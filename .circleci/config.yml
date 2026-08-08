@@ -5,10 +5,12 @@ workflows:
     jobs:
       - backend_tests
       - backend_checks
+      - jasmine
+      - frontend-checks
 jobs:
-  # Minimal bootstrap CI: backend-only for now. The full pipeline (frontend, proxy, release
-  # chain, image publishing) lives in .circleci/config.yml.bkp until the rest of the stack and
-  # its required CircleCI secrets are actually in place — see aux/todo.md.
+  # Minimal bootstrap CI: backend + frontend tests/lint only for now. The full pipeline (proxy,
+  # release chain, image publishing) lives in .circleci/config.yml.bkp until the rest of the
+  # stack and its required CircleCI secrets are actually in place — see aux/todo.md.
   #
   # No DB service container yet: no Sequelize models/specs exist to need one (see
   # docs/agents/product.md). Add a cimg/mysql:8.0 service alongside the first DB-touching spec.
@@ -35,6 +37,38 @@ jobs:
       - run:
           name: Set folder
           command: rm frontend -rf; cp backend/* ./ -r; rm backend -rf
+      - run:
+          name: Yarn install
+          command: yarn install
+      - run:
+          name: Check JS Lint
+          command: npm run lint
+
+  # No `check_i18n` step: Kerghan has no i18n layer (kerghan.md §16, aux/todo.md — optional,
+  # skipped for now).
+  jasmine:
+    docker:
+      - image: darthjee/circleci_node:0.2.1
+    steps:
+      - checkout
+      - run:
+          name: Set folder
+          command: rm backend -rf; cp frontend/* ./ -r; rm frontend -rf
+      - run:
+          name: Yarn install
+          command: yarn install
+      - run:
+          name: Tests
+          command: npm run coverage
+
+  frontend-checks:
+    docker:
+      - image: darthjee/circleci_node:0.2.1
+    steps:
+      - checkout
+      - run:
+          name: Set folder
+          command: rm backend -rf; cp frontend/* ./ -r; rm frontend -rf
       - run:
           name: Yarn install
           command: yarn install
