@@ -46,8 +46,8 @@ Both dev and prod configurations follow the same order (defined in `configure.ph
 2. `rules/backend.php` — routes `*.json` requests to the Express backend
 3. `rules/redirects.php` — catch-all: `GET /path → /#/path` (302) — **always last**
 
-There is no `rules/admin.php` — Kerghan has no admin UI (decided, kerghan.md §7/§21). Do not add
-one without a corresponding product decision.
+There is no `rules/admin.php` — Kerghan has no admin UI (see `docs/agents/product.md`). Do not
+add one without a corresponding product decision.
 
 The redirect rule is last so it never overrides frontend or backend routes.
 

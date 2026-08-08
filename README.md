@@ -17,7 +17,7 @@ attention" in one place. See [docs/agents/flow.md](docs/agents/flow.md) for the 
 The application is structured as a Node/Express backend and a React single-page application
 frontend, served together through the [Tent](https://github.com/darthjee/tent) reverse proxy —
 the same shape as [Majora](https://github.com/darthjee/majora), the project this one's
-infrastructure was bootstrapped from (see `kerghan.md`).
+infrastructure was bootstrapped from.
 
 **Status:** early infrastructure bootstrap. There are no real models, routes, or components yet
 — the backend is an Express/Sequelize skeleton with a single health-check route, and the
@@ -123,5 +123,4 @@ yarn lint        # lint source and specs
 
 Agent-facing documentation lives under [`docs/agents/`](docs/agents/) — start at
 [`docs/agents/index.md`](docs/agents/index.md). Project instructions for AI agents live in
-[`AGENTS.md`](AGENTS.md). The full infrastructure bootstrap spec this repository was scaffolded
-from is [`kerghan.md`](kerghan.md).
+[`AGENTS.md`](AGENTS.md).

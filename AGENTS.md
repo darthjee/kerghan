@@ -8,10 +8,8 @@ each user's own browser IP absorbs GitHub's unauthenticated rate limit instead o
 shared one. Nothing about issues is persisted to MySQL by default; opt-in persistence (for
 history/trends) is a future addition, not the current behavior. The driving use case is
 label-based attention triage — surfacing which of a user's many tracked repos "need my
-attention". See [Flow](docs/agents/flow.md) for the full request/data flow.
-
-See `kerghan.md` for the full infrastructure bootstrap spec this repository was scaffolded from,
-including what's decided vs. still open.
+attention". See [Flow](docs/agents/flow.md) for the full request/data flow and
+[Product Definitions](docs/agents/product.md) for what's decided vs. still open.
 
 ## Stack
 

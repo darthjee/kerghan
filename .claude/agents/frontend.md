@@ -32,8 +32,12 @@ Do NOT touch `backend/` (Express backend) or any file outside `frontend/`.
 
 The frontend is currently a **tooling-only skeleton**: `App.jsx` is a placeholder shell, no
 real components, client, or router exist yet. There is no data model to build against —
-kerghan.md §1/§21 leaves the tracked-repo/label-rule data model open. Don't invent API shapes
-speculatively; build against what `backend` actually exposes.
+`docs/agents/product.md` leaves the tracked-repo/label-rule data model open. Don't invent API
+shapes speculatively; build against what `backend` actually exposes.
+
+Per `docs/agents/flow.md`, this frontend owns two different data sources once built: repo
+selection comes from the backend, but issue data is fetched live, client-side, directly against
+GitHub's public REST API — not proxied through the backend.
 
 ## Commands
 

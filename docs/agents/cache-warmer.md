@@ -40,10 +40,10 @@ sections via a top-level `include:` list. Currently only one file is included:
 - `clients.yml` — the `clients.default` block (base URL, timeout) used to make every request in
   any future resource file.
 
-There is no `issues.yml` or similar resource file yet — the issues API doesn't exist (see
-kerghan.md §12/§21). When one is eventually warranted (for the narrow slice of Kerghan's surface
-that's genuinely public), add it to `include:` here and declare `namespace: $NAVI_NAMEPACE` at
-its top, matching `clients.yml`'s convention.
+There is no `issues.yml` or similar resource file yet — the issues API doesn't exist. When one
+is eventually warranted (for the narrow slice of Kerghan's surface that's genuinely public), add
+it to `include:` here and declare `namespace: $NAVI_NAMEPACE` at its top, matching `clients.yml`'s
+convention.
 
 ## Maintaining this configuration
 

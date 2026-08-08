@@ -4,9 +4,9 @@
 decided — see [Flow](flow.md). Entity definitions, an ownership chain, and role definitions
 still don't exist, because the core tracked-repo/label-rule data model is still open. This file
 is the canonical place for the `product-owner`, `data-access`, and `security` agents to check
-"is this decided yet?" rather than re-deriving it from kerghan.md each time.
+"is this decided yet?".
 
-## What's already decided (see kerghan.md §1 and docs/agents/flow.md for the full context)
+## What's already decided (see [Flow](flow.md) for the full context)
 
 - **What Kerghan is**: a GitHub issue monitoring/dashboard app. Users log into Kerghan itself
   (lightweight account/session, not GitHub OAuth) and register the repos/orgs they care about.
@@ -23,10 +23,13 @@ is the canonical place for the `product-owner`, `data-access`, and `security` ag
   user's own browser IP instead. Refresh is manual (user-triggered), not automatic/polled.
 - **GitHub access**: unauthenticated, public-repo data only for now. No OAuth app, no PAT
   storage, no GitHub App installation. A per-user GitHub token for private-repo access is a
-  planned future addition (kerghan.md §1/§21), not yet built.
+  planned future addition, not yet built.
 - **Frontend surface**: a dashboard/analytics view (issue volume, age, label breakdowns, "needs
   attention" lists), not just CRUD forms — API design should be aggregation-friendly.
 - **No admin UI, no file uploads, no GitHub webhooks.**
+- **Env vars for the framework**: simple env-driven config, read once at boot (no hidden env
+  reads inside classes) — `KERGHAN_SECRET_KEY` (session/cookie signing, backing the login
+  described in [Flow](flow.md)), `KERGHAN_ALLOWED_ORIGINS` (CORS allowlist), `NODE_ENV`/`DEBUG`.
 
 ## Deferred (future, not current scope)
 

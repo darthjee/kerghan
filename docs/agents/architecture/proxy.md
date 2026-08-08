@@ -14,7 +14,7 @@ host-specific `$backendHost`/`$staticRoot` pair (prod).
    middlewares (`SetClientIpMiddleware`, `CacheCleanupMiddleware`, `CacheStalenessMiddleware`)
 3. `rules/redirects.php` — catch-all: `GET /path → /#/path` (302) — **must stay last**
 
-There is no `rules/admin.php` — Kerghan has no admin UI (decided, kerghan.md §7/§21).
+There is no `rules/admin.php` — Kerghan has no admin UI (see `docs/agents/product.md`).
 
 ## Dev vs. prod configuration
 

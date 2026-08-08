@@ -15,15 +15,17 @@ clean bill of health) that the architect then acts on.
 
 ## Primary reference
 
-`docs/agents/product.md` and its access-control section are the authoritative source for who
-can access what — **these don't exist yet**. The tracked-repo/label-rule data model is still an
-open product decision (kerghan.md §1/§21). Until `docs/agents/product.md` exists:
+`docs/agents/product.md` is the authoritative source for what's decided (login/session, repo
+selection scoped per account) — but it has no dedicated access-control section yet, because the
+tracked-repo/label-rule data model itself is still an open product decision. Until that section
+exists:
 
 - Treat any endpoint that returns another user's tracked repos, label rules, or account data as
   a violation by default.
 - Flag any new model/endpoint that doesn't come with a clear statement of who can read/write it.
-- When `docs/agents/product.md` is written, this file should be updated to point at it the same
-  way Majora's `data-access` agent points at `docs/agents/access-control/`.
+- When an access-control section is written into `docs/agents/product.md` (or a dedicated
+  `docs/agents/access-control.md` is created), this file should be updated to point at it the
+  same way Majora's `data-access` agent points at `docs/agents/access-control/`.
 
 ## When you are invoked
 
