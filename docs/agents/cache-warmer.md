@@ -13,6 +13,24 @@ the requesting user's own tracked repos/label rules, not a shared public respons
 assumption for any new endpoint: **it does not belong in Navi's warm-up config.** Only add one
 if it's genuinely public and unauthenticated (e.g. a possible future public status page).
 
+## Per-user cache (upcoming)
+
+Today, the rule for any user-scoped endpoint (e.g. the repo-selection read path described in
+[Flow](flow.md#per-user-cache-upcoming)) is: set the `X-Skip-Cache` header so it bypasses Tent's
+shared HTTP cache entirely (see `.claude/agents/cache.md`'s X-Skip-Cache review). That's a
+correctness requirement, not a performance story — user-scoped responses currently get no
+caching at all.
+
+A **per-user cache** capability is in active development on Tent itself, meant to let
+user-scoped responses be cached safely (keyed per user, not shared across users the way Navi's
+warm-up is). It is not available yet. Once it lands:
+
+- Update this section with the actual mechanism (cache key shape, invalidation, how a route
+  opts in) once it's implemented.
+- Update `.claude/agents/cache.md` and `.claude/agents/proxy.md` to describe when a route should
+  use it instead of `X-Skip-Cache`.
+- Update `docs/agents/flow.md`'s repo-selection step accordingly.
+
 ## Configuration
 
 The Navi configuration entry file lives at [`navi/navi_config.yaml`](../../navi/navi_config.yaml).

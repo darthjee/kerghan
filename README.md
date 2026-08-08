@@ -7,11 +7,12 @@ A tool for monitoring github issues
 
 ## About
 
-Kerghan is a GitHub issue monitoring/dashboard app. Users register the repos and/or orgs they
-care about, and Kerghan polls/aggregates their issues into MySQL so they can be queried and
-visualized without going back to GitHub for each check. The driving use case is label-based
-attention triage — surfacing which of a user's many tracked repos "need my attention" in one
-place.
+Kerghan is a GitHub issue monitoring/dashboard app. Users log in (a lightweight Kerghan account,
+not GitHub OAuth) and choose which repos/orgs to monitor — that selection is the only thing the
+backend persists. Issue data itself is fetched live, on demand, by the frontend calling GitHub's
+public API directly, so the backend stays idle between visits. The driving use case is
+label-based attention triage — surfacing which of a user's many tracked repos "need my
+attention" in one place. See [docs/agents/flow.md](docs/agents/flow.md) for the full flow.
 
 The application is structured as a Node/Express backend and a React single-page application
 frontend, served together through the [Tent](https://github.com/darthjee/tent) reverse proxy —
