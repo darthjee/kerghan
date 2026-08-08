@@ -25,6 +25,10 @@ full file before loading it. For a bare link-only table of contents instead, see
   new entities.
 - **[Issue Enhancement](issue-enhancement.md)** — Checklist of concerns (`/enhance-issue` uses
   this) for fleshing out a vague issue idea before it reaches the `Created` stage.
+- **[Environment Variables](environment-variables.md)** — Every env var Kerghan's production
+  deployment needs: backend runtime (Render), the cache warmer, and CircleCI deploy-pipeline
+  secrets — with each one marked as actually consumed by code or still reserved. Update it
+  whenever a "reserved" var gets wired up or a new one is added.
 
 ## External tooling
 
