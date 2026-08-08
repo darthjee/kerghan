@@ -12,8 +12,9 @@ describe('LoginHandler', () => {
       body: { username: 'darthjee', password: 'correct-password' },
       session: { regenerate: jasmine.createSpy().and.callFake((cb) => cb()) },
     };
-    response = jasmine.createSpyObj('response', ['status', 'json']);
+    response = jasmine.createSpyObj('response', ['status', 'json', 'set']);
     response.status.and.returnValue(response);
+    response.set.and.returnValue(response);
     authenticator = jasmine.createSpyObj('authenticator', ['authenticate']);
   });
 
@@ -33,6 +34,12 @@ describe('LoginHandler', () => {
         username: 'darthjee',
         email: 'darthjee@example.com',
       });
+    });
+
+    it('sets the X-Skip-Cache header, so the proxy never caches a session-bound response', async () => {
+      await new LoginHandler(request, response, authenticator).handle();
+
+      expect(response.set).toHaveBeenCalledWith('X-Skip-Cache', 'true');
     });
 
     it('regenerates the session and stores the user id', async () => {

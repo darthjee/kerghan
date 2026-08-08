@@ -40,7 +40,7 @@ class LoginHandler extends RequestHandler {
 
     await this.#regenerateSession();
     this.#request.session.userId = user.id;
-    this.#response.status(200).json(new UserSerializer(user).asJson());
+    this.#response.set('X-Skip-Cache', 'true').status(200).json(new UserSerializer(user).asJson());
   }
 
   /**

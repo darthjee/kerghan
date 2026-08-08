@@ -16,8 +16,9 @@ describe('RegisterHandler', () => {
       },
       session: { regenerate: jasmine.createSpy().and.callFake((cb) => cb()) },
     };
-    response = jasmine.createSpyObj('response', ['status', 'json']);
+    response = jasmine.createSpyObj('response', ['status', 'json', 'set']);
     response.status.and.returnValue(response);
+    response.set.and.returnValue(response);
     registrar = jasmine.createSpyObj('registrar', ['register']);
   });
 
@@ -44,6 +45,12 @@ describe('RegisterHandler', () => {
 
       expect(request.session.regenerate).toHaveBeenCalled();
       expect(request.session.userId).toBe(42);
+    });
+
+    it('sets the X-Skip-Cache header, so the proxy never caches a session-bound response', async () => {
+      await new RegisterHandler(request, response, registrar).handle();
+
+      expect(response.set).toHaveBeenCalledWith('X-Skip-Cache', 'true');
     });
 
     it('registers with the submitted username, email and password', async () => {
