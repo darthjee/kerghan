@@ -20,10 +20,10 @@ class HandlerConfig {
    * Instantiates the handler executor class with the stored parameters and delegates the request to it.
    * @param {object} req - The Express request object.
    * @param {object} res - The Express response object.
-   * @returns {void}
+   * @returns {*} Whatever the handler's handle() returns (a Promise for async handlers).
    */
   handle(req, res) {
-    new this.#handlerExecutorClass(req, res, ...this.#parameters).handle();
+    return new this.#handlerExecutorClass(req, res, ...this.#parameters).handle();
   }
 }
 
