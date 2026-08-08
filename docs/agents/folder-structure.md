@@ -4,7 +4,7 @@
 
 | Path | Purpose |
 |---|---|
-| `backend/` | Node.js/Express app, plain JS + Sequelize (no models yet — see kerghan.md §1/§21) |
+| `backend/` | Node.js/Express app, plain JS + Sequelize (no models yet — data model still open, see `docs/agents/product.md`) |
 | `frontend/` | React 19 + Vite app — dashboard/analytics UI, currently a tooling-only skeleton |
 | `proxy/` | PHP Tent proxy config (`dev_configuration/`, `prod_configuration/`, `extension/`) |
 | `dockerfiles/` | One directory per built image, `-base`/leaf pairs |
@@ -20,7 +20,6 @@
 | `docker-compose.yml` | Full stack service definitions |
 | `version` | Base-image version registry |
 | `.env.dev.sample`, `.env`, `.env.prod` | Environment variable files |
-| `kerghan.md` | Infrastructure bootstrap spec this scaffolding was built from |
 
 ## `backend/` — Backend
 
@@ -74,17 +73,17 @@
 | `data-access.md` | Read-only access-control reviewer |
 | `product-owner.md` | Read-only product-definitions reference |
 
-No `backend.md` yet — the Node/Express stack is decided (kerghan.md §20/§21) but the agent
-itself is left for whoever builds out the real API.
+No `backend.md` yet — the Node/Express stack is decided (see `docs/agents/architecture/backend.md`
+for the precedent) but the agent itself is left for whoever builds out the real API.
 
 ## `docs/agents/` — Documentation
 
 | Subdirectory / File | Description |
 |---|---|
-| `architecture/` | Per-area architecture pages (`proxy.md`, `frontend.md`; `backend.md` not written yet) |
+| `architecture/` | Per-area architecture pages (`proxy.md`, `frontend.md`; `backend.md` is precedent-only, no real API yet) |
 | `plans/` | Implementation plans, one directory per issue |
 | `issues/` | Detailed specs for open issues, one file per issue |
-| `index.md`, `summary.md`, `folder-structure.md`, `architecture.md`, `contributing.md`, `cache-warmer.md`, `product.md` | Top-level reference docs |
+| `index.md`, `summary.md`, `folder-structure.md`, `flow.md`, `architecture.md`, `contributing.md`, `cache-warmer.md`, `product.md`, `issue-enhancement.md` | Top-level reference docs |
 
 ## `dockerfiles/` — Service Images
 

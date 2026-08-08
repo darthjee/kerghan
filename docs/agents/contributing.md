@@ -71,8 +71,8 @@ opening a PR.
 - **Method order:** within a class, public methods should be declared before private
   (`#`-prefixed) methods (enforced by `eslint-plugin-sort-class-members`).
 - **File naming:** class files use CamelCase matching the class name; specs are
-  `<ClassName>_spec.js` — see kerghan.md §20's "Agent template" section for the full backend
-  code-style precedent (drawn from the `navi` checkout).
+  `<ClassName>_spec.js` — see [Architecture — Backend](architecture/backend.md) for the full
+  backend code-style precedent.
 - **Dependency injection only:** classes never load files/env vars themselves — e.g. the DB
   connection/pool should be constructed once and injected, not opened ad hoc per class.
 

@@ -6,12 +6,14 @@ For a short abstract of each doc's content, see [summary.md](summary.md) instead
 ## Architecture
 
 - [Folder Structure](folder-structure.md)
+- [Flow](flow.md)
 - [Architecture](architecture.md)
 
 ## Conventions
 
 - [Contributing](contributing.md)
 - [Product Definitions](product.md)
+- [Issue Enhancement](issue-enhancement.md)
 
 ## External tooling
 

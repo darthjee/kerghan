@@ -8,6 +8,8 @@ full file before loading it. For a bare link-only table of contents instead, see
 
 - **[Folder Structure](folder-structure.md)** — Top-level directory layout: what each top-level
   folder (`backend/`, `frontend/`, `proxy/`, `dockerfiles/`, `docs/`, etc.) is for.
+- **[Flow](flow.md)** — Target end-to-end flow (not yet implemented): login, repo selection
+  persisted by the backend, issues fetched live client-side against GitHub, manual refresh.
 - **[Architecture](architecture.md)** — Hub page splitting the architecture by concern (proxy,
   frontend, backend) to keep agent contexts small. Read the linked area page relevant to your
   task instead of loading everything.
@@ -16,15 +18,20 @@ full file before loading it. For a bare link-only table of contents instead, see
 
 - **[Contributing](contributing.md)** — Commit guidelines (atomic, no unrelated changes,
   separate refactors) and PR standards (descriptive summary, description files when needed).
-- **[Product Definitions](product.md)** — Currently a stub: the tracked-repo/label-rule data
-  model is still an open product decision (see kerghan.md §1/§21). Read it to confirm what's
-  decided vs. still open before planning any issue that introduces new entities.
+- **[Product Definitions](product.md)** — What's decided (login/session, repo selection is the
+  only persisted state, issues fetched live client-side, no issue persistence by default) vs.
+  still open (the tracked-repo/label-rule data model) and deferred (opt-in issue persistence,
+  history/trends, private-repo GitHub tokens). Read it before planning any issue that introduces
+  new entities.
+- **[Issue Enhancement](issue-enhancement.md)** — Checklist of concerns (`/enhance-issue` uses
+  this) for fleshing out a vague issue idea before it reaches the `Created` stage.
 
 ## External tooling
 
 - **[Cache Warmer](cache-warmer.md)** — How Kerghan uses Navi to warm the Tent proxy cache after
   each production release; used by the `cache` agent. Given Kerghan's multi-tenant model, most
-  endpoints are excluded from warming by default.
+  endpoints are excluded from warming by default. Also documents the per-user cache Tent is
+  developing, expected to eventually replace `X-Skip-Cache` for user-scoped reads.
 
 ## Plans & Issues
 

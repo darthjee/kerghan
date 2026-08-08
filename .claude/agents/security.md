@@ -16,10 +16,11 @@ the architect then acts on.
 ## Kerghan's current surface
 
 There is currently **no GitHub credential storage to review** — Kerghan reads only public
-GitHub REST API data, fully unauthenticated (kerghan.md §1/§21). No OAuth tokens, no PATs, no
-GitHub App installation secrets exist in this codebase. If you ever find code that starts
-storing GitHub credentials, treat that as a significant finding requiring an explicit product
-decision, not a routine implementation detail.
+GitHub REST API data, fully unauthenticated (see `docs/agents/product.md`). No OAuth tokens, no
+PATs, no GitHub App installation secrets exist in this codebase. A per-user GitHub token for
+private-repo access is planned but not built — if you ever find code that starts storing GitHub
+credentials, treat that as a significant finding requiring an explicit product decision, not a
+routine implementation detail.
 
 The surface that *does* matter today is the **multi-tenant account/session layer** — even
 though the exact data model isn't decided yet (see `docs/agents/product.md`), any code that

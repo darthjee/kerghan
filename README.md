@@ -7,16 +7,17 @@ A tool for monitoring github issues
 
 ## About
 
-Kerghan is a GitHub issue monitoring/dashboard app. Users register the repos and/or orgs they
-care about, and Kerghan polls/aggregates their issues into MySQL so they can be queried and
-visualized without going back to GitHub for each check. The driving use case is label-based
-attention triage — surfacing which of a user's many tracked repos "need my attention" in one
-place.
+Kerghan is a GitHub issue monitoring/dashboard app. Users log in (a lightweight Kerghan account,
+not GitHub OAuth) and choose which repos/orgs to monitor — that selection is the only thing the
+backend persists. Issue data itself is fetched live, on demand, by the frontend calling GitHub's
+public API directly, so the backend stays idle between visits. The driving use case is
+label-based attention triage — surfacing which of a user's many tracked repos "need my
+attention" in one place. See [docs/agents/flow.md](docs/agents/flow.md) for the full flow.
 
 The application is structured as a Node/Express backend and a React single-page application
 frontend, served together through the [Tent](https://github.com/darthjee/tent) reverse proxy —
 the same shape as [Majora](https://github.com/darthjee/majora), the project this one's
-infrastructure was bootstrapped from (see `kerghan.md`).
+infrastructure was bootstrapped from.
 
 **Status:** early infrastructure bootstrap. There are no real models, routes, or components yet
 — the backend is an Express/Sequelize skeleton with a single health-check route, and the
@@ -122,5 +123,4 @@ yarn lint        # lint source and specs
 
 Agent-facing documentation lives under [`docs/agents/`](docs/agents/) — start at
 [`docs/agents/index.md`](docs/agents/index.md). Project instructions for AI agents live in
-[`AGENTS.md`](AGENTS.md). The full infrastructure bootstrap spec this repository was scaffolded
-from is [`kerghan.md`](kerghan.md).
+[`AGENTS.md`](AGENTS.md).

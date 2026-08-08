@@ -10,7 +10,7 @@ dashboard app.
 ## Your scope
 
 - `docs/agents/` — all project documentation (architecture, folder structure, plans, issues)
-- Root-level files: `README.md`, `AGENTS.md`, `CLAUDE.md`, `.env.dev.sample`, `kerghan.md`
+- Root-level files: `README.md`, `AGENTS.md`, `CLAUDE.md`, `.env.dev.sample`
 - Cross-cutting decisions that span multiple layers
 - Coordination of the other specialist agents
 
@@ -27,17 +27,16 @@ yourself.
 | Agent | Scope |
 |-------|-------|
 | `frontend` | `frontend/` — React components, Jasmine specs, ESLint, Vite, CSS |
-| `backend` | `backend/` — Express routes, Sequelize models/migrations, Jasmine specs — 🚧 not yet written, see kerghan.md §18/§21 |
+| `backend` | `backend/` — Express routes, Sequelize models/migrations, Jasmine specs — 🚧 not yet written |
 | `infra` | `docker-compose.yml`, `dockerfiles/`, `.circleci/config.yml`, `scripts/`, `Makefile` |
 | `proxy` | `proxy/` — PHP Tent proxy configuration, custom middleware, and tests |
 | `cache` | `navi/navi_config.yaml`, `navi/resources/*.yml`, cache-warmer docs — Navi warm-up route maintenance + `X-Skip-Cache` review |
 
-There is no `backend` agent definition yet — the Node/Express backend stack was decided
-(kerghan.md §20/§21) but the agent itself is left for whoever builds out the real API once the
-tracked-repo/label-rule data model is decided. Until then, treat `backend/` changes as your own
-scope, following the conventions already laid out in `backend/eslint.config.mjs` and
-kerghan.md §20/§21 (`docs/agents/architecture/backend.md` doesn't exist yet — write it once the
-`backend` agent is created).
+There is no `backend` agent definition yet — the Node/Express backend stack is decided, but the
+agent itself is left for whoever builds out the real API once the tracked-repo/label-rule data
+model is decided (see `docs/agents/product.md`). Until then, treat `backend/` changes as your
+own scope, following the conventions in `backend/eslint.config.mjs`,
+`docs/agents/contributing.md`, and the precedent in `docs/agents/architecture/backend.md`.
 
 ## How to coordinate
 
@@ -75,9 +74,9 @@ Invoke the `security` agent after `backend` or `infra` finishes whenever an issu
 of:
 
 - A new API endpoint
-- Any future authentication/authorization logic (Kerghan currently has none — no per-user
-  GitHub credentials, no accounts model — see kerghan.md §1/§21; flag any change that starts
-  introducing one)
+- Any authentication/authorization logic (Kerghan has a lightweight per-user login, but no
+  GitHub credentials/OAuth yet — see `docs/agents/product.md`; flag any change that starts
+  storing GitHub credentials)
 - Tent proxy rule changes (`proxy/dev_configuration/`, `proxy/prod_configuration/`)
 - User input handling (new request params, new query parameters)
 
@@ -100,7 +99,7 @@ endpoint that should carry `X-Skip-Cache` but doesn't.
 | `folder-structure.md` | Top-level directory layout |
 | `architecture.md` | Hub linking to per-area architecture pages |
 | `cache-warmer.md` | Navi setup for warming the proxy cache; used by the `cache` agent |
-| `product.md` | Product-level concepts once the data model is decided — currently a stub, see kerghan.md §1/§21 |
+| `product.md` | What's decided (login, repo selection, on-demand issue fetching) vs. still open (the tracked-repo/label-rule data model) |
 | `plans/` | Implementation plans for ongoing or upcoming features |
 | `issues/` | Detailed specs for open issues |
 
@@ -109,20 +108,24 @@ its scope changes, update this file and `AGENTS.md`.
 
 ## Project overview
 
-Kerghan is a GitHub issue monitoring/dashboard app: users register repos/orgs they care about,
-and Kerghan surfaces which of them "need attention" based on label rules, without the user
-manually checking each repo's issue tracker.
+Kerghan is a GitHub issue monitoring/dashboard app: users log in, choose which repos/orgs to
+monitor, and Kerghan surfaces which of them "need attention" based on label rules, without the
+user manually checking each repo's issue tracker. See `docs/agents/flow.md` for the full
+end-to-end flow.
 
-- **Backend** (Node/Express, once written) exposes JSON endpoints (`.json` URLs, same convention
-  as Majora) consumed by the frontend.
+- **Backend** (Node/Express, once written) persists only account/login state and each user's
+  repo selection — it does not fetch or store issue data. Exposes JSON endpoints (`.json` URLs,
+  same convention as Majora) consumed by the frontend.
 - **Frontend** is a dashboard/analytics SPA — issue volume, age, label breakdowns, "needs
-  attention" lists — not just CRUD forms.
+  attention" lists — not just CRUD forms. It fetches issue data itself, live and on demand,
+  directly against GitHub's public API (not through the backend) — see `docs/agents/flow.md`.
 - **Tent** is the single entry point: routes `*.json` to the backend, all else to Vite (dev) or
   static files (prod), with a catch-all redirect `GET /path → /#/path`. No `/admin` route —
   Kerghan has no admin UI.
-- **GitHub access** is currently unauthenticated, public-data-only (60 requests/hour/IP shared
-  across all Kerghan users) — see kerghan.md §1/§21 before touching anything that talks to the
-  GitHub API.
+- **GitHub access** is currently unauthenticated, public-data-only (60 requests/hour/IP) — before
+  this change, that limit was shared across all Kerghan users via the backend's IP; now it's
+  scoped to each user's own browser IP for issue fetching (see `docs/agents/product.md`). A
+  per-user GitHub token for private repos is planned but not built.
 - **Navi** warms the Tent cache after each release, but most of Kerghan's data is user-scoped and
   won't go through it — see `cache.md`.
 - **CircleCI** runs tests and checks on every push; release jobs run only on version tags
@@ -130,6 +133,7 @@ manually checking each repo's issue tracker.
 
 ## Data model
 
-Not yet decided. The user account / tracked-repo / label-rule data model is the core open
-product question (kerghan.md §1/§21) — consult `docs/agents/product.md` once it exists, and
-update this file's "Data model"/"API endpoints" sections when it's written.
+The high-level flow (login, repo selection, issue fetching) is decided — see
+`docs/agents/flow.md` and `docs/agents/product.md`. The tracked-repo/label-rule data model
+itself — entity definitions, ownership chain, editing rules — is still open. Update this file's
+"Data model"/"API endpoints" sections once it's decided.

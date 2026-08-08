@@ -29,9 +29,11 @@ frontend/specs/
 
 Once real views exist, mirror Majora's shape (`components/`, `client/`, `utils/`) rather than
 inventing a new one — see `frontend.md` in `.claude/agents/` for the full component-extraction
-conventions to apply as it grows. Given kerghan.md §1's "aggregation-friendly, not just CRUD"
-API design, expect the eventual `client/` layer to fetch pre-aggregated dashboard data
-(counts, groupings, "needs attention" lists) rather than raw per-issue CRUD.
+conventions to apply as it grows. Given `docs/agents/product.md`'s "aggregation-friendly, not
+just CRUD" API design, expect the eventual `client/` layer to fetch pre-aggregated dashboard data
+(counts, groupings, "needs attention" lists) rather than raw per-issue CRUD — plus, per
+`docs/agents/flow.md`, some of that fetching happens directly against GitHub's API rather than
+the backend at all.
 
 ## No Vite proxy to the backend
 

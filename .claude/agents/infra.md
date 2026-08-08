@@ -45,7 +45,4 @@ Per project decision, `darthjee/kerghan`, `darthjee/circleci_kerghan-base`, and
 fresh `yarn install` each run, mirroring how the frontend's own `jasmine`/`frontend-checks` CI
 jobs already work. Only the `vite_kerghan*` images are published (frontend/proxy asset builds).
 Never add `push`/`push-base` Makefile targets or a CircleCI `release-image` job for the backend
-image family — see kerghan.md §6/§20/§21 (`docs/agents/architecture/backend.md` doesn't exist
-yet, it's written once the backend agent is).
-
-(See kerghan.md §5–§14 in the source infra doc for the full rationale behind every job/script.)
+image family — see `docs/agents/architecture/backend.md`.
