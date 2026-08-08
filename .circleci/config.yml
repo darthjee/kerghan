@@ -7,10 +7,11 @@ workflows:
       - backend_checks
       - jasmine
       - frontend-checks
+      - proxy_extension_tests
 jobs:
-  # Minimal bootstrap CI: backend + frontend tests/lint only for now. The full pipeline (proxy,
-  # release chain, image publishing) lives in .circleci/config.yml.bkp until the rest of the
-  # stack and its required CircleCI secrets are actually in place — see aux/todo.md.
+  # Minimal bootstrap CI: backend, frontend and proxy-extension tests/lint only for now. The
+  # full pipeline (release chain, image publishing) lives in .circleci/config.yml.bkp until the
+  # rest of the stack and its required CircleCI secrets are actually in place — see aux/todo.md.
   #
   # No DB service container yet: no Sequelize models/specs exist to need one (see
   # docs/agents/product.md). Add a cimg/mysql:8.0 service alongside the first DB-touching spec.
@@ -75,3 +76,17 @@ jobs:
       - run:
           name: Check JS Lint
           command: npm run lint
+
+  proxy_extension_tests:
+    docker:
+      - image: darthjee/tent-test:0.10.0
+    working_directory: /home/app/app
+    steps:
+      - checkout:
+          path: /tmp/checkout
+      - run:
+          name: Copy extension into place
+          command: cp -r /tmp/checkout/proxy/extension/. /var/www/html/extension/
+      - run:
+          name: Tests
+          command: vendor/bin/phpunit --bootstrap /var/www/html/extension/tests/bootstrap.php /var/www/html/extension/tests
