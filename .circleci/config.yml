@@ -8,6 +8,42 @@ workflows:
       - jasmine
       - frontend-checks
       - proxy_extension_tests
+      - release-image:
+          name: release-kerghan-base
+          image: kerghan-base
+          filters: { tags: { only: /.*/ } }
+      - release-image:
+          name: release-kerghan-base-arm64
+          image: kerghan-base
+          arch: arm64
+          filters: { tags: { only: /.*/ } }
+      - release-image:
+          name: release-circleci_kerghan-base
+          image: circleci_kerghan-base
+          filters: { tags: { only: /.*/ } }
+      - release-image:
+          name: release-circleci_kerghan-base-arm64
+          image: circleci_kerghan-base
+          arch: arm64
+          filters: { tags: { only: /.*/ } }
+      - release-image:
+          name: release-production_kerghan-base
+          image: production_kerghan-base
+          filters: { tags: { only: /.*/ } }
+      - release-image:
+          name: release-production_kerghan-base-arm64
+          image: production_kerghan-base
+          arch: arm64
+          filters: { tags: { only: /.*/ } }
+      - release-image:
+          name: release-vite_kerghan-base
+          image: vite_kerghan-base
+          filters: { tags: { only: /.*/ } }
+      - release-image:
+          name: release-vite_kerghan-base-arm64
+          image: vite_kerghan-base
+          arch: arm64
+          filters: { tags: { only: /.*/ } }
 jobs:
   # Minimal bootstrap CI: backend, frontend and proxy-extension tests/lint only for now. The
   # full pipeline (release chain, image publishing) lives in .circleci/config.yml.bkp until the
@@ -90,3 +126,24 @@ jobs:
       - run:
           name: Tests
           command: vendor/bin/phpunit --bootstrap /var/www/html/extension/tests/bootstrap.php /var/www/html/extension/tests
+
+  # Multi-arch (amd64 + arm64) publish of Kerghan's 4 base images, mirroring majora-3's
+  # release-image pattern (see aux/base-image.md). Runs on tag builds only —
+  # bin/image.sh's skip_if_not_tag/skip_if_unchanged decide whether to actually build/push,
+  # unless FORCE_IMAGE_BUILD bypasses those guards.
+  release-image:
+    parameters:
+      image:
+        type: string
+      arch:
+        type: string
+        default: ""
+    machine: true
+    steps:
+      - checkout
+      - run:
+          name: Set up QEMU
+          command: bin/image.sh qemu << parameters.image >>
+      - run:
+          name: Release
+          command: bin/image.sh push << parameters.image >> << parameters.arch >>

@@ -39,10 +39,20 @@ through `docker-compose run` or the relevant image.
 
 ## Backend image publishing
 
-Per project decision, `darthjee/kerghan`, `darthjee/circleci_kerghan-base`, and
-`darthjee/production_kerghan-base` are **not published to Docker Hub** — they're built locally
-(`make build`/`make build-base`) or, in CI, from a generic `darthjee/circleci_node` image with a
-fresh `yarn install` each run, mirroring how the frontend's own `jasmine`/`frontend-checks` CI
-jobs already work. Only the `vite_kerghan*` images are published (frontend/proxy asset builds).
-Never add `push`/`push-base` Makefile targets or a CircleCI `release-image` job for the backend
-image family — see `docs/agents/architecture/backend.md`.
+All 4 base images — `kerghan-base`, `circleci_kerghan-base`, `production_kerghan-base`, and
+`vite_kerghan-base` — are published to Docker Hub, multi-arch (amd64 + arm64), via the
+`release-image` CircleCI job on tag builds (mirroring Majora's `release-image` pattern; see
+`aux/base-image.md`) and via the `push`/`push-base`/`push-circleci-base`/`push-production-base`/
+`push-fe-base` Makefile targets for manual pushes. `bin/image.sh`'s `skip_if_not_tag`/
+`skip_if_unchanged` guards keep unchanged images from rebuilding on every tag; `FORCE_IMAGE_BUILD`
+bypasses both guards when a forced rebuild/republish is needed.
+
+The existing `backend_tests`/`backend_checks`/`jasmine`/`frontend-checks` CI jobs still run from a
+generic `darthjee/circleci_node` image with a fresh `yarn install` each run — switching them to
+consume the published `circleci_kerghan-base` image (and `requires:` the release job) is a
+follow-up, not done yet.
+
+The **leaf app images** — `darthjee/kerghan` (backend) and `darthjee/production_kerghan` — are
+still **not published to Docker Hub**; they're built locally (`make build`) or, in CI, from the
+generic `darthjee/circleci_node` image. Only the `*-base` images are published. See
+`docs/agents/architecture/backend.md`.
