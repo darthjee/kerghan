@@ -1,7 +1,7 @@
 import express from 'express';
 import { HandlerConfig } from './HandlerConfig.js';
-import { RouteRegister } from './RouteRegister.js';
 import { HealthHandler } from './handlers/HealthHandler.js';
+import { RouteRegister } from './RouteRegister.js';
 
 const { Router: ExpressRouter } = express;
 
