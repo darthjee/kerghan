@@ -1,5 +1,7 @@
+import { BadRequestError } from '../exceptions/http/BadRequestError.js';
 import { ForbiddenError } from '../exceptions/http/ForbiddenError.js';
 import { NotFoundError } from '../exceptions/http/NotFoundError.js';
+import { UnauthorizedError } from '../exceptions/http/UnauthorizedError.js';
 
 /**
  * Registers a route on an Express router by binding the handler's handle method.
@@ -16,17 +18,20 @@ class RouteRegister {
   }
 
   /**
-   * Registers a GET route on the router.
-   * Catches ForbiddenError → 403, NotFoundError → 404, and any other error → 500.
+   * Registers a route on the router.
+   * Catches BadRequestError → 400, UnauthorizedError → 401, ForbiddenError → 403,
+   * NotFoundError → 404, and any other error → 500. The handler may be sync or
+   * return a Promise — either way its rejection/throw is caught.
    * @param {object} params - Options for registering a route.
+   * @param {string} [params.method] - The HTTP method (lowercase), defaults to 'get'.
    * @param {string} params.route - The route path (e.g. '/health.json').
    * @param {object} params.handler - The handler whose handle method is called.
    * @returns {void}
    */
-  register({ route, handler }) {
-    this.#router.get(route, (req, res) => {
+  register({ method = 'get', route, handler }) {
+    this.#router[method](route, async (req, res) => {
       try {
-        handler.handle(req, res);
+        await handler.handle(req, res);
       } catch (e) {
         this.#handleError(e, res);
       }
@@ -42,7 +47,13 @@ class RouteRegister {
   #handleError(e, res) {
     let statusCode;
     let message;
-    if (e instanceof ForbiddenError) {
+    if (e instanceof BadRequestError) {
+      statusCode = 400;
+      message = e.message;
+    } else if (e instanceof UnauthorizedError) {
+      statusCode = 401;
+      message = e.message;
+    } else if (e instanceof ForbiddenError) {
       statusCode = 403;
       message = 'Forbidden';
     } else if (e instanceof NotFoundError) {

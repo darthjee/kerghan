@@ -7,16 +7,18 @@
   "main": "bin/server.js",
   "scripts": {
     "server": "node bin/server.js",
-    "spec": "npx jasmine spec/**/*.js",
-    "test": "npx c8 jasmine spec/**/*.js",
-    "coverage": "npx c8 --reporter=lcov jasmine spec/**/*.js",
+    "spec": "npx jasmine \"spec/**/*[sS]pec.js\"",
+    "test": "npx c8 jasmine \"spec/**/*[sS]pec.js\"",
+    "coverage": "npx c8 --reporter=lcov jasmine \"spec/**/*[sS]pec.js\"",
     "lint": "eslint lib bin spec",
     "lint_fix": "eslint lib bin spec --fix"
   },
   "author": "darthjee",
   "license": "UNLICENSED",
   "dependencies": {
+    "bcryptjs": "^2.4.3",
     "express": "5.2.1",
+    "express-session": "^1.18.0",
     "mysql2": "^3.11.0",
     "sequelize": "^6.37.0"
   },

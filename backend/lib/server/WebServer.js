@@ -14,11 +14,14 @@ class WebServer {
   /**
    * @param {object} params - Options for initializing the WebServer.
    * @param {number} params.port - The port to listen on.
+   * @param {object} params.models - The injected Sequelize models (e.g. { User }).
+   * @param {string} params.secretKey - The session cookie signing secret.
+   * @param {boolean} params.isProduction - Whether to mark the session cookie as secure-only.
    */
-  constructor({ port }) {
+  constructor({ port, models, secretKey, isProduction }) {
     this.#port = port;
     this.#app = express();
-    this.#app.use(new Router().build());
+    this.#app.use(new Router({ models, secretKey, isProduction }).build());
   }
 
   /**
