@@ -8,6 +8,11 @@ function image_version() {
 }
 
 function skip_if_not_tag() {
+  if [ -n "$FORCE_IMAGE_BUILD" ]; then
+    echo "FORCE_IMAGE_BUILD set, bypassing tag guard."
+    return 0
+  fi
+
   if [ -z "$CIRCLE_TAG" ]; then
     echo "Not a tag build, skipping."
     exit 0
@@ -16,6 +21,11 @@ function skip_if_not_tag() {
 
 function skip_if_unchanged() {
   local image=$1
+
+  if [ -n "$FORCE_IMAGE_BUILD" ]; then
+    echo "FORCE_IMAGE_BUILD set, bypassing unchanged guard."
+    return 0
+  fi
 
   local prev_tag
   prev_tag=$(git tag --sort=-creatordate | awk 'NR==2{print; exit}')
