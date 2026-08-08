@@ -3,103 +3,21 @@ workflows:
   version: 2
   test:
     jobs:
-      - backend_tests:
-          filters: &all_tags
-            tags:
-              only: /.*/
-      - backend_checks:
-          filters: *all_tags
-      - jasmine:
-          filters: *all_tags
-      - frontend-checks:
-          filters: *all_tags
-      - proxy_extension_tests:
-          filters: *all_tags
-      - coverage-final:
-          requires: [backend_tests, jasmine]
-          filters: *all_tags
-      - release-image:
-          name: release-vite_kerghan-base
-          image: vite_kerghan-base
-          filters: *all_tags
-      - release-image:
-          name: release-vite_kerghan-base-arm64
-          image: vite_kerghan-base
-          arch: arm64
-          filters: *all_tags
-      - build-and-release:
-          requires: [backend_tests, backend_checks, jasmine, frontend-checks, proxy_extension_tests]
-          filters: &tags_only
-            tags:
-              only: /\d+\.\d+\.\d+/
-            branches:
-              ignore: /.*/
-      - upload_proxy_files:
-          requires: [backend_tests, backend_checks, jasmine, frontend-checks, proxy_extension_tests]
-          filters: *tags_only
-      - upload_fe_files:
-          requires: [backend_tests, backend_checks, jasmine, frontend-checks, proxy_extension_tests, release-vite_kerghan-base, release-vite_kerghan-base-arm64]
-          filters: *tags_only
-      - upload_extension:
-          requires: [upload_proxy_files]
-          filters: *tags_only
-      - copy_proxy_configuration:
-          requires: [upload_proxy_files]
-          filters: *tags_only
-      - release:
-          requires:
-            - build-and-release
-            - upload_extension
-            - upload_proxy_files
-            - copy_proxy_configuration
-            - upload_fe_files
-            - release-vite_kerghan-base
-            - release-vite_kerghan-base-arm64
-          filters: *tags_only
-      - warm-up-cache:
-          requires: [release]
-          filters: *tags_only
-      - wake-navi:
-          filters: *tags_only
+      - backend_tests
+      - backend_checks
+      - jasmine
+      - frontend-checks
+      - proxy_extension_tests
 jobs:
-  release-image:
-    parameters:
-      image:
-        type: string
-      arch:
-        type: string
-        default: ""
-    machine: true
-    steps:
-      - checkout
-      - run:
-          name: Set up QEMU
-          command: bin/image.sh qemu << parameters.image >>
-      - run:
-          name: Release
-          command: bin/image.sh push << parameters.image >> << parameters.arch >>
-
-  # Backend base images (kerghan-base, circleci_kerghan-base, production_kerghan-base) are not
-  # published to Docker Hub for this project (see docs/agents/architecture/backend.md), so there
-  # is no release-image job for them. backend_tests/backend_checks below run against the same
-  # generic darthjee/circleci_node image the frontend jobs already use, with a fresh `yarn
-  # install` each run — the same pattern jasmine/frontend-checks use, not a workaround.
+  # Minimal bootstrap CI: backend, frontend and proxy-extension tests/lint only for now. The
+  # full pipeline (release chain, image publishing) lives in .circleci/config.yml.bkp until the
+  # rest of the stack and its required CircleCI secrets are actually in place — see aux/todo.md.
+  #
+  # No DB service container yet: no Sequelize models/specs exist to need one (see
+  # docs/agents/product.md). Add a cimg/mysql:8.0 service alongside the first DB-touching spec.
   backend_tests:
     docker:
       - image: darthjee/circleci_node:0.2.1
-        environment:
-          KERGHAN_MYSQL_HOST: mysql
-          KERGHAN_MYSQL_PORT: 3306
-          KERGHAN_MYSQL_USER: root
-          KERGHAN_MYSQL_NAME: kerghan
-          KERGHAN_MYSQL_PASSWORD: kerghan
-      - image: cimg/mysql:8.0
-        name: mysql
-        environment:
-          MYSQL_DATABASE: kerghan
-          MYSQL_USER: kerghan
-          MYSQL_PASSWORD: kerghan
-          MYSQL_ROOT_PASSWORD: kerghan
     steps:
       - checkout
       - run:
@@ -111,9 +29,6 @@ jobs:
       - run:
           name: Tests
           command: npm run coverage
-      - run:
-          name: Upload coverage to Codacy (partial)
-          command: bash <(curl -Ls https://coverage.codacy.com/get.sh) report --partial -r coverage/lcov.info
 
   backend_checks:
     docker:
@@ -130,6 +45,8 @@ jobs:
           name: Check JS Lint
           command: npm run lint
 
+  # No `check_i18n` step: Kerghan has no i18n layer (kerghan.md §16, aux/todo.md — optional,
+  # skipped for now).
   jasmine:
     docker:
       - image: darthjee/circleci_node:0.2.1
@@ -144,17 +61,6 @@ jobs:
       - run:
           name: Tests
           command: npm run coverage
-      - run:
-          name: Upload coverage to Codacy (partial)
-          command: bash <(curl -Ls https://coverage.codacy.com/get.sh) report --partial -r coverage/lcov.info
-
-  coverage-final:
-    docker:
-      - image: darthjee/circleci_node:0.2.1
-    steps:
-      - run:
-          name: Finalize coverage on Codacy
-          command: bash <(curl -Ls https://coverage.codacy.com/get.sh) final
 
   frontend-checks:
     docker:
@@ -184,122 +90,3 @@ jobs:
       - run:
           name: Tests
           command: vendor/bin/phpunit --bootstrap /var/www/html/extension/tests/bootstrap.php /var/www/html/extension/tests
-
-  upload_proxy_files:
-    docker:
-      - image: darthjee/tent:0.10.1
-    working_directory: /home/app/app
-    steps:
-      - checkout
-      - run:
-          name: Generate key file
-          command: bin/deploy_frontend.sh generate_key_file
-      - run:
-          name: Upload proxy files
-          command: SOURCE=/var/www/html/ bin/deploy_frontend.sh upload
-
-  copy_proxy_configuration:
-    docker:
-      - image: darthjee/tent:0.10.1
-    working_directory: /home/app/app
-    steps:
-      - checkout
-      - run:
-          name: Generate key file
-          command: bin/deploy_frontend.sh generate_key_file
-      - run:
-          name: Upload proxy configuration
-          command: SOURCE=proxy/prod_configuration/ DEPLOY_PATH=configuration/ bin/deploy_frontend.sh upload
-      - run:
-          name: Setup locals
-          command: TARGET=configuration/locals.php DEPLOY_PATH=configuration/ bin/deploy_frontend.sh copy_files
-      - run:
-          name: Setup .htaccess
-          command: TARGET=.htaccess DEPLOY_PATH=./ bin/deploy_frontend.sh copy_files
-
-  upload_extension:
-    docker:
-      - image: darthjee/tent:0.10.1
-    working_directory: /home/app/app
-    steps:
-      - checkout
-      - run:
-          name: Generate key file
-          command: bin/deploy_frontend.sh generate_key_file
-      - run:
-          name: Remove test files
-          command: rm -rf proxy/extension/tests/
-      - run:
-          name: Upload proxy extension
-          command: SOURCE=proxy/extension/ DEPLOY_PATH=extension/ bin/deploy_frontend.sh upload
-
-  upload_fe_files:
-    docker:
-      - image: darthjee/vite_kerghan-base:0.1.0
-    steps:
-      - checkout
-      - run:
-          name: Set folder
-          command: rm backend -rf; cp frontend/* ./ -r; rm frontend -rf
-      - run:
-          name: Yarn install
-          command: yarn install
-      - run:
-          name: Build assets
-          command: bin/deploy_frontend.sh build
-      - run:
-          name: Generate key file
-          command: bin/deploy_frontend.sh generate_key_file
-      - run:
-          name: Generate folder
-          command: DEPLOY_PATH=static/ bin/deploy_frontend.sh generate_folder
-      - run:
-          name: Upload assets
-          command: SOURCE=dist/ DEPLOY_PATH=static/ bin/deploy_frontend.sh upload
-
-  build-and-release:
-    machine: true
-    steps:
-      - checkout
-      - run:
-          name: Update Render Deploy Branch
-          command: scripts/deploy.sh update_deploy_branch
-      - run:
-          name: Trigger Deploy
-          command: scripts/deploy.sh deploy
-
-  release:
-    docker:
-      - image: darthjee/vite_kerghan-base:0.1.0
-    steps:
-      - checkout
-      - run:
-          name: Generate key file
-          command: bin/deploy_frontend.sh generate_key_file
-      - run:
-          name: Release assets
-          command: bin/deploy_frontend.sh release
-
-  warm-up-cache:
-    docker:
-      - image: darthjee/navi-hey-client:latest
-    steps:
-      - checkout
-      - run:
-          name: Set Navi namespace
-          command: echo 'export NAVI_NAMEPACE="${KERGHAN_NAMESPACE}-${CIRCLE_WORKFLOW_WORKSPACE_ID}"' >> "$BASH_ENV"
-      - run:
-          name: Push navi config
-          command: scripts/warm_navi_cache.sh config
-      - run:
-          name: Start navi engine
-          command: scripts/warm_navi_cache.sh engine-start
-
-  wake-navi:
-    docker:
-      - image: cimg/base:current
-    steps:
-      - checkout
-      - run:
-          name: Wake up Navi
-          command: scripts/wake_navi.sh
