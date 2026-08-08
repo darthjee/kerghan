@@ -2,8 +2,10 @@ import express from 'express';
 import session from 'express-session';
 import { HandlerConfig } from './HandlerConfig.js';
 import { Authenticator } from '../accounts/Authenticator.js';
+import { Registrar } from '../accounts/Registrar.js';
 import { HealthHandler } from './handlers/HealthHandler.js';
 import { LoginHandler } from './handlers/LoginHandler.js';
+import { RegisterHandler } from './handlers/RegisterHandler.js';
 import { RouteRegister } from './RouteRegister.js';
 
 const { Router: ExpressRouter } = express;
@@ -37,6 +39,7 @@ class Router {
     const router = ExpressRouter();
     const register = new RouteRegister(router);
     const authenticator = new Authenticator(this.#models.User);
+    const registrar = new Registrar(this.#models.User);
 
     router.use(express.json());
     router.use(this.#buildSession());
@@ -45,7 +48,8 @@ class Router {
       '/health.json': new HandlerConfig(HealthHandler),
     };
     const POST_ROUTES = {
-      '/login.json': new HandlerConfig(LoginHandler, authenticator),
+      '/accounts/login.json': new HandlerConfig(LoginHandler, authenticator),
+      '/accounts/register.json': new HandlerConfig(RegisterHandler, registrar),
     };
 
     Object.entries(GET_ROUTES).forEach(([route, handler]) => {
