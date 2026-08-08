@@ -1,0 +1,142 @@
+version: '3.8'
+
+services:
+  kerghan_mysql:
+    image: mysql:9.3.0
+    container_name: kerghan_mysql
+    env_file: .env
+    environment:
+      MYSQL_DATABASE: kerghan
+      MYSQL_USER: kerghan
+      MYSQL_PASSWORD: kerghan
+      MYSQL_ROOT_PASSWORD: kerghan
+    ports:
+      - 0.0.0.0:$KERGHAN_MYSQL_PORT:3306
+    volumes:
+      - ./docker_volumes/mysql_data:/var/lib/mysql
+
+  #################### Base (Node build — Express + Yarn) ####################
+
+  base: &base
+    image: darthjee/kerghan   # local tag only — not pushed to Docker Hub
+    volumes:
+      - ./backend:/home/node/app
+    links:
+      - kerghan_mysql:mysql
+    env_file: .env
+
+  base_build:
+    <<: *base
+    build:
+      context: .
+      dockerfile: dockerfiles/kerghan/Dockerfile
+    command: echo done
+
+  base_prod: &base_prod
+    image: darthjee/production_kerghan
+    links:
+      - kerghan_mysql:mysql
+    env_file: .env.prod
+
+  base_prod_build:
+    <<: *base_prod
+    build:
+      context: .
+      dockerfile: dockerfiles/production_kerghan/Dockerfile
+    command: echo done
+
+  #################### DEV CONTAINERS ####################
+
+  kerghan_app:
+    <<: *base
+    container_name: kerghan_app
+    depends_on:
+      - base_build
+      - kerghan_mysql
+      - kerghan_phpmyadmin
+    ports:
+      - 0.0.0.0:3030:8080
+    environment:
+      - KERGHAN_MYSQL_PORT=3306
+
+  kerghan_tests:
+    <<: *base
+    container_name: kerghan_tests
+    depends_on:
+      - base_build
+
+  kerghan_prod_app:
+    <<: *base_prod
+    container_name: kerghan_prod_app
+    depends_on:
+      - base_prod_build
+      - kerghan_mysql
+    ports:
+      - 0.0.0.0:3030:8080
+    environment:
+      - KERGHAN_MYSQL_PORT=3306
+      - STAGE=production
+
+  kerghan_fe:
+    container_name: kerghan_fe
+    build:
+      context: .
+      dockerfile: dockerfiles/vite_kerghan/Dockerfile
+    volumes:
+      - ./frontend:/home/node/app
+      - ./docker_volumes/node_modules:/home/node/app/node_modules
+      - ./docker_volumes/static:/home/node/app/dist
+    ports:
+      - 0.0.0.0:3010:8080
+    env_file: .env
+
+  kerghan_proxy:
+    image: darthjee/tent:0.10.1
+    container_name: kerghan_proxy
+    env_file: .env
+    volumes:
+      - ./docker_volumes/static/:/var/www/html/static/
+      - ./proxy/dev_configuration:/var/www/html/configuration/
+      - ./docker_volumes/proxy_cache:/var/www/html/cache/
+      - ./proxy/extension:/var/www/html/extension
+    links:
+      - kerghan_app:backend
+      - kerghan_fe:frontend
+    depends_on:
+      - kerghan_app
+      - kerghan_fe
+    ports:
+      - 0.0.0.0:3000:80
+
+  proxy_tests:
+    image: darthjee/tent-test:0.10.0
+    volumes:
+      - ./proxy/extension:/var/www/html/extension
+    command: vendor/bin/phpunit --bootstrap /var/www/html/extension/tests/bootstrap.php /var/www/html/extension/tests
+
+  kerghan_navi:
+    image: darthjee/navi-hey:1.5.1
+    volumes:
+      - ./navi/:/home/node/app
+    command: navi-hey --config navi_config.yaml
+    environment:
+      - KERGHAN_PRODUCTION_URL=$KERGHAN_PRODUCTION_URL
+      - NAVI_PORT=3000
+      - NAVI_NAMEPACE=$NAVI_NAMEPACE
+    ports:
+      - 0.0.0.0:3100:3000
+
+  kerghan_phpmyadmin:
+    image: phpmyadmin/phpmyadmin
+    container_name: kerghan_phpmyadmin
+    depends_on: [kerghan_mysql]
+    links:
+      - kerghan_mysql:mysql
+    environment:
+      PMA_HOST: mysql
+      PMA_PORT: 3306
+      MYSQL_USER: root
+      MYSQL_ROOT_PASSWORD: kerghan
+      MYSQL_PASSWORD: kerghan
+    ports:
+      - 0.0.0.0:3050:80

@@ -1,0 +1,59 @@
+import { ForbiddenError } from '../exceptions/http/ForbiddenError.js';
+import { NotFoundError } from '../exceptions/http/NotFoundError.js';
+
+/**
+ * Registers a route on an Express router by binding the handler's handle method.
+ * @author darthjee
+ */
+class RouteRegister {
+  #router;
+
+  /**
+   * @param {object} router - An Express Router instance.
+   */
+  constructor(router) {
+    this.#router = router;
+  }
+
+  /**
+   * Registers a GET route on the router.
+   * Catches ForbiddenError → 403, NotFoundError → 404, and any other error → 500.
+   * @param {object} params - Options for registering a route.
+   * @param {string} params.route - The route path (e.g. '/health.json').
+   * @param {object} params.handler - The handler whose handle method is called.
+   * @returns {void}
+   */
+  register({ route, handler }) {
+    this.#router.get(route, (req, res) => {
+      try {
+        handler.handle(req, res);
+      } catch (e) {
+        this.#handleError(e, res);
+      }
+    });
+  }
+
+  /**
+   * Maps a caught exception to an HTTP error response.
+   * @param {Error} e - The caught exception.
+   * @param {object} res - The Express response object.
+   * @returns {void}
+   */
+  #handleError(e, res) {
+    let statusCode;
+    let message;
+    if (e instanceof ForbiddenError) {
+      statusCode = 403;
+      message = 'Forbidden';
+    } else if (e instanceof NotFoundError) {
+      statusCode = 404;
+      message = e.message;
+    } else {
+      statusCode = 500;
+      message = 'Internal Server Error';
+    }
+    res.status(statusCode).json({ error: message });
+  }
+}
+
+export { RouteRegister };

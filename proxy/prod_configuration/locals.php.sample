@@ -1,0 +1,5 @@
+<?php
+
+$backendHost = 'https://localhost:3030/';
+$staticRoot = '/home/kerghan_user/kerghan';
+$cacheFolder = './cache';
