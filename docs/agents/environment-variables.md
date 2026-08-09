@@ -52,10 +52,12 @@ Used by the `kerghan_navi` compose service and the CI `warm-up-cache`/`wake-navi
 ## 4. CircleCI project variables (deploy pipeline)
 
 Not part of any `.env` file — set directly in CircleCI's project (or org) settings, consumed as
-plain shell env vars by `scripts/`/`bin/` during CI jobs. **The currently-live
-`.circleci/config.yml` is a trimmed test/lint-only pipeline and needs none of these.** They're
-required once the full release chain (kept as reference in `aux/circleci_config.yml` until
-Kerghan's own Render service / SSH host exist — see `aux/todo.md`) is turned back on:
+plain shell env vars by `scripts/`/`bin/` during CI jobs. `.circleci/config.yml`'s release chain
+(`build-and-release`, `upload_proxy_files`, `copy_proxy_configuration`, `upload_extension`,
+`upload_fe_files`, `release`), gated to semver tag pushes, requires every variable below. No real
+Render service or SSH deploy host exists for Kerghan yet, though — provisioning that
+infrastructure and filling in these values is a separate, not-yet-done step; until then, a tag
+push runs the jobs but they fail against unset/placeholder credentials.
 
 | Variable | Purpose | Used by |
 |---|---|---|
@@ -69,7 +71,7 @@ Kerghan's own Render service / SSH host exist — see `aux/todo.md`) is turned b
 | `SSH_REMOTE_TEMP_DIR` | Workspace-scoped staging path before the atomic swap. | `bin/deploy_frontend.sh` |
 | `NAVI_URL` | Navi server URL for cache warm-up and wake calls. | `scripts/warm_navi_cache.sh`, `scripts/wake_navi.sh` |
 | `NAVI_API_TOKEN` | Auth token for Navi's `navi-client`. | `scripts/warm_navi_cache.sh` |
-| `KERGHAN_NAMESPACE` | Combined with the CircleCI workspace ID to build a per-build Navi namespace. | `aux/circleci_config.yml`'s `warm-up-cache` job |
+| `KERGHAN_NAMESPACE` | Combined with the CircleCI workspace ID to build a per-build Navi namespace. | Not yet consumed — reserved for a future `warm-up-cache` job (cache warm-up is out of scope for the current release chain; see `docs/agents/cache-warmer.md`). |
 | `CODACY_PROJECT_TOKEN` | Coverage upload target, read implicitly by Codacy's own uploader script. | `backend_tests`/`jasmine` CI jobs |
 
 ## Keeping this doc honest

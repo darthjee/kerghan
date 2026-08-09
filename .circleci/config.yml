@@ -10,6 +10,42 @@ workflows:
       - jasmine
       - frontend-checks
       - proxy_extension_tests
+      - build-and-release:
+          requires: [backend_tests, backend_checks, jasmine, frontend-checks, proxy_extension_tests]
+          filters: &tags_only
+            tags:
+              only: /\d+\.\d+\.\d+/
+            branches:
+              ignore: /.*/
+      - upload_proxy_files:
+          requires: [backend_tests, backend_checks, jasmine, frontend-checks, proxy_extension_tests]
+          filters: *tags_only
+      - upload_fe_files:
+          requires:
+            - backend_tests
+            - backend_checks
+            - jasmine
+            - frontend-checks
+            - proxy_extension_tests
+            - release-vite_kerghan-base
+            - release-vite_kerghan-base-arm64
+          filters: *tags_only
+      - upload_extension:
+          requires: [upload_proxy_files]
+          filters: *tags_only
+      - copy_proxy_configuration:
+          requires: [upload_proxy_files]
+          filters: *tags_only
+      - release:
+          requires:
+            - build-and-release
+            - upload_extension
+            - upload_proxy_files
+            - copy_proxy_configuration
+            - upload_fe_files
+            - release-vite_kerghan-base
+            - release-vite_kerghan-base-arm64
+          filters: *tags_only
       - release-image:
           name: release-kerghan-base
           image: kerghan-base
@@ -47,9 +83,8 @@ workflows:
           arch: arm64
           filters: { tags: { only: /.*/ } }
 jobs:
-  # Minimal bootstrap CI: backend, frontend and proxy-extension tests/lint only for now. The
-  # full pipeline (release chain, image publishing) lives in .circleci/config.yml.bkp until the
-  # rest of the stack and its required CircleCI secrets are actually in place — see aux/todo.md.
+  # Minimal bootstrap CI: backend, frontend and proxy-extension tests/lint. The release chain
+  # (build/upload/deploy) lives further down in this same file, gated to semver tag pushes only.
   #
   # No DB service container yet: no Sequelize models/specs exist to need one (see
   # docs/agents/product.md). Add a cimg/mysql:8.0 service alongside the first DB-touching spec.
@@ -83,8 +118,7 @@ jobs:
           name: Check JS Lint
           command: npm run lint
 
-  # No `check_i18n` step: Kerghan has no i18n layer (kerghan.md §16, aux/todo.md — optional,
-  # skipped for now).
+  # No `check_i18n` step: Kerghan has no i18n layer (kerghan.md §16 — optional, skipped for now).
   jasmine:
     docker:
       - image: darthjee/circleci_node:0.2.1
@@ -129,10 +163,10 @@ jobs:
           name: Tests
           command: vendor/bin/phpunit --bootstrap /var/www/html/extension/tests/bootstrap.php /var/www/html/extension/tests
 
-  # Multi-arch (amd64 + arm64) publish of Kerghan's 4 base images, mirroring majora-3's
-  # release-image pattern (see aux/base-image.md). Runs on tag builds only —
-  # bin/image.sh's skip_if_not_tag/skip_if_unchanged decide whether to actually build/push,
-  # unless FORCE_IMAGE_BUILD bypasses those guards.
+  # Multi-arch (amd64 + arm64) publish of Kerghan's 4 base images, mirroring Majora's
+  # release-image pattern. Runs on tag builds only — bin/image.sh's
+  # skip_if_not_tag/skip_if_unchanged decide whether to actually build/push, unless
+  # FORCE_IMAGE_BUILD bypasses those guards.
   release-image:
     parameters:
       image:
@@ -149,3 +183,114 @@ jobs:
       - run:
           name: Release
           command: bin/image.sh push << parameters.image >> << parameters.arch >>
+
+  # Deploys the backend to Render: points the service's branch at the tag that triggered this
+  # workflow, triggers a deploy, and blocks (watch_deployment, in scripts/deploy.sh) until it
+  # reaches "live". Runs on `machine: true` since scripts/render.sh/scripts/deploy.sh only need
+  # curl/jq, already present on the machine executor.
+  build-and-release:
+    machine: true
+    steps:
+      - checkout
+      - run:
+          name: Update Render Deploy Branch
+          command: scripts/deploy.sh update_deploy_branch
+      - run:
+          name: Trigger Deploy
+          command: scripts/deploy.sh deploy
+
+  # Uploads the Tent proxy runtime (/var/www/html/) to the SSH deploy host's workspace-scoped
+  # temp dir — staged, not yet swapped live (see the `release` job below).
+  upload_proxy_files:
+    docker:
+      - image: darthjee/tent:0.10.1
+    working_directory: /home/app/app
+    steps:
+      - checkout
+      - run:
+          name: Generate key file
+          command: bin/deploy_frontend.sh generate_key_file
+      - run:
+          name: Upload proxy files
+          command: SOURCE=/var/www/html/ bin/deploy_frontend.sh upload
+
+  # Uploads the production proxy configuration, then copies over server-side state that only
+  # ever lives on the host (locals.php with real secrets, and .htaccess for the Apache front
+  # end) so the atomic swap doesn't wipe them.
+  copy_proxy_configuration:
+    docker:
+      - image: darthjee/tent:0.10.1
+    working_directory: /home/app/app
+    steps:
+      - checkout
+      - run:
+          name: Generate key file
+          command: bin/deploy_frontend.sh generate_key_file
+      - run:
+          name: Upload proxy configuration
+          command: SOURCE=proxy/prod_configuration/ DEPLOY_PATH=configuration/ bin/deploy_frontend.sh upload
+      - run:
+          name: Setup locals
+          command: TARGET=configuration/locals.php DEPLOY_PATH=configuration/ bin/deploy_frontend.sh copy_files
+      - run:
+          name: Setup .htaccess
+          command: TARGET=.htaccess DEPLOY_PATH=./ bin/deploy_frontend.sh copy_files
+
+  # Uploads the Tent proxy extension, stripped of its test suite (not needed at runtime).
+  upload_extension:
+    docker:
+      - image: darthjee/tent:0.10.1
+    working_directory: /home/app/app
+    steps:
+      - checkout
+      - run:
+          name: Generate key file
+          command: bin/deploy_frontend.sh generate_key_file
+      - run:
+          name: Remove test files
+          command: rm -rf proxy/extension/tests/
+      - run:
+          name: Upload proxy extension
+          command: SOURCE=proxy/extension/ DEPLOY_PATH=extension/ bin/deploy_frontend.sh upload
+
+  # Builds the Vite frontend and uploads the static build output to the SSH deploy host's
+  # workspace-scoped temp dir — staged, not yet swapped live (see the `release` job below).
+  upload_fe_files:
+    docker:
+      - image: darthjee/vite_kerghan-base:0.1.0
+    steps:
+      - checkout
+      - run:
+          name: Set folder
+          command: rm backend -rf; cp frontend/* ./ -r; rm frontend -rf
+      - run:
+          name: Yarn install
+          command: yarn install
+      - run:
+          name: Build assets
+          command: bin/deploy_frontend.sh build
+      - run:
+          name: Generate key file
+          command: bin/deploy_frontend.sh generate_key_file
+      - run:
+          name: Generate folder
+          command: DEPLOY_PATH=static/ bin/deploy_frontend.sh generate_folder
+      - run:
+          name: Upload assets
+          command: SOURCE=dist/ DEPLOY_PATH=static/ bin/deploy_frontend.sh upload
+
+  # Atomic swap: only runs once every upload/build job above (and the backend's
+  # build-and-release, which blocks until Render reports "live") has succeeded, so frontend,
+  # proxy, and backend never go live out of sync with each other. If anything upstream fails,
+  # this job simply never runs and the previously-live build keeps serving unchanged.
+  release:
+    docker:
+      - image: darthjee/vite_kerghan-base:0.1.0
+    steps:
+      - checkout
+      - run:
+          name: Generate key file
+          command: bin/deploy_frontend.sh generate_key_file
+      - run:
+          name: Release assets
+          command: bin/deploy_frontend.sh release
