@@ -3,8 +3,10 @@ workflows:
   version: 2
   test:
     jobs:
-      - backend_tests
-      - backend_checks
+      - backend_tests:
+          requires: [release-circleci_kerghan-base, release-circleci_kerghan-base-arm64]
+      - backend_checks:
+          requires: [release-circleci_kerghan-base, release-circleci_kerghan-base-arm64]
       - jasmine
       - frontend-checks
       - proxy_extension_tests
@@ -53,7 +55,7 @@ jobs:
   # docs/agents/product.md). Add a cimg/mysql:8.0 service alongside the first DB-touching spec.
   backend_tests:
     docker:
-      - image: darthjee/circleci_node:0.2.1
+      - image: darthjee/circleci_kerghan-base:0.1.0
     steps:
       - checkout
       - run:
@@ -68,7 +70,7 @@ jobs:
 
   backend_checks:
     docker:
-      - image: darthjee/circleci_node:0.2.1
+      - image: darthjee/circleci_kerghan-base:0.1.0
     steps:
       - checkout
       - run:
