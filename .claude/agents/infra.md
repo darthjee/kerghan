@@ -47,10 +47,12 @@ All 4 base images — `kerghan-base`, `circleci_kerghan-base`, `production_kergh
 `skip_if_unchanged` guards keep unchanged images from rebuilding on every tag; `FORCE_IMAGE_BUILD`
 bypasses both guards when a forced rebuild/republish is needed.
 
-The existing `backend_tests`/`backend_checks`/`jasmine`/`frontend-checks` CI jobs still run from a
-generic `darthjee/circleci_node` image with a fresh `yarn install` each run — switching them to
-consume the published `circleci_kerghan-base` image (and `requires:` the release job) is a
-follow-up, not done yet.
+`backend_tests`/`backend_checks` now run from the published `darthjee/circleci_kerghan-base:0.1.0`
+image (pinned to the version in the root `version` file, not `:latest`), `requires:`-gated on
+`release-circleci_kerghan-base`/`release-circleci_kerghan-base-arm64` so they wait for a fresh
+publish on tag builds; `yarn install` still runs but reads from the base image's pre-warmed cache
+instead of a cold network install. `jasmine`/`frontend-checks` intentionally stay on the generic
+`darthjee/circleci_node` image, since no frontend-specific CI base image exists.
 
 The **leaf app images** — `darthjee/kerghan` (backend) and `darthjee/production_kerghan` — are
 still **not published to Docker Hub**; they're built locally (`make build`) or, in CI, from the
