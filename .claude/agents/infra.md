@@ -41,8 +41,8 @@ through `docker-compose run` or the relevant image.
 
 All 4 base images — `kerghan-base`, `circleci_kerghan-base`, `production_kerghan-base`, and
 `vite_kerghan-base` — are published to Docker Hub, multi-arch (amd64 + arm64), via the
-`release-image` CircleCI job on tag builds (mirroring Majora's `release-image` pattern; see
-`aux/base-image.md`) and via the `push`/`push-base`/`push-circleci-base`/`push-production-base`/
+`release-image` CircleCI job on tag builds (mirroring Majora's `release-image` pattern) and via
+the `push`/`push-base`/`push-circleci-base`/`push-production-base`/
 `push-fe-base` Makefile targets for manual pushes. `bin/image.sh`'s `skip_if_not_tag`/
 `skip_if_unchanged` guards keep unchanged images from rebuilding on every tag; `FORCE_IMAGE_BUILD`
 bypasses both guards when a forced rebuild/republish is needed.
