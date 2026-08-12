@@ -11,7 +11,14 @@ workflows:
       - frontend-checks
       - proxy_extension_tests
       - build-and-release:
-          requires: [backend_tests, backend_checks, jasmine, frontend-checks, proxy_extension_tests]
+          requires:
+            - backend_tests
+            - backend_checks
+            - jasmine
+            - frontend-checks
+            - proxy_extension_tests
+            - release-production_kerghan-base
+            - release-production_kerghan-base-arm64
           filters: &tags_only
             tags:
               only: /\d+\.\d+\.\d+/

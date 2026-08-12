@@ -80,7 +80,7 @@ for the precedent) but the agent itself is left for whoever builds out the real 
 
 | Subdirectory / File | Description |
 |---|---|
-| `architecture/` | Per-area architecture pages (`proxy.md`, `frontend.md`; `backend.md` is precedent-only, no real API yet) |
+| `architecture/` | Per-area architecture pages (`proxy.md`, `frontend.md`, `infra.md`; `backend.md` is precedent-only, no real API yet) |
 | `plans/` | Implementation plans, one directory per issue |
 | `issues/` | Detailed specs for open issues, one file per issue |
 | `index.md`, `summary.md`, `folder-structure.md`, `flow.md`, `architecture.md`, `contributing.md`, `cache-warmer.md`, `product.md`, `issue-enhancement.md` | Top-level reference docs |
@@ -91,4 +91,5 @@ One directory per service image (dev and production backend, dev and production 
 base), each with a `-base` variant shared by its dev/production counterpart where applicable.
 See `ls dockerfiles/` for the current list. The backend image family (`kerghan-base`,
 `circleci_kerghan-base`, `production_kerghan-base`) is built but not published to Docker Hub —
-see `docs/agents/architecture/backend.md`.
+see `docs/agents/architecture/infra.md` for the CircleCI `release-image` jobs that publish each
+image family (and which ones actually push to Docker Hub).

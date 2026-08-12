@@ -12,3 +12,5 @@ This page is the hub. See the area pages for details:
 - [Backend](./architecture/backend.md) — precedent only, no real API exists yet. The
   tracked-repo/label-rule data model (see `docs/agents/product.md`) needs to be decided, and a
   `backend` agent created, before this becomes a real architecture page.
+- [Infra](./architecture/infra.md) — the CircleCI release pipeline's job graph (test/lint jobs,
+  the semver-tag-gated release chain, and the base-image publish jobs feeding it).
