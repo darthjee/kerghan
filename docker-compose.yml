@@ -115,7 +115,7 @@ services:
     command: vendor/bin/phpunit --bootstrap /var/www/html/extension/tests/bootstrap.php /var/www/html/extension/tests
 
   kerghan_navi:
-    image: darthjee/navi-hey:1.5.1
+    image: darthjee/navi-hey:1.6.1
     volumes:
       - ./navi/:/home/node/app
     command: navi-hey --config navi_config.yaml
