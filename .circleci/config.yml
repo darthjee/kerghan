@@ -5,11 +5,18 @@ workflows:
     jobs:
       - backend_tests:
           requires: [release-circleci_kerghan-base, release-circleci_kerghan-base-arm64]
+          filters: &all_tags
+            tags:
+              only: /.*/
       - backend_checks:
           requires: [release-circleci_kerghan-base, release-circleci_kerghan-base-arm64]
-      - jasmine
-      - frontend-checks
-      - proxy_extension_tests
+          filters: *all_tags
+      - jasmine:
+          filters: *all_tags
+      - frontend-checks:
+          filters: *all_tags
+      - proxy_extension_tests:
+          filters: *all_tags
       - build-and-release:
           requires:
             - backend_tests
