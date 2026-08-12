@@ -3,7 +3,9 @@
 Tent (`darthjee/tent`) is the single entry point on port 3000 in both dev and prod. It's a
 small PHP reverse proxy/static file server, entirely backend-language-agnostic — it just
 proxies to `http://backend:8080` and `http://frontend:8080` by container link alias (dev) or a
-host-specific `$backendHost`/`$staticRoot` pair (prod).
+host-specific `$backendHost`/`$staticRoot` pair (prod). See
+[How to Use Tent](../external/how-to-use-tent.md) for the full rule/middleware/cache reference —
+this page only covers how Kerghan configures it.
 
 ## Rule loading order
 
