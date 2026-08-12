@@ -36,7 +36,10 @@ docker run --rm -v "$PWD":/repo darthjee/tent:0.10.1 sh -c '
 ## Tent proxy overview
 
 Tent (`darthjee/tent`) is the single entry point on port 3000. It routes requests based on
-rules loaded by `configure.php`.
+rules loaded by `configure.php`. See
+[`docs/agents/external/how-to-use-tent.md`](../../docs/agents/external/how-to-use-tent.md) for
+the full Tent reference (rule structure, handlers, middlewares, cache config) — this page only
+covers how Kerghan configures it.
 
 ### Rule loading order
 

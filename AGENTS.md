@@ -100,6 +100,7 @@ All project documentation lives under [`docs/agents/`](docs/agents/):
 | [Architecture](docs/agents/architecture.md) | Hub page linking to per-area architecture pages (`proxy`, `frontend`; `backend` not written yet). |
 | [Contributing](docs/agents/contributing.md) | Commit guidelines, PR standards, code organization, and refactoring rules. |
 | [Product Definitions](docs/agents/product.md) | Stub — restates what's decided vs. still open about Kerghan's data model. Consult before planning any issue that introduces new entities. |
+| [External Tooling](docs/agents/external.md) | Hub linking full usage guides for external, non-Kerghan-specific tools (Tent, Navi, navi-hey-client). |
 | [Cache Warmer](docs/agents/cache-warmer.md) | Navi setup for warming the proxy cache after release (CI and local); used by the `cache` agent. |
 | [Plans](docs/agents/plans/) | Implementation plans for ongoing or upcoming features. |
 | [Issues](docs/agents/issues/) | Detailed specs for open issues. |

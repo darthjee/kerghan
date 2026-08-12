@@ -1,9 +1,10 @@
 # Cache Warmer
 
 Kerghan uses [Navi](https://github.com/darthjee/navi) to warm the Tent proxy cache after each
-production release, the same tool Majora uses. See `majora-2/docs/agents/external/HOW_TO_USE_NAVI.md`
-in the reference checkout for the full Navi config-format reference (fields, pagination,
-splitting config via `include:`/`namespace:`) — those mechanics aren't repeated here.
+production release, the same tool Majora uses. See
+[`external/HOW_TO_USE_NAVI.md`](external/HOW_TO_USE_NAVI.md) for the full Navi config-format
+reference (fields, pagination, splitting config via `include:`/`namespace:`) — those mechanics
+aren't repeated here.
 
 ## Kerghan is mostly not cacheable through Navi
 
@@ -63,7 +64,9 @@ endpoint is added, follow these rules:
 uses `darthjee/navi-hey-client:latest` directly as the executor and runs `infra`'s
 `scripts/warm_navi_cache.sh` in two steps: `config` (pushes every file listed in that script's
 `RESOURCE_FILES` array — currently just `clients.yml` — via one `navi-client -a config --file
-...` call per file) and `engine-start` (triggers the warm-up for the build's namespace).
+...` call per file) and `engine-start` (triggers the warm-up for the build's namespace). See
+[`external/HOW_TO_USE_NAVI-CLIENT.md`](external/HOW_TO_USE_NAVI-CLIENT.md) for the `navi-client`
+CLI/library reference.
 
 `wake-navi` runs `infra`'s `scripts/wake_navi.sh` early in the workflow (no `requires:`, so it
 doesn't gate or get gated by anything) to ping `$NAVI_URL` awake before `warm-up-cache` needs

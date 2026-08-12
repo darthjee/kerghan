@@ -32,6 +32,9 @@ full file before loading it. For a bare link-only table of contents instead, see
 
 ## External tooling
 
+- **[External Tooling](external.md)** — Hub linking the full usage guides for the non-Kerghan
+  tools the project depends on: Tent (proxy), Navi (cache warmer), and navi-hey-client (Navi's
+  CLI/library). Read the linked guide before making changes involving that tool.
 - **[Cache Warmer](cache-warmer.md)** — How Kerghan uses Navi to warm the Tent proxy cache after
   each production release; used by the `cache` agent. Given Kerghan's multi-tenant model, most
   endpoints are excluded from warming by default. Also documents the per-user cache Tent is

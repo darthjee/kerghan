@@ -23,10 +23,10 @@ This is the single most important thing to know about this agent's scope in Kerg
 Majora: Kerghan is **multi-tenant**. Almost every dashboard endpoint returns data scoped to the
 requesting user's own tracked repos/label rules, not a public, identical-for-everyone response.
 Navi only warms public, identical-for-everyone responses (see
-`docs/agents/external/HOW_TO_USE_NAVI.md` in the reference `majora-2` checkout for the full
-Navi reference). Default assumption for any new endpoint: **it does not belong in Navi's
-warm-up config.** Only add an endpoint if it is genuinely public and unauthenticated (e.g. a
-future public status page) — cross-check with `docs/agents/product.md` once it exists.
+`docs/agents/external/HOW_TO_USE_NAVI.md` for the full Navi reference). Default assumption for
+any new endpoint: **it does not belong in Navi's warm-up config.** Only add an endpoint if it is
+genuinely public and unauthenticated (e.g. a future public status page) — cross-check with
+`docs/agents/product.md` once it exists.
 
 ## Maintaining `navi/navi_config.yaml` and `navi/resources/*.yml`
 
