@@ -17,6 +17,9 @@ workflows:
           filters: *all_tags
       - proxy_extension_tests:
           filters: *all_tags
+      - coverage-final:
+          requires: [backend_tests, jasmine]
+          filters: *all_tags
       - build-and-release:
           requires:
             - backend_tests
@@ -116,6 +119,9 @@ jobs:
       - run:
           name: Tests
           command: npm run coverage
+      - run:
+          name: Upload coverage to Codacy
+          command: bash <(curl -Ls https://coverage.codacy.com/get.sh) report --partial -r coverage/lcov.info || true
 
   backend_checks:
     docker:
@@ -147,6 +153,9 @@ jobs:
       - run:
           name: Tests
           command: npm run coverage
+      - run:
+          name: Upload coverage to Codacy
+          command: bash <(curl -Ls https://coverage.codacy.com/get.sh) report --partial -r coverage/lcov.info || true
 
   frontend-checks:
     docker:
@@ -162,6 +171,17 @@ jobs:
       - run:
           name: Check JS Lint
           command: npm run lint
+
+  # Finalizes the aggregated Codacy coverage report once both partial uploads
+  # (backend_tests, jasmine) have completed. Reuses circleci_kerghan-base since the
+  # get.sh uploader only needs bash/curl and the job doesn't touch repository files.
+  coverage-final:
+    docker:
+      - image: darthjee/circleci_kerghan-base:0.1.0
+    steps:
+      - run:
+          name: Finalize Codacy coverage
+          command: bash <(curl -Ls https://coverage.codacy.com/get.sh) final || true
 
   proxy_extension_tests:
     docker:
