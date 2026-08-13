@@ -121,7 +121,7 @@ jobs:
           command: npm run coverage
       - run:
           name: Upload coverage to Codacy
-          command: bash <(curl -Ls https://coverage.codacy.com/get.sh) report --partial -r coverage/lcov.info
+          command: bash <(curl -Ls https://coverage.codacy.com/get.sh) report --partial -r coverage/lcov.info || true
 
   backend_checks:
     docker:
@@ -155,7 +155,7 @@ jobs:
           command: npm run coverage
       - run:
           name: Upload coverage to Codacy
-          command: bash <(curl -Ls https://coverage.codacy.com/get.sh) report --partial -r coverage/lcov.info
+          command: bash <(curl -Ls https://coverage.codacy.com/get.sh) report --partial -r coverage/lcov.info || true
 
   frontend-checks:
     docker:
@@ -181,7 +181,7 @@ jobs:
     steps:
       - run:
           name: Finalize Codacy coverage
-          command: bash <(curl -Ls https://coverage.codacy.com/get.sh) final
+          command: bash <(curl -Ls https://coverage.codacy.com/get.sh) final || true
 
   proxy_extension_tests:
     docker:

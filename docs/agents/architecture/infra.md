@@ -44,6 +44,17 @@ stay readable. `coverage-final` requires only `backend_tests` and `jasmine` (the
 upload partial Codacy coverage) and isn't required by anything else — it doesn't gate the release
 chain, it just finalizes the aggregated Codacy report once both partial uploads have completed.
 
+All three Codacy upload steps (the partial uploads in `backend_tests`/`jasmine`, and the
+finalize step in `coverage-final`) are best-effort/non-blocking (`|| true` on the upload
+command): `CODACY_PROJECT_TOKEN` isn't provisioned in CircleCI's project settings yet, so as
+things stand today the uploader always fails with "Invalid configuration: Either a project or
+account API token must be provided". Making the step non-blocking keeps that missing credential
+from failing `backend_tests`/`jasmine` themselves — which would otherwise incorrectly gate
+`build-and-release` on an unrelated external-service token — while still actually attempting the
+upload every run, so real Codacy reporting resumes automatically, with no further config change,
+once the token is provisioned. The test/lint commands earlier in each job remain the real
+pass/fail gate.
+
 ### Why `build-and-release` requires the production-base release-image jobs
 
 `build-and-release` requires `release-production_kerghan-base` and
@@ -72,12 +83,12 @@ workflow at all — nothing downstream depends on it being fresh.
 
 | Job | Image/Executor | Filter | Purpose |
 |-----|-----------------|--------|---------|
-| `backend_tests` | `darthjee/circleci_kerghan-base:0.1.0` | every push | Backend test suite + coverage; uploads a partial Codacy coverage report afterward |
+| `backend_tests` | `darthjee/circleci_kerghan-base:0.1.0` | every push | Backend test suite + coverage; uploads a partial Codacy coverage report afterward (best-effort, non-blocking) |
 | `backend_checks` | `darthjee/circleci_kerghan-base:0.1.0` | every push | Backend ESLint |
-| `jasmine` | `darthjee/circleci_node:0.2.1` | every push | Frontend test suite + coverage; uploads a partial Codacy coverage report afterward |
+| `jasmine` | `darthjee/circleci_node:0.2.1` | every push | Frontend test suite + coverage; uploads a partial Codacy coverage report afterward (best-effort, non-blocking) |
 | `frontend-checks` | `darthjee/circleci_node:0.2.1` | every push | Frontend ESLint |
 | `proxy_extension_tests` | `darthjee/tent-test:0.10.4` | every push | PHPUnit tests for `proxy/extension/` |
-| `coverage-final` | `darthjee/circleci_kerghan-base:0.1.0` | every push | Finalizes the aggregated Codacy coverage report once `backend_tests`/`jasmine`'s partial uploads land |
+| `coverage-final` | `darthjee/circleci_kerghan-base:0.1.0` | every push | Finalizes the aggregated Codacy coverage report once `backend_tests`/`jasmine`'s partial uploads land (best-effort, non-blocking) |
 | `release-image` | machine (multi-arch: amd64 + arm64) | every push (no-op unless tag) | Publishes one of the 4 base images to Docker Hub via `bin/image.sh`; instantiated 8 times (one per image × arch) — see below |
 | `build-and-release` | machine | tag only | Triggers the Render deploy of the backend (`scripts/deploy.sh`), blocks until it reports "live" |
 | `upload_proxy_files` | `darthjee/tent:0.10.4` | tag only | Uploads Tent proxy runtime to the SSH deploy host's staging dir |
