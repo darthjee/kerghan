@@ -15,8 +15,6 @@ function remote_temp_dir() {
 
 function run_build() {
     npm run build
-    rsync -r assets/images/ dist/assets/images/
-    rm -f $(find dist/assets/images/ -iname "*.pbm")
 }
 
 function run_generate_ssh_key_file() {
