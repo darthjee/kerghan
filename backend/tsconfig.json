@@ -14,7 +14,6 @@
     "outDir": "./dist",
     "baseUrl": "./",
     "rootDir": "./src",
-    "incremental": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "strict": true,

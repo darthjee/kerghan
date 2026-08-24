@@ -1,13 +1,15 @@
 import 'reflect-metadata';
 import { NestFactory } from '@nestjs/core';
 import { ConfigService } from '@nestjs/config';
+import { ValidationPipe } from '@nestjs/common';
 import cookieParser from 'cookie-parser';
 import { AppModule } from './app.module.js';
 
 /**
  * Boots the Nest application, wiring cookie parsing (needed for the
- * httpOnly access-token cookie added by the Auth module) and reading
- * runtime configuration (`PORT`, `KERGHAN_SECRET_KEY`) through
+ * httpOnly access-token cookie added by the Auth module), global request
+ * DTO validation (`class-validator`, used by the Auth module's DTOs), and
+ * reading runtime configuration (`PORT`, `KERGHAN_SECRET_KEY`) through
  * `@nestjs/config` rather than reading `process.env` directly.
  * @returns {Promise<void>} Resolves once the HTTP server is listening.
  */
@@ -16,6 +18,7 @@ async function bootstrap(): Promise<void> {
   const configService = app.get(ConfigService);
 
   app.use(cookieParser(configService.get<string>('KERGHAN_SECRET_KEY')));
+  app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
 
   const port = configService.get<number>('PORT', 8080);
   await app.listen(port);
