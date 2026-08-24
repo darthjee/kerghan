@@ -21,6 +21,7 @@ running `kerghan_prod_app` locally to sanity-check the production image).
 | `KERGHAN_MYSQL_USER` | **Consumed** | ditto | `backend/src/database/data-source.ts`, `backend/src/app.module.ts` |
 | `KERGHAN_MYSQL_PASSWORD` | **Consumed** | ditto | `backend/src/database/data-source.ts`, `backend/src/app.module.ts` |
 | `KERGHAN_MYSQL_NAME` | **Consumed** | ditto | `backend/src/database/data-source.ts`, `backend/src/app.module.ts` |
+| `KERGHAN_DEMO_PASSWORD` | **Consumed**, dev/seed-only | Password for the `demo` user seeded by the demo-seed migration. Falls back to a non-working placeholder (`kerghan-demo-placeholder`) if unset, so the real dev password only exists in `.env`/`.env.dev.sample`, never in source. | `backend/src/database/migrations/20260824120004-auth-seed-demo-user.ts` |
 | `KERGHAN_ALLOWED_ORIGINS` | Reserved, not yet read | Intended for CORS restriction once a cross-origin frontend call exists. Currently in `.env.dev.sample` but no CORS middleware exists yet — safe to set for when it lands, has no effect today. | — |
 | `FRONTEND_BASE_URL` | Reserved, not yet read | No consumer yet (candidate: links in future emails, or a CORS allow-list entry). | — |
 | `EMAILS_ENABLED` | Reserved, not yet read | No email-sending code exists in the backend yet (candidate future use: account/digest notifications). | — |

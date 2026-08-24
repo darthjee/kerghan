@@ -41,7 +41,11 @@ section for the general convention.
 A dev/manual-testing demo user (`demo`/`kerghan-demo`) is seeded by
 `database/migrations/20260824120004-auth-seed-demo-user.ts`, gated on `process.env.STAGE !==
 'production'` so it can never be created if `yarn migration:run` is ever pointed at a production
-database.
+database. The password comes from `KERGHAN_DEMO_PASSWORD` (see
+`docs/agents/environment-variables.md`), set to `kerghan-demo` in `.env.dev.sample` — if that
+var is unset the migration falls back to `kerghan-demo-placeholder`, which is **not** a working
+login for the documented demo credentials, it only exists so the real password never lives in
+source.
 
 ## JWT/refresh-token flow
 

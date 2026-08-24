@@ -5,10 +5,12 @@ import type { MigrationInterface, QueryRunner } from 'typeorm';
 // seeder (backend/seeders/20260808060903-demo-user.js). This migration
 // runs as part of `yarn migration:run` (wired into `make setup`), so the
 // demo login stays available out of the box: username "demo" / password
-// "kerghan-demo".
+// taken from `KERGHAN_DEMO_PASSWORD` (see `.env.dev.sample`). The fallback
+// below is intentionally not a working credential — it only exists so this
+// file never hardcodes the real dev password in source.
 const USERNAME = 'demo';
 const EMAIL = 'demo@kerghan.test';
-const PASSWORD = 'kerghan-demo';
+const PASSWORD = process.env.KERGHAN_DEMO_PASSWORD ?? 'kerghan-demo-placeholder';
 
 /**
  * Seeds a demo user for local/manual testing. No CI/deploy step runs
