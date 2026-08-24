@@ -21,21 +21,21 @@ import {
 @Entity('auth_refresh_tokens')
 export class RefreshToken {
   @PrimaryGeneratedColumn()
-  id!: number;
+    id!: number;
 
   @Index({ unique: true })
   @Column({ name: 'token_hash' })
-  tokenHash!: string;
+    tokenHash!: string;
 
   @Column({ name: 'user_id' })
-  userId!: number;
+    userId!: number;
 
   @CreateDateColumn({ name: 'issued_at' })
-  issuedAt!: Date;
+    issuedAt!: Date;
 
   @Column({ name: 'expires_at' })
-  expiresAt!: Date;
+    expiresAt!: Date;
 
   @Column({ name: 'revoked_at', type: 'datetime', nullable: true })
-  revokedAt!: Date | null;
+    revokedAt!: Date | null;
 }

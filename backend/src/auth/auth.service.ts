@@ -1,16 +1,16 @@
+import { randomBytes, createHash } from 'node:crypto';
 import { BadRequestException, Injectable, UnauthorizedException } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { JwtService } from '@nestjs/jwt';
 import { InjectRepository } from '@nestjs/typeorm';
 import bcrypt from 'bcryptjs';
-import { randomBytes, createHash } from 'node:crypto';
 import { Repository } from 'typeorm';
 import { LoginDto } from './dto/login.dto.js';
 import { RegisterDto } from './dto/register.dto.js';
-import { UserRegisteredEvent } from './events/user-registered.event.js';
 import { RefreshToken } from './entities/refresh-token.entity.js';
 import { Session } from './entities/session.entity.js';
 import { User } from './entities/user.entity.js';
+import { UserRegisteredEvent } from './events/user-registered.event.js';
 
 // A pre-computed bcrypt hash of a value nobody will ever submit, compared
 // against when no user is found so lookups for unknown usernames take the
@@ -53,8 +53,8 @@ export class AuthService {
     @InjectRepository(User) userRepository: Repository<User>,
     @InjectRepository(RefreshToken) refreshTokenRepository: Repository<RefreshToken>,
     @InjectRepository(Session) sessionRepository: Repository<Session>,
-    jwtService: JwtService,
-    eventEmitter: EventEmitter2,
+      jwtService: JwtService,
+      eventEmitter: EventEmitter2,
   ) {
     this.userRepository = userRepository;
     this.refreshTokenRepository = refreshTokenRepository;

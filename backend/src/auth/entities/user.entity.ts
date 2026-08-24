@@ -15,20 +15,20 @@ import {
 @Entity('auth_users')
 export class User {
   @PrimaryGeneratedColumn()
-  id!: number;
+    id!: number;
 
   @Column({ unique: true })
-  username!: string;
+    username!: string;
 
   @Column({ unique: true })
-  email!: string;
+    email!: string;
 
   @Column({ name: 'password_digest' })
-  passwordDigest!: string;
+    passwordDigest!: string;
 
   @CreateDateColumn({ name: 'created_at' })
-  createdAt!: Date;
+    createdAt!: Date;
 
   @UpdateDateColumn({ name: 'updated_at' })
-  updatedAt!: Date;
+    updatedAt!: Date;
 }

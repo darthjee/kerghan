@@ -14,14 +14,14 @@ import {
 @Entity('auth_sessions')
 export class Session {
   @PrimaryGeneratedColumn()
-  id!: number;
+    id!: number;
 
   @Column({ name: 'user_id' })
-  userId!: number;
+    userId!: number;
 
   @CreateDateColumn({ name: 'created_at' })
-  createdAt!: Date;
+    createdAt!: Date;
 
   @Column({ name: 'last_seen_at' })
-  lastSeenAt!: Date;
+    lastSeenAt!: Date;
 }

@@ -1,6 +1,6 @@
+import { createHmac } from 'node:crypto';
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { createHmac } from 'node:crypto';
 
 /**
  * Generates an HMAC-based cache token used to key Tent's proxy cache

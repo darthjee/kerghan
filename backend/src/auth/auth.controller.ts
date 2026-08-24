@@ -1,7 +1,7 @@
 import { Body, Controller, HttpCode, HttpStatus, Post, Res } from '@nestjs/common';
 import type { Response } from 'express';
-import { Public } from '../core/public.decorator.js';
 import { AuthResult, AuthService } from './auth.service.js';
+import { Public } from '../core/public.decorator.js';
 import { LoginDto } from './dto/login.dto.js';
 import { RefreshTokenDto } from './dto/refresh-token.dto.js';
 import { RegisterDto } from './dto/register.dto.js';
