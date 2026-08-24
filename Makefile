@@ -56,7 +56,7 @@ push-fe:
 # ── Development ───────────────────────────────────────────────────────────────
 
 setup: .env
-	docker-compose run --rm $(PROJECT)_app yarn sequelize-cli db:migrate
+	docker-compose run --rm $(PROJECT)_app yarn migration:run
 
 dev:
 	docker-compose run $(PROJECT)_app /bin/bash
