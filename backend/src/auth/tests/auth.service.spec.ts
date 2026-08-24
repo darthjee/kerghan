@@ -2,6 +2,7 @@ import { BadRequestException, UnauthorizedException } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { JwtService } from '@nestjs/jwt';
 import bcrypt from 'bcryptjs';
+import { IsNull } from 'typeorm';
 import { AuthService } from '../auth.service.js';
 import { RefreshToken } from '../entities/refresh-token.entity.js';
 import { Session } from '../entities/session.entity.js';
@@ -232,6 +233,15 @@ describe('AuthService', () => {
           new UnauthorizedException('Invalid or expired refresh token'),
         );
       });
+
+      it('treats the replay as a compromise signal, revoking the rest of the token family', async () => {
+        await expect(service.refresh('reused-token')).rejects.toThrow(UnauthorizedException);
+
+        expect(refreshTokenRepository.update).toHaveBeenCalledWith(
+          { userId: activeToken.userId, revokedAt: IsNull() },
+          { revokedAt: expect.any(Date) },
+        );
+      });
     });
 
     describe('when the refresh token has expired', () => {
@@ -246,6 +256,12 @@ describe('AuthService', () => {
         await expect(service.refresh('expired-token')).rejects.toThrow(
           new UnauthorizedException('Invalid or expired refresh token'),
         );
+      });
+
+      it('does not treat plain expiry as a compromise signal, leaving the token family untouched', async () => {
+        await expect(service.refresh('expired-token')).rejects.toThrow(UnauthorizedException);
+
+        expect(refreshTokenRepository.update).not.toHaveBeenCalled();
       });
     });
   });

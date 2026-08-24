@@ -4,7 +4,7 @@ import { EventEmitter2 } from '@nestjs/event-emitter';
 import { JwtService } from '@nestjs/jwt';
 import { InjectRepository } from '@nestjs/typeorm';
 import bcrypt from 'bcryptjs';
-import { Repository } from 'typeorm';
+import { IsNull, Repository } from 'typeorm';
 import { LoginDto } from './dto/login.dto.js';
 import { RegisterDto } from './dto/register.dto.js';
 import { RefreshToken } from './entities/refresh-token.entity.js';
@@ -105,6 +105,13 @@ export class AuthService {
   /**
    * Rotates a refresh token: the presented token is revoked and a new
    * access/refresh pair is issued, preventing replay of the old one.
+   *
+   * Presenting a token that is specifically already-revoked (as opposed to
+   * merely expired) is treated as a compromise signal per standard
+   * refresh-token-rotation guidance: it means someone is replaying a token
+   * whose rotated successor already exists, so every other currently-active
+   * refresh token belonging to that user is revoked too, forcing re-login,
+   * before the 401 is thrown.
    * @param {string} refreshToken - The refresh token presented by the client.
    * @returns {Promise<AuthResult>} The user plus the newly issued token pair.
    * @throws {UnauthorizedException} When the token is unknown, expired, or already revoked.
@@ -151,7 +158,16 @@ export class AuthService {
     const tokenHash = this.#hashToken(refreshToken);
     const tokenRow = await this.refreshTokenRepository.findOneBy({ tokenHash });
 
-    if (!tokenRow || tokenRow.revokedAt || tokenRow.expiresAt < new Date()) {
+    if (!tokenRow) {
+      throw new UnauthorizedException('Invalid or expired refresh token');
+    }
+
+    if (tokenRow.revokedAt) {
+      await this.#revokeTokenFamily(tokenRow.userId);
+      throw new UnauthorizedException('Invalid or expired refresh token');
+    }
+
+    if (tokenRow.expiresAt < new Date()) {
       throw new UnauthorizedException('Invalid or expired refresh token');
     }
 
@@ -178,6 +194,13 @@ export class AuthService {
     await this.#touchSession(user.id);
 
     return { user, accessToken, refreshToken };
+  }
+
+  async #revokeTokenFamily(userId: number): Promise<void> {
+    await this.refreshTokenRepository.update(
+      { userId, revokedAt: IsNull() },
+      { revokedAt: new Date() },
+    );
   }
 
   async #touchSession(userId: number): Promise<void> {
