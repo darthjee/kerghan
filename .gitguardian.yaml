@@ -7,6 +7,6 @@ version: 2
 # migration that consumes it no-ops when STAGE=production — see
 # backend/src/database/migrations/20260824120004-auth-seed-demo-user.ts).
 secret:
-  ignored-matches:
+  ignored_matches:
     - name: Demo-user dev/manual-testing seed password (non-production only)
       match: kerghan-demo
