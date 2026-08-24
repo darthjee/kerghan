@@ -24,8 +24,8 @@ attention". See [Flow](docs/agents/flow.md) for the full request/data flow and
 
 Only the Auth module exists so far — the tracked-repo/label-rule data model is still an open
 product decision (see `docs/agents/product.md`). See `docs/agents/architecture/backend.md` for
-the module classification (Core/Always-on/Lazy) and inter-module communication rules a future
-module is expected to follow, absent an explicit decision to deviate.
+the module classification (Core/Always-on/Lazy) and inter-module communication guidelines a
+future module is generally expected to follow, absent an explicit decision to deviate.
 
 ### Frontend
 
