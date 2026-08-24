@@ -16,7 +16,7 @@ attention". See [Flow](docs/agents/flow.md) for the full request/data flow and
 ### Backend
 
 - Node.js, ES Modules, TypeScript (strict), NestJS
-- TypeORM (Object-Relational Mapper (ORM) + CLI migrations)
+- TypeORM (Object-Relational Mapping — ORM — library, with CLI migrations)
 - MySQL 8
 - Yarn (package manager)
 - Jest + `@swc/jest` + `supertest` + `@nestjs/testing` (tests and coverage)
@@ -24,8 +24,8 @@ attention". See [Flow](docs/agents/flow.md) for the full request/data flow and
 
 Only the Auth module exists so far — the tracked-repo/label-rule data model is still an open
 product decision (see `docs/agents/product.md`). See `docs/agents/architecture/backend.md` for
-the module classification (Core/Always-on/Lazy) and inter-module communication rules any future
-module must follow.
+the module classification (Core/Always-on/Lazy) and inter-module communication rules a future
+module is expected to follow, absent an explicit decision to deviate.
 
 ### Frontend
 
@@ -81,8 +81,8 @@ docker-compose run --rm kerghan_tests yarn test
   TypeORM migrations live under `backend/src/database/migrations/`.
 - Frontend JS/JSX lives under `frontend/assets/js/`, specs under `frontend/specs/`.
 - Max 300 lines per file, max complexity 10 (both backend and frontend, ESLint-enforced).
-- Keep backend controllers thin — business logic belongs in each module's service, never the
-  controller.
+- Keep backend controllers thin — business logic belongs in each module's service, not the
+  controller, unless a change explicitly documents why an exception is warranted.
 - The backend image family (`kerghan`, `circleci_kerghan-base`, `production_kerghan-base`) is
   **not published to Docker Hub** — built locally / in CI only. Only the frontend/proxy
   (`vite_kerghan*`) images are published.

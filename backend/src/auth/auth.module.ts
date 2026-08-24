@@ -19,6 +19,6 @@ import { User } from './entities/user.entity.js';
   providers: [AuthService],
   exports: [AuthService],
 })
-// eslint-disable-next-line @typescript-eslint/no-extraneous-class -- NestJS
-// module classes are intentionally empty; all behavior lives in @Module().
+// NestJS module classes are intentionally empty; all behavior lives in @Module().
+// eslint-disable-next-line @typescript-eslint/no-extraneous-class
 export class AuthModule {}
