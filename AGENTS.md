@@ -16,7 +16,7 @@ attention". See [Flow](docs/agents/flow.md) for the full request/data flow and
 ### Backend
 
 - Node.js, ES Modules, TypeScript (strict), NestJS
-- TypeORM (ORM + CLI migrations)
+- TypeORM (Object-Relational Mapper (ORM) + CLI migrations)
 - MySQL 8
 - Yarn (package manager)
 - Jest + `@swc/jest` + `supertest` + `@nestjs/testing` (tests and coverage)

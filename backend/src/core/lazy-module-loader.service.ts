@@ -1,8 +1,5 @@
-import type { DynamicModule, Type } from '@nestjs/common';
 import { Injectable } from '@nestjs/common';
 import { LazyModuleLoader, ModuleRef } from '@nestjs/core';
-
-type LoadableModule = Type<unknown> | DynamicModule;
 
 /**
  * Thin wrapper around Nest's built-in `LazyModuleLoader`, documenting
@@ -51,12 +48,13 @@ export class LazyModuleLoaderService {
 
   /**
    * Loads (and caches, on subsequent calls) a module on demand.
-   * @param {Function} loaderFn - Returns (or resolves to) the module class,
-   * dynamic module, or forward reference to load.
+   * @param {Parameters<LazyModuleLoader['load']>[0]} loaderFn - Returns (or
+   * resolves to) the module class, dynamic module, or forward reference to
+   * load.
    * @returns {Promise<ModuleRef>} The loaded module's DI container.
    */
-  async loadOnFirstRequest(
-    loaderFn: () => LoadableModule | Promise<LoadableModule>,
+  loadOnFirstRequest(
+    loaderFn: Parameters<LazyModuleLoader['load']>[0],
   ): Promise<ModuleRef> {
     return this.lazyModuleLoader.load(loaderFn);
   }
