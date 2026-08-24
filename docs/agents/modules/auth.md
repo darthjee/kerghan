@@ -38,6 +38,11 @@ section for the general convention.
   `lastSeenAt`. Bookkeeping only (touched on every token issuance) — not itself an
   authorization gate; see "JWT/refresh-token flow" below for what actually invalidates access.
 
+A dev/manual-testing demo user (`demo`/`kerghan-demo`) is seeded by
+`database/migrations/20260824120004-auth-seed-demo-user.ts`, gated on `process.env.STAGE !==
+'production'` so it can never be created if `yarn migration:run` is ever pointed at a production
+database.
+
 ## JWT/refresh-token flow
 
 - **Access token**: JWT (`@nestjs/jwt`), 15 minute expiry, signed with `KERGHAN_SECRET_KEY`
@@ -47,7 +52,9 @@ section for the general convention.
   and persisted only as a SHA-256 hash. **Rotated on every use**: `POST /auth/refresh.json`
   marks the presented token's `revokedAt` and issues a brand new pair — replaying an
   already-rotated (or logged-out) refresh token is rejected with `401`, verified end-to-end in
-  `auth/tests/auth.controller.e2e-spec.ts`.
+  `auth/tests/auth.controller.e2e-spec.ts`. Replaying a token that's specifically
+  already-*revoked* (not merely expired) is treated as a compromise signal: every other
+  currently-active refresh token for that user is revoked too, forcing re-login.
 - **Logout**: `POST /auth/logout.json` sets `revokedAt` on the matching refresh token and clears
   the `access_token` cookie. The access token itself stays valid (stateless JWT, not tracked
   server-side) until its own 15 minute expiry — logout guarantees the *refresh* path is closed,
