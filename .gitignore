@@ -6,6 +6,8 @@ frontend/.nyc_output/
 frontend/coverage/
 backend/coverage/
 backend/report/
+backend/dist/
+backend/*.tsbuildinfo
 *.log
 
 # Docker volumes
