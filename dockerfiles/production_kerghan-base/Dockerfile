@@ -1,7 +1,7 @@
 FROM darthjee/scripts:0.8.0 as scripts
 FROM darthjee/node:0.2.1 as base
 
-CMD ["node", "bin/server.js"]
+CMD ["node", "dist/main.js"]
 
 ######################################
 

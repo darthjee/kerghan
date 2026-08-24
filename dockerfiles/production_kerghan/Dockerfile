@@ -12,7 +12,8 @@ ENV HOME_DIR /home/node
 USER node
 COPY --chown=node:node --from=scripts /home/scripts/builder/yarn_builder.sh /usr/local/sbin/yarn_builder.sh
 RUN /bin/bash yarn_builder.sh
-RUN rm -rf spec
+RUN yarn build
+RUN find src -type d -name tests -exec rm -rf {} +
 
 #######################
 # FINAL IMAGE
