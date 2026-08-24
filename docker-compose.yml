@@ -50,6 +50,11 @@ services:
   kerghan_app:
     <<: *base
     container_name: kerghan_app
+    # ./backend is bind-mounted over the image's /home/node/app (see the `base`
+    # anchor above), so the image's own dist/ would go stale as soon as source
+    # changes — run Nest's watch-mode build against the live-mounted source
+    # instead of relying on a one-shot `yarn build && node dist/main.js`.
+    command: yarn start:dev
     depends_on:
       - base_build
       - kerghan_mysql
