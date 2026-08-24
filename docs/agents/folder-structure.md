@@ -4,7 +4,7 @@
 
 | Path | Purpose |
 |---|---|
-| `backend/` | Node.js/Express app, plain JS + Sequelize (no models yet — data model still open, see `docs/agents/product.md`) |
+| `backend/` | Node.js/NestJS app, TypeScript + TypeORM/MySQL (only the Auth module exists — the tracked-repo/label-rule data model is still open, see `docs/agents/product.md`) |
 | `frontend/` | React 19 + Vite app — dashboard/analytics UI, currently a tooling-only skeleton |
 | `proxy/` | PHP Tent proxy config (`dev_configuration/`, `prod_configuration/`, `extension/`) |
 | `dockerfiles/` | One directory per built image, `-base`/leaf pairs |
@@ -25,13 +25,14 @@
 
 | Subdirectory / File | Description |
 |---|---|
-| `lib/server/` | Express app skeleton: `WebServer.js`, `Router.js`, `RouteRegister.js`, `HandlerConfig.js`, `RequestHandler.js`, `handlers/` |
-| `lib/exceptions/` | `AppError.js` base class + HTTP exception subclasses |
-| `config/database.js` | Sequelize CLI connection config (env-driven) |
-| `models/`, `migrations/`, `seeders/` | Sequelize CLI convention folders — empty, no models yet |
-| `bin/server.js` | Entrypoint |
-| `spec/` | Jasmine specs, mirrors `lib/` |
-| `.sequelizerc`, `package.json`, `eslint.config.mjs` | Tooling config |
+| `src/main.ts` | Nest app bootstrap (cookie-parser, global `ValidationPipe`, `PORT`) |
+| `src/app.module.ts` | Root module — see `docs/agents/architecture/backend.md` |
+| `src/core/` | Core layer: JWT Guard, `@Public()` decorator, CacheToken service, `LazyModuleLoader` wrapper, `tests/` |
+| `src/database/` | TypeORM `DataSource` config + `migrations/` (`<timestamp>-<module>-<action>.ts`) |
+| `src/health/` | `GET /health.json` controller |
+| `src/auth/` | Auth module — see `docs/agents/modules/auth.md` |
+| `dist/` | Compiled build output (gitignored) |
+| `nest-cli.json`, `tsconfig.json`, `tsconfig.build.json`, `jest.config.ts`, `package.json`, `eslint.config.mjs` | Tooling config |
 
 ## `frontend/` — Frontend
 
@@ -65,6 +66,7 @@
 | File | Description |
 |---|---|
 | `architect.md` | Cross-cutting coordinator |
+| `backend.md` | NestJS/TypeORM/Jest/ESLint |
 | `infra.md` | docker-compose, Dockerfiles, CI, deploy scripts, Makefile |
 | `frontend.md` | React/Vite/Jasmine/ESLint |
 | `proxy.md` | Tent PHP proxy config + extension |
@@ -73,14 +75,12 @@
 | `data-access.md` | Read-only access-control reviewer |
 | `product-owner.md` | Read-only product-definitions reference |
 
-No `backend.md` yet — the Node/Express stack is decided (see `docs/agents/architecture/backend.md`
-for the precedent) but the agent itself is left for whoever builds out the real API.
-
 ## `docs/agents/` — Documentation
 
 | Subdirectory / File | Description |
 |---|---|
-| `architecture/` | Per-area architecture pages (`proxy.md`, `frontend.md`, `infra.md`; `backend.md` is precedent-only, no real API yet) |
+| `architecture/` | Per-area architecture pages (`proxy.md`, `frontend.md`, `backend.md`, `modular-pattern.md`, `infra.md`) |
+| `modules/` | Per-backend-module documentation (routes, entities, events) — `auth.md` today |
 | `plans/` | Implementation plans, one directory per issue |
 | `issues/` | Detailed specs for open issues, one file per issue |
 | `index.md`, `summary.md`, `folder-structure.md`, `flow.md`, `architecture.md`, `contributing.md`, `cache-warmer.md`, `product.md`, `issue-enhancement.md` | Top-level reference docs |

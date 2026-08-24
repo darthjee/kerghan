@@ -13,14 +13,14 @@ running `kerghan_prod_app` locally to sanity-check the production image).
 
 | Variable | Status | Purpose | Source |
 |---|---|---|---|
-| `KERGHAN_SECRET_KEY` | **Consumed** | Signs the `express-session` cookie. Must be a long random value in production — the dev sample ships an intentionally insecure placeholder. | `backend/bin/server.js`, `backend/lib/server/Router.js` |
-| `NODE_ENV` | **Consumed** | `production` selects the `production` Sequelize config block and marks the session cookie `secure: true` (HTTPS-only). | `backend/bin/server.js`, `backend/models/index.js` |
-| `PORT` | **Consumed**, optional | Port the Express server listens on (defaults to `8080`). Render injects its own `PORT` automatically — only set this explicitly for other hosts. | `backend/bin/server.js` |
-| `KERGHAN_MYSQL_HOST` | **Consumed** | Production MySQL connection. | `backend/config/database.js` |
-| `KERGHAN_MYSQL_PORT` | **Consumed** | ditto | `backend/config/database.js` |
-| `KERGHAN_MYSQL_USER` | **Consumed** | ditto | `backend/config/database.js` |
-| `KERGHAN_MYSQL_PASSWORD` | **Consumed** | ditto | `backend/config/database.js` |
-| `KERGHAN_MYSQL_NAME` | **Consumed** | ditto | `backend/config/database.js` |
+| `KERGHAN_SECRET_KEY` | **Consumed** | Signs JWT access tokens, derives the HMAC cache token, and signs `cookie-parser`'s cookies. Must be a long random value in production — the dev sample ships an intentionally insecure placeholder. | `backend/src/app.module.ts`, `backend/src/core/cache-token.service.ts`, `backend/src/main.ts` |
+| `NODE_ENV` | Reserved, not yet read | No longer consumed since the Express/Sequelize migration (issue #24) — the access-token cookie is always `Secure`/`httpOnly`/`SameSite=Strict` regardless of environment. | — |
+| `PORT` | **Consumed**, optional | Port the Nest HTTP server listens on (defaults to `8080`). Render injects its own `PORT` automatically — only set this explicitly for other hosts. | `backend/src/main.ts` |
+| `KERGHAN_MYSQL_HOST` | **Consumed** | Production MySQL connection. | `backend/src/database/data-source.ts`, `backend/src/app.module.ts` |
+| `KERGHAN_MYSQL_PORT` | **Consumed** | ditto | `backend/src/database/data-source.ts`, `backend/src/app.module.ts` |
+| `KERGHAN_MYSQL_USER` | **Consumed** | ditto | `backend/src/database/data-source.ts`, `backend/src/app.module.ts` |
+| `KERGHAN_MYSQL_PASSWORD` | **Consumed** | ditto | `backend/src/database/data-source.ts`, `backend/src/app.module.ts` |
+| `KERGHAN_MYSQL_NAME` | **Consumed** | ditto | `backend/src/database/data-source.ts`, `backend/src/app.module.ts` |
 | `KERGHAN_ALLOWED_ORIGINS` | Reserved, not yet read | Intended for CORS restriction once a cross-origin frontend call exists. Currently in `.env.dev.sample` but no CORS middleware exists yet — safe to set for when it lands, has no effect today. | — |
 | `FRONTEND_BASE_URL` | Reserved, not yet read | No consumer yet (candidate: links in future emails, or a CORS allow-list entry). | — |
 | `EMAILS_ENABLED` | Reserved, not yet read | No email-sending code exists in the backend yet (candidate future use: account/digest notifications). | — |

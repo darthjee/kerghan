@@ -11,8 +11,11 @@ full file before loading it. For a bare link-only table of contents instead, see
 - **[Flow](flow.md)** — Target end-to-end flow (not yet implemented): login, repo selection
   persisted by the backend, issues fetched live client-side against GitHub, manual refresh.
 - **[Architecture](architecture.md)** — Hub page splitting the architecture by concern (proxy,
-  frontend, backend, infra) to keep agent contexts small. Read the linked area page relevant to
-  your task instead of loading everything.
+  frontend, backend, modular pattern, infra) to keep agent contexts small. Read the linked area
+  page relevant to your task instead of loading everything.
+- **[Modules](modules/)** — Per-backend-module documentation (routes, entities, events), one
+  file per module (`modules/auth.md` today). Read the module's page before extending or
+  consuming it.
 
 ## Conventions
 
