@@ -5,6 +5,7 @@ import { JwtModule } from '@nestjs/jwt';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { CacheTokenService } from './core/cache-token.service.js';
 import { JwtGuard } from './core/jwt.guard.js';
+import { LazyModuleLoaderService } from './core/lazy-module-loader.service.js';
 import { HealthController } from './health/health.controller.js';
 
 /**
@@ -44,6 +45,7 @@ import { HealthController } from './health/health.controller.js';
   controllers: [HealthController],
   providers: [
     CacheTokenService,
+    LazyModuleLoaderService,
     {
       provide: APP_GUARD,
       useClass: JwtGuard,
