@@ -20,6 +20,13 @@ routing convention (`docs/agents/architecture/backend.md`):
 
 `user` is always `{ id, username, email }` — `passwordDigest` is never serialized.
 
+All four routes also set `X-Skip-Cache: true` on the response. Tent's `default_proxy` rule
+caches any 2xx `*.json` response keyed only by query string, regardless of HTTP method — since
+these POST routes carry no query string, an uncapped response could otherwise be cached after
+the first login/register/refresh and served verbatim (credentials/session token included) to a
+different caller. See `docs/agents/architecture/proxy.md`'s "Cache bypass (`X-Skip-Cache`)"
+section for the general convention.
+
 ## Entities (`auth_` table prefix)
 
 - `auth_users` (`entities/user.entity.ts`) — `id`, `username` (unique), `email` (unique),

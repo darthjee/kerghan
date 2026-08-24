@@ -209,6 +209,52 @@ describe('AuthController (e2e)', () => {
     });
   });
 
+  describe('X-Skip-Cache header', () => {
+    it('is set on the login response, so Tent never caches it across users', async () => {
+      const response = await request(app.getHttpServer())
+        .post('/auth/login.json')
+        .send({ username: 'darthjee', password: 'my-password' })
+        .expect(201);
+
+      expect(response.headers['x-skip-cache']).toBe('true');
+    });
+
+    it('is set on the register response', async () => {
+      const response = await request(app.getHttpServer())
+        .post('/auth/register.json')
+        .send({ username: 'obi-wan', email: 'obi-wan@example.com', password: 'another-password' })
+        .expect(201);
+
+      expect(response.headers['x-skip-cache']).toBe('true');
+    });
+
+    it('is set on the refresh response', async () => {
+      const login = await request(app.getHttpServer())
+        .post('/auth/login.json')
+        .send({ username: 'darthjee', password: 'my-password' });
+
+      const response = await request(app.getHttpServer())
+        .post('/auth/refresh.json')
+        .send({ refreshToken: login.body.refreshToken })
+        .expect(201);
+
+      expect(response.headers['x-skip-cache']).toBe('true');
+    });
+
+    it('is set on the logout response', async () => {
+      const login = await request(app.getHttpServer())
+        .post('/auth/login.json')
+        .send({ username: 'darthjee', password: 'my-password' });
+
+      const response = await request(app.getHttpServer())
+        .post('/auth/logout.json')
+        .send({ refreshToken: login.body.refreshToken })
+        .expect(204);
+
+      expect(response.headers['x-skip-cache']).toBe('true');
+    });
+  });
+
   describe('JwtGuard', () => {
     it('allows a public route through without a token', async () => {
       await request(app.getHttpServer()).get('/public').expect(200);
