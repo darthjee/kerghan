@@ -103,8 +103,9 @@ jobs:
   # Minimal bootstrap CI: backend, frontend and proxy-extension tests/lint. The release chain
   # (build/upload/deploy) lives further down in this same file, gated to semver tag pushes only.
   #
-  # No DB service container yet: no Sequelize models/specs exist to need one (see
-  # docs/agents/product.md). Add a cimg/mysql:8.0 service alongside the first DB-touching spec.
+  # No DB service container yet: backend specs inject mocked TypeORM repositories rather than
+  # hitting a live database (see docs/agents/product.md). Add a cimg/mysql:8.0 service alongside
+  # the first spec that actually needs one.
   backend_tests:
     docker:
       - image: darthjee/circleci_kerghan-base:0.1.0
