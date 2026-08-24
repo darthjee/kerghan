@@ -1,6 +1,6 @@
 import { IsEmail, IsNotEmpty, IsString, MinLength } from 'class-validator';
 
-/** Request body for `POST /auth/register`. */
+/** Request body for `POST /auth/register.json`. */
 export class RegisterDto {
   @IsString()
   @IsNotEmpty()

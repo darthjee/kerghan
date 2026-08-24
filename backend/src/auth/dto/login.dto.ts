@@ -1,6 +1,6 @@
 import { IsNotEmpty, IsString } from 'class-validator';
 
-/** Request body for `POST /auth/login`. */
+/** Request body for `POST /auth/login.json`. */
 export class LoginDto {
   @IsString()
   @IsNotEmpty()

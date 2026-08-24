@@ -125,6 +125,5 @@ docs/agents/plans/<issue_id>_<topic>/<related_files>.md
 
 ## Specialist agents
 
-See `.claude/agents/` for the full roster (`architect`, `infra`, `frontend`, `proxy`, `cache`,
-`security`, `data-access`, `product-owner`). There is no `backend` agent yet — see
-`.claude/agents/architect.md` for why and what to do in the meantime.
+See `.claude/agents/` for the full roster (`architect`, `backend`, `infra`, `frontend`, `proxy`,
+`cache`, `security`, `data-access`, `product-owner`).

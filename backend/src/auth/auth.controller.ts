@@ -28,26 +28,26 @@ export class AuthController {
   }
 
   /**
-   * `POST /auth/login`.
+   * `POST /auth/login.json`.
    * @param {LoginDto} dto - The login credentials.
    * @param {Response} res - Used to set the httpOnly access-token cookie.
    * @returns {Promise<object>} The public user view plus the refresh token.
    */
   @Public()
-  @Post('login')
+  @Post('login.json')
   async login(@Body() dto: LoginDto, @Res({ passthrough: true }) res: Response): Promise<object> {
     return this.#respond(await this.authService.login(dto), res);
   }
 
   /**
-   * `POST /auth/logout`. Invalidates the given refresh token server-side
+   * `POST /auth/logout.json`. Invalidates the given refresh token server-side
    * and clears the access-token cookie.
    * @param {RefreshTokenDto} dto - Carries the refresh token to invalidate.
    * @param {Response} res - Used to clear the access-token cookie.
    * @returns {Promise<void>} Resolves once the token has been revoked.
    */
   @Public()
-  @Post('logout')
+  @Post('logout.json')
   @HttpCode(HttpStatus.NO_CONTENT)
   async logout(@Body() dto: RefreshTokenDto, @Res({ passthrough: true }) res: Response): Promise<void> {
     await this.authService.logout(dto.refreshToken);
@@ -55,13 +55,13 @@ export class AuthController {
   }
 
   /**
-   * `POST /auth/refresh`. Rotates the given refresh token.
+   * `POST /auth/refresh.json`. Rotates the given refresh token.
    * @param {RefreshTokenDto} dto - Carries the refresh token to rotate.
    * @param {Response} res - Used to set the renewed access-token cookie.
    * @returns {Promise<object>} The public user view plus the new refresh token.
    */
   @Public()
-  @Post('refresh')
+  @Post('refresh.json')
   async refresh(
     @Body() dto: RefreshTokenDto,
     @Res({ passthrough: true }) res: Response,
@@ -70,13 +70,13 @@ export class AuthController {
   }
 
   /**
-   * `POST /auth/register`.
+   * `POST /auth/register.json`.
    * @param {RegisterDto} dto - The registration payload.
    * @param {Response} res - Used to set the httpOnly access-token cookie.
    * @returns {Promise<object>} The public user view plus the refresh token.
    */
   @Public()
-  @Post('register')
+  @Post('register.json')
   async register(
     @Body() dto: RegisterDto,
     @Res({ passthrough: true }) res: Response,

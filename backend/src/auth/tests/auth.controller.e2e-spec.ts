@@ -109,7 +109,7 @@ describe('AuthController (e2e)', () => {
     await app.init();
 
     await request(app.getHttpServer())
-      .post('/auth/register')
+      .post('/auth/register.json')
       .send({ username: 'darthjee', email: 'darthjee@example.com', password: 'my-password' });
   });
 
@@ -120,7 +120,7 @@ describe('AuthController (e2e)', () => {
   describe('login flow', () => {
     it('logs in with valid credentials, returning the user and a refresh token', async () => {
       const response = await request(app.getHttpServer())
-        .post('/auth/login')
+        .post('/auth/login.json')
         .send({ username: 'darthjee', password: 'my-password' })
         .expect(201);
 
@@ -132,14 +132,14 @@ describe('AuthController (e2e)', () => {
 
     it('rejects an invalid password', async () => {
       await request(app.getHttpServer())
-        .post('/auth/login')
+        .post('/auth/login.json')
         .send({ username: 'darthjee', password: 'wrong-password' })
         .expect(401);
     });
 
     it('sets the access token as an httpOnly, secure, SameSite=Strict cookie', async () => {
       const response = await request(app.getHttpServer())
-        .post('/auth/login')
+        .post('/auth/login.json')
         .send({ username: 'darthjee', password: 'my-password' })
         .expect(201);
 
@@ -155,26 +155,26 @@ describe('AuthController (e2e)', () => {
   describe('refresh token rotation', () => {
     it('issues a new token pair and invalidates the old refresh token', async () => {
       const login = await request(app.getHttpServer())
-        .post('/auth/login')
+        .post('/auth/login.json')
         .send({ username: 'darthjee', password: 'my-password' });
       const oldRefreshToken = login.body.refreshToken;
 
       const refreshed = await request(app.getHttpServer())
-        .post('/auth/refresh')
+        .post('/auth/refresh.json')
         .send({ refreshToken: oldRefreshToken })
         .expect(201);
 
       expect(refreshed.body.refreshToken).not.toBe(oldRefreshToken);
 
       await request(app.getHttpServer())
-        .post('/auth/refresh')
+        .post('/auth/refresh.json')
         .send({ refreshToken: oldRefreshToken })
         .expect(401);
     });
 
     it('rejects an expired refresh token', async () => {
       const login = await request(app.getHttpServer())
-        .post('/auth/login')
+        .post('/auth/login.json')
         .send({ username: 'darthjee', password: 'my-password' });
 
       // `rows[0]` is the token issued by `register()` in the outer
@@ -183,7 +183,7 @@ describe('AuthController (e2e)', () => {
       refreshTokenRepo.rows[refreshTokenRepo.rows.length - 1].expiresAt = new Date(Date.now() - 1000);
 
       await request(app.getHttpServer())
-        .post('/auth/refresh')
+        .post('/auth/refresh.json')
         .send({ refreshToken: login.body.refreshToken })
         .expect(401);
     });
@@ -192,18 +192,18 @@ describe('AuthController (e2e)', () => {
   describe('logout', () => {
     it('invalidates the refresh token and clears the access-token cookie', async () => {
       const login = await request(app.getHttpServer())
-        .post('/auth/login')
+        .post('/auth/login.json')
         .send({ username: 'darthjee', password: 'my-password' });
 
       const response = await request(app.getHttpServer())
-        .post('/auth/logout')
+        .post('/auth/logout.json')
         .send({ refreshToken: login.body.refreshToken })
         .expect(204);
 
       expect(response.headers['set-cookie'][0]).toMatch(/^access_token=;/);
 
       await request(app.getHttpServer())
-        .post('/auth/refresh')
+        .post('/auth/refresh.json')
         .send({ refreshToken: login.body.refreshToken })
         .expect(401);
     });
@@ -227,7 +227,7 @@ describe('AuthController (e2e)', () => {
 
     it('allows a protected route with a valid access token', async () => {
       const login = await request(app.getHttpServer())
-        .post('/auth/login')
+        .post('/auth/login.json')
         .send({ username: 'darthjee', password: 'my-password' });
       const accessTokenCookie = login.headers['set-cookie'][0].split(';')[0];
 
