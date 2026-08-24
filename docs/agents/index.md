@@ -8,6 +8,7 @@ For a short abstract of each doc's content, see [summary.md](summary.md) instead
 - [Folder Structure](folder-structure.md)
 - [Flow](flow.md)
 - [Architecture](architecture.md)
+- [Modules](modules/)
 
 ## Conventions
 

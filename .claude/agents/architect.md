@@ -27,16 +27,10 @@ explore, or plan what belongs to a specialist yourself.
 | Agent | Scope |
 |-------|-------|
 | `frontend` | `frontend/` — React components, Jasmine specs, ESLint, Vite, CSS |
-| `backend` | `backend/` — Express routes, Sequelize models/migrations, Jasmine specs — 🚧 not yet written |
+| `backend` | `backend/` — NestJS modules/controllers/services, TypeORM entities/migrations, Jest specs, ESLint |
 | `infra` | `docker-compose.yml`, `dockerfiles/`, `.circleci/config.yml`, `scripts/`, `Makefile` |
 | `proxy` | `proxy/` — PHP Tent proxy configuration, custom middleware, and tests |
 | `cache` | `navi/navi_config.yaml`, `navi/resources/*.yml`, cache-warmer docs — Navi warm-up route maintenance + `X-Skip-Cache` review |
-
-There is no `backend` agent definition yet — the Node/Express backend stack is decided, but the
-agent itself is left for whoever builds out the real API once the tracked-repo/label-rule data
-model is decided (see `docs/agents/product.md`). Until then, treat `backend/` changes as your
-own scope, following the conventions in `backend/eslint.config.mjs`,
-`docs/agents/contributing.md`, and the precedent in `docs/agents/architecture/backend.md`.
 
 ## How to coordinate
 
@@ -115,7 +109,7 @@ monitor, and Kerghan surfaces which of them "need attention" based on label rule
 user manually checking each repo's issue tracker. See `docs/agents/flow.md` for the full
 end-to-end flow.
 
-- **Backend** (Node/Express, once written) persists only account/login state and each user's
+- **Backend** (NestJS + TypeORM + MySQL) persists only account/login state and each user's
   repo selection — it does not fetch or store issue data. Exposes JSON endpoints (`.json` URLs,
   same convention as Majora) consumed by the frontend.
 - **Frontend** is a dashboard/analytics SPA — issue volume, age, label breakdowns, "needs

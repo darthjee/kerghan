@@ -63,18 +63,26 @@ opening a PR.
 
 ### Backend (`backend/`)
 
-- **Routes/handlers are thin:** business logic belongs in domain classes, not in
-  `lib/server/handlers/`.
-- **One concern per module:** keep new code in the module that matches its concern
-  (`lib/server/`, `lib/exceptions/`, and eventually `lib/serializers/`, domain classes) rather
-  than growing one file.
+- **Controllers are thin:** business logic belongs in the module's service
+  (`<name>.service.ts`), never the controller (`<name>.controller.ts`).
+- **One module per concern:** new backend features are their own module under `src/<name>/`,
+  following the standard module structure (`<name>.module.ts`, `.controller.ts`, `.service.ts`,
+  `dto/`, `entities/`, `events/`, `tests/`) — see
+  [Architecture — Modular Pattern](architecture/modular-pattern.md).
 - **Method order:** within a class, public methods should be declared before private
   (`#`-prefixed) methods (enforced by `eslint-plugin-sort-class-members`).
-- **File naming:** class files use CamelCase matching the class name; specs are
-  `<ClassName>_spec.js` — see [Architecture — Backend](architecture/backend.md) for the full
-  backend code-style precedent.
-- **Dependency injection only:** classes never load files/env vars themselves — e.g. the DB
-  connection/pool should be constructed once and injected, not opened ad hoc per class.
+- **File naming:** `kebab-case.ts` matching the exported class's purpose (e.g.
+  `auth.service.ts`, `refresh-token.entity.ts`); specs are `<name>.spec.ts`/`<name>.e2e-spec.ts`
+  under the module's `tests/` folder, never colocated next to the source file — see
+  [Architecture — Backend](architecture/backend.md) for the full stack/layout.
+- **Every route ends in `.json`:** Tent only forwards `.json`-suffixed requests to the backend
+  (`proxy/dev_configuration/rules/backend.php`) — verify a new route through a live
+  `kerghan_proxy` container, not just by hitting the backend directly, before considering it
+  done.
+- **Dependency injection only:** classes never read env vars or import global state themselves
+  — the DB connection/pool, JWT secret, etc. are constructed once (via `ConfigService`) and
+  injected. `src/database/data-source.ts` is the one documented exception (consumed standalone
+  by the TypeORM CLI, outside Nest's DI container).
 
 ### Frontend (`frontend/`)
 

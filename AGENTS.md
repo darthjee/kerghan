@@ -15,15 +15,15 @@ attention". See [Flow](docs/agents/flow.md) for the full request/data flow and
 
 ### Backend
 
-- Node.js, ES Modules, Express
-- Sequelize (ORM + `sequelize-cli` migrations)
+- Node.js, ES Modules, TypeScript (strict), NestJS
+- TypeORM (Object-Relational Mapping — ORM — library, with CLI migrations)
 - MySQL 8
 - Yarn (package manager)
-- Jasmine + c8 (tests and coverage)
-- ESLint (linting, flat config)
+- Jest + `@swc/jest` + `supertest` + `@nestjs/testing` (tests and coverage)
+- ESLint (linting, flat config, `typescript-eslint`)
 
-No models exist yet — the tracked-repo/label-rule data model is still an open product decision
-(see `docs/agents/product.md`).
+Only the Auth module exists so far — the tracked-repo/label-rule data model is still an open
+product decision (see `docs/agents/product.md`). See `docs/agents/architecture/backend.md` for the module classification (Core/Always-on/Lazy) and inter-module communication guidelines a future module is generally expected to follow, absent an explicit decision to deviate.
 
 ### Frontend
 
@@ -53,7 +53,7 @@ make dev
 # Open a test shell
 make tests
 
-# Run Sequelize migrations
+# Run TypeORM migrations
 make setup
 ```
 
@@ -73,12 +73,14 @@ docker-compose run --rm kerghan_tests yarn test
 
 - All documentation and code comments must be written in **English**.
 - Backend code lives in `backend/`, frontend in `frontend/`.
-- Backend source lives under `backend/lib/` (`server/`, `exceptions/`, and eventually domain
-  classes); Sequelize models/migrations/seeders live under `backend/models/`,
-  `backend/migrations/`, `backend/seeders/`.
+- Backend source lives under `backend/src/`, one folder per module (e.g. `backend/src/auth/`),
+  following the standard module structure (`<name>.module.ts`, `.controller.ts`, `.service.ts`,
+  `dto/`, `entities/`, `events/`, `tests/`) — see `docs/agents/architecture/backend.md`.
+  TypeORM migrations live under `backend/src/database/migrations/`.
 - Frontend JS/JSX lives under `frontend/assets/js/`, specs under `frontend/specs/`.
 - Max 300 lines per file, max complexity 10 (both backend and frontend, ESLint-enforced).
-- Keep backend routes/handlers thin — business logic belongs in domain classes.
+- Keep backend controllers thin — business logic belongs in each module's service, not the
+  controller, unless a change explicitly documents why an exception is warranted.
 - The backend image family (`kerghan`, `circleci_kerghan-base`, `production_kerghan-base`) is
   **not published to Docker Hub** — built locally / in CI only. Only the frontend/proxy
   (`vite_kerghan*`) images are published.
@@ -97,7 +99,7 @@ All project documentation lives under [`docs/agents/`](docs/agents/):
 | [Summary](docs/agents/summary.md) | 2-4 line abstract of each doc under `docs/agents/`, to decide whether to open the full file. |
 | [Folder Structure](docs/agents/folder-structure.md) | Top-level directory layout and the role of each folder. |
 | [Flow](docs/agents/flow.md) | End-to-end request/data flow: login, repo selection, on-demand issue fetching. |
-| [Architecture](docs/agents/architecture.md) | Hub page linking to per-area architecture pages (`proxy`, `frontend`, `infra`; `backend` not written yet). |
+| [Architecture](docs/agents/architecture.md) | Hub page linking to per-area architecture pages (`proxy`, `frontend`, `infra`, `backend`) plus the cross-cutting modular-pattern page. |
 | [Contributing](docs/agents/contributing.md) | Commit guidelines, PR standards, code organization, and refactoring rules. |
 | [Product Definitions](docs/agents/product.md) | Stub — restates what's decided vs. still open about Kerghan's data model. Consult before planning any issue that introduces new entities. |
 | [External Tooling](docs/agents/external.md) | Hub linking full usage guides for external, non-Kerghan-specific tools (Tent, Navi, navi-hey-client). |
@@ -125,6 +127,5 @@ docs/agents/plans/<issue_id>_<topic>/<related_files>.md
 
 ## Specialist agents
 
-See `.claude/agents/` for the full roster (`architect`, `infra`, `frontend`, `proxy`, `cache`,
-`security`, `data-access`, `product-owner`). There is no `backend` agent yet — see
-`.claude/agents/architect.md` for why and what to do in the meantime.
+See `.claude/agents/` for the full roster (`architect`, `backend`, `infra`, `frontend`, `proxy`,
+`cache`, `security`, `data-access`, `product-owner`).

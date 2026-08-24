@@ -28,4 +28,8 @@ COPY --chown=node:node --from=builder /home/node/yarn/new/ /usr/local/share/.cac
 
 USER node
 
-CMD ["node", "bin/server.js"]
+# The dev container mounts ./backend over /home/node/app at runtime (see
+# docker-compose.yml), so there's no compiled TS source at image-build time —
+# the build has to run against the mounted source right before starting the
+# compiled Nest entrypoint.
+CMD ["sh", "-c", "yarn build && node dist/main.js"]
