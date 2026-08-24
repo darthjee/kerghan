@@ -1,6 +1,10 @@
 # kerghan
 A tool for monitoring github issues
 
+[![Build Status](https://circleci.com/gh/darthjee/kerghan.svg?style=shield)](https://circleci.com/gh/darthjee/kerghan)
+[![Codacy Badge](https://app.codacy.com/project/badge/Grade/fb47154bedbb42799e51d50f51f87054)](https://app.codacy.com/gh/darthjee/kerghan/dashboard?utm_source=gh&utm_medium=referral&utm_content=&utm_campaign=Badge_grade)
+[![Codacy Badge](https://app.codacy.com/project/badge/Coverage/fb47154bedbb42799e51d50f51f87054)](https://app.codacy.com/gh/darthjee/kerghan/dashboard?utm_source=gh&utm_medium=referral&utm_content=&utm_campaign=Badge_coverage)
+
 **Current Version:** [0.1.0](https://github.com/darthjee/kerghan/releases/tag/0.1.0)
 
 **Next Release:** [0.1.1](https://github.com/darthjee/kerghan/compare/0.1.0...main)
