@@ -26,3 +26,7 @@ COPY --chown=node:node --from=builder /home/node/app/ /home/node/app/
 USER node
 
 RUN yarn install --production
+
+COPY --chown=node:node ./dockerfiles/production_kerghan/entrypoint.sh /home/node/app/entrypoint.sh
+
+ENTRYPOINT ["/home/node/app/entrypoint.sh"]
