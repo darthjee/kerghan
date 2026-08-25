@@ -140,6 +140,21 @@ files there:
 | `bin/image.sh` | Builds/pushes a `release-image` instance; `skip_if_not_tag`/`skip_if_unchanged` guards, `qemu`/`push` subcommands |
 | `bin/deploy_frontend.sh` | SSH-based upload/release helpers used by `upload_proxy_files`, `upload_fe_files`, `upload_extension`, `copy_proxy_configuration`, `release` |
 
+## Migrations on production boot
+
+`dockerfiles/production_kerghan/Dockerfile` sets `dockerfiles/production_kerghan/entrypoint.sh`
+as its `ENTRYPOINT`. On container start, the entrypoint runs `yarn migration:run` first and,
+because it's a `set -e` `/bin/sh` script, any migration failure aborts immediately with a
+non-zero exit — `node dist/main.js` (invoked via `exec`, so it replaces the shell as PID 1) never
+runs against a broken/partial schema. This applies only to the production image; the dev/test
+containers (`kerghan_app`, `kerghan_tests`) and `make setup` are unchanged and still run
+migrations manually.
+
+This issue does not add automated migration-revert tooling. If a deploy that included a new
+migration is rolled back, the newer migration's schema changes remain in the database — reverting
+them requires manually running `yarn migration:revert` (e.g. via a one-off shell against the
+running container, or a local connection using the deploy's `KERGHAN_MYSQL_*` values).
+
 ## No Navi warm-up job yet
 
 Unlike Majora (`warm-up-cache`/`wake-navi`), Kerghan's `.circleci/config.yml` has no job that
