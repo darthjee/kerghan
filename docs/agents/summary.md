@@ -16,6 +16,9 @@ full file before loading it. For a bare link-only table of contents instead, see
 - **[Modules](modules/)** — Per-backend-module documentation (routes, entities, events), one
   file per module (`modules/auth.md` today). Read the module's page before extending or
   consuming it.
+- **[Routes](backend/routes.md)** — Per-endpoint backend route reference, one file per domain
+  under `backend/routes/` (`auth.md` today), complementing the entity/event-focused
+  `modules/` pages.
 
 ## Conventions
 

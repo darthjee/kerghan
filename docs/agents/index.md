@@ -9,6 +9,7 @@ For a short abstract of each doc's content, see [summary.md](summary.md) instead
 - [Flow](flow.md)
 - [Architecture](architecture.md)
 - [Modules](modules/)
+- [Routes](backend/routes.md)
 
 ## Conventions
 
