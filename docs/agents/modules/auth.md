@@ -8,6 +8,9 @@ Kerghan's lightweight per-user login (username/password, independent of any GitH
 
 ## Routes
 
+See [Auth routes](../backend/routes/auth.md) for the full per-endpoint reference (request/response
+detail, HTTP status, source files).
+
 All routes are `@Public()` (exempt from the global `JwtGuard`) and end in `.json`, per Tent's
 routing convention (`docs/agents/architecture/backend.md`):
 
