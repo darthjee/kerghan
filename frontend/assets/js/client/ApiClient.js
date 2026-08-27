@@ -112,9 +112,27 @@ export default class ApiClient {
       body: JSON.stringify(body),
     });
 
-    const data = await response.json();
+    const data = await ApiClient.#parseBody(response);
 
     return { response, data };
+  }
+
+  /**
+   * Parse a response's JSON body, without attempting to parse an empty body (e.g. a
+   * `204 No Content` response, as returned by `DELETE /auth/logoff.json`) — `response.json()`
+   * throws a `SyntaxError` on an empty string, since it is not valid JSON.
+   *
+   * @param {Response} response - The raw `fetch` response.
+   * @returns {Promise<object>} The parsed JSON body, or `{}` when the response has no body.
+   */
+  static async #parseBody(response) {
+    if (response.status === 204) {
+      return {};
+    }
+
+    const text = await response.text();
+
+    return text === '' ? {} : JSON.parse(text);
   }
 
   /**

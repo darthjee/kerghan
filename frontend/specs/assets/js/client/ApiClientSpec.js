@@ -3,6 +3,25 @@ import ApiError from '../../../../assets/js/client/ApiError.js';
 import AuthSession from '../../../../assets/js/client/AuthSession.js';
 
 /**
+ * Build a fake `fetch` `Response`-like object whose `json`/`text` behave like a real one: an
+ * empty body cannot be parsed as JSON (`json()` rejects, mirroring `SyntaxError: Unexpected
+ * end of JSON input`), while a non-empty body is serialized/parsed for real.
+ *
+ * @param {{ok: boolean, status: number, json: object|undefined}} descriptor - Response shape;
+ *   `json` is omitted (or `undefined`) to simulate a truly empty body, e.g. a `204`.
+ * @returns {{ok: boolean, status: number, json: Function, text: Function}} The fake response.
+ */
+function fakeResponse({ json, ...rest }) {
+  const body = json === undefined ? '' : JSON.stringify(json);
+
+  return {
+    ...rest,
+    text: () => Promise.resolve(body),
+    json: () => (body === '' ? Promise.reject(new SyntaxError('Unexpected end of JSON input')) : Promise.resolve(JSON.parse(body))),
+  };
+}
+
+/**
  * Build a `fetch` spy that resolves with the given responses in order, one per call.
  *
  * @param {Array<{ok: boolean, status: number, json: object}>} responses - Ordered responses.
@@ -12,9 +31,9 @@ function fetchSequence(responses) {
   let call = 0;
 
   return jasmine.createSpy('fetch').and.callFake(() => {
-    const { json, ...rest } = responses[call];
+    const response = fakeResponse(responses[call]);
     call += 1;
-    return Promise.resolve({ ...rest, json: () => Promise.resolve(json) });
+    return Promise.resolve(response);
   });
 }
 
@@ -77,7 +96,7 @@ describe('ApiClient', () => {
 
   describe('.deleteJson', () => {
     it('deletes a JSON body with same-origin credentials', async () => {
-      globalThis.fetch = fetchSequence([{ ok: true, status: 204, json: {} }]);
+      globalThis.fetch = fetchSequence([{ ok: true, status: 204 }]);
 
       await ApiClient.deleteJson('/auth/logoff.json', { refreshToken: 'token' });
 
@@ -88,8 +107,9 @@ describe('ApiClient', () => {
       }));
     });
 
-    it('resolves with the parsed JSON body on a successful delete', async () => {
-      globalThis.fetch = fetchSequence([{ ok: true, status: 204, json: {} }]);
+    it('resolves without throwing on a 204 response with a truly empty body, the way a ' +
+      'real `fetch` behaves for DELETE /auth/logoff.json', async () => {
+      globalThis.fetch = fetchSequence([{ ok: true, status: 204 }]);
 
       const data = await ApiClient.deleteJson('/auth/logoff.json', { refreshToken: 'token' });
 
