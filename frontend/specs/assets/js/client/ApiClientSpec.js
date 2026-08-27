@@ -67,4 +67,45 @@ describe('ApiClient', () => {
       expect(error instanceof ApiError).toBe(true);
     }
   });
+
+  it('deletes a JSON body with same-origin credentials', async () => {
+    globalThis.fetch = jasmine.createSpy('fetch').and.resolveTo({
+      ok: true,
+      status: 204,
+      json: () => Promise.resolve({}),
+    });
+
+    await ApiClient.deleteJson('/auth/logoff.json', { refreshToken: 'token' });
+
+    expect(globalThis.fetch).toHaveBeenCalledWith('/auth/logoff.json', jasmine.objectContaining({
+      method: 'DELETE',
+      credentials: 'same-origin',
+      body: JSON.stringify({ refreshToken: 'token' }),
+    }));
+  });
+
+  it('resolves with the parsed JSON body on a successful delete', async () => {
+    globalThis.fetch = jasmine.createSpy('fetch').and.resolveTo({
+      ok: true,
+      status: 204,
+      json: () => Promise.resolve({}),
+    });
+
+    const data = await ApiClient.deleteJson('/auth/logoff.json', { refreshToken: 'token' });
+
+    expect(data).toEqual({});
+  });
+
+  it('throws an ApiError with the status and message when a delete fails', async () => {
+    globalThis.fetch = jasmine.createSpy('fetch').and.resolveTo({
+      ok: false,
+      status: 401,
+      json: () => Promise.resolve({ error: 'invalid refresh token' }),
+    });
+
+    await expectAsync(ApiClient.deleteJson('/auth/logoff.json', { refreshToken: 'token' }))
+      .toBeRejectedWith(jasmine.objectContaining(
+        { status: 401, message: 'invalid refresh token' },
+      ));
+  });
 });
