@@ -9,6 +9,7 @@ import Router from './Router.js';
  */
 const ROUTES = [
   ['/register', 'register'],
+  ['/login', 'login'],
   ['/', 'home'],
 ];
 

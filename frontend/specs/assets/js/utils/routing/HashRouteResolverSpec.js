@@ -7,6 +7,12 @@ describe('HashRouteResolver', () => {
     expect(resolver.getPage()).toBe('register');
   });
 
+  it('resolves the login route', () => {
+    const resolver = new HashRouteResolver(() => '#/login');
+
+    expect(resolver.getPage()).toBe('login');
+  });
+
   it('resolves the home route', () => {
     const resolver = new HashRouteResolver(() => '#/');
 

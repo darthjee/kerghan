@@ -9,6 +9,12 @@ describe('AppHelper', () => {
     expect(markup).toContain('Register');
   });
 
+  it('renders the login page for the login key', () => {
+    const markup = renderToStaticMarkup(React.createElement('div', null, AppHelper.render('login')));
+
+    expect(markup).toContain('Login');
+  });
+
   it('renders the home page for the home key', () => {
     const markup = renderToStaticMarkup(React.createElement('div', null, AppHelper.render('home')));
 
