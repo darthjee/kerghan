@@ -1,4 +1,5 @@
-import { Body, Controller, HttpCode, HttpStatus, Post, Res } from '@nestjs/common';
+import { Body, Controller, Delete, HttpCode, HttpStatus, Post, Res } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import type { Response } from 'express';
 import { AuthResult, AuthService } from './auth.service.js';
 import { Public } from '../core/public.decorator.js';
@@ -8,7 +9,11 @@ import { RegisterDto } from './dto/register.dto.js';
 import { User } from './entities/user.entity.js';
 
 const ACCESS_TOKEN_COOKIE = 'access_token';
-const ACCESS_TOKEN_MAX_AGE_MS = 15 * 60 * 1000;
+// Default access-token lifetime (15 minutes, in milliseconds) used when
+// `KERGHAN_ACCESS_TOKEN_TTL_MS` is unset — must match `app.module.ts`'s
+// `JwtModule.registerAsync` default so the cookie's `maxAge` always tracks
+// the signed JWT's actual expiry.
+const DEFAULT_ACCESS_TOKEN_TTL_MS = 15 * 60 * 1000;
 // Tent's `default_proxy` rule (`proxy/*_configuration/rules/backend.php`) caches any 2xx
 // response to a `*.json` URL by method-agnostic, query-string-only key — these POST routes have
 // no query string, so without this header a second caller could be served the first caller's
@@ -26,12 +31,16 @@ const SKIP_CACHE_HEADER = 'X-Skip-Cache';
 @Controller('auth')
 export class AuthController {
   private readonly authService: AuthService;
+  private readonly configService: ConfigService;
 
   /**
    * @param {AuthService} authService - The Auth module's business logic.
+   * @param {ConfigService} configService - Supplies the access-token TTL used
+   *   for the cookie's `maxAge`.
    */
-  constructor(authService: AuthService) {
+  constructor(authService: AuthService, configService: ConfigService) {
     this.authService = authService;
+    this.configService = configService;
   }
 
   /**
@@ -47,14 +56,14 @@ export class AuthController {
   }
 
   /**
-   * `POST /auth/logout.json`. Invalidates the given refresh token server-side
-   * and clears the access-token cookie.
+   * `DELETE /auth/logoff.json`. Invalidates the given refresh token
+   * server-side and clears the access-token cookie.
    * @param {RefreshTokenDto} dto - Carries the refresh token to invalidate.
    * @param {Response} res - Used to clear the access-token cookie.
    * @returns {Promise<void>} Resolves once the token has been revoked.
    */
   @Public()
-  @Post('logout.json')
+  @Delete('logoff.json')
   @HttpCode(HttpStatus.NO_CONTENT)
   async logout(@Body() dto: RefreshTokenDto, @Res({ passthrough: true }) res: Response): Promise<void> {
     await this.authService.logout(dto.refreshToken);
@@ -97,7 +106,7 @@ export class AuthController {
       httpOnly: true,
       secure: true,
       sameSite: 'strict',
-      maxAge: ACCESS_TOKEN_MAX_AGE_MS,
+      maxAge: this.configService.get<number>('KERGHAN_ACCESS_TOKEN_TTL_MS', DEFAULT_ACCESS_TOKEN_TTL_MS),
     });
     res.set(SKIP_CACHE_HEADER, 'true');
 

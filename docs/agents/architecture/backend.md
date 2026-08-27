@@ -78,7 +78,7 @@ TypeORM CLI (`yarn migration:run`/`migration:revert`), outside Nest's DI contain
 
 `core/jwt.guard.ts` is registered as a global `APP_GUARD` in `AppModule`, so every route requires
 a valid access token by default. Routes that must stay reachable without one (`/health.json`, and
-the Auth module's own `login.json`/`register.json`/`refresh.json`/`logout.json`) opt out with
+the Auth module's own `login.json`/`register.json`/`refresh.json`/`logoff.json`) opt out with
 `@Public()`. `JwtModule` itself is registered with `{ global: true }` in `AppModule` — without
 that, only modules that import `JwtModule` directly (not just `AuthModule`) can inject
 `JwtService`, which broke `AuthService`'s constructor resolution the first time this was wired up.

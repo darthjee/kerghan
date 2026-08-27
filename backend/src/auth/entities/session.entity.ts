@@ -7,7 +7,7 @@ import {
 
 /**
  * Tracks a logged-in user's active session, independent of the JWT access
- * token itself, so `POST /auth/logout.json` has a server-side record to
+ * token itself, so `DELETE /auth/logoff.json` has a server-side record to
  * invalidate. Owns table `auth_sessions`. `userId` is a logical foreign key
  * (no physical FK, no cross-module JOIN) into `auth_users`.
  */
