@@ -1,111 +1,170 @@
 import ApiClient from '../../../../assets/js/client/ApiClient.js';
 import ApiError from '../../../../assets/js/client/ApiError.js';
+import AuthSession from '../../../../assets/js/client/AuthSession.js';
+
+/**
+ * Build a `fetch` spy that resolves with the given responses in order, one per call.
+ *
+ * @param {Array<{ok: boolean, status: number, json: object}>} responses - Ordered responses.
+ * @returns {jasmine.Spy} The `fetch` spy.
+ */
+function fetchSequence(responses) {
+  let call = 0;
+
+  return jasmine.createSpy('fetch').and.callFake(() => {
+    const { json, ...rest } = responses[call];
+    call += 1;
+    return Promise.resolve({ ...rest, json: () => Promise.resolve(json) });
+  });
+}
 
 describe('ApiClient', () => {
   let originalFetch;
+  let originalWindow;
 
   beforeEach(() => {
     originalFetch = globalThis.fetch;
+    originalWindow = globalThis.window;
+    globalThis.window = { location: { hash: '' } };
   });
 
   afterEach(() => {
     globalThis.fetch = originalFetch;
+    globalThis.window = originalWindow;
   });
 
-  it('posts a JSON body with same-origin credentials', async () => {
-    globalThis.fetch = jasmine.createSpy('fetch').and.resolveTo({
-      ok: true,
-      status: 200,
-      json: () => Promise.resolve({ id: 1 }),
+  describe('.postJson', () => {
+    it('posts a JSON body with same-origin credentials', async () => {
+      globalThis.fetch = fetchSequence([{ ok: true, status: 200, json: { id: 1 } }]);
+
+      await ApiClient.postJson('/accounts/register.json', { username: 'foo' });
+
+      expect(globalThis.fetch).toHaveBeenCalledWith('/accounts/register.json', jasmine.objectContaining({
+        method: 'POST',
+        credentials: 'same-origin',
+        body: JSON.stringify({ username: 'foo' }),
+      }));
     });
 
-    await ApiClient.postJson('/accounts/register.json', { username: 'foo' });
+    it('resolves with the parsed JSON body on success', async () => {
+      globalThis.fetch = fetchSequence([{ ok: true, status: 200, json: { id: 1, username: 'foo' } }]);
 
-    expect(globalThis.fetch).toHaveBeenCalledWith('/accounts/register.json', jasmine.objectContaining({
-      method: 'POST',
-      credentials: 'same-origin',
-      body: JSON.stringify({ username: 'foo' }),
-    }));
+      const data = await ApiClient.postJson('/accounts/register.json', { username: 'foo' });
+
+      expect(data).toEqual({ id: 1, username: 'foo' });
+    });
+
+    it('throws an ApiError with the status and message on a non-401 failure', async () => {
+      globalThis.fetch = fetchSequence([{ ok: false, status: 400, json: { error: 'username is not available' } }]);
+
+      await expectAsync(ApiClient.postJson('/accounts/register.json', {}))
+        .toBeRejectedWith(jasmine.objectContaining(
+          { status: 400, message: 'username is not available' },
+        ));
+    });
+
+    it('throws instances of ApiError', async () => {
+      globalThis.fetch = fetchSequence([{ ok: false, status: 400, json: { error: 'bad request' } }]);
+
+      try {
+        await ApiClient.postJson('/accounts/register.json', {});
+        fail('expected postJson to throw');
+      } catch (error) {
+        expect(error instanceof ApiError).toBe(true);
+      }
+    });
   });
 
-  it('resolves with the parsed JSON body on success', async () => {
-    globalThis.fetch = jasmine.createSpy('fetch').and.resolveTo({
-      ok: true,
-      status: 200,
-      json: () => Promise.resolve({ id: 1, username: 'foo' }),
+  describe('.deleteJson', () => {
+    it('deletes a JSON body with same-origin credentials', async () => {
+      globalThis.fetch = fetchSequence([{ ok: true, status: 204, json: {} }]);
+
+      await ApiClient.deleteJson('/auth/logoff.json', { refreshToken: 'token' });
+
+      expect(globalThis.fetch).toHaveBeenCalledWith('/auth/logoff.json', jasmine.objectContaining({
+        method: 'DELETE',
+        credentials: 'same-origin',
+        body: JSON.stringify({ refreshToken: 'token' }),
+      }));
     });
 
-    const data = await ApiClient.postJson('/accounts/register.json', { username: 'foo' });
+    it('resolves with the parsed JSON body on a successful delete', async () => {
+      globalThis.fetch = fetchSequence([{ ok: true, status: 204, json: {} }]);
 
-    expect(data).toEqual({ id: 1, username: 'foo' });
+      const data = await ApiClient.deleteJson('/auth/logoff.json', { refreshToken: 'token' });
+
+      expect(data).toEqual({});
+    });
   });
 
-  it('throws an ApiError with the status and message on failure', async () => {
-    globalThis.fetch = jasmine.createSpy('fetch').and.resolveTo({
-      ok: false,
-      status: 400,
-      json: () => Promise.resolve({ error: 'username is not available' }),
+  describe('401 handling', () => {
+    it('refreshes the access token and retries the original request on success', async () => {
+      spyOn(AuthSession, 'get').and.returnValue('old-refresh-token');
+      spyOn(AuthSession, 'set');
+      spyOn(AuthSession, 'clear');
+      globalThis.fetch = fetchSequence([
+        { ok: false, status: 401, json: { error: 'unauthorized' } },
+        { ok: true, status: 200, json: { user: { id: 1 }, refreshToken: 'new-refresh-token' } },
+        { ok: true, status: 200, json: { id: 1, username: 'foo' } },
+      ]);
+
+      const data = await ApiClient.postJson('/accounts/register.json', { username: 'foo' });
+
+      expect(data).toEqual({ id: 1, username: 'foo' });
+      expect(globalThis.fetch).toHaveBeenCalledTimes(3);
+      expect(globalThis.fetch.calls.argsFor(1)[0]).toBe('/auth/refresh.json');
+      expect(AuthSession.set).toHaveBeenCalledWith('new-refresh-token');
+      expect(AuthSession.clear).not.toHaveBeenCalled();
+      expect(globalThis.window.location.hash).toBe('');
     });
 
-    await expectAsync(ApiClient.postJson('/accounts/register.json', {}))
-      .toBeRejectedWith(jasmine.objectContaining(
-        { status: 400, message: 'username is not available' },
-      ));
-  });
+    it('treats a failed refresh as a session expiry: clears the session and redirects to login', async () => {
+      spyOn(AuthSession, 'get').and.returnValue('old-refresh-token');
+      spyOn(AuthSession, 'clear');
+      globalThis.fetch = fetchSequence([
+        { ok: false, status: 401, json: { error: 'unauthorized' } },
+        { ok: false, status: 401, json: { error: 'invalid refresh token' } },
+      ]);
 
-  it('throws instances of ApiError', async () => {
-    globalThis.fetch = jasmine.createSpy('fetch').and.resolveTo({
-      ok: false,
-      status: 400,
-      json: () => Promise.resolve({ error: 'bad request' }),
+      const data = await ApiClient.postJson('/accounts/register.json', { username: 'foo' });
+
+      expect(data).toBeUndefined();
+      expect(globalThis.fetch).toHaveBeenCalledTimes(2);
+      expect(AuthSession.clear).toHaveBeenCalled();
+      expect(globalThis.window.location.hash).toBe('/login');
     });
 
-    try {
-      await ApiClient.postJson('/accounts/register.json', {});
-      fail('expected postJson to throw');
-    } catch (error) {
-      expect(error instanceof ApiError).toBe(true);
-    }
-  });
+    it('treats a missing refresh token as a session expiry, without attempting a refresh call', async () => {
+      spyOn(AuthSession, 'get').and.returnValue(null);
+      spyOn(AuthSession, 'clear');
+      globalThis.fetch = fetchSequence([
+        { ok: false, status: 401, json: { error: 'unauthorized' } },
+      ]);
 
-  it('deletes a JSON body with same-origin credentials', async () => {
-    globalThis.fetch = jasmine.createSpy('fetch').and.resolveTo({
-      ok: true,
-      status: 204,
-      json: () => Promise.resolve({}),
+      const data = await ApiClient.postJson('/accounts/register.json', { username: 'foo' });
+
+      expect(data).toBeUndefined();
+      expect(globalThis.fetch).toHaveBeenCalledTimes(1);
+      expect(AuthSession.clear).toHaveBeenCalled();
+      expect(globalThis.window.location.hash).toBe('/login');
     });
 
-    await ApiClient.deleteJson('/auth/logoff.json', { refreshToken: 'token' });
+    it('does not attempt a second refresh when the retried request also returns 401', async () => {
+      spyOn(AuthSession, 'get').and.returnValue('old-refresh-token');
+      spyOn(AuthSession, 'set');
+      spyOn(AuthSession, 'clear');
+      globalThis.fetch = fetchSequence([
+        { ok: false, status: 401, json: { error: 'unauthorized' } },
+        { ok: true, status: 200, json: { user: { id: 1 }, refreshToken: 'new-refresh-token' } },
+        { ok: false, status: 401, json: { error: 'unauthorized' } },
+      ]);
 
-    expect(globalThis.fetch).toHaveBeenCalledWith('/auth/logoff.json', jasmine.objectContaining({
-      method: 'DELETE',
-      credentials: 'same-origin',
-      body: JSON.stringify({ refreshToken: 'token' }),
-    }));
-  });
+      const data = await ApiClient.postJson('/accounts/register.json', { username: 'foo' });
 
-  it('resolves with the parsed JSON body on a successful delete', async () => {
-    globalThis.fetch = jasmine.createSpy('fetch').and.resolveTo({
-      ok: true,
-      status: 204,
-      json: () => Promise.resolve({}),
+      expect(data).toBeUndefined();
+      expect(globalThis.fetch).toHaveBeenCalledTimes(3);
+      expect(AuthSession.clear).toHaveBeenCalled();
+      expect(globalThis.window.location.hash).toBe('/login');
     });
-
-    const data = await ApiClient.deleteJson('/auth/logoff.json', { refreshToken: 'token' });
-
-    expect(data).toEqual({});
-  });
-
-  it('throws an ApiError with the status and message when a delete fails', async () => {
-    globalThis.fetch = jasmine.createSpy('fetch').and.resolveTo({
-      ok: false,
-      status: 401,
-      json: () => Promise.resolve({ error: 'invalid refresh token' }),
-    });
-
-    await expectAsync(ApiClient.deleteJson('/auth/logoff.json', { refreshToken: 'token' }))
-      .toBeRejectedWith(jasmine.objectContaining(
-        { status: 401, message: 'invalid refresh token' },
-      ));
   });
 });
