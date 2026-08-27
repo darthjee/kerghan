@@ -1,0 +1,18 @@
+---
+# Codacy project configuration. See https://docs.codacy.com/related-tools-integration/coding-standards/codacy-configuration-file/
+#
+# Scoped, narrow exclusions only — never a blanket disable of a whole engine/category. Each
+# entry below documents exactly why it's excluded, so future contributors can tell a deliberate
+# suppression from an oversight.
+engines:
+  pmd:
+    exclude_paths:
+      # PMD's ecmascript module misparses private class methods/fields (`static async
+      # #method() {}`) as a redundant nested block ("Unnecessary block."), flagging the method
+      # body itself — a parser limitation with this newer JS syntax, not a real code smell. All
+      # three files below use private methods extensively; see PR #33 / issue #30 for the
+      # findings this was added to resolve (ApiClient.js:54,117,130,
+      # AccountsClient.js:72, HeaderController.js:27).
+      - 'frontend/assets/js/client/ApiClient.js'
+      - 'frontend/assets/js/client/AccountsClient.js'
+      - 'frontend/assets/js/components/common/header/controllers/HeaderController.js'
