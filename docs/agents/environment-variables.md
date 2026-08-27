@@ -14,6 +14,7 @@ running `kerghan_prod_app` locally to sanity-check the production image).
 | Variable | Status | Purpose | Source |
 |---|---|---|---|
 | `KERGHAN_SECRET_KEY` | **Consumed** | Signs JWT access tokens, derives the HMAC cache token, and signs `cookie-parser`'s cookies. Must be a long random value in production — the dev sample ships an intentionally insecure placeholder. | `backend/src/app.module.ts`, `backend/src/core/cache-token.service.ts`, `backend/src/main.ts` |
+| `KERGHAN_ACCESS_TOKEN_TTL_MS` | **Consumed**, optional | Access-token lifetime, in milliseconds. Drives both the signed JWT's `signOptions.expiresIn` (`app.module.ts`, converted to seconds for `jsonwebtoken`) and the `access_token` cookie's `maxAge` (`auth.controller.ts`, used as-is), so the two always agree. Defaults to `900000` (15 minutes) when unset. | `backend/src/app.module.ts`, `backend/src/auth/auth.controller.ts` |
 | `NODE_ENV` | Reserved, not yet read | No longer consumed since the Express/Sequelize migration (issue #24) — the access-token cookie is always `Secure`/`httpOnly`/`SameSite=Strict` regardless of environment. | — |
 | `PORT` | **Consumed**, optional | Port the Nest HTTP server listens on (defaults to `8080`). Render injects its own `PORT` automatically — only set this explicitly for other hosts. | `backend/src/main.ts` |
 | `KERGHAN_MYSQL_HOST` | **Consumed** | Production MySQL connection. | `backend/src/database/data-source.ts`, `backend/src/app.module.ts` |

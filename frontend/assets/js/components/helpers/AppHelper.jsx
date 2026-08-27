@@ -1,9 +1,11 @@
 import Header from '../common/header/Header.jsx';
 import Home from '../resources/home/pages/Home.jsx';
 import Register from '../resources/accounts/pages/Register.jsx';
+import Login from '../resources/accounts/pages/Login.jsx';
 
 const PAGES = {
   register: <Register />,
+  login: <Login />,
   home: <Home />,
 };
 

@@ -55,6 +55,28 @@ upload every run, so real Codacy reporting resumes automatically, with no furthe
 once the token is provisioned. The test/lint commands earlier in each job remain the real
 pass/fail gate.
 
+### `.codacy.yml` — suppressing confirmed static-analysis false positives
+
+Separate from the CircleCI coverage upload above, Codacy's GitHub App also runs its own static
+analysis directly against every PR (the "Codacy Static Code Analysis" check-run), gating on zero
+new issues of at least minor severity. `.codacy.yml` (repo root) is Codacy's own supported,
+version-controlled configuration file for narrowly excluding specific tool/path combinations from
+that analysis — introduced in PR #33 (issue #30) to resolve a real block: PMD's ecmascript module
+misparses this codebase's private class methods/fields (`static async #method() {}`) as a
+redundant "Unnecessary block", flagging the method body itself. Confirmed as a PMD parser
+limitation with this JS syntax, not a real code smell, this is scoped to only the three files that
+use private methods heavily (`ApiClient.js`, `AccountsClient.js`, `HeaderController.js`) via
+`engines.pmd.exclude_paths`, rather than disabling PMD (or any rule) repository-wide. Other
+confirmed false positives from that same PR (Codacy's `xss/no-mixed-html` firing on
+`renderToStaticMarkup`-based Jasmine spec assertions, and `security/detect-object-injection`
+firing on bracket-notation access with a compile-time-fixed key) were resolved with narrower,
+per-line `// eslint-disable-next-line <rule>` comments instead, since Codacy's ESLint-based tool
+respects native ESLint inline-disable syntax — `.codacy.yml` was reserved for PMD, which has no
+such per-line mechanism available here. Future Codacy findings should default to the same
+per-line-inline-disable approach when the underlying tool supports it, falling back to a
+narrowly-scoped `.codacy.yml` `exclude_paths` entry (documented inline, same as above) only when
+it doesn't.
+
 ### Why `build-and-release` requires the production-base release-image jobs
 
 `build-and-release` requires `release-production_kerghan-base` and

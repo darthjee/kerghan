@@ -19,7 +19,7 @@ routing convention (`docs/agents/architecture/backend.md`):
 | `POST /auth/login.json` | `{ username, password }` | `{ user, refreshToken }` + `access_token` cookie |
 | `POST /auth/register.json` | `{ username, email, password }` | `{ user, refreshToken }` + `access_token` cookie |
 | `POST /auth/refresh.json` | `{ refreshToken }` | `{ user, refreshToken }` + `access_token` cookie |
-| `POST /auth/logout.json` | `{ refreshToken }` | `204 No Content`, clears the `access_token` cookie |
+| `DELETE /auth/logoff.json` | `{ refreshToken }` | `204 No Content`, clears the `access_token` cookie |
 
 `user` is always `{ id, username, email }` — `passwordDigest` is never serialized.
 
@@ -52,9 +52,11 @@ source.
 
 ## JWT/refresh-token flow
 
-- **Access token**: JWT (`@nestjs/jwt`), 15 minute expiry, signed with `KERGHAN_SECRET_KEY`
-  (via `ConfigService`, never read directly). Set as an `httpOnly` + `Secure` +
-  `SameSite=Strict` cookie (`access_token`) — never returned in the response body.
+- **Access token**: JWT (`@nestjs/jwt`), signed with `KERGHAN_SECRET_KEY` (via `ConfigService`,
+  never read directly). Expiry is configurable via `KERGHAN_ACCESS_TOKEN_TTL_MS` (milliseconds;
+  defaults to `900000`, 15 minutes, when unset) — see `docs/agents/environment-variables.md`. Set
+  as an `httpOnly` + `Secure` + `SameSite=Strict` cookie (`access_token`), whose `maxAge` is
+  driven by the same env var — never returned in the response body.
 - **Refresh token**: a random 48-byte hex string, 7 day expiry, returned in the response body
   and persisted only as a SHA-256 hash. **Rotated on every use**: `POST /auth/refresh.json`
   marks the presented token's `revokedAt` and issues a brand new pair — replaying an
@@ -62,9 +64,9 @@ source.
   `auth/tests/auth.controller.e2e-spec.ts`. Replaying a token that's specifically
   already-*revoked* (not merely expired) is treated as a compromise signal: every other
   currently-active refresh token for that user is revoked too, forcing re-login.
-- **Logout**: `POST /auth/logout.json` sets `revokedAt` on the matching refresh token and clears
-  the `access_token` cookie. The access token itself stays valid (stateless JWT, not tracked
-  server-side) until its own 15 minute expiry — logout guarantees the *refresh* path is closed,
+- **Logout**: `DELETE /auth/logoff.json` sets `revokedAt` on the matching refresh token and
+  clears the `access_token` cookie. The access token itself stays valid (stateless JWT, not
+  tracked server-side) until its own expiry — logout guarantees the *refresh* path is closed,
   not instant access-token revocation.
 - **Registration also logs in**: `POST /auth/register.json` issues a token pair immediately on
   success, same as login/refresh (per the issue's "issued on login/register/refresh" flow) —

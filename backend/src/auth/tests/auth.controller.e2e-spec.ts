@@ -1,4 +1,5 @@
 import { Controller, Get, INestApplication, ValidationPipe } from '@nestjs/common';
+import { ConfigModule } from '@nestjs/config';
 import { APP_GUARD } from '@nestjs/core';
 import { EventEmitterModule } from '@nestjs/event-emitter';
 import { JwtModule } from '@nestjs/jwt';
@@ -88,6 +89,7 @@ describe('AuthController (e2e)', () => {
 
     const moduleRef = await Test.createTestingModule({
       imports: [
+        ConfigModule.forRoot({ isGlobal: true }),
         EventEmitterModule.forRoot(),
         JwtModule.register({ global: true, secret: 'test-secret', signOptions: { expiresIn: '15m' } }),
         AuthModule,
@@ -152,6 +154,19 @@ describe('AuthController (e2e)', () => {
     });
   });
 
+  describe('access-token cookie maxAge', () => {
+    it('defaults to 900 seconds (15 minutes) when KERGHAN_ACCESS_TOKEN_TTL_MS is unset', async () => {
+      const response = await request(app.getHttpServer())
+        .post('/auth/login.json')
+        .send({ username: 'darthjee', password: 'my-password' })
+        .expect(201);
+
+      const cookie = response.headers['set-cookie'][0];
+
+      expect(cookie).toMatch(/Max-Age=900\b/);
+    });
+  });
+
   describe('refresh token rotation', () => {
     it('issues a new token pair and invalidates the old refresh token', async () => {
       const login = await request(app.getHttpServer())
@@ -196,7 +211,7 @@ describe('AuthController (e2e)', () => {
         .send({ username: 'darthjee', password: 'my-password' });
 
       const response = await request(app.getHttpServer())
-        .post('/auth/logout.json')
+        .delete('/auth/logoff.json')
         .send({ refreshToken: login.body.refreshToken })
         .expect(204);
 
@@ -247,7 +262,7 @@ describe('AuthController (e2e)', () => {
         .send({ username: 'darthjee', password: 'my-password' });
 
       const response = await request(app.getHttpServer())
-        .post('/auth/logout.json')
+        .delete('/auth/logoff.json')
         .send({ refreshToken: login.body.refreshToken })
         .expect(204);
 

@@ -47,7 +47,7 @@ Creates a new `auth_users` record, then issues tokens identically to login.
 Rotates the refresh token server-side (old token's `revokedAt` is set).
 Replay of a revoked or expired token is rejected with `401`.
 
-### `POST /auth/logout.json`
+### `DELETE /auth/logoff.json`
 
 | Property | Value |
 | --- | --- |
@@ -77,11 +77,12 @@ The `access_token` cookie is set with:
 - `httpOnly: true` — not accessible via JavaScript
 - `secure: true` — only sent over HTTPS
 - `sameSite: 'strict'` — not sent on cross-site requests
-- `maxAge`: 15 minutes (matches JWT expiry)
+- `maxAge`: `KERGHAN_ACCESS_TOKEN_TTL_MS` (default 15 minutes when unset — matches JWT expiry;
+  see `docs/agents/environment-variables.md`)
 
 The token is never returned in the response body — only the `refreshToken`
 is, as it must be stored client-side to call `/auth/refresh.json` and
-`/auth/logout.json`.
+`/auth/logoff.json`.
 
 ## Source files
 
