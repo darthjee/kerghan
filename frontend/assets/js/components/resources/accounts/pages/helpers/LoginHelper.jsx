@@ -6,6 +6,8 @@ const FIELDS = [
 /**
  * Rendering helper for the login page.
  */
+// eslint-disable-next-line @typescript-eslint/no-extraneous-class -- static-methods-only
+// utility/client class is this codebase's deliberate convention, matching client/ApiClient.js.
 export default class LoginHelper {
   /**
    * Render the login page form.
@@ -29,7 +31,10 @@ export default class LoginHelper {
           {LoginHelper.#renderSubmitError(state)}
           {FIELDS.map(
             ([name, type, label]) => LoginHelper.#renderField(
-              name, type, label, state, onChangeByField[name],
+              name, type, label, state,
+              // eslint-disable-next-line security/detect-object-injection -- name is only ever
+              // one of the hardcoded FIELDS keys above, never user/attacker-controlled.
+              onChangeByField[name],
             ),
           )}
           <button type="submit" className="btn btn-primary">Login</button>
@@ -72,6 +77,8 @@ export default class LoginHelper {
           id={inputId}
           type={type}
           className="form-control"
+          // eslint-disable-next-line security/detect-object-injection -- name is only ever one
+          // of the hardcoded FIELDS keys above, never user/attacker-controlled.
           value={state[name]}
           onChange={onChange}
         />

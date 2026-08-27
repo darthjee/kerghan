@@ -6,12 +6,25 @@ import jasmine from 'eslint-plugin-jasmine';
 import jsdoc from 'eslint-plugin-jsdoc';
 import globals from 'globals';
 
+// No-op stand-ins for Codacy-only rules (Codacy runs a broader ESLint-based rule set than this
+// project installs). They are never enabled in `rules` below — they exist solely so ESLint
+// recognizes the rule IDs referenced by narrowly-scoped `eslint-disable-next-line` comments
+// suppressing confirmed Codacy false positives; without a matching rule definition, ESLint
+// itself errors with "Definition for rule ... was not found" on those disable comments.
+const codacyRuleStubs = {
+  xss: { rules: { 'no-mixed-html': { create: () => ({}) } } },
+  security: { rules: { 'detect-object-injection': { create: () => ({}) } } },
+  '@typescript-eslint': { rules: { 'no-extraneous-class': { create: () => ({}) } } },
+};
+
 export default [
   { ignores: ['node_modules/**/*.js', 'dist/**/*.js', 'report/**'] },
   js.configs.recommended,
   {
     files: ['**/*.{js,jsx,mjs}'],
-    plugins: { complexity, react, 'react-hooks': reactHooks, jsdoc },
+    plugins: {
+      complexity, react, 'react-hooks': reactHooks, jsdoc, ...codacyRuleStubs,
+    },
     languageOptions: {
       ecmaVersion: 'latest',
       sourceType: 'module',
@@ -65,5 +78,20 @@ export default [
       'jsdoc/require-returns-description': 'off',
       'jsdoc/require-description': 'off',
     },
+  },
+  {
+    // The `codacyRuleStubs` above are always off in this project's own lint run (they exist
+    // only so the rule IDs resolve), so any `eslint-disable-next-line` referencing them is,
+    // from this config's point of view, always "unused". Silencing that meta-warning is scoped
+    // to just the files carrying those Codacy-only suppressions, so unused-directive detection
+    // stays intact everywhere else.
+    files: [
+      'assets/js/client/AuthSession.js',
+      'assets/js/components/resources/accounts/pages/helpers/LoginHelper.jsx',
+      'specs/assets/js/client/ApiClientSpec.js',
+      'specs/assets/js/components/resources/accounts/pages/LoginSpec.js',
+      'specs/assets/js/components/resources/accounts/pages/helpers/LoginHelperSpec.js',
+    ],
+    linterOptions: { reportUnusedDisableDirectives: 'off' },
   },
 ];

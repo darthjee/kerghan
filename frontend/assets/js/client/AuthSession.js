@@ -28,6 +28,8 @@ function storage() {
  * React/DOM dependency beyond `localStorage` itself — a plain class with static methods,
  * matching {@link module:client/ApiClient}'s style.
  */
+// eslint-disable-next-line @typescript-eslint/no-extraneous-class -- static-methods-only
+// utility/client class is this codebase's deliberate convention, matching client/ApiClient.js.
 export default class AuthSession {
   /**
    * Read the currently stored refresh token.
