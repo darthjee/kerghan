@@ -1,4 +1,5 @@
 import AccountsClient from '../../../../../client/AccountsClient.js';
+import AuthEvents from '../../../../../client/AuthEvents.js';
 
 /**
  * Controller for the login page: submits credentials to {@link AccountsClient} and redirects
@@ -18,8 +19,8 @@ export default class LoginController {
   }
 
   /**
-   * Submit the login form: authenticate against the backend and either redirect home on
-   * success or set a submit-error message on failure.
+   * Submit the login form: authenticate against the backend and either announce the new
+   * logged-in state and redirect home on success, or set a submit-error message on failure.
    *
    * @param {{username: string, password: string}} fields - Current form field values.
    * @returns {Promise<void>} Resolves once submission handling finishes.
@@ -29,6 +30,7 @@ export default class LoginController {
 
     try {
       await this.client.login(fields);
+      AuthEvents.emit(true);
       this.#redirectHome();
     } catch (error) {
       this.setSubmitError(error.message);
