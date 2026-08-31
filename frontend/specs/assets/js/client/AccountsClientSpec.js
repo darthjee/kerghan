@@ -140,4 +140,33 @@ describe('AccountsClient', () => {
       expect(AuthSession.get()).toBeNull();
     });
   });
+
+  describe('.status', () => {
+    it('posts the refresh token to the status endpoint', async () => {
+      spyOn(ApiClient, 'postJson').and.resolveTo({ loggedIn: true });
+
+      await AccountsClient.status('refresh-token');
+
+      expect(ApiClient.postJson).toHaveBeenCalledWith('/auth/status.json', {
+        refreshToken: 'refresh-token',
+      });
+    });
+
+    it('resolves with the parsed loggedIn response', async () => {
+      spyOn(ApiClient, 'postJson').and.resolveTo({ loggedIn: false });
+
+      const response = await AccountsClient.status('refresh-token');
+
+      expect(response).toEqual({ loggedIn: false });
+    });
+
+    it('does not touch the stored refresh token', async () => {
+      AuthSession.set('refresh-token');
+      spyOn(ApiClient, 'postJson').and.resolveTo({ loggedIn: false });
+
+      await AccountsClient.status('refresh-token');
+
+      expect(AuthSession.get()).toBe('refresh-token');
+    });
+  });
 });
