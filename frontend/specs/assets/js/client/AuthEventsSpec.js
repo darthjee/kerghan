@@ -1,0 +1,62 @@
+import AuthEvents from '../../../../assets/js/client/AuthEvents.js';
+
+describe('AuthEvents', () => {
+  let originalWindow;
+
+  beforeEach(() => {
+    // Node-based Jasmine specs run without a DOM, so `window` is undefined there; a plain
+    // `EventTarget` provides the same `addEventListener`/`removeEventListener`/`dispatchEvent`
+    // shape AuthEvents relies on.
+    originalWindow = globalThis.window;
+    globalThis.window = new EventTarget();
+  });
+
+  afterEach(() => {
+    globalThis.window = originalWindow;
+  });
+
+  describe('.emit', () => {
+    it('dispatches a window event carrying loggedIn: true', () => {
+      const handler = jasmine.createSpy('handler');
+
+      AuthEvents.subscribe(handler);
+
+      try {
+        AuthEvents.emit(true);
+
+        expect(handler).toHaveBeenCalled();
+        expect(handler.calls.mostRecent().args[0].type).toBe('auth:changed');
+        expect(handler.calls.mostRecent().args[0].detail).toEqual({ loggedIn: true });
+      } finally {
+        AuthEvents.unsubscribe(handler);
+      }
+    });
+
+    it('dispatches a window event carrying loggedIn: false', () => {
+      const handler = jasmine.createSpy('handler');
+
+      AuthEvents.subscribe(handler);
+
+      try {
+        AuthEvents.emit(false);
+
+        expect(handler).toHaveBeenCalled();
+        expect(handler.calls.mostRecent().args[0].detail).toEqual({ loggedIn: false });
+      } finally {
+        AuthEvents.unsubscribe(handler);
+      }
+    });
+  });
+
+  describe('.subscribe / .unsubscribe', () => {
+    it('stops the handler from firing on a subsequent emit after unsubscribing', () => {
+      const handler = jasmine.createSpy('handler');
+
+      AuthEvents.subscribe(handler);
+      AuthEvents.unsubscribe(handler);
+      AuthEvents.emit(true);
+
+      expect(handler).not.toHaveBeenCalled();
+    });
+  });
+});
