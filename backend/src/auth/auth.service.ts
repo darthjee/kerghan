@@ -141,6 +141,25 @@ export class AuthService {
     await this.refreshTokenRepository.update({ tokenHash }, { revokedAt: new Date() });
   }
 
+  /**
+   * Reports whether a refresh token currently identifies an active
+   * session, without mutating anything. Deliberately distinct from
+   * `#findActiveRefreshToken` (used by `refresh()`), which revokes the
+   * user's entire token family and throws when it finds an
+   * already-revoked token — the correct replay-detection behavior for a
+   * token-consuming flow, but unsafe to reuse here: a passive status check
+   * must never revoke or rotate anything, or a second tab's routine
+   * mount-time confirmation could log every tab out after the first tab's
+   * legitimate refresh.
+   * @param {string} refreshToken - The refresh token presented by the client.
+   * @returns {Promise<{ loggedIn: boolean }>} `{ loggedIn: true }` only when
+   *   the token is known, unrevoked, and unexpired; `{ loggedIn: false }`
+   *   for every other case (missing, unknown, revoked, or expired).
+   */
+  async status(refreshToken: string): Promise<{ loggedIn: boolean }> {
+    return { loggedIn: await this.#isActiveToken(refreshToken) };
+  }
+
   async #assertAvailable(username: string, email: string): Promise<void> {
     const existing = await this.userRepository.findOne({
       where: [{ username }, { email }],
@@ -176,6 +195,13 @@ export class AuthService {
 
   #hashToken(token: string): string {
     return createHash('sha256').update(token).digest('hex');
+  }
+
+  async #isActiveToken(refreshToken: string): Promise<boolean> {
+    const tokenHash = this.#hashToken(refreshToken);
+    const tokenRow = await this.refreshTokenRepository.findOneBy({ tokenHash });
+
+    return !!tokenRow && !tokenRow.revokedAt && tokenRow.expiresAt > new Date();
   }
 
   async #issueTokens(user: User): Promise<AuthResult> {

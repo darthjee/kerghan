@@ -86,6 +86,7 @@ export default [
     // to just the files carrying those Codacy-only suppressions, so unused-directive detection
     // stays intact everywhere else.
     files: [
+      'assets/js/client/AuthEvents.js',
       'assets/js/client/AuthSession.js',
       'assets/js/components/resources/accounts/pages/helpers/LoginHelper.jsx',
       'specs/assets/js/client/ApiClientSpec.js',

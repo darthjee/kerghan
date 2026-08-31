@@ -9,6 +9,7 @@ type AuthServiceMock = {
   register: jest.Mock;
   refresh: jest.Mock;
   logout: jest.Mock;
+  status: jest.Mock;
 };
 
 function authServiceMock(user: User): AuthServiceMock {
@@ -17,6 +18,7 @@ function authServiceMock(user: User): AuthServiceMock {
     register: jest.fn(),
     refresh: jest.fn(),
     logout: jest.fn().mockResolvedValue(undefined),
+    status: jest.fn(),
   };
 }
 
@@ -95,6 +97,50 @@ describe('AuthController', () => {
       expect(authService.logout).toHaveBeenCalledWith('a-refresh-token');
       expect(res.clearCookie).toHaveBeenCalledWith('access_token');
       expect(res.set).toHaveBeenCalledWith('X-Skip-Cache', 'true');
+    });
+  });
+
+  describe('POST /auth/status.json', () => {
+    function buildController(): AuthController {
+      const configService = { get: jest.fn((_key: string, defaultValue: number) => defaultValue) };
+
+      return new AuthController(
+        authService as unknown as AuthService,
+        configService as unknown as ConfigService,
+      );
+    }
+
+    describe('when the service reports an active session', () => {
+      it('responds with { loggedIn: true }', async () => {
+        authService.status.mockResolvedValue({ loggedIn: true });
+        const controller = buildController();
+
+        const result = await controller.status({ refreshToken: 'a-refresh-token' }, res as unknown as Response);
+
+        expect(authService.status).toHaveBeenCalledWith('a-refresh-token');
+        expect(result).toEqual({ loggedIn: true });
+      });
+    });
+
+    describe('when the service reports no active session', () => {
+      it('responds with { loggedIn: false }', async () => {
+        authService.status.mockResolvedValue({ loggedIn: false });
+        const controller = buildController();
+
+        const result = await controller.status({ refreshToken: 'unknown-token' }, res as unknown as Response);
+
+        expect(result).toEqual({ loggedIn: false });
+      });
+    });
+
+    it('sets the X-Skip-Cache header and never sets the access-token cookie', async () => {
+      authService.status.mockResolvedValue({ loggedIn: true });
+      const controller = buildController();
+
+      await controller.status({ refreshToken: 'a-refresh-token' }, res as unknown as Response);
+
+      expect(res.set).toHaveBeenCalledWith('X-Skip-Cache', 'true');
+      expect(res.cookie).not.toHaveBeenCalled();
     });
   });
 });

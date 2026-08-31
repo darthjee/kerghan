@@ -1,10 +1,11 @@
 import AccountsClient from '../../../../client/AccountsClient.js';
 import AuthSession from '../../../../client/AuthSession.js';
+import AuthEvents from '../../../../client/AuthEvents.js';
 
 /**
- * Controller for the Header's logout action: ends the session via {@link AccountsClient.logout}
- * and redirects home regardless of whether the request succeeded — `AccountsClient.logout`
- * already clears `AuthSession` unconditionally.
+ * Controller for the Header's logout action and mount-time auth-status confirmation. Logout ends
+ * the session via {@link AccountsClient.logout} and redirects home regardless of whether the
+ * request succeeded — `AccountsClient.logout` already clears `AuthSession` unconditionally.
  */
 export default class HeaderController {
   /**
@@ -17,9 +18,9 @@ export default class HeaderController {
   }
 
   /**
-   * Log out the current session and redirect home. Always redirects, even when the logout
-   * request itself fails, since `AccountsClient.logout` already clears `AuthSession`
-   * client-side unconditionally.
+   * Log out the current session and redirect home. Always redirects and emits the new
+   * `false` auth state, even when the logout request itself fails, since `AccountsClient.logout`
+   * already clears `AuthSession` client-side unconditionally.
    *
    * @returns {Promise<void>} Resolves once logout handling finishes.
    */
@@ -30,8 +31,35 @@ export default class HeaderController {
       // Ignored: the client-side session is already cleared by AccountsClient.logout,
       // regardless of whether the network request itself succeeded.
     } finally {
+      AuthEvents.emit(false);
       this.#redirectHome();
     }
+  }
+
+  /**
+   * Confirm the current auth state against the backend and announce it via {@link AuthEvents}.
+   * Skips the network call entirely when there is no stored refresh token — a missing token is
+   * unambiguously "logged out". When the backend reports the stored token is no longer active,
+   * the stale token is cleared from `AuthSession` before emitting, so `ApiClient`'s 401-retry
+   * logic does not keep attempting to refresh with a token already known to be dead.
+   *
+   * @returns {Promise<void>} Resolves once the status check finishes.
+   */
+  async checkStatus() {
+    const token = AuthSession.get();
+
+    if (!token) {
+      AuthEvents.emit(false);
+      return;
+    }
+
+    const { loggedIn } = await this.client.status(token);
+
+    if (!loggedIn) {
+      AuthSession.clear();
+    }
+
+    AuthEvents.emit(loggedIn);
   }
 
   #redirectHome() {

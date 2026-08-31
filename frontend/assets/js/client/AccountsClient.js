@@ -75,4 +75,17 @@ export default class AccountsClient {
       AuthSession.clear();
     }
   }
+
+  /**
+   * Check whether a refresh token is still active, without consuming or rotating it. Unlike
+   * {@link AccountsClient.login}/{@link AccountsClient.refresh}, this does not touch
+   * `AuthSession` itself — a `false` result means clearing a now-known-stale token, not setting
+   * a new one, which is the caller's responsibility.
+   *
+   * @param {string} refreshToken - The refresh token to check.
+   * @returns {Promise<{loggedIn: boolean}>} Whether the token is still active.
+   */
+  static async status(refreshToken) {
+    return ApiClient.postJson('/auth/status.json', { refreshToken });
+  }
 }

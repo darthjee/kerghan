@@ -22,10 +22,12 @@ const SKIP_CACHE_HEADER = 'X-Skip-Cache';
 
 /**
  * Auth module routes — thin, delegating all business logic to
- * `AuthService`. `login`/`register`/`refresh`/`logout` are all `@Public()`:
- * they exist precisely to establish or renew credentials, so they must
- * stay reachable without an already-valid access token. Every route also
- * sets `X-Skip-Cache` on its response so Tent's proxy never caches — and
+ * `AuthService`. `login`/`register`/`refresh`/`logout`/`status` are all
+ * `@Public()`: the first four exist precisely to establish or renew
+ * credentials, and `status` exists to let an already-logged-out client
+ * check its session without one — so all of them must stay reachable
+ * without an already-valid access token. Every route also sets
+ * `X-Skip-Cache` on its response so Tent's proxy never caches — and
  * cross-serves — a login/session response between users.
  */
 @Controller('auth')
@@ -99,6 +101,24 @@ export class AuthController {
     @Res({ passthrough: true }) res: Response,
   ): Promise<object> {
     return this.#respond(await this.authService.register(dto), res);
+  }
+
+  /**
+   * `POST /auth/status.json`. Reports whether the given refresh token still
+   * identifies an active session, without setting/clearing the
+   * access-token cookie or mutating anything server-side — used for
+   * mount-time login-state confirmation (e.g. the frontend header), not for
+   * establishing or renewing credentials.
+   * @param {RefreshTokenDto} dto - Carries the refresh token to check.
+   * @param {Response} res - Used only to set the `X-Skip-Cache` header.
+   * @returns {Promise<object>} `{ loggedIn: boolean }`, always `200`.
+   */
+  @Public()
+  @Post('status.json')
+  async status(@Body() dto: RefreshTokenDto, @Res({ passthrough: true }) res: Response): Promise<object> {
+    res.set(SKIP_CACHE_HEADER, 'true');
+
+    return this.authService.status(dto.refreshToken);
   }
 
   #respond({ user, accessToken, refreshToken }: AuthResult, res: Response): object {
