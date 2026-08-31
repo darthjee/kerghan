@@ -276,4 +276,63 @@ describe('AuthService', () => {
       );
     });
   });
+
+  describe('status', () => {
+    const activeToken = { id: 10, userId: 1, revokedAt: null, expiresAt: new Date(Date.now() + 60_000) };
+
+    describe('when the refresh token is active', () => {
+      beforeEach(() => {
+        refreshTokenRepository.findOneBy.mockResolvedValue(activeToken);
+      });
+
+      it('resolves with loggedIn: true', async () => {
+        await expect(service.status('a-refresh-token')).resolves.toEqual({ loggedIn: true });
+      });
+
+      it('does not mutate the token row', async () => {
+        await service.status('a-refresh-token');
+
+        expect(refreshTokenRepository.update).not.toHaveBeenCalled();
+      });
+    });
+
+    describe('when the refresh token is unknown', () => {
+      beforeEach(() => {
+        refreshTokenRepository.findOneBy.mockResolvedValue(null);
+      });
+
+      it('resolves with loggedIn: false, without throwing', async () => {
+        await expect(service.status('unknown-token')).resolves.toEqual({ loggedIn: false });
+      });
+    });
+
+    describe('when the refresh token has expired', () => {
+      beforeEach(() => {
+        refreshTokenRepository.findOneBy.mockResolvedValue({
+          ...activeToken,
+          expiresAt: new Date(Date.now() - 1000),
+        });
+      });
+
+      it('resolves with loggedIn: false', async () => {
+        await expect(service.status('expired-token')).resolves.toEqual({ loggedIn: false });
+      });
+    });
+
+    describe('when the refresh token was already revoked', () => {
+      beforeEach(() => {
+        refreshTokenRepository.findOneBy.mockResolvedValue({ ...activeToken, revokedAt: new Date() });
+      });
+
+      it('resolves with loggedIn: false, without throwing', async () => {
+        await expect(service.status('revoked-token')).resolves.toEqual({ loggedIn: false });
+      });
+
+      it('does not revoke the rest of the token family', async () => {
+        await service.status('revoked-token');
+
+        expect(refreshTokenRepository.update).not.toHaveBeenCalled();
+      });
+    });
+  });
 });

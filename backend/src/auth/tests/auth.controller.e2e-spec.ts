@@ -224,6 +224,77 @@ describe('AuthController (e2e)', () => {
     });
   });
 
+  describe('status check', () => {
+    it('resolves loggedIn: true for an active refresh token', async () => {
+      const login = await request(app.getHttpServer())
+        .post('/auth/login.json')
+        .send({ username: 'darthjee', password: 'my-password' });
+
+      const response = await request(app.getHttpServer())
+        .post('/auth/status.json')
+        .send({ refreshToken: login.body.refreshToken })
+        .expect(201);
+
+      expect(response.body).toEqual({ loggedIn: true });
+    });
+
+    it('resolves loggedIn: false for an unknown refresh token, without a 401', async () => {
+      const response = await request(app.getHttpServer())
+        .post('/auth/status.json')
+        .send({ refreshToken: 'not-a-real-token' })
+        .expect(201);
+
+      expect(response.body).toEqual({ loggedIn: false });
+    });
+
+    it('resolves loggedIn: false for a revoked refresh token, without revoking the token family', async () => {
+      const login = await request(app.getHttpServer())
+        .post('/auth/login.json')
+        .send({ username: 'darthjee', password: 'my-password' });
+
+      await request(app.getHttpServer())
+        .delete('/auth/logoff.json')
+        .send({ refreshToken: login.body.refreshToken })
+        .expect(204);
+
+      const response = await request(app.getHttpServer())
+        .post('/auth/status.json')
+        .send({ refreshToken: login.body.refreshToken })
+        .expect(201);
+
+      expect(response.body).toEqual({ loggedIn: false });
+    });
+
+    it('does not set or clear the access-token cookie', async () => {
+      const login = await request(app.getHttpServer())
+        .post('/auth/login.json')
+        .send({ username: 'darthjee', password: 'my-password' });
+
+      const response = await request(app.getHttpServer())
+        .post('/auth/status.json')
+        .send({ refreshToken: login.body.refreshToken })
+        .expect(201);
+
+      expect(response.headers['set-cookie']).toBeUndefined();
+    });
+
+    it('is reachable without an access-token cookie, being @Public()', async () => {
+      await request(app.getHttpServer())
+        .post('/auth/status.json')
+        .send({ refreshToken: 'whatever' })
+        .expect(201);
+    });
+
+    it('sets the X-Skip-Cache header', async () => {
+      const response = await request(app.getHttpServer())
+        .post('/auth/status.json')
+        .send({ refreshToken: 'whatever' })
+        .expect(201);
+
+      expect(response.headers['x-skip-cache']).toBe('true');
+    });
+  });
+
   describe('X-Skip-Cache header', () => {
     it('is set on the login response, so Tent never caches it across users', async () => {
       const response = await request(app.getHttpServer())
