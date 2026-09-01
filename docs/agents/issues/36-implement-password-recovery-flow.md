@@ -28,7 +28,7 @@ infrastructure of any kind (no mailer dependency, no SMTP config; the only prece
 3. The user follows the link from their recovery email to `#/recover-password?token=...`, sets a
    new password, and submits to `reset-password.json`.
 4. Any rejection reason (unknown token, already-used token, expired token) produces the exact same
-   generic `401 Unauthorized` error — the client never learns which case it hit.
+   generic `400 Bad Request` error — the client never learns which case it hit.
 5. On success, the password is updated, the token is marked used (can't be replayed), all of that
    user's existing refresh tokens/sessions are revoked (forcing re-login everywhere), and the user
    sees a confirmation screen with a manual link back to `#/login`.
@@ -93,14 +93,34 @@ this model — `PasswordResetToken` mirrors it closely rather than inventing a n
   match (no branch-dependent early return); the `PasswordResetToken` row and the
   `PasswordRecoveryRequestedEvent` are only created/fired when the email matches an account.
 - `reset-password.json`: every rejection reason (unknown token, already-used token, expired token)
-  throws the exact same `UnauthorizedException('Invalid or expired token')` — mirroring
-  `refresh.json`'s existing pattern in `auth.service.ts`, which already collapses unknown/expired/
-  revoked refresh tokens into one `UnauthorizedException('Invalid or expired refresh token')`. No
-  custom exception filter needed — Nest's default error shape is fine.
+  throws the exact same `BadRequestException('Invalid or expired token')` — **`400`, not `401`**.
+  This corrects an earlier draft of this issue, which proposed `401` to mirror `refresh.json`'s
+  own uniform-error pattern (`auth.service.ts`, which collapses unknown/expired/revoked refresh
+  tokens into one `UnauthorizedException`). That precedent doesn't transfer here: the frontend's
+  shared `ApiClient#sendJson` (`frontend/assets/js/client/ApiClient.js`) intercepts **every** `401`
+  app-wide to attempt an access-token refresh-and-retry — appropriate for `refresh.json`'s
+  authenticated context, but wrong for a logged-out flow like this one. A `401` here would have a
+  user with no stored refresh token silently redirected to `/login` (via `#sessionExpired()`)
+  instead of seeing "Invalid or expired token" — and could even resolve as a false success in a
+  naively-written `AccountsClient.resetPassword`, since `ApiClient` resolves to `undefined` rather
+  than throwing in that path. `400` bypasses that interception entirely and reaches the plain
+  `throw new ApiError(response.status, data.error)` branch instead. No custom exception filter is
+  added — Nest's default error shape is used as-is.
 - Password-format validation (e.g. `@MinLength(8)`, matching `RegisterDto`) stays a normal
-  `class-validator`/`ValidationPipe` 400 — independent of the token-validity uniform error.
+  `class-validator`/`ValidationPipe` 400 too — same status as the uniform token error, which is
+  fine: both are non-401 `ApiError`s the frontend surfaces the same way, and neither leaks which
+  reset-rejection reason occurred.
 - No account-eligibility/banned-state concept exists in Kerghan today (confirmed against
   `docs/agents/product.md`), so there's nothing to check at reset time beyond token validity.
+- Separately: exploring this surfaced that `ApiClient`'s `throw new ApiError(response.status,
+  data.error)` reads a `data.error` field, but NestJS's default (unfiltered) exception body shape
+  is `{ statusCode, message, error }`, where `error` is just the generic HTTP status text (e.g.
+  "Bad Request") and the actual message lives in `data.message`. This looks like a pre-existing
+  mismatch affecting other flows too (e.g. `register.json`'s "username is not available") — tracked
+  separately as #42, not fixed here, since it's a cross-cutting frontend/backend contract issue
+  unrelated to password recovery specifically. It doesn't undermine this issue's security
+  properties (the displayed text stays uniform across rejection reasons either way), only its
+  wording.
 
 ### Frontend pages & routing
 Follows the existing `Login`/`Register` page conventions
@@ -149,8 +169,8 @@ Follows the existing `Login`/`Register` page conventions
 ## Benefits
 - Users who forget their password can regain access without manual/admin intervention.
 - Reuses this codebase's own established security precedents (the `RefreshToken` model, and
-  `refresh.json`'s uniform-error pattern) instead of inventing new ones, keeping the auth module
-  internally consistent.
+  `refresh.json`'s "collapse every rejection reason into one message" pattern) instead of
+  inventing new ones, keeping the auth module internally consistent.
 - Fully closes out the placeholder "Recover" link added in #35.
 - Establishes the `PasswordResetToken` model and `PasswordRecoveryRequestedEvent` that the
   follow-on admin tooling (#40, #41) and email-sending work (#38, #39) build directly on.
