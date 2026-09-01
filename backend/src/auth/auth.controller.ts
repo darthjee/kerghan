@@ -7,6 +7,7 @@ import { LoginDto } from './dto/login.dto.js';
 import { RecoverDto } from './dto/recover.dto.js';
 import { RefreshTokenDto } from './dto/refresh-token.dto.js';
 import { RegisterDto } from './dto/register.dto.js';
+import { ResetPasswordDto } from './dto/reset-password.dto.js';
 import { User } from './entities/user.entity.js';
 
 const ACCESS_TOKEN_COOKIE = 'access_token';
@@ -121,6 +122,29 @@ export class AuthController {
     @Res({ passthrough: true }) res: Response,
   ): Promise<object> {
     return this.#respond(await this.authService.register(dto), res);
+  }
+
+  /**
+   * `POST /auth/reset-password.json`. Finishes a self-service password
+   * recovery. Every rejection reason (unknown token, already-used token,
+   * expired token) surfaces as the exact same `400 Bad Request` — never
+   * `401`, so the frontend's shared `ApiClient` doesn't intercept it as a
+   * session-refresh candidate (see `AuthService#resetPassword`).
+   * @param {ResetPasswordDto} dto - Carries the token and the new password.
+   * @param {Response} res - Used only to set the `X-Skip-Cache` header.
+   * @returns {Promise<object>} `{ reset: true }` on success.
+   */
+  @Public()
+  @Post('reset-password.json')
+  @HttpCode(HttpStatus.OK)
+  async resetPassword(
+    @Body() dto: ResetPasswordDto,
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<object> {
+    await this.authService.resetPassword(dto);
+    res.set(SKIP_CACHE_HEADER, 'true');
+
+    return { reset: true };
   }
 
   /**

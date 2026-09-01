@@ -1,7 +1,7 @@
 import { Controller, Get, INestApplication, ValidationPipe } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { APP_GUARD } from '@nestjs/core';
-import { EventEmitterModule } from '@nestjs/event-emitter';
+import { EventEmitter2, EventEmitterModule } from '@nestjs/event-emitter';
 import { JwtModule } from '@nestjs/jwt';
 import { Test } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
@@ -14,6 +14,19 @@ import { PasswordResetToken } from '../entities/password-reset-token.entity.js';
 import { RefreshToken } from '../entities/refresh-token.entity.js';
 import { Session } from '../entities/session.entity.js';
 import { User } from '../entities/user.entity.js';
+
+// Matches a single condition value against a row's field, understanding
+// TypeORM's `IsNull()` find operator (used by `AuthService#revokeTokenFamily`)
+// in addition to plain equality — real TypeORM/MySQL handles it natively,
+// this in-memory stand-in needs to special-case it.
+function matchesCondition(rowValue: unknown, conditionValue: unknown): boolean {
+  if (conditionValue && typeof conditionValue === 'object' && 'type' in conditionValue) {
+    const operator = conditionValue as { type: string };
+    return operator.type === 'isNull' ? rowValue === null || rowValue === undefined : false;
+  }
+
+  return rowValue === conditionValue;
+}
 
 // Standing in for a real database, mirroring the CI comment on
 // `backend_tests`'s "No DB service container yet" strategy: backend specs
@@ -30,13 +43,15 @@ function createInMemoryRepo<T extends { id?: number }>() {
       return (
         rows.find((row) =>
           conditions.some((condition) =>
-            Object.entries(condition).every(([key, value]) => (row as never)[key] === value),
+            Object.entries(condition).every(([key, value]) => matchesCondition((row as never)[key], value)),
           ),
         ) ?? null
       );
     },
     findOneBy: async (where: Partial<T>): Promise<T | null> =>
-      rows.find((row) => Object.entries(where).every(([key, value]) => (row as never)[key] === value)) ?? null,
+      rows.find((row) =>
+        Object.entries(where).every(([key, value]) => matchesCondition((row as never)[key], value)),
+      ) ?? null,
     save: async (entity: T): Promise<T> => {
       if (entity.id === undefined) {
         entity.id = nextId++;
@@ -48,7 +63,7 @@ function createInMemoryRepo<T extends { id?: number }>() {
       rows.forEach((row) => {
         const matches =
           typeof criteria === 'object'
-            ? Object.entries(criteria).every(([key, value]) => (row as never)[key] === value)
+            ? Object.entries(criteria).every(([key, value]) => matchesCondition((row as never)[key], value))
             : row.id === criteria;
 
         if (matches) {
@@ -201,6 +216,119 @@ describe('AuthController (e2e)', () => {
         .expect(200);
 
       expect(passwordResetTokenRepo.rows).toHaveLength(1);
+    });
+  });
+
+  describe('reset-password flow', () => {
+    // Captures the plaintext token from the fired event, standing in for
+    // the recovery-email listener that #39 will add — this issue's own
+    // code never returns the plaintext token over HTTP.
+    async function requestRecoveryToken(email: string): Promise<string> {
+      const eventEmitter = app.get(EventEmitter2);
+      const tokenPromise = new Promise<string>((resolve) => {
+        eventEmitter.once('password-recovery.requested', (event: { token: string }) => {
+          resolve(event.token);
+        });
+      });
+
+      await request(app.getHttpServer()).post('/auth/recover.json').send({ email });
+
+      return tokenPromise;
+    }
+
+    it('resets the password and responds 200 { reset: true }', async () => {
+      const token = await requestRecoveryToken('darthjee@example.com');
+
+      const response = await request(app.getHttpServer())
+        .post('/auth/reset-password.json')
+        .send({ token, password: 'brand-new-password' })
+        .expect(200);
+
+      expect(response.body).toEqual({ reset: true });
+
+      await request(app.getHttpServer())
+        .post('/auth/login.json')
+        .send({ username: 'darthjee', password: 'brand-new-password' })
+        .expect(201);
+    });
+
+    it('sets the X-Skip-Cache header', async () => {
+      const token = await requestRecoveryToken('darthjee@example.com');
+
+      const response = await request(app.getHttpServer())
+        .post('/auth/reset-password.json')
+        .send({ token, password: 'brand-new-password' })
+        .expect(200);
+
+      expect(response.headers['x-skip-cache']).toBe('true');
+    });
+
+    it('revokes the user\'s other refresh tokens on success', async () => {
+      const login = await request(app.getHttpServer())
+        .post('/auth/login.json')
+        .send({ username: 'darthjee', password: 'my-password' });
+      const token = await requestRecoveryToken('darthjee@example.com');
+
+      await request(app.getHttpServer())
+        .post('/auth/reset-password.json')
+        .send({ token, password: 'brand-new-password' })
+        .expect(200);
+
+      await request(app.getHttpServer())
+        .post('/auth/refresh.json')
+        .send({ refreshToken: login.body.refreshToken })
+        .expect(401);
+    });
+
+    it('rejects an unknown token with a 400 whose body carries a message field, not 401', async () => {
+      const response = await request(app.getHttpServer())
+        .post('/auth/reset-password.json')
+        .send({ token: 'not-a-real-token', password: 'brand-new-password' })
+        .expect(400);
+
+      expect(response.body).toEqual(
+        expect.objectContaining({ statusCode: 400, message: expect.any(String) }),
+      );
+    });
+
+    it('rejects an already-used token', async () => {
+      const token = await requestRecoveryToken('darthjee@example.com');
+
+      await request(app.getHttpServer())
+        .post('/auth/reset-password.json')
+        .send({ token, password: 'brand-new-password' })
+        .expect(200);
+
+      await request(app.getHttpServer())
+        .post('/auth/reset-password.json')
+        .send({ token, password: 'yet-another-password' })
+        .expect(400);
+    });
+
+    it('rejects an expired token', async () => {
+      const token = await requestRecoveryToken('darthjee@example.com');
+      passwordResetTokenRepo.rows[passwordResetTokenRepo.rows.length - 1].expiresAt = new Date(
+        Date.now() - 1000,
+      );
+
+      await request(app.getHttpServer())
+        .post('/auth/reset-password.json')
+        .send({ token, password: 'brand-new-password' })
+        .expect(400);
+    });
+
+    it('rejects a too-short password with a 400, without touching the token', async () => {
+      const token = await requestRecoveryToken('darthjee@example.com');
+
+      await request(app.getHttpServer())
+        .post('/auth/reset-password.json')
+        .send({ token, password: 'short' })
+        .expect(400);
+
+      await request(app.getHttpServer())
+        .post('/auth/reset-password.json')
+        .send({ token, password: 'brand-new-password' })
+        .expect(200);
     });
   });
 
