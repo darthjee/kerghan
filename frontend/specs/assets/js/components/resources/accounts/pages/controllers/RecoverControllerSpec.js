@@ -34,7 +34,7 @@ describe('RecoverController', () => {
       client.recover.and.rejectWith(new Error('network error'));
       const controller = new RecoverController(setSent, client);
 
-      await controller.handleSubmit(email);
+      await expectAsync(controller.handleSubmit(email)).toBeRejected();
 
       expect(setSent).toHaveBeenCalledWith(true);
     });

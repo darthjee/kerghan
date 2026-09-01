@@ -14,15 +14,9 @@ describe('RecoverHelper', () => {
 
   describe('.render', () => {
     it('renders the email field when not yet sent', () => {
-      // eslint-disable-next-line xss/no-mixed-html -- server-side renderToStaticMarkup output
-      // in a Node-only spec, no DOM/user input involved; same pattern as RegisterSpec.js.
       const html = renderToStaticMarkup(RecoverHelper.render(buildState(), buildHandlers()));
 
-      // eslint-disable-next-line xss/no-mixed-html -- asserting against static test markup
-      // only, no DOM/user input involved; same pattern as RegisterSpec.js.
       expect(html).toContain('id="recover-email"');
-      // eslint-disable-next-line xss/no-mixed-html -- asserting against static test markup
-      // only, no DOM/user input involved; same pattern as RegisterSpec.js.
       expect(html).toContain('Recover');
     });
 
