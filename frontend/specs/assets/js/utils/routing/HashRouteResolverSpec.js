@@ -13,6 +13,24 @@ describe('HashRouteResolver', () => {
     expect(resolver.getPage()).toBe('login');
   });
 
+  it('resolves the recover route', () => {
+    const resolver = new HashRouteResolver(() => '#/recover');
+
+    expect(resolver.getPage()).toBe('recover');
+  });
+
+  it('resolves the reset-password route', () => {
+    const resolver = new HashRouteResolver(() => '#/recover-password');
+
+    expect(resolver.getPage()).toBe('reset-password');
+  });
+
+  it('resolves the reset-password route with a token query string', () => {
+    const resolver = new HashRouteResolver(() => '#/recover-password?token=abc123');
+
+    expect(resolver.getPage()).toBe('reset-password');
+  });
+
   it('resolves the home route', () => {
     const resolver = new HashRouteResolver(() => '#/');
 

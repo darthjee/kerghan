@@ -169,4 +169,70 @@ describe('AccountsClient', () => {
       expect(AuthSession.get()).toBe('refresh-token');
     });
   });
+
+  describe('.recover', () => {
+    it('posts the email to the recover endpoint', async () => {
+      spyOn(ApiClient, 'postJson').and.resolveTo({ sent: true });
+
+      await AccountsClient.recover('foo@example.com');
+
+      expect(ApiClient.postJson).toHaveBeenCalledWith('/auth/recover.json', {
+        email: 'foo@example.com',
+      });
+    });
+
+    it('resolves with the parsed response', async () => {
+      spyOn(ApiClient, 'postJson').and.resolveTo({ sent: true });
+
+      const response = await AccountsClient.recover('foo@example.com');
+
+      expect(response).toEqual({ sent: true });
+    });
+
+    it('does not touch the stored refresh token', async () => {
+      AuthSession.set('refresh-token');
+      spyOn(ApiClient, 'postJson').and.resolveTo({ sent: true });
+
+      await AccountsClient.recover('foo@example.com');
+
+      expect(AuthSession.get()).toBe('refresh-token');
+    });
+  });
+
+  describe('.resetPassword', () => {
+    it('posts the token and password fields to the reset-password endpoint, mapping to snake_case', async () => {
+      spyOn(ApiClient, 'postJson').and.resolveTo({ reset: true });
+
+      await AccountsClient.resetPassword({
+        token: 'reset-token', password: 'secret', passwordConfirmation: 'secret',
+      });
+
+      expect(ApiClient.postJson).toHaveBeenCalledWith('/auth/reset-password.json', {
+        token: 'reset-token',
+        password: 'secret',
+        password_confirmation: 'secret',
+      });
+    });
+
+    it('resolves with the parsed response', async () => {
+      spyOn(ApiClient, 'postJson').and.resolveTo({ reset: true });
+
+      const response = await AccountsClient.resetPassword({
+        token: 'reset-token', password: 'secret', passwordConfirmation: 'secret',
+      });
+
+      expect(response).toEqual({ reset: true });
+    });
+
+    it('does not touch the stored refresh token', async () => {
+      AuthSession.set('refresh-token');
+      spyOn(ApiClient, 'postJson').and.resolveTo({ reset: true });
+
+      await AccountsClient.resetPassword({
+        token: 'reset-token', password: 'secret', passwordConfirmation: 'secret',
+      });
+
+      expect(AuthSession.get()).toBe('refresh-token');
+    });
+  });
 });

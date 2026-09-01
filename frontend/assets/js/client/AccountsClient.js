@@ -88,4 +88,35 @@ export default class AccountsClient {
   static async status(refreshToken) {
     return ApiClient.postJson('/auth/status.json', { refreshToken });
   }
+
+  /**
+   * Request a password recovery email. Unlike {@link AccountsClient.login}/
+   * {@link AccountsClient.register}, this never touches `AuthSession` — this flow never issues
+   * a refresh token.
+   *
+   * @param {string} email - The account email to send a recovery link to.
+   * @returns {Promise<{sent: boolean}>} Always resolves; the backend never reveals whether the
+   *   email matched an account.
+   */
+  static async recover(email) {
+    return ApiClient.postJson('/auth/recover.json', { email });
+  }
+
+  /**
+   * Complete a password recovery flow using the token from the recovery link. Unlike
+   * {@link AccountsClient.login}/{@link AccountsClient.register}, this never touches
+   * `AuthSession` — this flow never issues a refresh token.
+   *
+   * @param {{token: string, password: string, passwordConfirmation: string}} fields - The
+   *   recovery token and new password fields.
+   * @returns {Promise<{reset: boolean}>} Resolves on a successful reset; rejects with an
+   *   `ApiError` on any rejection reason (unknown, used, or expired token).
+   */
+  static async resetPassword({ token, password, passwordConfirmation }) {
+    return ApiClient.postJson('/auth/reset-password.json', {
+      token,
+      password,
+      password_confirmation: passwordConfirmation,
+    });
+  }
 }
