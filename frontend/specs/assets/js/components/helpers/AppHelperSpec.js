@@ -15,6 +15,18 @@ describe('AppHelper', () => {
     expect(markup).toContain('Login');
   });
 
+  it('renders the recover page for the recover key', () => {
+    const markup = renderToStaticMarkup(React.createElement('div', null, AppHelper.render('recover')));
+
+    expect(markup).toContain('Recover');
+  });
+
+  it('renders the reset-password page for the reset-password key', () => {
+    const markup = renderToStaticMarkup(React.createElement('div', null, AppHelper.render('reset-password')));
+
+    expect(markup).toContain('Reset');
+  });
+
   it('renders the home page for the home key', () => {
     const markup = renderToStaticMarkup(React.createElement('div', null, AppHelper.render('home')));
 

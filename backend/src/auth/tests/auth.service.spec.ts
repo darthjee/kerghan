@@ -7,6 +7,7 @@ import { AuthService } from '../auth.service.js';
 import { RefreshToken } from '../entities/refresh-token.entity.js';
 import { Session } from '../entities/session.entity.js';
 import { User } from '../entities/user.entity.js';
+import { PasswordResetService } from '../password-reset.service.js';
 
 type RepoMock<T extends object> = {
   findOne: jest.Mock;
@@ -32,6 +33,7 @@ describe('AuthService', () => {
   let sessionRepository: RepoMock<Session>;
   let jwtService: { sign: jest.Mock };
   let eventEmitter: { emit: jest.Mock };
+  let passwordResetService: { recover: jest.Mock; resetPassword: jest.Mock };
   let service: AuthService;
 
   beforeEach(() => {
@@ -40,6 +42,7 @@ describe('AuthService', () => {
     sessionRepository = repoMock<Session>();
     jwtService = { sign: jest.fn().mockReturnValue('signed-access-token') };
     eventEmitter = { emit: jest.fn() };
+    passwordResetService = { recover: jest.fn(), resetPassword: jest.fn() };
 
     service = new AuthService(
       userRepository as never,
@@ -47,6 +50,7 @@ describe('AuthService', () => {
       sessionRepository as never,
       jwtService as unknown as JwtService,
       eventEmitter as unknown as EventEmitter2,
+      passwordResetService as unknown as PasswordResetService,
     );
   });
 
@@ -113,6 +117,19 @@ describe('AuthService', () => {
           service.login({ username: 'nobody', password: 'whatever' }),
         ).rejects.toThrow(new UnauthorizedException('Invalid username or password'));
       });
+    });
+  });
+
+  // Detailed recover() behavior (token creation, event shape,
+  // enumeration-safety) is covered by `password-reset.service.spec.ts`,
+  // where that logic actually lives — this only proves the delegation.
+  describe('recover', () => {
+    it('delegates to PasswordResetService#recover with the given dto', async () => {
+      const dto = { email: 'darthjee@example.com' };
+
+      await service.recover(dto);
+
+      expect(passwordResetService.recover).toHaveBeenCalledWith(dto);
     });
   });
 
@@ -274,6 +291,49 @@ describe('AuthService', () => {
         { tokenHash: expect.any(String) },
         { revokedAt: expect.any(Date) },
       );
+    });
+  });
+
+  // Detailed token-validation/rejection-reason behavior is covered by
+  // `password-reset.service.spec.ts` — this proves AuthService's own
+  // contribution: revoking the user's other sessions on success, and
+  // never revoking anything when the token is rejected.
+  describe('resetPassword', () => {
+    describe('when the token is valid', () => {
+      beforeEach(() => {
+        passwordResetService.resetPassword.mockResolvedValue(1);
+      });
+
+      it('revokes every other refresh token belonging to that user', async () => {
+        await service.resetPassword({ token: 'a-token', password: 'new-password' });
+
+        expect(refreshTokenRepository.update).toHaveBeenCalledWith(
+          { userId: 1, revokedAt: IsNull() },
+          { revokedAt: expect.any(Date) },
+        );
+      });
+    });
+
+    describe('when the token is rejected', () => {
+      beforeEach(() => {
+        passwordResetService.resetPassword.mockRejectedValue(
+          new BadRequestException('Invalid or expired token'),
+        );
+      });
+
+      it('propagates the BadRequestException', async () => {
+        await expect(
+          service.resetPassword({ token: 'bad-token', password: 'new-password' }),
+        ).rejects.toThrow(new BadRequestException('Invalid or expired token'));
+      });
+
+      it('does not revoke any refresh tokens', async () => {
+        await expect(
+          service.resetPassword({ token: 'bad-token', password: 'new-password' }),
+        ).rejects.toThrow(BadRequestException);
+
+        expect(refreshTokenRepository.update).not.toHaveBeenCalled();
+      });
     });
   });
 
