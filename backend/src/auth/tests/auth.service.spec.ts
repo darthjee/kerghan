@@ -1,9 +1,11 @@
 import { BadRequestException, UnauthorizedException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { JwtService } from '@nestjs/jwt';
 import bcrypt from 'bcryptjs';
 import { IsNull } from 'typeorm';
 import { AuthService } from '../auth.service.js';
+import { PasswordResetToken } from '../entities/password-reset-token.entity.js';
 import { RefreshToken } from '../entities/refresh-token.entity.js';
 import { Session } from '../entities/session.entity.js';
 import { User } from '../entities/user.entity.js';
@@ -30,23 +32,37 @@ describe('AuthService', () => {
   let userRepository: RepoMock<User>;
   let refreshTokenRepository: RepoMock<RefreshToken>;
   let sessionRepository: RepoMock<Session>;
+  let passwordResetTokenRepository: RepoMock<PasswordResetToken>;
   let jwtService: { sign: jest.Mock };
   let eventEmitter: { emit: jest.Mock };
+  let configService: { get: jest.Mock };
   let service: AuthService;
 
   beforeEach(() => {
     userRepository = repoMock<User>();
     refreshTokenRepository = repoMock<RefreshToken>();
     sessionRepository = repoMock<Session>();
+    passwordResetTokenRepository = repoMock<PasswordResetToken>();
     jwtService = { sign: jest.fn().mockReturnValue('signed-access-token') };
     eventEmitter = { emit: jest.fn() };
+    configService = {
+      get: jest.fn((key: string, defaultValue?: unknown) => {
+        if (key === 'FRONTEND_BASE_URL') {
+          return 'http://localhost:3000';
+        }
+
+        return defaultValue;
+      }),
+    };
 
     service = new AuthService(
       userRepository as never,
       refreshTokenRepository as never,
       sessionRepository as never,
+      passwordResetTokenRepository as never,
       jwtService as unknown as JwtService,
       eventEmitter as unknown as EventEmitter2,
+      configService as unknown as ConfigService,
     );
   });
 
@@ -112,6 +128,68 @@ describe('AuthService', () => {
         await expect(
           service.login({ username: 'nobody', password: 'whatever' }),
         ).rejects.toThrow(new UnauthorizedException('Invalid username or password'));
+      });
+    });
+  });
+
+  describe('recover', () => {
+    const user = { id: 1, username: 'darthjee', email: 'darthjee@example.com' } as User;
+
+    describe('when the email matches an account', () => {
+      beforeEach(() => {
+        userRepository.findOneBy.mockResolvedValue(user);
+      });
+
+      it('creates a password-reset token hashed for that user', async () => {
+        await service.recover({ email: 'darthjee@example.com' });
+
+        expect(passwordResetTokenRepository.save).toHaveBeenCalledWith(
+          expect.objectContaining({ userId: 1, tokenHash: expect.any(String), usedAt: null }),
+        );
+      });
+
+      it('emits a password-recovery.requested event with the reset URL', async () => {
+        await service.recover({ email: 'darthjee@example.com' });
+
+        expect(eventEmitter.emit).toHaveBeenCalledWith(
+          'password-recovery.requested',
+          expect.objectContaining({
+            userId: 1,
+            token: expect.any(String),
+            resetUrl: expect.stringMatching(/^http:\/\/localhost:3000\/#\/recover-password\?token=.+$/),
+          }),
+        );
+      });
+
+      it('never persists the plaintext token', async () => {
+        await service.recover({ email: 'darthjee@example.com' });
+
+        const savedTokenHash = passwordResetTokenRepository.save.mock.calls[0][0].tokenHash;
+        const emittedToken = eventEmitter.emit.mock.calls[0][1].token;
+
+        expect(savedTokenHash).not.toBe(emittedToken);
+      });
+    });
+
+    describe('when the email does not match an account', () => {
+      beforeEach(() => {
+        userRepository.findOneBy.mockResolvedValue(null);
+      });
+
+      it('resolves without throwing', async () => {
+        await expect(service.recover({ email: 'nobody@example.com' })).resolves.toBeUndefined();
+      });
+
+      it('creates no password-reset token', async () => {
+        await service.recover({ email: 'nobody@example.com' });
+
+        expect(passwordResetTokenRepository.save).not.toHaveBeenCalled();
+      });
+
+      it('emits no event', async () => {
+        await service.recover({ email: 'nobody@example.com' });
+
+        expect(eventEmitter.emit).not.toHaveBeenCalled();
       });
     });
   });

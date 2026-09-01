@@ -10,6 +10,7 @@ import request from 'supertest';
 import { JwtGuard } from '../../core/jwt.guard.js';
 import { Public } from '../../core/public.decorator.js';
 import { AuthModule } from '../auth.module.js';
+import { PasswordResetToken } from '../entities/password-reset-token.entity.js';
 import { RefreshToken } from '../entities/refresh-token.entity.js';
 import { Session } from '../entities/session.entity.js';
 import { User } from '../entities/user.entity.js';
@@ -81,11 +82,13 @@ describe('AuthController (e2e)', () => {
   let app: INestApplication;
   let userRepo: ReturnType<typeof createInMemoryRepo<User>>;
   let refreshTokenRepo: ReturnType<typeof createInMemoryRepo<RefreshToken>>;
+  let passwordResetTokenRepo: ReturnType<typeof createInMemoryRepo<PasswordResetToken>>;
 
   beforeEach(async () => {
     userRepo = createInMemoryRepo<User>();
     refreshTokenRepo = createInMemoryRepo<RefreshToken>();
     const sessionRepo = createInMemoryRepo<Session>();
+    passwordResetTokenRepo = createInMemoryRepo<PasswordResetToken>();
 
     const moduleRef = await Test.createTestingModule({
       imports: [
@@ -103,6 +106,8 @@ describe('AuthController (e2e)', () => {
       .useValue(refreshTokenRepo)
       .overrideProvider(getRepositoryToken(Session))
       .useValue(sessionRepo)
+      .overrideProvider(getRepositoryToken(PasswordResetToken))
+      .useValue(passwordResetTokenRepo)
       .compile();
 
     app = moduleRef.createNestApplication();
@@ -151,6 +156,51 @@ describe('AuthController (e2e)', () => {
       expect(cookie).toMatch(/HttpOnly/);
       expect(cookie).toMatch(/Secure/);
       expect(cookie).toMatch(/SameSite=Strict/);
+    });
+  });
+
+  describe('recover flow', () => {
+    it('responds 200 { sent: true } for an email that matches an account', async () => {
+      const response = await request(app.getHttpServer())
+        .post('/auth/recover.json')
+        .send({ email: 'darthjee@example.com' })
+        .expect(200);
+
+      expect(response.body).toEqual({ sent: true });
+    });
+
+    it('responds 200 { sent: true } for an email that does not match any account', async () => {
+      const response = await request(app.getHttpServer())
+        .post('/auth/recover.json')
+        .send({ email: 'nobody@example.com' })
+        .expect(200);
+
+      expect(response.body).toEqual({ sent: true });
+    });
+
+    it('sets the X-Skip-Cache header', async () => {
+      const response = await request(app.getHttpServer())
+        .post('/auth/recover.json')
+        .send({ email: 'darthjee@example.com' })
+        .expect(200);
+
+      expect(response.headers['x-skip-cache']).toBe('true');
+    });
+
+    it('creates a password-reset token only when the email matches an account', async () => {
+      await request(app.getHttpServer())
+        .post('/auth/recover.json')
+        .send({ email: 'nobody@example.com' })
+        .expect(200);
+
+      expect(passwordResetTokenRepo.rows).toHaveLength(0);
+
+      await request(app.getHttpServer())
+        .post('/auth/recover.json')
+        .send({ email: 'darthjee@example.com' })
+        .expect(200);
+
+      expect(passwordResetTokenRepo.rows).toHaveLength(1);
     });
   });
 

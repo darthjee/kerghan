@@ -4,6 +4,7 @@ import type { Response } from 'express';
 import { AuthResult, AuthService } from './auth.service.js';
 import { Public } from '../core/public.decorator.js';
 import { LoginDto } from './dto/login.dto.js';
+import { RecoverDto } from './dto/recover.dto.js';
 import { RefreshTokenDto } from './dto/refresh-token.dto.js';
 import { RegisterDto } from './dto/register.dto.js';
 import { User } from './entities/user.entity.js';
@@ -71,6 +72,25 @@ export class AuthController {
     await this.authService.logout(dto.refreshToken);
     res.clearCookie(ACCESS_TOKEN_COOKIE);
     res.set(SKIP_CACHE_HEADER, 'true');
+  }
+
+  /**
+   * `POST /auth/recover.json`. Always responds `200 { sent: true }`,
+   * whether or not `dto.email` matches an account — no status, body, or
+   * timing difference should reveal whether the email is registered (see
+   * `AuthService#recover`).
+   * @param {RecoverDto} dto - Carries the email to look up.
+   * @param {Response} res - Used only to set the `X-Skip-Cache` header.
+   * @returns {Promise<object>} `{ sent: true }`, always `200`.
+   */
+  @Public()
+  @Post('recover.json')
+  @HttpCode(HttpStatus.OK)
+  async recover(@Body() dto: RecoverDto, @Res({ passthrough: true }) res: Response): Promise<object> {
+    await this.authService.recover(dto);
+    res.set(SKIP_CACHE_HEADER, 'true');
+
+    return { sent: true };
   }
 
   /**
