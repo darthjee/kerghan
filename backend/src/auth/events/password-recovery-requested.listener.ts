@@ -1,0 +1,54 @@
+import { Injectable, Logger } from '@nestjs/common';
+import { OnEvent } from '@nestjs/event-emitter';
+import { MailService } from '../../mail/mail.service.js';
+import { buildPasswordRecoveryEmail } from './password-recovery-email.content.js';
+import { PasswordRecoveryRequestedEvent } from './password-recovery-requested.event.js';
+
+/**
+ * In-module consumer of the `password-recovery.requested` event: builds the
+ * plain-text recovery email (via `buildPasswordRecoveryEmail`) and sends it
+ * to the account's address through `MailService`. Best-effort — the whole
+ * body is wrapped in `try/catch`, a disabled-mail `skipped` result is a
+ * normal outcome, and a send failure is logged at `warn` and never
+ * propagated back to the already-responded `/auth/recover.json` request.
+ * Only `event.userId` (and, on failure, the error message) is ever logged —
+ * never the email address, token, reset link, subject, or body.
+ */
+@Injectable()
+export class PasswordRecoveryRequestedListener {
+  private readonly logger = new Logger(PasswordRecoveryRequestedListener.name);
+  private readonly mailService: MailService;
+
+  /**
+   * @param {MailService} mailService - The Mail module's send pipe (direct DI).
+   */
+  constructor(mailService: MailService) {
+    this.mailService = mailService;
+  }
+
+  /**
+   * Handles one `password-recovery.requested` event by composing and sending
+   * the recovery email. Always resolves; never rethrows.
+   * @param {PasswordRecoveryRequestedEvent} event - The recovery request
+   *   payload: `userId`, `token`, `resetUrl`, and the recipient `email`.
+   * @returns {Promise<void>} Resolves once the send has been attempted
+   *   (regardless of its outcome).
+   */
+  @OnEvent('password-recovery.requested')
+  async handlePasswordRecoveryRequested(event: PasswordRecoveryRequestedEvent): Promise<void> {
+    const { subject, text } = buildPasswordRecoveryEmail(event.resetUrl);
+
+    try {
+      const result = await this.mailService.send({ to: event.email, subject, text });
+
+      if (result.status === 'sent') {
+        this.logger.debug(
+          `recovery email sent (messageId=${result.messageId}) for user ${event.userId}`,
+        );
+      }
+    } catch (err) {
+      const reason = err instanceof Error ? err.message : String(err);
+      this.logger.warn(`recovery email not sent for user ${event.userId}: ${reason}`);
+    }
+  }
+}
