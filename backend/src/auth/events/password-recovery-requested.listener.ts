@@ -1,8 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
-import { MailService } from '../../mail/mail.service.js';
 import { buildPasswordRecoveryEmail } from './password-recovery-email.content.js';
 import { PasswordRecoveryRequestedEvent } from './password-recovery-requested.event.js';
+import { MailService } from '../../mail/mail.service.js';
 
 /**
  * In-module consumer of the `password-recovery.requested` event: builds the
