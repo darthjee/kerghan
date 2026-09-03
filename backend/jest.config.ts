@@ -40,6 +40,7 @@ const config: Config = {
     // excludes `main.ts`.
     '!main.ts',
     '!app.module.ts',
+    '!mail/mail.module.ts',
     '!database/**',
   ],
   coverageDirectory: '../coverage',

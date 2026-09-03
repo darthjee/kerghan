@@ -9,6 +9,7 @@ import { CacheTokenService } from './core/cache-token.service.js';
 import { JwtGuard } from './core/jwt.guard.js';
 import { LazyModuleLoaderService } from './core/lazy-module-loader.service.js';
 import { HealthController } from './health/health.controller.js';
+import { MailModule } from './mail/mail.module.js';
 
 // Default access-token lifetime (15 minutes, in milliseconds) used when
 // `KERGHAN_ACCESS_TOKEN_TTL_MS` is unset — must match
@@ -45,6 +46,7 @@ export function buildJwtSignOptions(configService: ConfigService): { expiresIn: 
     ConfigModule.forRoot({ isGlobal: true }),
     EventEmitterModule.forRoot(),
     AuthModule,
+    MailModule,
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
       inject: [ConfigService],

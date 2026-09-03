@@ -12,7 +12,7 @@ See `docs/agents/architecture/backend.md` for the stack/layout this pattern live
 | Type | Loading | Examples |
 |---|---|---|
 | Core | Always resident, at boot | `src/core/` — JWT Guard, DB connection, CacheToken Service, `LazyModuleLoader` wrapper |
-| Always-on | Always resident, at boot | Auth module — imported directly into `AppModule` |
+| Always-on | Always resident, at boot | Auth module, Mail module — imported directly into `AppModule` |
 | Lazy | On demand, first request | Future modules (tracked-repo, label-rule, etc.) — none exist yet |
 
 A **lazy** module is *not* imported into `AppModule` directly. Instead, its controller's first
