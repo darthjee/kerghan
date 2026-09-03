@@ -36,13 +36,19 @@ backend/src/
 │   └── migrations/            # <timestamp>-<module>-<action>.ts
 ├── health/
 │   └── health.controller.ts   # GET /health.json — @Public()
-└── auth/                      # first feature module — see docs/agents/modules/auth.md
-    ├── auth.module.ts
-    ├── auth.controller.ts
-    ├── auth.service.ts
-    ├── dto/
-    ├── entities/
-    ├── events/
+├── auth/                      # first feature module — see docs/agents/modules/auth.md
+│   ├── auth.module.ts
+│   ├── auth.controller.ts
+│   ├── auth.service.ts
+│   ├── dto/
+│   ├── entities/
+│   ├── events/
+│   └── tests/
+└── mail/                      # Mail module — always-on, general-purpose transactional email sender, no HTTP surface
+    ├── mail.module.ts
+    ├── mail.config.ts
+    ├── mail.service.ts
+    ├── mail.tokens.ts
     └── tests/
 ```
 

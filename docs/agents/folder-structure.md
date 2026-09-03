@@ -4,7 +4,7 @@
 
 | Path | Purpose |
 |---|---|
-| `backend/` | Node.js/NestJS app, TypeScript + TypeORM/MySQL (only the Auth module exists — the tracked-repo/label-rule data model is still open, see `docs/agents/product.md`) |
+| `backend/` | Node.js/NestJS app, TypeScript + TypeORM/MySQL (the Auth and Mail modules exist — the tracked-repo/label-rule data model is still open, see `docs/agents/product.md`) |
 | `frontend/` | React 19 + Vite app — dashboard/analytics UI, currently a tooling-only skeleton |
 | `proxy/` | PHP Tent proxy config (`dev_configuration/`, `prod_configuration/`, `extension/`) |
 | `dockerfiles/` | One directory per built image, `-base`/leaf pairs |
@@ -31,6 +31,7 @@
 | `src/database/` | TypeORM `DataSource` config + `migrations/` (`<timestamp>-<module>-<action>.ts`) |
 | `src/health/` | `GET /health.json` controller |
 | `src/auth/` | Auth module — see `docs/agents/modules/auth.md` |
+| `src/mail/` | Mail module — always-on, no routes/entities — see `docs/agents/modules/mail.md` |
 | `dist/` | Compiled build output (gitignored) |
 | `nest-cli.json`, `tsconfig.json`, `tsconfig.build.json`, `jest.config.ts`, `package.json`, `eslint.config.mjs` | Tooling config |
 

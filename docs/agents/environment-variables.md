@@ -25,8 +25,14 @@ running `kerghan_prod_app` locally to sanity-check the production image).
 | `KERGHAN_DEMO_PASSWORD` | **Consumed**, dev/seed-only | Password for the `demo` user seeded by the demo-seed migration. Falls back to a non-working placeholder (`kerghan-demo-placeholder`) if unset, so the real dev password only exists in `.env`/`.env.dev.sample`, never in source. | `backend/src/database/migrations/20260824120004-auth-seed-demo-user.ts` |
 | `KERGHAN_ALLOWED_ORIGINS` | Reserved, not yet read | Intended for CORS restriction once a cross-origin frontend call exists. Currently in `.env.dev.sample` but no CORS middleware exists yet — safe to set for when it lands, has no effect today. | — |
 | `FRONTEND_BASE_URL` | Reserved, not yet read | No consumer yet (candidate: links in future emails, or a CORS allow-list entry). | — |
-| `EMAILS_ENABLED` | Reserved, not yet read | No email-sending code exists in the backend yet (candidate future use: account/digest notifications). | — |
-| `EMAIL_HOST` / `EMAIL_PORT` / `EMAIL_HOST_USER` / `EMAIL_HOST_PASSWORD` / `EMAIL_USE_TLS` / `DEFAULT_FROM_EMAIL` | Reserved, not yet read | ditto | — |
+| `KERGHAN_EMAILS_ENABLED` | **Consumed**, optional | Master toggle; `'true'` enables outbound sending, anything else (default) disables it (log-and-skip). | `backend/src/mail/mail.config.ts`, `backend/src/mail/mail.module.ts` |
+| `KERGHAN_EMAIL_HOST` | **Consumed** (required when enabled) | SMTP host. Boot throws if enabled without it. | `backend/src/mail/mail.config.ts` |
+| `KERGHAN_EMAIL_PORT` | **Consumed**, optional | SMTP port; defaults to `587`. `465` ⇒ implicit TLS (`secure`); other ports ⇒ STARTTLS when `KERGHAN_EMAIL_USE_TLS`. | `backend/src/mail/mail.config.ts` |
+| `KERGHAN_EMAIL_USER` | **Consumed**, optional | SMTP auth username. `auth` is sent only when both user and password are set. | `backend/src/mail/mail.config.ts` |
+| `KERGHAN_EMAIL_PASSWORD` | **Consumed**, optional | SMTP auth password. | `backend/src/mail/mail.config.ts` |
+| `KERGHAN_EMAIL_USE_TLS` | **Consumed**, optional | Forces a STARTTLS upgrade on non-465 ports. Defaults to `true`. | `backend/src/mail/mail.config.ts` |
+| `KERGHAN_EMAIL_FROM` | **Consumed** (required when enabled) | Default `From:` address. Must be one the SMTP server is authorized to send as (SPF/DKIM). | `backend/src/mail/mail.config.ts` |
+| `KERGHAN_EMAIL_TIMEOUT_MS` | **Consumed**, optional | Bounds nodemailer's connection/greeting/socket timeouts. Defaults to `10000`. | `backend/src/mail/mail.config.ts` |
 
 **GitHub credentials — deliberately none.** Kerghan reads only public GitHub REST API data,
 unauthenticated (see `docs/agents/product.md`). There is no PAT/OAuth/App var to set for this,

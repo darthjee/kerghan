@@ -14,8 +14,13 @@ full file before loading it. For a bare link-only table of contents instead, see
   frontend, backend, modular pattern, infra) to keep agent contexts small. Read the linked area
   page relevant to your task instead of loading everything.
 - **[Modules](modules/)** — Per-backend-module documentation (routes, entities, events), one
-  file per module (`modules/auth.md` today). Read the module's page before extending or
-  consuming it.
+  file per module (`modules/auth.md` and `modules/mail.md` today). Read the module's page before
+  extending or consuming it.
+  - **[Auth](modules/auth.md)** — Kerghan's always-on login module: `/auth/*.json` routes, the
+    `auth_` tables, the JWT/refresh-token flow, and the `user.registered` event.
+  - **[Mail](modules/mail.md)** — Always-on, general-purpose transactional email sender. No HTTP
+    surface; consumed via the exported `MailService`. `KERGHAN_EMAIL_*` config read once at boot;
+    disabled by default (log-and-skip). First consumer: #39.
 - **[Routes](backend/routes.md)** — Per-endpoint backend route reference, one file per domain
   under `backend/routes/` (`auth.md` today), complementing the entity/event-focused
   `modules/` pages.
