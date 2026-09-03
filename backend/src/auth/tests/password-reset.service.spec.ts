@@ -76,6 +76,7 @@ describe('PasswordResetService', () => {
             userId: 1,
             token: expect.any(String),
             resetUrl: expect.stringMatching(/^http:\/\/localhost:3000\/#\/recover-password\?token=.+$/),
+            email: 'darthjee@example.com',
           }),
         );
       });
