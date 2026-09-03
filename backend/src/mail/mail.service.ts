@@ -1,5 +1,5 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
-import type { MailTransport } from './mail-transport.type.js';
+import type { Transporter } from 'nodemailer';
 import type { MailConfig } from './mail.config.js';
 import { MAIL_CONFIG, MAIL_TRANSPORT } from './mail.tokens.js';
 
@@ -33,16 +33,16 @@ export interface SendMailResult {
 @Injectable()
 export class MailService {
   private readonly logger = new Logger(MailService.name);
-  private readonly transporter: MailTransport;
+  private readonly transporter: Transporter | null;
   private readonly config: MailConfig;
 
   /**
-   * @param {MailTransport} transporter - The nodemailer transporter, or
+   * @param {Transporter | null} transporter - The nodemailer transporter, or
    *   `null` when `config.enabled` is `false`.
    * @param {MailConfig} config - The frozen outbound-email config.
    */
   constructor(
-    @Inject(MAIL_TRANSPORT) transporter: MailTransport,
+    @Inject(MAIL_TRANSPORT) transporter: Transporter | null,
     @Inject(MAIL_CONFIG) config: MailConfig,
   ) {
     this.transporter = transporter;
@@ -100,7 +100,7 @@ export class MailService {
   }
 
   #assertSendable(params: SendMailParams, from: string): void {
-    if (!params.to?.trim()) {
+    if (!params.to.trim()) {
       throw new Error("mail: 'to' is required");
     }
 
