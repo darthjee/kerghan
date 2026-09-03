@@ -96,6 +96,18 @@ describe('buildMailConfig', () => {
       expect(config.transport?.requireTLS).toBe(false);
     });
 
+    it('forces STARTTLS when credentials are set even if USE_TLS is "false" on a non-465 port', () => {
+      const config = buildMailConfig(fakeConfigService({
+        ...base,
+        KERGHAN_EMAIL_PORT: '587',
+        KERGHAN_EMAIL_USE_TLS: 'false',
+        KERGHAN_EMAIL_USER: 'mailer',
+        KERGHAN_EMAIL_PASSWORD: 's3cret',
+      }));
+
+      expect(config.transport?.requireTLS).toBe(true);
+    });
+
     it('includes auth only when both user and password are set', () => {
       const config = buildMailConfig(fakeConfigService({
         ...base,

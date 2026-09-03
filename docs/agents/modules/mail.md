@@ -23,7 +23,9 @@ Three boot states:
   `KERGHAN_EMAIL_FROM`. The transporter is built: `465` ⇒ implicit TLS (`secure`), other ports ⇒
   STARTTLS forced when `KERGHAN_EMAIL_USE_TLS` (default `true`); `auth` is sent only when both
   `KERGHAN_EMAIL_USER` and `KERGHAN_EMAIL_PASSWORD` are set; connection/greeting/socket timeouts
-  are bounded by `KERGHAN_EMAIL_TIMEOUT_MS` (default `10000`).
+  are bounded by `KERGHAN_EMAIL_TIMEOUT_MS` (default `10000`). When SMTP credentials are
+  configured, `KERGHAN_EMAIL_USE_TLS=false` is ignored on non-465 ports — STARTTLS stays
+  required so the credentials are never offered over a plaintext fallback.
 - **Enabled but misconfigured** — enabled with a missing/invalid required var. `buildMailConfig`
   throws at boot, naming every offending var.
 

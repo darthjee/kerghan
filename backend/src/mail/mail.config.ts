@@ -101,22 +101,26 @@ export function buildMailConfig(configService: ConfigService): MailConfig {
  * Maps validated primitives to the nodemailer transport-options shape.
  * @param {TransportOptionsInput} input - The validated host/port/credentials/timeout.
  * @returns {TransportOptions} Options for `nodemailer.createTransport`;
- *   `auth` is present only when both `user` and `pass` are non-empty.
+ *   `auth` is present only when both `user` and `pass` are non-empty. When
+ *   `auth` is present, `requireTLS` is forced on for non-465 ports even if
+ *   `useTls` is `false`, so credentials are never offered over a plaintext
+ *   fallback.
  */
 export function buildTransportOptions(input: TransportOptionsInput): TransportOptions {
   const { host, port, user, pass, useTls, timeoutMs } = input;
+  const hasAuth = Boolean(user && pass);
 
   const options: TransportOptions = {
     host,
     port,
     secure: port === 465,
-    requireTLS: useTls && port !== 465,
+    requireTLS: (useTls || hasAuth) && port !== 465,
     connectionTimeout: timeoutMs,
     greetingTimeout: timeoutMs,
     socketTimeout: timeoutMs,
   };
 
-  if (user && pass) {
+  if (hasAuth) {
     options.auth = { user, pass };
   }
 
