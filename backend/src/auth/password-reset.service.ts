@@ -87,7 +87,7 @@ export class PasswordResetService {
 
     this.eventEmitter.emit(
       'password-recovery.requested',
-      new PasswordRecoveryRequestedEvent(user.id, token, resetUrl),
+      new PasswordRecoveryRequestedEvent(user.id, token, resetUrl, user.email),
     );
   }
 

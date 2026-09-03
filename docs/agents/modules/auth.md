@@ -80,6 +80,18 @@ source.
 (e.g. a welcome-email or onboarding module) can react without `AuthService` knowing it exists,
 per the modular pattern's event-driven communication rule.
 
+## `password-recovery.requested` event
+
+`PasswordResetService#recover` fires `password-recovery.requested` (via `EventEmitter2`) with a
+`PasswordRecoveryRequestedEvent { userId, token, resetUrl, email }` payload whenever a recovery
+is requested for a known email — see `events/password-recovery-requested.event.ts`. It is
+consumed in-module by `events/password-recovery-requested.listener.ts`, which builds the
+plain-text message with `events/password-recovery-email.content.ts` and sends it through
+`MailService` (Mail module, direct DI — `AuthModule` imports `MailModule`). Delivery is
+best-effort: the listener swallows every send error (one `warn` line, `userId` only) and treats
+a disabled-mail `{ status: 'skipped' }` as success, so a mail problem never affects the
+already-responded `/auth/recover.json` request.
+
 ## Testing
 
 - `auth/tests/auth.service.spec.ts` — unit specs, mocked repositories, port of the old

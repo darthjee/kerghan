@@ -4,8 +4,11 @@ Kerghan's general-purpose transactional-email sender. **Always-on** — imported
 `AppModule` (see `docs/agents/architecture/modular-pattern.md`'s classification), not
 lazy-loaded. It has **no HTTP surface** (no controller, routes, DTOs, entities, or migrations);
 other modules and event listeners consume it through the exported `MailService`, injected via
-direct DI. First consumer: [#39](../issues/39-send-the-password-recovery-email.md), the
-password-recovery email, wired as an `@OnEvent('password-recovery.requested')` listener.
+direct DI. First consumer: the password-recovery email (see
+[#39](../issues/39-send-password-recovery-email-when-a-reset-token-is-created.md)), an
+`@OnEvent('password-recovery.requested')` listener in the **Auth** module
+(`backend/src/auth/events/password-recovery-requested.listener.ts`) that calls
+`MailService.send`.
 
 ## Configuration
 
