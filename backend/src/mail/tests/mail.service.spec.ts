@@ -125,6 +125,16 @@ describe('MailService', () => {
     });
   });
 
+  describe('when enabled but the transporter was never built', () => {
+    it('rejects instead of dereferencing a null transporter', async () => {
+      const service = new MailService(null as never, enabledConfig);
+
+      await expect(service.send({ ...validParams })).rejects.toThrow(
+        'mail: transporter is not configured',
+      );
+    });
+  });
+
   describe('when a header field contains a newline', () => {
     it('rejects via the header-injection guard without calling sendMail', async () => {
       const service = new MailService(transporter as never, enabledConfig);

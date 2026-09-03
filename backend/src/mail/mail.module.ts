@@ -1,6 +1,7 @@
 import { Logger, Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import nodemailer from 'nodemailer';
+import type { MailTransport } from './mail-transport.type.js';
 import { buildMailConfig, type MailConfig } from './mail.config.js';
 import { MailService } from './mail.service.js';
 import { MAIL_CONFIG, MAIL_TRANSPORT } from './mail.tokens.js';
@@ -13,9 +14,9 @@ export { MAIL_CONFIG, MAIL_TRANSPORT } from './mail.tokens.js';
  * `enabled` plus the host only — never the whole config, which holds the
  * SMTP password.
  * @param {MailConfig} config - The frozen config from `buildMailConfig`.
- * @returns {nodemailer.Transporter | null} The transporter, or `null` when disabled.
+ * @returns {MailTransport} The transporter, or `null` when disabled.
  */
-function createMailTransport(config: MailConfig): nodemailer.Transporter | null {
+function createMailTransport(config: MailConfig): MailTransport {
   const logger = new Logger('MailModule');
 
   if (!config.enabled || !config.transport) {
@@ -44,7 +45,7 @@ function createMailTransport(config: MailConfig): nodemailer.Transporter | null 
     {
       provide: MAIL_TRANSPORT,
       inject: [MAIL_CONFIG],
-      useFactory: (config: MailConfig): nodemailer.Transporter | null => createMailTransport(config),
+      useFactory: (config: MailConfig): MailTransport => createMailTransport(config),
     },
     MailService,
   ],
