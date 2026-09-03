@@ -102,7 +102,7 @@ describe('buildMailConfig', () => {
         KERGHAN_EMAIL_PORT: '587',
         KERGHAN_EMAIL_USE_TLS: 'false',
         KERGHAN_EMAIL_USER: 'mailer',
-        KERGHAN_EMAIL_PASSWORD: 's3cret',
+        KERGHAN_EMAIL_PASSWORD: 'test-placeholder',
       }));
 
       expect(config.transport?.requireTLS).toBe(true);
@@ -112,10 +112,10 @@ describe('buildMailConfig', () => {
       const config = buildMailConfig(fakeConfigService({
         ...base,
         KERGHAN_EMAIL_USER: 'mailer',
-        KERGHAN_EMAIL_PASSWORD: 's3cret',
+        KERGHAN_EMAIL_PASSWORD: 'test-placeholder',
       }));
 
-      expect(config.transport?.auth).toEqual({ user: 'mailer', pass: 's3cret' });
+      expect(config.transport?.auth).toEqual({ user: 'mailer', pass: 'test-placeholder' });
     });
 
     it('omits auth when only the user is set', () => {
@@ -146,12 +146,12 @@ describe('buildMailConfig', () => {
         KERGHAN_EMAIL_HOST: '  smtp.example.com  ',
         KERGHAN_EMAIL_FROM: '  no-reply@kerghan.local  ',
         KERGHAN_EMAIL_USER: '  mailer  ',
-        KERGHAN_EMAIL_PASSWORD: 's3cret',
+        KERGHAN_EMAIL_PASSWORD: 'test-placeholder',
       }));
 
       expect(config.transport?.host).toBe('smtp.example.com');
       expect(config.from).toBe('no-reply@kerghan.local');
-      expect(config.transport?.auth).toEqual({ user: 'mailer', pass: 's3cret' });
+      expect(config.transport?.auth).toEqual({ user: 'mailer', pass: 'test-placeholder' });
     });
   });
 });
