@@ -46,6 +46,30 @@ describe('buildMailConfig', () => {
       expect(() => buildMailConfig(config)).toThrow('KERGHAN_EMAIL_FROM');
     });
 
+    it('throws naming KERGHAN_EMAIL_PORT when the port is set but not a positive number', () => {
+      const config = fakeConfigService({ ...base, KERGHAN_EMAIL_PORT: 'not-a-port' });
+
+      expect(() => buildMailConfig(config)).toThrow('KERGHAN_EMAIL_PORT');
+    });
+
+    it('throws naming KERGHAN_EMAIL_TIMEOUT_MS when the timeout is set but not a positive number', () => {
+      const config = fakeConfigService({ ...base, KERGHAN_EMAIL_TIMEOUT_MS: '-5' });
+
+      expect(() => buildMailConfig(config)).toThrow('KERGHAN_EMAIL_TIMEOUT_MS');
+    });
+
+    it('lists every offending var in a single thrown message', () => {
+      const config = fakeConfigService({
+        KERGHAN_EMAILS_ENABLED: 'true',
+        KERGHAN_EMAIL_PORT: 'nope',
+      });
+
+      expect(() => buildMailConfig(config)).toThrow(
+        'mail: KERGHAN_EMAILS_ENABLED is true but the following are missing/invalid: '
+          + 'KERGHAN_EMAIL_HOST, KERGHAN_EMAIL_FROM, KERGHAN_EMAIL_PORT',
+      );
+    });
+
     it('defaults the port to 587 when unset', () => {
       const config = buildMailConfig(fakeConfigService(base));
 

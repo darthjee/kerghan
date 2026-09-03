@@ -1,7 +1,7 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import type { Transporter } from 'nodemailer';
-import { MAIL_CONFIG, MAIL_TRANSPORT } from './mail.tokens.js';
 import type { MailConfig } from './mail.config.js';
+import { MAIL_CONFIG, MAIL_TRANSPORT } from './mail.tokens.js';
 
 /**
  * Arguments accepted by {@link MailService.send}.
