@@ -17,7 +17,8 @@ full file before loading it. For a bare link-only table of contents instead, see
   file per module (`modules/auth.md` and `modules/mail.md` today). Read the module's page before
   extending or consuming it.
   - **[Auth](modules/auth.md)** — Kerghan's always-on login module: `/auth/*.json` routes, the
-    `auth_` tables, the JWT/refresh-token flow, and the `user.registered` event.
+    `auth_` tables, the JWT/refresh-token flow, and the `user.registered` and
+    `password-recovery.requested` events.
   - **[Mail](modules/mail.md)** — Always-on, general-purpose transactional email sender. No HTTP
     surface; consumed via the exported `MailService`. `KERGHAN_EMAIL_*` config read once at boot;
     disabled by default (log-and-skip). First consumer: #39.
