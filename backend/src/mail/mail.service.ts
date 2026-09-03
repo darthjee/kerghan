@@ -73,7 +73,8 @@ export class MailService {
     try {
       return await this.#deliver(params, from);
     } catch (err) {
-      this.logger.error(`mail send failed to ${params.to} subj=${params.subject}: ${err}`);
+      const reason = err instanceof Error ? err.message : String(err);
+      this.logger.error(`mail send failed to ${params.to} subj=${params.subject}: ${reason}`);
       throw err;
     }
   }

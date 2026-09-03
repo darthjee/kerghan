@@ -102,6 +102,8 @@ describe('MailService', () => {
       const logged = (Logger.prototype.error as jest.Mock).mock.calls[0][0] as string;
       expect(logged).not.toContain('PLAIN_BODY_SECRET');
       expect(logged).not.toContain('HTML_BODY_SECRET');
+      expect(logged).toContain('transport exploded');
+      expect(logged).not.toContain('Error:');
     });
   });
 
