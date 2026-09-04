@@ -7,6 +7,7 @@ import {
 import { Reflector } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
 import type { Request } from 'express';
+import type { AccessTokenPayload } from './access-token-payload.js';
 import { IS_PUBLIC_KEY } from './public.decorator.js';
 
 /**
@@ -66,9 +67,9 @@ export class JwtGuard implements CanActivate {
     );
   }
 
-  #verify(token: string): object {
+  #verify(token: string): AccessTokenPayload {
     try {
-      return this.jwtService.verify(token);
+      return this.jwtService.verify<AccessTokenPayload>(token);
     } catch {
       throw new UnauthorizedException('Invalid or expired access token');
     }

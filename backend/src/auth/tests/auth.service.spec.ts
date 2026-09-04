@@ -63,6 +63,7 @@ describe('AuthService', () => {
         username: 'darthjee',
         email: 'darthjee@example.com',
         passwordDigest: await bcrypt.hash('correct-password', 4),
+        isAdmin: false,
       } as User;
     });
 
@@ -84,6 +85,12 @@ describe('AuthService', () => {
         expect(userRepository.findOneBy).toHaveBeenCalledWith({ username: 'darthjee' });
       });
 
+      it('signs the access token with isAdmin: false for a non-admin user', async () => {
+        await service.login({ username: 'darthjee', password: 'correct-password' });
+
+        expect(jwtService.sign).toHaveBeenCalledWith(expect.objectContaining({ isAdmin: false }));
+      });
+
       it('persists a hashed refresh token and a session for the user', async () => {
         const result = await service.login({ username: 'darthjee', password: 'correct-password' });
 
@@ -92,6 +99,18 @@ describe('AuthService', () => {
         );
         expect(refreshTokenRepository.save.mock.calls[0][0].tokenHash).not.toBe(result.refreshToken);
         expect(sessionRepository.save).toHaveBeenCalledWith(expect.objectContaining({ userId: 1 }));
+      });
+    });
+
+    describe('when the user is an admin', () => {
+      beforeEach(() => {
+        userRepository.findOneBy.mockResolvedValue({ ...user, isAdmin: true });
+      });
+
+      it('signs the access token with isAdmin: true', async () => {
+        await service.login({ username: 'darthjee', password: 'correct-password' });
+
+        expect(jwtService.sign).toHaveBeenCalledWith(expect.objectContaining({ isAdmin: true }));
       });
     });
 
@@ -152,6 +171,16 @@ describe('AuthService', () => {
         expect(result.accessToken).toBe('signed-access-token');
       });
 
+      it('signs the access token with isAdmin: false for a newly registered user', async () => {
+        await service.register({
+          username: 'darthjee',
+          email: 'darthjee@example.com',
+          password: 'my-password',
+        });
+
+        expect(jwtService.sign).toHaveBeenCalledWith(expect.objectContaining({ isAdmin: false }));
+      });
+
       it('creates the user with a hashed password digest', async () => {
         await service.register({
           username: 'darthjee',
@@ -210,7 +239,12 @@ describe('AuthService', () => {
 
   describe('refresh', () => {
     const activeToken = { id: 10, userId: 1, revokedAt: null, expiresAt: new Date(Date.now() + 60_000) };
-    const user = { id: 1, username: 'darthjee', email: 'darthjee@example.com' } as User;
+    const user = {
+      id: 1,
+      username: 'darthjee',
+      email: 'darthjee@example.com',
+      isAdmin: false,
+    } as User;
 
     describe('when the refresh token is active', () => {
       beforeEach(() => {
@@ -225,6 +259,25 @@ describe('AuthService', () => {
         expect(result.user).toBe(user);
         expect(result.accessToken).toBe('signed-access-token');
         expect(result.refreshToken).not.toBe('a-refresh-token');
+      });
+
+      it('signs the access token with the reloaded user isAdmin claim', async () => {
+        await service.refresh('a-refresh-token');
+
+        expect(jwtService.sign).toHaveBeenCalledWith(expect.objectContaining({ isAdmin: false }));
+      });
+    });
+
+    describe('when the refreshed user is an admin', () => {
+      beforeEach(() => {
+        refreshTokenRepository.findOneBy.mockResolvedValue(activeToken);
+        userRepository.findOneBy.mockResolvedValue({ ...user, isAdmin: true });
+      });
+
+      it('signs the access token with isAdmin: true', async () => {
+        await service.refresh('a-refresh-token');
+
+        expect(jwtService.sign).toHaveBeenCalledWith(expect.objectContaining({ isAdmin: true }));
       });
     });
 
