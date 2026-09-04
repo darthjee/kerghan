@@ -27,6 +27,12 @@ describe('AppHelper', () => {
     expect(markup).toContain('Reset');
   });
 
+  it('renders the admin users page for the admin-users key', () => {
+    const markup = renderToStaticMarkup(React.createElement('div', null, AppHelper.render('admin-users')));
+
+    expect(markup).toContain('Admin Users');
+  });
+
   it('renders the home page for the home key', () => {
     const markup = renderToStaticMarkup(React.createElement('div', null, AppHelper.render('home')));
 

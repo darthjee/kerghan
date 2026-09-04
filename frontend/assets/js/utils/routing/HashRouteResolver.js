@@ -12,6 +12,7 @@ const ROUTES = [
   ['/login', 'login'],
   ['/recover', 'recover'],
   ['/recover-password', 'reset-password'],
+  ['/admin/users', 'admin-users'],
   ['/', 'home'],
 ];
 
