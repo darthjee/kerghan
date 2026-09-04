@@ -89,6 +89,7 @@ export default [
       'assets/js/client/AuthEvents.js',
       'assets/js/client/AuthSession.js',
       'assets/js/components/resources/accounts/pages/helpers/LoginHelper.jsx',
+      'assets/js/components/resources/admin/pages/helpers/AdminUsersHelper.jsx',
       'specs/assets/js/client/ApiClientSpec.js',
       'specs/assets/js/components/resources/accounts/pages/LoginSpec.js',
       'specs/assets/js/components/resources/accounts/pages/helpers/LoginHelperSpec.js',
