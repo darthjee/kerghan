@@ -68,6 +68,27 @@ export class PasswordResetService {
       return;
     }
 
+    const { token, resetUrl } = await this.issueToken(user);
+
+    this.eventEmitter.emit(
+      'password-recovery.requested',
+      new PasswordRecoveryRequestedEvent(user.id, token, resetUrl, user.email),
+    );
+  }
+
+  /**
+   * Mints a fresh single-use `PasswordResetToken` for the given user and
+   * builds its recovery URL, without emitting any event or otherwise
+   * assuming a self-service caller — shared by `recover()` (self-service)
+   * and the admin recovery-link/send-recovery-email flows, so both mint
+   * tokens the exact same way (same TTL config key, same hashing, same
+   * `resetUrl` format).
+   * @param {User} user - The user to mint a password-reset token for.
+   * @returns {Promise<{ token: string; resetUrl: string }>} The plaintext
+   *   token (never persisted — only its hash is stored) and the URL built
+   *   from it.
+   */
+  async issueToken(user: User): Promise<{ token: string; resetUrl: string }> {
     const token = randomBytes(48).toString('hex');
     const ttlMs = this.configService.get<number>(
       'KERGHAN_PASSWORD_RESET_TOKEN_TTL_MS',
@@ -85,10 +106,7 @@ export class PasswordResetService {
 
     const resetUrl = `${this.configService.get<string>('FRONTEND_BASE_URL')}/#/recover-password?token=${token}`;
 
-    this.eventEmitter.emit(
-      'password-recovery.requested',
-      new PasswordRecoveryRequestedEvent(user.id, token, resetUrl, user.email),
-    );
+    return { token, resetUrl };
   }
 
   /**

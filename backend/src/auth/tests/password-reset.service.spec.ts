@@ -114,6 +114,38 @@ describe('PasswordResetService', () => {
     });
   });
 
+  describe('issueToken', () => {
+    const user = { id: 1, username: 'darthjee', email: 'darthjee@example.com' } as User;
+
+    it('creates a password-reset token hashed for that user', async () => {
+      await service.issueToken(user);
+
+      expect(passwordResetTokenRepository.save).toHaveBeenCalledWith(
+        expect.objectContaining({ userId: 1, tokenHash: expect.any(String), usedAt: null }),
+      );
+    });
+
+    it('resolves with the plaintext token and a matching reset URL', async () => {
+      const result = await service.issueToken(user);
+
+      expect(result.resetUrl).toBe(`http://localhost:3000/#/recover-password?token=${result.token}`);
+    });
+
+    it('never persists the plaintext token', async () => {
+      const result = await service.issueToken(user);
+
+      const savedTokenHash = passwordResetTokenRepository.save.mock.calls[0][0].tokenHash;
+
+      expect(savedTokenHash).not.toBe(result.token);
+    });
+
+    it('does not emit any event', async () => {
+      await service.issueToken(user);
+
+      expect(eventEmitter.emit).not.toHaveBeenCalled();
+    });
+  });
+
   describe('resetPassword', () => {
     const activeToken = {
       id: 10,
