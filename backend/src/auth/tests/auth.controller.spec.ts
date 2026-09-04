@@ -40,7 +40,7 @@ describe('AuthController', () => {
   let res: jest.Mocked<Pick<Response, 'cookie' | 'set' | 'clearCookie'>>;
 
   beforeEach(() => {
-    user = { id: 1, username: 'darthjee', email: 'darthjee@example.com' } as User;
+    user = { id: 1, username: 'darthjee', email: 'darthjee@example.com', isAdmin: false } as User;
     authService = authServiceMock(user);
     res = responseMock();
   });
@@ -111,30 +111,30 @@ describe('AuthController', () => {
     }
 
     describe('when the service reports an active session', () => {
-      it('responds with { loggedIn: true }', async () => {
-        authService.status.mockResolvedValue({ loggedIn: true });
+      it('responds with { loggedIn: true, isAdmin }', async () => {
+        authService.status.mockResolvedValue({ loggedIn: true, isAdmin: false });
         const controller = buildController();
 
         const result = await controller.status({ refreshToken: 'a-refresh-token' }, res as unknown as Response);
 
         expect(authService.status).toHaveBeenCalledWith('a-refresh-token');
-        expect(result).toEqual({ loggedIn: true });
+        expect(result).toEqual({ loggedIn: true, isAdmin: false });
       });
     });
 
     describe('when the service reports no active session', () => {
-      it('responds with { loggedIn: false }', async () => {
-        authService.status.mockResolvedValue({ loggedIn: false });
+      it('responds with { loggedIn: false, isAdmin: false }', async () => {
+        authService.status.mockResolvedValue({ loggedIn: false, isAdmin: false });
         const controller = buildController();
 
         const result = await controller.status({ refreshToken: 'unknown-token' }, res as unknown as Response);
 
-        expect(result).toEqual({ loggedIn: false });
+        expect(result).toEqual({ loggedIn: false, isAdmin: false });
       });
     });
 
     it('sets the X-Skip-Cache header and never sets the access-token cookie', async () => {
-      authService.status.mockResolvedValue({ loggedIn: true });
+      authService.status.mockResolvedValue({ loggedIn: true, isAdmin: false });
       const controller = buildController();
 
       await controller.status({ refreshToken: 'a-refresh-token' }, res as unknown as Response);

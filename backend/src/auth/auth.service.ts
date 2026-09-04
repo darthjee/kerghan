@@ -190,12 +190,20 @@ export class AuthService {
    * mount-time confirmation could log every tab out after the first tab's
    * legitimate refresh.
    * @param {string} refreshToken - The refresh token presented by the client.
-   * @returns {Promise<{ loggedIn: boolean }>} `{ loggedIn: true }` only when
-   *   the token is known, unrevoked, and unexpired; `{ loggedIn: false }`
-   *   for every other case (missing, unknown, revoked, or expired).
+   * @returns {Promise<{ loggedIn: boolean; isAdmin: boolean }>} `{ loggedIn:
+   *   true, isAdmin }` (resolved from the token's user) when active; `{
+   *   loggedIn: false, isAdmin: false }` otherwise, with no extra query.
    */
-  async status(refreshToken: string): Promise<{ loggedIn: boolean }> {
-    return { loggedIn: await this.#isActiveToken(refreshToken) };
+  async status(refreshToken: string): Promise<{ loggedIn: boolean; isAdmin: boolean }> {
+    const tokenRow = await this.#findActiveTokenRow(refreshToken);
+
+    if (!tokenRow) {
+      return { loggedIn: false, isAdmin: false };
+    }
+
+    const user = await this.userRepository.findOneBy({ id: tokenRow.userId });
+
+    return { loggedIn: true, isAdmin: user?.isAdmin ?? false };
   }
 
   async #assertAvailable(username: string, email: string): Promise<void> {
@@ -235,11 +243,12 @@ export class AuthService {
     return createHash('sha256').update(token).digest('hex');
   }
 
-  async #isActiveToken(refreshToken: string): Promise<boolean> {
+  async #findActiveTokenRow(refreshToken: string): Promise<RefreshToken | null> {
     const tokenHash = this.#hashToken(refreshToken);
     const tokenRow = await this.refreshTokenRepository.findOneBy({ tokenHash });
+    const isActive = !!tokenRow && !tokenRow.revokedAt && tokenRow.expiresAt > new Date();
 
-    return !!tokenRow && !tokenRow.revokedAt && tokenRow.expiresAt > new Date();
+    return isActive ? tokenRow : null;
   }
 
   async #issueTokens(user: User): Promise<AuthResult> {
