@@ -88,6 +88,7 @@ export class AuthService {
         username: dto.username,
         email: dto.email,
         passwordDigest,
+        isAdmin: false,
       }),
     );
 
@@ -242,7 +243,11 @@ export class AuthService {
   }
 
   async #issueTokens(user: User): Promise<AuthResult> {
-    const accessToken = this.jwtService.sign({ sub: user.id, username: user.username });
+    const accessToken = this.jwtService.sign({
+      sub: user.id,
+      username: user.username,
+      isAdmin: user.isAdmin,
+    });
     const refreshToken = randomBytes(48).toString('hex');
 
     await this.refreshTokenRepository.save(
