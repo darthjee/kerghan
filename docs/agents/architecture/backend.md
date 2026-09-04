@@ -24,10 +24,14 @@ one — must follow. See `docs/agents/modules/auth.md` for the Auth module itsel
 backend/src/
 ├── main.ts                    # boots the app: cookie-parser, global ValidationPipe, PORT
 ├── app.module.ts              # root module: ConfigModule, TypeOrmModule, JwtModule (global),
-│                               #   EventEmitterModule, AuthModule, core providers, global JwtGuard
+│                               #   EventEmitterModule, AuthModule, core providers, global
+│                               #   JwtGuard + AdminGuard
 ├── core/                      # Core layer — always resident, independent of any feature module
 │   ├── jwt.guard.ts           #   global CanActivate verifying the access-token cookie
 │   ├── public.decorator.ts    #   @Public() escape hatch from the JWT guard
+│   ├── admin.guard.ts         #   global CanActivate enforcing @AdminOnly() routes
+│   ├── admin-only.decorator.ts #  @AdminOnly() marker read by AdminGuard
+│   ├── access-token-payload.ts #  shape signed by AuthService / verified by JwtGuard
 │   ├── cache-token.service.ts #   HMAC cache-token generation for Tent cache keying
 │   ├── lazy-module-loader.service.ts  # thin wrapper around Nest's LazyModuleLoader
 │   └── tests/
@@ -88,6 +92,16 @@ the Auth module's own `login.json`/`register.json`/`refresh.json`/`logoff.json`)
 `@Public()`. `JwtModule` itself is registered with `{ global: true }` in `AppModule` — without
 that, only modules that import `JwtModule` directly (not just `AuthModule`) can inject
 `JwtService`, which broke `AuthService`'s constructor resolution the first time this was wired up.
+
+## Admin Guard
+
+`core/admin.guard.ts` is a second global `APP_GUARD`, registered in `AppModule` right after
+`JwtGuard` (`APP_GUARD`s run in registration order, and `AdminGuard` depends on `request.user`
+already being populated by `JwtGuard`). It is a no-op unless the route (or controller) is
+annotated `@AdminOnly()` (`core/admin-only.decorator.ts`), in which case it requires
+`request.user.isAdmin === true`, throwing `403 Forbidden` otherwise — it never re-verifies the
+JWT itself. See `docs/agents/modules/auth.md`'s "Admin authorization" section for the
+`isAdmin` claim/provisioning details.
 
 ## Dependency injection only
 

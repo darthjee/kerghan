@@ -33,7 +33,7 @@ section for the general convention.
 ## Entities (`auth_` table prefix)
 
 - `auth_users` (`entities/user.entity.ts`) — `id`, `username` (unique), `email` (unique),
-  `passwordDigest`, `createdAt`, `updatedAt`.
+  `passwordDigest`, `isAdmin` (boolean, default `false`), `createdAt`, `updatedAt`.
 - `auth_refresh_tokens` (`entities/refresh-token.entity.ts`) — `id`, `tokenHash` (SHA-256 of the
   token, unique — the plaintext value is returned to the client once and never stored),
   `userId` (logical FK), `issuedAt`, `expiresAt`, `revokedAt`.
@@ -48,7 +48,12 @@ database. The password comes from `KERGHAN_DEMO_PASSWORD` (see
 `docs/agents/environment-variables.md`), set to `kerghan-demo` in `.env.dev.sample` — if that
 var is unset the migration falls back to `kerghan-demo-placeholder`, which is **not** a working
 login for the documented demo credentials, it only exists so the real password never lives in
-source.
+source. A follow-on dev-only migration
+(`database/migrations/20260903120007-auth-promote-demo-user-admin.ts`), also gated on
+`process.env.STAGE === 'production'`, promotes the seeded `demo` user to admin so admin-only
+tooling stays exercisable out of the box locally — it has to be a separate, later migration
+rather than an edit to the seed migration's `INSERT`, since the seed migration runs before
+`is_admin` exists on a fresh database.
 
 ## JWT/refresh-token flow
 
@@ -56,7 +61,12 @@ source.
   never read directly). Expiry is configurable via `KERGHAN_ACCESS_TOKEN_TTL_MS` (milliseconds;
   defaults to `900000`, 15 minutes, when unset) — see `docs/agents/environment-variables.md`. Set
   as an `httpOnly` + `Secure` + `SameSite=Strict` cookie (`access_token`), whose `maxAge` is
-  driven by the same env var — never returned in the response body.
+  driven by the same env var — never returned in the response body. The payload also carries an
+  `isAdmin` claim (`core/access-token-payload.ts`'s `AccessTokenPayload`), read straight off
+  `request.user` by the global `AdminGuard` with no per-request DB lookup — see "Admin
+  authorization" below. It is (re)issued on every login/register/refresh, so a role change (an
+  admin demotion, in particular) takes effect on that user's next refresh — and immediately for
+  anything that re-logs in — rather than instantly.
 - **Refresh token**: a random 48-byte hex string, 7 day expiry, returned in the response body
   and persisted only as a SHA-256 hash. **Rotated on every use**: `POST /auth/refresh.json`
   marks the presented token's `revokedAt` and issues a brand new pair — replaying an
@@ -71,6 +81,27 @@ source.
 - **Registration also logs in**: `POST /auth/register.json` issues a token pair immediately on
   success, same as login/refresh (per the issue's "issued on login/register/refresh" flow) —
   there's no separate "register, then log in" round trip.
+
+## Admin authorization
+
+Routes (or whole controllers) requiring an admin account are annotated `@AdminOnly()`
+(`core/admin-only.decorator.ts`), enforced by the global `AdminGuard` (`core/admin.guard.ts`),
+registered as an `APP_GUARD` right after `JwtGuard`. `AdminGuard` never re-verifies the JWT — it
+just reads the `isAdmin` claim off `request.user`, already populated by `JwtGuard`. Routes
+without `@AdminOnly()` metadata are unaffected. An unauthenticated request already gets `401`
+from `JwtGuard`; `@AdminOnly()` plus an authenticated non-admin gets `403` from `AdminGuard`.
+`@AdminOnly()` and `@Public()` on the same route are contradictory — `@Public()` skips `JwtGuard`,
+leaving `request.user` unset, which `AdminGuard` treats as forbidden.
+
+Route responses' `user` shape is unchanged (`{ id, username, email }`) — `isAdmin` is not exposed
+over HTTP yet, only carried internally on the access-token claim.
+
+**First admin**: there is no admin-provisioning endpoint or CLI. Promote an account manually,
+directly against the database:
+
+```sql
+UPDATE auth_users SET is_admin = true WHERE username = '<username>';
+```
 
 ## `user.registered` event
 
