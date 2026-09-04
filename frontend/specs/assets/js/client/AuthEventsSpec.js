@@ -16,17 +16,17 @@ describe('AuthEvents', () => {
   });
 
   describe('.emit', () => {
-    it('dispatches a window event carrying loggedIn: true', () => {
+    it('dispatches a window event carrying loggedIn: true and the given isAdmin value', () => {
       const handler = jasmine.createSpy('handler');
 
       AuthEvents.subscribe(handler);
 
       try {
-        AuthEvents.emit(true);
+        AuthEvents.emit(true, true);
 
         expect(handler).toHaveBeenCalled();
         expect(handler.calls.mostRecent().args[0].type).toBe('auth:changed');
-        expect(handler.calls.mostRecent().args[0].detail).toEqual({ loggedIn: true });
+        expect(handler.calls.mostRecent().args[0].detail).toEqual({ loggedIn: true, isAdmin: true });
       } finally {
         AuthEvents.unsubscribe(handler);
       }
@@ -41,7 +41,21 @@ describe('AuthEvents', () => {
         AuthEvents.emit(false);
 
         expect(handler).toHaveBeenCalled();
-        expect(handler.calls.mostRecent().args[0].detail).toEqual({ loggedIn: false });
+        expect(handler.calls.mostRecent().args[0].detail).toEqual({ loggedIn: false, isAdmin: false });
+      } finally {
+        AuthEvents.unsubscribe(handler);
+      }
+    });
+
+    it('defaults isAdmin to false when omitted', () => {
+      const handler = jasmine.createSpy('handler');
+
+      AuthEvents.subscribe(handler);
+
+      try {
+        AuthEvents.emit(true);
+
+        expect(handler.calls.mostRecent().args[0].detail).toEqual({ loggedIn: true, isAdmin: false });
       } finally {
         AuthEvents.unsubscribe(handler);
       }

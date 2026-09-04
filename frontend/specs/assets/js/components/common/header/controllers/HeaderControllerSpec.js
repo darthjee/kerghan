@@ -74,7 +74,7 @@ describe('HeaderController', () => {
       try {
         await controller.handleLogout();
 
-        expect(AuthEvents.emit).toHaveBeenCalledWith(false);
+        expect(AuthEvents.emit).toHaveBeenCalledWith(false, false);
       } finally {
         delete globalThis.window;
       }
@@ -90,7 +90,7 @@ describe('HeaderController', () => {
       try {
         await controller.handleLogout();
 
-        expect(AuthEvents.emit).toHaveBeenCalledWith(false);
+        expect(AuthEvents.emit).toHaveBeenCalledWith(false, false);
       } finally {
         delete globalThis.window;
       }
@@ -98,36 +98,36 @@ describe('HeaderController', () => {
   });
 
   describe('#checkStatus', () => {
-    it('emits false without calling the backend when there is no stored token', async () => {
+    it('emits false/false without calling the backend when there is no stored token', async () => {
       const controller = new HeaderController(client);
 
       await controller.checkStatus();
 
       expect(client.status).not.toHaveBeenCalled();
-      expect(AuthEvents.emit).toHaveBeenCalledWith(false);
+      expect(AuthEvents.emit).toHaveBeenCalledWith(false, false);
     });
 
-    it('emits true and leaves the stored token untouched when it is still active', async () => {
+    it('emits true and the admin flag, leaving the stored token untouched, when it is still active', async () => {
       AuthSession.set('refresh-token');
-      client.status.and.resolveTo({ loggedIn: true });
+      client.status.and.resolveTo({ loggedIn: true, isAdmin: true });
       const controller = new HeaderController(client);
 
       await controller.checkStatus();
 
       expect(client.status).toHaveBeenCalledWith('refresh-token');
       expect(AuthSession.get()).toBe('refresh-token');
-      expect(AuthEvents.emit).toHaveBeenCalledWith(true);
+      expect(AuthEvents.emit).toHaveBeenCalledWith(true, true);
     });
 
     it('clears the stored token and emits false when it is no longer active', async () => {
       AuthSession.set('refresh-token');
-      client.status.and.resolveTo({ loggedIn: false });
+      client.status.and.resolveTo({ loggedIn: false, isAdmin: false });
       const controller = new HeaderController(client);
 
       await controller.checkStatus();
 
       expect(AuthSession.get()).toBeNull();
-      expect(AuthEvents.emit).toHaveBeenCalledWith(false);
+      expect(AuthEvents.emit).toHaveBeenCalledWith(false, false);
     });
   });
 });

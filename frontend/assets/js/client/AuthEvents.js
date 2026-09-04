@@ -13,10 +13,11 @@ export default class AuthEvents {
    * Announce an auth-state change to every current subscriber.
    *
    * @param {boolean} loggedIn - Whether a session is now active.
+   * @param {boolean} [isAdmin] - Whether the current session belongs to an admin user.
    * @returns {void} Nothing.
    */
-  static emit(loggedIn) {
-    window.dispatchEvent(new CustomEvent(AUTH_CHANGED_EVENT, { detail: { loggedIn } }));
+  static emit(loggedIn, isAdmin = false) {
+    window.dispatchEvent(new CustomEvent(AUTH_CHANGED_EVENT, { detail: { loggedIn, isAdmin } }));
   }
 
   /**

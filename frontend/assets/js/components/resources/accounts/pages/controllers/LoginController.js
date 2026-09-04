@@ -29,8 +29,8 @@ export default class LoginController {
     this.setSubmitError(null);
 
     try {
-      await this.client.login(fields);
-      AuthEvents.emit(true);
+      const result = await this.client.login(fields);
+      AuthEvents.emit(true, result.user.isAdmin);
       this.#redirectHome();
     } catch (error) {
       this.setSubmitError(error.message);

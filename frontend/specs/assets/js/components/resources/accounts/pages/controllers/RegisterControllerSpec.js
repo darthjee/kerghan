@@ -1,4 +1,5 @@
 import RegisterController from '../../../../../../../../assets/js/components/resources/accounts/pages/controllers/RegisterController.js';
+import AuthEvents from '../../../../../../../../assets/js/client/AuthEvents.js';
 
 describe('RegisterController', () => {
   let setFieldErrors;
@@ -13,6 +14,7 @@ describe('RegisterController', () => {
     setFieldErrors = jasmine.createSpy('setFieldErrors');
     setSubmitError = jasmine.createSpy('setSubmitError');
     client = jasmine.createSpyObj('client', ['register']);
+    spyOn(AuthEvents, 'emit');
   });
 
   describe('#validate', () => {
@@ -74,7 +76,12 @@ describe('RegisterController', () => {
     });
 
     it('clears field errors and redirects home on success', async () => {
-      client.register.and.resolveTo({ id: 1, username: 'foo', email: 'foo@example.com' });
+      client.register.and.resolveTo({
+        user: {
+          id: 1, username: 'foo', email: 'foo@example.com', isAdmin: false,
+        },
+        refreshToken: 'refresh-token',
+      });
       const controller = new RegisterController(setFieldErrors, setSubmitError, client);
       const fakeWindow = { location: { hash: '' } };
 
@@ -87,6 +94,27 @@ describe('RegisterController', () => {
         expect(client.register).toHaveBeenCalledWith(validFields);
         expect(setSubmitError).toHaveBeenCalledWith(null);
         expect(fakeWindow.location.hash).toBe('/');
+      } finally {
+        delete globalThis.window;
+      }
+    });
+
+    it('emits the logged-in auth state on success', async () => {
+      client.register.and.resolveTo({
+        user: {
+          id: 1, username: 'foo', email: 'foo@example.com', isAdmin: true,
+        },
+        refreshToken: 'refresh-token',
+      });
+      const controller = new RegisterController(setFieldErrors, setSubmitError, client);
+      const fakeWindow = { location: { hash: '' } };
+
+      globalThis.window = fakeWindow;
+
+      try {
+        await controller.handleSubmit(validFields);
+
+        expect(AuthEvents.emit).toHaveBeenCalledWith(true, true);
       } finally {
         delete globalThis.window;
       }

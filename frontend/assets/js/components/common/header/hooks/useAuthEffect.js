@@ -6,21 +6,25 @@ import AuthEvents from '../../../../client/AuthEvents.js';
  * `AuthEvents.emit(...)` — from a login, a logout, or any other future component — updates
  * state), then triggers `controller.checkStatus()`'s own mount-time confirmation, whose emit is
  * what ultimately drives the first update. Returns a cleanup function that unsubscribes and
- * guards against calling `setLoggedIn` once cleanup has already run (e.g. a fast unmount before
+ * guards against calling the setters once cleanup has already run (e.g. a fast unmount before
  * `checkStatus()` resolves). Extracted as a plain function, separate from the `useEffect` call
  * itself, so it can be exercised directly in tests without a React renderer — mirroring
  * {@link module:components/AppController}'s `buildEffect()`.
  *
  * @param {{checkStatus: Function}} controller - Controller exposing a `checkStatus()` method.
- * @param {Function} setLoggedIn - React state setter for the current auth state.
+ * @param {{setLoggedIn: Function, setIsAdmin: Function}} setters - React state setters for the
+ *   current auth state.
  * @returns {Function} Effect callback, returning a cleanup function.
  */
-export function buildAuthEffect(controller, setLoggedIn) {
+export function buildAuthEffect(controller, { setLoggedIn, setIsAdmin }) {
   return () => {
     let mounted = true;
 
     const handleAuthChanged = (event) => {
-      if (mounted) setLoggedIn(Boolean(event.detail?.loggedIn));
+      if (!mounted) return;
+
+      setLoggedIn(Boolean(event.detail?.loggedIn));
+      setIsAdmin(Boolean(event.detail?.isAdmin));
     };
 
     AuthEvents.subscribe(handleAuthChanged);
@@ -34,13 +38,15 @@ export function buildAuthEffect(controller, setLoggedIn) {
 }
 
 /**
- * Keep a `loggedIn` state variable in sync with the shared `AuthEvents` bus, confirmed at mount
- * time via `controller.checkStatus()`. See {@link buildAuthEffect} for the effect's behavior.
+ * Keep `loggedIn`/`isAdmin` state variables in sync with the shared `AuthEvents` bus, confirmed
+ * at mount time via `controller.checkStatus()`. See {@link buildAuthEffect} for the effect's
+ * behavior.
  *
  * @param {{checkStatus: Function}} controller - Controller exposing a `checkStatus()` method.
- * @param {Function} setLoggedIn - React state setter for the current auth state.
+ * @param {{setLoggedIn: Function, setIsAdmin: Function}} setters - React state setters for the
+ *   current auth state.
  * @returns {void} Nothing.
  */
-export default function useAuthEffect(controller, setLoggedIn) {
-  useEffect(() => buildAuthEffect(controller, setLoggedIn)(), [controller, setLoggedIn]);
+export default function useAuthEffect(controller, setters) {
+  useEffect(() => buildAuthEffect(controller, setters)(), [controller, setters]);
 }

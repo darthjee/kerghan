@@ -83,7 +83,9 @@ export default class AccountsClient {
    * a new one, which is the caller's responsibility.
    *
    * @param {string} refreshToken - The refresh token to check.
-   * @returns {Promise<{loggedIn: boolean}>} Whether the token is still active.
+   * @returns {Promise<{loggedIn: boolean, isAdmin: boolean}>} Whether the token is still active,
+   *   and whether that session belongs to an admin user (always `false` when `loggedIn` is
+   *   `false`).
    */
   static async status(refreshToken) {
     return ApiClient.postJson('/auth/status.json', { refreshToken });
