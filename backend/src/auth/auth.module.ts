@@ -1,5 +1,7 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { AdminController } from './admin.controller.js';
+import { AdminService } from './admin.service.js';
 import { AuthController } from './auth.controller.js';
 import { AuthService } from './auth.service.js';
 import { MailModule } from '../mail/mail.module.js';
@@ -19,8 +21,8 @@ import { PasswordResetService } from './password-reset.service.js';
  */
 @Module({
   imports: [TypeOrmModule.forFeature([User, RefreshToken, Session, PasswordResetToken]), MailModule],
-  controllers: [AuthController],
-  providers: [AuthService, PasswordResetService, PasswordRecoveryRequestedListener],
+  controllers: [AuthController, AdminController],
+  providers: [AuthService, AdminService, PasswordResetService, PasswordRecoveryRequestedListener],
   exports: [AuthService],
 })
 // NestJS module classes are intentionally empty; all behavior lives in @Module().

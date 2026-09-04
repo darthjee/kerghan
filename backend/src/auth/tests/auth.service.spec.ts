@@ -392,14 +392,22 @@ describe('AuthService', () => {
 
   describe('status', () => {
     const activeToken = { id: 10, userId: 1, revokedAt: null, expiresAt: new Date(Date.now() + 60_000) };
+    const user = { id: 1, username: 'darthjee', email: 'darthjee@example.com', isAdmin: false } as User;
 
     describe('when the refresh token is active', () => {
       beforeEach(() => {
         refreshTokenRepository.findOneBy.mockResolvedValue(activeToken);
+        userRepository.findOneBy.mockResolvedValue(user);
       });
 
-      it('resolves with loggedIn: true', async () => {
-        await expect(service.status('a-refresh-token')).resolves.toEqual({ loggedIn: true });
+      it('resolves with loggedIn: true and the user isAdmin', async () => {
+        await expect(service.status('a-refresh-token')).resolves.toEqual({ loggedIn: true, isAdmin: false });
+      });
+
+      it('looks the user up by the token row userId', async () => {
+        await service.status('a-refresh-token');
+
+        expect(userRepository.findOneBy).toHaveBeenCalledWith({ id: 1 });
       });
 
       it('does not mutate the token row', async () => {
@@ -409,13 +417,30 @@ describe('AuthService', () => {
       });
     });
 
+    describe('when the active token belongs to an admin', () => {
+      beforeEach(() => {
+        refreshTokenRepository.findOneBy.mockResolvedValue(activeToken);
+        userRepository.findOneBy.mockResolvedValue({ ...user, isAdmin: true });
+      });
+
+      it('resolves with isAdmin: true', async () => {
+        await expect(service.status('a-refresh-token')).resolves.toEqual({ loggedIn: true, isAdmin: true });
+      });
+    });
+
     describe('when the refresh token is unknown', () => {
       beforeEach(() => {
         refreshTokenRepository.findOneBy.mockResolvedValue(null);
       });
 
-      it('resolves with loggedIn: false, without throwing', async () => {
-        await expect(service.status('unknown-token')).resolves.toEqual({ loggedIn: false });
+      it('resolves with loggedIn: false and isAdmin: false, without throwing', async () => {
+        await expect(service.status('unknown-token')).resolves.toEqual({ loggedIn: false, isAdmin: false });
+      });
+
+      it('does not look up the user', async () => {
+        await service.status('unknown-token');
+
+        expect(userRepository.findOneBy).not.toHaveBeenCalled();
       });
     });
 
@@ -427,8 +452,8 @@ describe('AuthService', () => {
         });
       });
 
-      it('resolves with loggedIn: false', async () => {
-        await expect(service.status('expired-token')).resolves.toEqual({ loggedIn: false });
+      it('resolves with loggedIn: false and isAdmin: false', async () => {
+        await expect(service.status('expired-token')).resolves.toEqual({ loggedIn: false, isAdmin: false });
       });
     });
 
@@ -437,8 +462,8 @@ describe('AuthService', () => {
         refreshTokenRepository.findOneBy.mockResolvedValue({ ...activeToken, revokedAt: new Date() });
       });
 
-      it('resolves with loggedIn: false, without throwing', async () => {
-        await expect(service.status('revoked-token')).resolves.toEqual({ loggedIn: false });
+      it('resolves with loggedIn: false and isAdmin: false, without throwing', async () => {
+        await expect(service.status('revoked-token')).resolves.toEqual({ loggedIn: false, isAdmin: false });
       });
 
       it('does not revoke the rest of the token family', async () => {

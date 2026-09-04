@@ -15,7 +15,7 @@ describe('LoginController', () => {
 
   describe('#handleSubmit', () => {
     it('clears the submit error and logs in with the current fields', async () => {
-      client.login.and.resolveTo({ user: { id: 1, username: 'foo' }, refreshToken: 'token' });
+      client.login.and.resolveTo({ user: { id: 1, username: 'foo', isAdmin: false }, refreshToken: 'token' });
       const controller = new LoginController(setSubmitError, client);
       const fakeWindow = { location: { hash: '' } };
 
@@ -32,7 +32,7 @@ describe('LoginController', () => {
     });
 
     it('redirects home on success', async () => {
-      client.login.and.resolveTo({ user: { id: 1, username: 'foo' }, refreshToken: 'token' });
+      client.login.and.resolveTo({ user: { id: 1, username: 'foo', isAdmin: false }, refreshToken: 'token' });
       const controller = new LoginController(setSubmitError, client);
       const fakeWindow = { location: { hash: '' } };
 
@@ -48,7 +48,7 @@ describe('LoginController', () => {
     });
 
     it('emits the logged-in auth state on success', async () => {
-      client.login.and.resolveTo({ user: { id: 1, username: 'foo' }, refreshToken: 'token' });
+      client.login.and.resolveTo({ user: { id: 1, username: 'foo', isAdmin: false }, refreshToken: 'token' });
       const controller = new LoginController(setSubmitError, client);
       const fakeWindow = { location: { hash: '' } };
 
@@ -57,7 +57,23 @@ describe('LoginController', () => {
       try {
         await controller.handleSubmit(fields);
 
-        expect(AuthEvents.emit).toHaveBeenCalledWith(true);
+        expect(AuthEvents.emit).toHaveBeenCalledWith(true, false);
+      } finally {
+        delete globalThis.window;
+      }
+    });
+
+    it('emits the admin auth state when the account is an admin', async () => {
+      client.login.and.resolveTo({ user: { id: 1, username: 'foo', isAdmin: true }, refreshToken: 'token' });
+      const controller = new LoginController(setSubmitError, client);
+      const fakeWindow = { location: { hash: '' } };
+
+      globalThis.window = fakeWindow;
+
+      try {
+        await controller.handleSubmit(fields);
+
+        expect(AuthEvents.emit).toHaveBeenCalledWith(true, true);
       } finally {
         delete globalThis.window;
       }

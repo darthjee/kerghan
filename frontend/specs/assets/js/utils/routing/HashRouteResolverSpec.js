@@ -31,6 +31,12 @@ describe('HashRouteResolver', () => {
     expect(resolver.getPage()).toBe('reset-password');
   });
 
+  it('resolves the admin-users route', () => {
+    const resolver = new HashRouteResolver(() => '#/admin/users');
+
+    expect(resolver.getPage()).toBe('admin-users');
+  });
+
   it('resolves the home route', () => {
     const resolver = new HashRouteResolver(() => '#/');
 

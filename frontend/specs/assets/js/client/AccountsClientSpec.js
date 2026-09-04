@@ -143,7 +143,7 @@ describe('AccountsClient', () => {
 
   describe('.status', () => {
     it('posts the refresh token to the status endpoint', async () => {
-      spyOn(ApiClient, 'postJson').and.resolveTo({ loggedIn: true });
+      spyOn(ApiClient, 'postJson').and.resolveTo({ loggedIn: true, isAdmin: false });
 
       await AccountsClient.status('refresh-token');
 
@@ -152,17 +152,17 @@ describe('AccountsClient', () => {
       });
     });
 
-    it('resolves with the parsed loggedIn response', async () => {
-      spyOn(ApiClient, 'postJson').and.resolveTo({ loggedIn: false });
+    it('resolves with the parsed loggedIn/isAdmin response', async () => {
+      spyOn(ApiClient, 'postJson').and.resolveTo({ loggedIn: false, isAdmin: false });
 
       const response = await AccountsClient.status('refresh-token');
 
-      expect(response).toEqual({ loggedIn: false });
+      expect(response).toEqual({ loggedIn: false, isAdmin: false });
     });
 
     it('does not touch the stored refresh token', async () => {
       AuthSession.set('refresh-token');
-      spyOn(ApiClient, 'postJson').and.resolveTo({ loggedIn: false });
+      spyOn(ApiClient, 'postJson').and.resolveTo({ loggedIn: false, isAdmin: false });
 
       await AccountsClient.status('refresh-token');
 

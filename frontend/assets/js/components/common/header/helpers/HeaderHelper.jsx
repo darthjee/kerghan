@@ -10,10 +10,11 @@ export default class HeaderHelper {
    * Render the application navigation bar.
    *
    * @param {boolean} isLoggedIn - Whether a session is currently active.
+   * @param {boolean} isAdmin - Whether the current session belongs to an admin user.
    * @param {Function} onLogout - Click handler for the Logout link, used when logged in.
    * @returns {React.ReactElement} The rendered navigation bar.
    */
-  static render(isLoggedIn, onLogout) {
+  static render(isLoggedIn, isAdmin, onLogout) {
     return (
       <Navbar bg="light" expand="md">
         <Container fluid>
@@ -21,7 +22,7 @@ export default class HeaderHelper {
           <Navbar.Toggle aria-controls="header-navbar" />
           <Navbar.Collapse id="header-navbar">
             <Nav className="me-auto">
-              {HeaderHelper.#renderAuthLinks(isLoggedIn, onLogout)}
+              {HeaderHelper.#renderAuthLinks(isLoggedIn, isAdmin, onLogout)}
             </Nav>
           </Navbar.Collapse>
         </Container>
@@ -30,16 +31,22 @@ export default class HeaderHelper {
   }
 
   /**
-   * Render the Login/Register/Recover links when logged out, or the Logout action when logged
-   * in.
+   * Render the Login/Register/Recover links when logged out, or the Logout action (plus, for an
+   * admin, the Admin Users link) when logged in.
    *
    * @param {boolean} isLoggedIn - Whether a session is currently active.
+   * @param {boolean} isAdmin - Whether the current session belongs to an admin user.
    * @param {Function} onLogout - Click handler for the Logout link, used when logged in.
    * @returns {React.ReactElement} The rendered auth nav links.
    */
-  static #renderAuthLinks(isLoggedIn, onLogout) {
+  static #renderAuthLinks(isLoggedIn, isAdmin, onLogout) {
     if (isLoggedIn) {
-      return <Nav.Link href="#" onClick={onLogout}>Logout</Nav.Link>;
+      return (
+        <>
+          {HeaderHelper.#renderAdminLink(isAdmin)}
+          <Nav.Link href="#" onClick={onLogout}>Logout</Nav.Link>
+        </>
+      );
     }
 
     return (
@@ -49,5 +56,19 @@ export default class HeaderHelper {
         <Nav.Link href="#/recover">Recover</Nav.Link>
       </>
     );
+  }
+
+  /**
+   * Render the Admin Users nav link, only shown to a logged-in admin.
+   *
+   * @param {boolean} isAdmin - Whether the current session belongs to an admin user.
+   * @returns {React.ReactElement|null} The Admin Users link, or `null` for a non-admin.
+   */
+  static #renderAdminLink(isAdmin) {
+    if (!isAdmin) {
+      return null;
+    }
+
+    return <Nav.Link href="#/admin/users">Admin Users</Nav.Link>;
   }
 }

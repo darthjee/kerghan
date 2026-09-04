@@ -155,7 +155,7 @@ export class AuthController {
    * establishing or renewing credentials.
    * @param {RefreshTokenDto} dto - Carries the refresh token to check.
    * @param {Response} res - Used only to set the `X-Skip-Cache` header.
-   * @returns {Promise<object>} `{ loggedIn: boolean }`, always `200`.
+   * @returns {Promise<object>} `{ loggedIn: boolean, isAdmin: boolean }`, always `200`.
    */
   @Public()
   @Post('status.json')
@@ -178,6 +178,6 @@ export class AuthController {
   }
 
   #serialize(user: User): object {
-    return { id: user.id, username: user.username, email: user.email };
+    return { id: user.id, username: user.username, email: user.email, isAdmin: user.isAdmin };
   }
 }

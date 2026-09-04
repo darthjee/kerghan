@@ -147,7 +147,12 @@ describe('AuthController (e2e)', () => {
         .expect(201);
 
       expect(response.body).toEqual({
-        user: { id: expect.any(Number), username: 'darthjee', email: 'darthjee@example.com' },
+        user: {
+          id: expect.any(Number),
+          username: 'darthjee',
+          email: 'darthjee@example.com',
+          isAdmin: false,
+        },
         refreshToken: expect.any(String),
       });
     });
@@ -413,7 +418,7 @@ describe('AuthController (e2e)', () => {
         .send({ refreshToken: login.body.refreshToken })
         .expect(201);
 
-      expect(response.body).toEqual({ loggedIn: true });
+      expect(response.body).toEqual({ loggedIn: true, isAdmin: false });
     });
 
     it('resolves loggedIn: false for an unknown refresh token, without a 401', async () => {
@@ -422,7 +427,7 @@ describe('AuthController (e2e)', () => {
         .send({ refreshToken: 'not-a-real-token' })
         .expect(201);
 
-      expect(response.body).toEqual({ loggedIn: false });
+      expect(response.body).toEqual({ loggedIn: false, isAdmin: false });
     });
 
     it('resolves loggedIn: false for a revoked refresh token, without revoking the token family', async () => {
@@ -440,7 +445,22 @@ describe('AuthController (e2e)', () => {
         .send({ refreshToken: login.body.refreshToken })
         .expect(201);
 
-      expect(response.body).toEqual({ loggedIn: false });
+      expect(response.body).toEqual({ loggedIn: false, isAdmin: false });
+    });
+
+    it('resolves isAdmin: true for an active refresh token belonging to an admin', async () => {
+      userRepo.rows[0].isAdmin = true;
+
+      const login = await request(app.getHttpServer())
+        .post('/auth/login.json')
+        .send({ username: 'darthjee', password: 'my-password' });
+
+      const response = await request(app.getHttpServer())
+        .post('/auth/status.json')
+        .send({ refreshToken: login.body.refreshToken })
+        .expect(201);
+
+      expect(response.body).toEqual({ loggedIn: true, isAdmin: true });
     });
 
     it('does not set or clear the access-token cookie', async () => {

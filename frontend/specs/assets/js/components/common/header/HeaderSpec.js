@@ -29,7 +29,7 @@ describe('Header', () => {
 
     renderToStaticMarkup(React.createElement(Header, null));
 
-    expect(HeaderHelper.render).toHaveBeenCalledWith(false, jasmine.any(Function));
+    expect(HeaderHelper.render).toHaveBeenCalledWith(false, false, jasmine.any(Function));
   });
 
   it('passes the logged-in state to HeaderHelper when a refresh token is stored', () => {
@@ -38,13 +38,13 @@ describe('Header', () => {
 
     renderToStaticMarkup(React.createElement(Header, null));
 
-    expect(HeaderHelper.render).toHaveBeenCalledWith(true, jasmine.any(Function));
+    expect(HeaderHelper.render).toHaveBeenCalledWith(true, false, jasmine.any(Function));
   });
 
   it('logs out and prevents the default navigation when the logout handler fires', async () => {
     spyOn(HeaderController.prototype, 'handleLogout').and.resolveTo();
     let capturedHandler;
-    spyOn(HeaderHelper, 'render').and.callFake((_isLoggedIn, onLogout) => {
+    spyOn(HeaderHelper, 'render').and.callFake((_isLoggedIn, _isAdmin, onLogout) => {
       capturedHandler = onLogout;
       return React.createElement('div');
     });

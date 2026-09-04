@@ -4,12 +4,14 @@ import Register from '../resources/accounts/pages/Register.jsx';
 import Login from '../resources/accounts/pages/Login.jsx';
 import Recover from '../resources/accounts/pages/Recover.jsx';
 import ResetPassword from '../resources/accounts/pages/ResetPassword.jsx';
+import AdminUsers from '../resources/admin/pages/AdminUsers.jsx';
 
 const PAGES = {
   register: <Register />,
   login: <Login />,
   recover: <Recover />,
   'reset-password': <ResetPassword />,
+  'admin-users': <AdminUsers />,
   home: <Home />,
 };
 

@@ -31,7 +31,7 @@ export default class HeaderController {
       // Ignored: the client-side session is already cleared by AccountsClient.logout,
       // regardless of whether the network request itself succeeded.
     } finally {
-      AuthEvents.emit(false);
+      AuthEvents.emit(false, false);
       this.#redirectHome();
     }
   }
@@ -49,17 +49,17 @@ export default class HeaderController {
     const token = AuthSession.get();
 
     if (!token) {
-      AuthEvents.emit(false);
+      AuthEvents.emit(false, false);
       return;
     }
 
-    const { loggedIn } = await this.client.status(token);
+    const { loggedIn, isAdmin } = await this.client.status(token);
 
     if (!loggedIn) {
       AuthSession.clear();
     }
 
-    AuthEvents.emit(loggedIn);
+    AuthEvents.emit(loggedIn, isAdmin);
   }
 
   #redirectHome() {
