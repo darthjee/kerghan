@@ -20,8 +20,35 @@ routing convention (`docs/agents/architecture/backend.md`):
 | `POST /auth/register.json` | `{ username, email, password }` | `{ user, refreshToken }` + `access_token` cookie |
 | `POST /auth/refresh.json` | `{ refreshToken }` | `{ user, refreshToken }` + `access_token` cookie |
 | `DELETE /auth/logoff.json` | `{ refreshToken }` | `204 No Content`, clears the `access_token` cookie |
+| `POST /auth/status.json` | `{ refreshToken }` | `{ loggedIn, isAdmin }` |
 
-`user` is always `{ id, username, email }` — `passwordDigest` is never serialized.
+`user` is always `{ id, username, email, isAdmin }` — `passwordDigest` is never serialized. `isAdmin`
+is the only way the frontend can learn whether the logged-in user is an admin, since the
+`access_token` cookie is `httpOnly`. `/auth/status.json`'s `isAdmin` is resolved from the token
+row's user when `loggedIn` is `true`, and is always `false` when `loggedIn` is `false`.
+
+### Admin tool routes (`AdminController`, `/admin` prefix)
+
+Every route below requires the default `JwtGuard` behavior (no `@Public()`) plus `@AdminOnly()`
+(applied once at the controller level) — see "Admin authorization" below for what that enforces.
+All three also set `X-Skip-Cache: true`, for the same cross-caller-caching reason as the routes
+above.
+
+| Route | Body | Response |
+|---|---|---|
+| `POST /admin/users/search.json` | `{ q? }` | `{ users: [{ id, username, email, isAdmin, createdAt }] }` |
+| `POST /admin/users/:id/recovery-link.json` | — | `{ resetUrl }` |
+| `POST /admin/users/:id/send-recovery-email.json` | — | `{ sent }` |
+
+`search.json` matches `q` case-insensitively against `username`/`email` (TypeORM `ILike` on
+both, `where: [...]`); an absent/empty `q` returns every account, unpaginated. The other two
+routes both mint a fresh `PasswordResetToken` via `PasswordResetService#issueToken` (shared with
+self-service `recover()`) for the given `:id`, never invalidating that user's other outstanding
+tokens, and `404`s when `:id` doesn't match an account. `send-recovery-email.json` additionally
+calls `MailService.send(...)` directly and synchronously (not the fire-and-forget
+`password-recovery.requested` event self-service uses), so the admin gets a real
+`sent: true`/`false` result instead of a always-`true` response — `sent: false` covers both a
+disabled mail transport and a thrown send error, never a `500`.
 
 All four routes also set `X-Skip-Cache: true` on the response. Tent's `default_proxy` rule
 caches any 2xx `*.json` response keyed only by query string, regardless of HTTP method — since
@@ -93,8 +120,10 @@ from `JwtGuard`; `@AdminOnly()` plus an authenticated non-admin gets `403` from 
 `@AdminOnly()` and `@Public()` on the same route are contradictory — `@Public()` skips `JwtGuard`,
 leaving `request.user` unset, which `AdminGuard` treats as forbidden.
 
-Route responses' `user` shape is unchanged (`{ id, username, email }`) — `isAdmin` is not exposed
-over HTTP yet, only carried internally on the access-token claim.
+`isAdmin` is exposed on the `user` object returned by `login`/`register`/`refresh`, and on
+`/auth/status.json`'s response — see "Routes" above — so the frontend can gate admin-only UI
+(e.g. #41's user-lookup/recovery-link tool, `AdminController`) without decoding the `httpOnly`
+access-token cookie itself.
 
 **First admin**: there is no admin-provisioning endpoint or CLI. Promote an account manually,
 directly against the database:
@@ -132,3 +161,10 @@ already-responded `/auth/recover.json` request.
   section): login flow, refresh-token rotation (including replay/expiry rejection), logout, and
   the global `JwtGuard` (public routes, missing/invalid/valid access token) against two
   throwaway controllers defined in the spec itself.
+- `auth/tests/admin.service.spec.ts` — unit specs, mocked repositories: `searchUsers`
+  with/without a query, `generateRecoveryLink`/`sendRecoveryEmail` user-found/not-found paths,
+  and the mail `sent`/`skipped`/throwing outcomes for `sendRecoveryEmail`.
+- `auth/tests/admin.controller.e2e-spec.ts` — e2e specs, same in-memory-fake-repository pattern,
+  plus the global `JwtGuard`/`AdminGuard` pair registered as `APP_GUARD`s: unauthenticated (`401`)
+  and authenticated-non-admin (`403`) rejection on all three routes, an admin caller's documented
+  response shapes, `404` for an unknown user id, and `X-Skip-Cache: true` on every response.
