@@ -5,9 +5,9 @@ A tool for monitoring github issues
 [![Codacy Badge](https://app.codacy.com/project/badge/Grade/fb47154bedbb42799e51d50f51f87054)](https://app.codacy.com/gh/darthjee/kerghan/dashboard?utm_source=gh&utm_medium=referral&utm_content=&utm_campaign=Badge_grade)
 [![Codacy Badge](https://app.codacy.com/project/badge/Coverage/fb47154bedbb42799e51d50f51f87054)](https://app.codacy.com/gh/darthjee/kerghan/dashboard?utm_source=gh&utm_medium=referral&utm_content=&utm_campaign=Badge_coverage)
 
-**Current Version:** [0.1.2](https://github.com/darthjee/kerghan/releases/tag/0.1.2)
+**Current Version:** [0.1.3](https://github.com/darthjee/kerghan/releases/tag/0.1.3)
 
-**Next Release:** [0.1.3](https://github.com/darthjee/kerghan/compare/0.1.2...main)
+**Next Release:** [0.1.4](https://github.com/darthjee/kerghan/compare/0.1.3...main)
 
 ## About
 
