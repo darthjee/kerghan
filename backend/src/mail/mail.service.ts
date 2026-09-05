@@ -1,7 +1,8 @@
-import { Inject, Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import type { Transporter } from 'nodemailer';
 import type { MailConfig } from './mail.config.js';
 import { MAIL_CONFIG, MAIL_TRANSPORT } from './mail.tokens.js';
+import { LoggerService } from '../core/logger.service.js';
 
 /**
  * Arguments accepted by {@link MailService.send}.
@@ -32,7 +33,7 @@ export interface SendMailResult {
  */
 @Injectable()
 export class MailService {
-  private readonly logger = new Logger(MailService.name);
+  private readonly logger: LoggerService;
   private readonly transporter: Transporter | null;
   private readonly config: MailConfig;
 
@@ -40,13 +41,16 @@ export class MailService {
    * @param {Transporter | null} transporter - The nodemailer transporter, or
    *   `null` when `config.enabled` is `false`.
    * @param {MailConfig} config - The frozen outbound-email config.
+   * @param {LoggerService} logger - The injected Core logger.
    */
   constructor(
     @Inject(MAIL_TRANSPORT) transporter: Transporter | null,
     @Inject(MAIL_CONFIG) config: MailConfig,
+      logger: LoggerService,
   ) {
     this.transporter = transporter;
     this.config = config;
+    this.logger = logger;
   }
 
   /**
@@ -62,7 +66,11 @@ export class MailService {
    */
   async send(params: SendMailParams): Promise<SendMailResult> {
     if (!this.config.enabled) {
-      this.logger.debug(`email disabled; skipping message to ${params.to} subj=${params.subject}`);
+      this.logger.debug('email disabled; skipping send', {
+        context: 'MailService',
+        to: params.to,
+        subject: params.subject,
+      });
       return { status: 'skipped' };
     }
 
@@ -74,7 +82,12 @@ export class MailService {
       return await this.#deliver(params, from);
     } catch (err) {
       const reason = err instanceof Error ? err.message : String(err);
-      this.logger.error(`mail send failed to ${params.to} subj=${params.subject}: ${reason}`);
+      this.logger.error('mail send failed', {
+        context: 'MailService',
+        to: params.to,
+        subject: params.subject,
+        reason,
+      });
       throw err;
     }
   }

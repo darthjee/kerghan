@@ -1,4 +1,3 @@
-import { Logger } from '@nestjs/common';
 import type { MailService } from '../../mail/mail.service.js';
 import { PasswordRecoveryRequestedListener } from '../events/password-recovery-requested.listener.js';
 
@@ -11,15 +10,16 @@ describe('PasswordRecoveryRequestedListener', () => {
   };
 
   let send: jest.Mock;
-  let debugSpy: jest.SpyInstance;
-  let warnSpy: jest.SpyInstance;
+  let logger: { debug: jest.Mock; info: jest.Mock; warn: jest.Mock; error: jest.Mock };
   let listener: PasswordRecoveryRequestedListener;
 
   beforeEach(() => {
     send = jest.fn();
-    debugSpy = jest.spyOn(Logger.prototype, 'debug').mockImplementation(() => undefined);
-    warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
-    listener = new PasswordRecoveryRequestedListener({ send } as unknown as MailService);
+    logger = { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn() };
+    listener = new PasswordRecoveryRequestedListener(
+      { send } as unknown as MailService,
+      logger as never,
+    );
   });
 
   afterEach(() => {
@@ -54,9 +54,14 @@ describe('PasswordRecoveryRequestedListener', () => {
     it('logs one debug line with the messageId and user id', async () => {
       await listener.handlePasswordRecoveryRequested(event);
 
-      expect(debugSpy).toHaveBeenCalledTimes(1);
-      expect(debugSpy.mock.calls[0][0]).toContain('messageId=mid-1');
-      expect(debugSpy.mock.calls[0][0]).toContain('user 1');
+      expect(logger.debug).toHaveBeenCalledWith(
+        'recovery email sent',
+        expect.objectContaining({
+          context: 'PasswordRecoveryRequestedListener',
+          userId: 1,
+          messageId: 'mid-1',
+        }),
+      );
     });
 
     it('resolves', async () => {
@@ -71,8 +76,8 @@ describe('PasswordRecoveryRequestedListener', () => {
 
     it('resolves without logging', async () => {
       await expect(listener.handlePasswordRecoveryRequested(event)).resolves.toBeUndefined();
-      expect(warnSpy).not.toHaveBeenCalled();
-      expect(debugSpy).not.toHaveBeenCalled();
+      expect(logger.warn).not.toHaveBeenCalled();
+      expect(logger.debug).not.toHaveBeenCalled();
     });
   });
 
@@ -88,15 +93,16 @@ describe('PasswordRecoveryRequestedListener', () => {
     it('logs one warn line with the user id and the reason', async () => {
       await listener.handlePasswordRecoveryRequested(event);
 
-      expect(warnSpy).toHaveBeenCalledTimes(1);
-      expect(warnSpy.mock.calls[0][0]).toContain('user 1');
-      expect(warnSpy.mock.calls[0][0]).toContain('transport exploded');
+      expect(logger.warn).toHaveBeenCalledTimes(1);
+      const [, attrs] = logger.warn.mock.calls[0] as [string, Record<string, unknown>];
+      expect(attrs.userId).toBe(1);
+      expect(attrs.reason).toContain('transport exploded');
     });
 
     it('never logs the token or the body copy', async () => {
       await listener.handlePasswordRecoveryRequested(event);
 
-      const logged = warnSpy.mock.calls[0].join(' ');
+      const logged = JSON.stringify(logger.warn.mock.calls[0]);
 
       expect(logged).not.toContain('plain-token-SECRET');
       expect(logged).not.toContain('can only be used once');
@@ -110,7 +116,7 @@ describe('PasswordRecoveryRequestedListener', () => {
 
     it('still resolves and logs a warn line', async () => {
       await expect(listener.handlePasswordRecoveryRequested(event)).resolves.toBeUndefined();
-      expect(warnSpy).toHaveBeenCalledTimes(1);
+      expect(logger.warn).toHaveBeenCalledTimes(1);
     });
   });
 });

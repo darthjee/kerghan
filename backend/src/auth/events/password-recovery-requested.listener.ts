@@ -1,7 +1,8 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
 import { buildPasswordRecoveryEmail } from './password-recovery-email.content.js';
 import { PasswordRecoveryRequestedEvent } from './password-recovery-requested.event.js';
+import { LoggerService } from '../../core/logger.service.js';
 import { MailService } from '../../mail/mail.service.js';
 
 /**
@@ -16,14 +17,16 @@ import { MailService } from '../../mail/mail.service.js';
  */
 @Injectable()
 export class PasswordRecoveryRequestedListener {
-  private readonly logger = new Logger(PasswordRecoveryRequestedListener.name);
+  private readonly logger: LoggerService;
   private readonly mailService: MailService;
 
   /**
    * @param {MailService} mailService - The Mail module's send pipe (direct DI).
+   * @param {LoggerService} logger - The injected Core logger.
    */
-  constructor(mailService: MailService) {
+  constructor(mailService: MailService, logger: LoggerService) {
     this.mailService = mailService;
+    this.logger = logger;
   }
 
   /**
@@ -42,13 +45,19 @@ export class PasswordRecoveryRequestedListener {
       const result = await this.mailService.send({ to: event.email, subject, text });
 
       if (result.status === 'sent') {
-        this.logger.debug(
-          `recovery email sent (messageId=${result.messageId}) for user ${event.userId}`,
-        );
+        this.logger.debug('recovery email sent', {
+          context: 'PasswordRecoveryRequestedListener',
+          userId: event.userId,
+          messageId: result.messageId,
+        });
       }
     } catch (err) {
       const reason = err instanceof Error ? err.message : String(err);
-      this.logger.warn(`recovery email not sent for user ${event.userId}: ${reason}`);
+      this.logger.warn('recovery email not sent', {
+        context: 'PasswordRecoveryRequestedListener',
+        userId: event.userId,
+        reason,
+      });
     }
   }
 }
