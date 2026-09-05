@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { APP_GUARD } from '@nestjs/core';
 import { EventEmitterModule } from '@nestjs/event-emitter';
@@ -10,6 +10,7 @@ import { CacheTokenService } from './core/cache-token.service.js';
 import { JwtGuard } from './core/jwt.guard.js';
 import { LazyModuleLoaderService } from './core/lazy-module-loader.service.js';
 import { LoggingModule } from './core/logging.module.js';
+import { RequestContextMiddleware } from './core/request-context.middleware.js';
 import { HealthController } from './health/health.controller.js';
 import { MailModule } from './mail/mail.module.js';
 
@@ -42,6 +43,12 @@ export function buildJwtSignOptions(configService: ConfigService): { expiresIn: 
  * "Core" module classification — always resident, at boot, independent of
  * any feature module); feature modules (Auth, and later lazy modules) are
  * imported here as they are introduced.
+ *
+ * Implements `NestModule` to wire the global `RequestContextMiddleware`
+ * (request-correlation context + per-request access log) ahead of the
+ * `APP_GUARD` chain — Nest runs middleware before guards, so the correlation
+ * context is established and the access-log line still fires for
+ * guard-rejected 401/403 responses.
  */
 @Module({
   imports: [
@@ -89,6 +96,14 @@ export function buildJwtSignOptions(configService: ConfigService): { expiresIn: 
     },
   ],
 })
-// NestJS module classes are intentionally empty; all behavior lives in @Module().
-// eslint-disable-next-line @typescript-eslint/no-extraneous-class
-export class AppModule {}
+export class AppModule implements NestModule {
+  /**
+   * Applies the global `RequestContextMiddleware` to every route so each
+   * request runs inside a correlation context and emits one access-log line.
+   * @param {MiddlewareConsumer} consumer - Nest's middleware registration API.
+   * @returns {void}
+   */
+  configure(consumer: MiddlewareConsumer): void {
+    consumer.apply(RequestContextMiddleware).forRoutes('*');
+  }
+}
