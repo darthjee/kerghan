@@ -12,6 +12,9 @@ import { RequestContextService } from './request-context.service.js';
  * request-logging interceptor) injects `LoggerService` in its constructor
  * with zero import changes of its own. `RequestContextService` holds the
  * per-request correlation store that makes `LoggerService` context-aware.
+ *
+ * `LogContext` (the explicit attribute-binding wrapper) is not a provider —
+ * it is constructed ad hoc; import it directly from `./log-context.js`.
  */
 @Global()
 @Module({
