@@ -9,6 +9,7 @@ import { AdminGuard } from './core/admin.guard.js';
 import { CacheTokenService } from './core/cache-token.service.js';
 import { JwtGuard } from './core/jwt.guard.js';
 import { LazyModuleLoaderService } from './core/lazy-module-loader.service.js';
+import { LoggingModule } from './core/logging.module.js';
 import { HealthController } from './health/health.controller.js';
 import { MailModule } from './mail/mail.module.js';
 
@@ -47,6 +48,7 @@ export function buildJwtSignOptions(configService: ConfigService): { expiresIn: 
     ConfigModule.forRoot({ isGlobal: true }),
     EventEmitterModule.forRoot(),
     AuthModule,
+    LoggingModule,
     MailModule,
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
