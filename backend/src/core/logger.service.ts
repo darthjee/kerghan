@@ -122,10 +122,12 @@ export class LoggerService implements NestLoggerService {
     }
 
     if (attributes === undefined) {
+      // eslint-disable-next-line no-console
       console[level](message);
       return;
     }
 
+    // eslint-disable-next-line no-console
     console[level](message, attributes);
   }
 

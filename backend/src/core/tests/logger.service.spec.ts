@@ -136,6 +136,12 @@ describe('LoggerService', () => {
 
       expect(consoleSpies.debug).toHaveBeenCalledWith('via debug');
     });
+
+    it('routes verbose() to the debug level, collecting optionalParams into attributes', () => {
+      service.verbose('via verbose', 'extra');
+
+      expect(consoleSpies.debug).toHaveBeenCalledWith('via verbose', { optionalParams: ['extra'] });
+    });
   });
 
   describe('cross-module injection', () => {
