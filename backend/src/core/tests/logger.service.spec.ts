@@ -18,6 +18,16 @@ function buildConfigService(level?: string): { get: jest.Mock } {
   };
 }
 
+/**
+ * Builds a `RequestContextService` double whose `getRequestId()` returns the
+ * supplied `requestId` (or `undefined` for "no active request context").
+ * @param {string} [requestId] - The correlation id to report as active.
+ * @returns {{ getRequestId: jest.Mock }} The `RequestContextService` double.
+ */
+function buildRequestContext(requestId?: string): { getRequestId: jest.Mock } {
+  return { getRequestId: jest.fn(() => requestId) };
+}
+
 describe('LoggerService', () => {
   const consoleSpies = {
     debug: jest.spyOn(console, 'debug').mockImplementation(() => undefined),
@@ -35,7 +45,7 @@ describe('LoggerService', () => {
   });
 
   describe('default level', () => {
-    const service = new LoggerService(buildConfigService() as never);
+    const service = new LoggerService(buildConfigService() as never, buildRequestContext() as never);
 
     it('defaults to info, filtering out debug', () => {
       service.debug('hidden');
@@ -51,7 +61,7 @@ describe('LoggerService', () => {
   });
 
   describe('configured level override', () => {
-    const service = new LoggerService(buildConfigService('debug') as never);
+    const service = new LoggerService(buildConfigService('debug') as never, buildRequestContext() as never);
 
     it('allows debug when the threshold is lowered', () => {
       service.debug('now visible');
@@ -61,7 +71,7 @@ describe('LoggerService', () => {
   });
 
   describe('level filtering', () => {
-    const service = new LoggerService(buildConfigService('warn') as never);
+    const service = new LoggerService(buildConfigService('warn') as never, buildRequestContext() as never);
 
     it('suppresses a level below the threshold', () => {
       service.info('suppressed');
@@ -83,7 +93,7 @@ describe('LoggerService', () => {
   });
 
   describe('structured attributes', () => {
-    const service = new LoggerService(buildConfigService('debug') as never);
+    const service = new LoggerService(buildConfigService('debug') as never, buildRequestContext() as never);
 
     it('passes the attributes object unmodified as the second console argument', () => {
       const attributes = { userId: 42, nested: { flag: true } };
@@ -103,7 +113,7 @@ describe('LoggerService', () => {
   });
 
   describe('NestJS LoggerService interface methods', () => {
-    const service = new LoggerService(buildConfigService('debug') as never);
+    const service = new LoggerService(buildConfigService('debug') as never, buildRequestContext() as never);
 
     it('routes log() to the info level', () => {
       service.log('via log');
@@ -112,7 +122,7 @@ describe('LoggerService', () => {
     });
 
     it('filters log() the same as info() would be filtered', () => {
-      const infoService = new LoggerService(buildConfigService('warn') as never);
+      const infoService = new LoggerService(buildConfigService('warn') as never, buildRequestContext() as never);
 
       infoService.log('suppressed via log');
 
@@ -141,6 +151,52 @@ describe('LoggerService', () => {
       service.verbose('via verbose', 'extra');
 
       expect(consoleSpies.debug).toHaveBeenCalledWith('via verbose', { optionalParams: ['extra'] });
+    });
+  });
+
+  describe('request context correlation', () => {
+    it('merges the active requestId into a message logged with no attributes', () => {
+      const service = new LoggerService(
+        buildConfigService('debug') as never,
+        buildRequestContext('req-1') as never,
+      );
+
+      service.info('msg');
+
+      expect(consoleSpies.info).toHaveBeenCalledWith('msg', { requestId: 'req-1' });
+    });
+
+    it('merges the active requestId alongside caller-supplied attributes', () => {
+      const service = new LoggerService(
+        buildConfigService('debug') as never,
+        buildRequestContext('req-1') as never,
+      );
+
+      service.info('msg', { userId: 7 });
+
+      expect(consoleSpies.info).toHaveBeenCalledWith('msg', { requestId: 'req-1', userId: 7 });
+    });
+
+    it('lets a caller-supplied requestId win over the active context', () => {
+      const service = new LoggerService(
+        buildConfigService('debug') as never,
+        buildRequestContext('req-1') as never,
+      );
+
+      service.info('msg', { requestId: 'caller' });
+
+      expect(consoleSpies.info).toHaveBeenCalledWith('msg', { requestId: 'caller' });
+    });
+
+    it('keeps the single-argument console path when no context is active', () => {
+      const service = new LoggerService(
+        buildConfigService('debug') as never,
+        buildRequestContext() as never,
+      );
+
+      service.info('msg');
+
+      expect(consoleSpies.info).toHaveBeenCalledWith('msg');
     });
   });
 

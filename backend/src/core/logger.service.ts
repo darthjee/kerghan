@@ -1,5 +1,6 @@
 import { Injectable, LoggerService as NestLoggerService } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { RequestContextService } from './request-context.service.js';
 
 type LogLevel = 'debug' | 'info' | 'warn' | 'error';
 
@@ -24,12 +25,16 @@ const LEVEL_RANK: Record<LogLevel, number> = {
 @Injectable()
 export class LoggerService implements NestLoggerService {
   private readonly threshold: LogLevel;
+  private readonly requestContext: RequestContextService;
 
   /**
    * @param {ConfigService} configService - Supplies the configured log level threshold.
+   * @param {RequestContextService} requestContext - Supplies the active request's
+   *   correlation id, merged into every emitted line when a request context is active.
    */
-  constructor(configService: ConfigService) {
+  constructor(configService: ConfigService, requestContext: RequestContextService) {
     this.threshold = configService.get<LogLevel>('KERGHAN_LOG_LEVEL', 'info');
+    this.requestContext = requestContext;
   }
 
   /**
@@ -110,7 +115,9 @@ export class LoggerService implements NestLoggerService {
 
   /**
    * Emits a message through the console transport when its level is at or
-   * above the configured threshold.
+   * above the configured threshold. When a request context is active, the
+   * context's `requestId` is merged into the emitted attributes (caller-supplied
+   * keys win on collision).
    * @param {LogLevel} level - The level to log at.
    * @param {string} message - The message to log.
    * @param {Record<string, unknown>} [attributes] - Structured attributes accompanying the message.
@@ -121,14 +128,36 @@ export class LoggerService implements NestLoggerService {
       return;
     }
 
-    if (attributes === undefined) {
+    const effective = this.resolveAttributes(attributes);
+
+    if (effective === undefined) {
       // eslint-disable-next-line no-console
       console[level](message);
       return;
     }
 
     // eslint-disable-next-line no-console
-    console[level](message, attributes);
+    console[level](message, effective);
+  }
+
+  /**
+   * Merges the active request context's `requestId` into the caller-supplied
+   * attributes, with caller keys winning on collision. Returns `undefined`
+   * only when no request context is active and no attributes were supplied,
+   * preserving the single-argument `console` call.
+   * @param {Record<string, unknown>} [attributes] - Structured attributes accompanying the message.
+   * @returns {Record<string, unknown>|undefined} The effective attributes, or `undefined`.
+   */
+  private resolveAttributes(
+    attributes?: Record<string, unknown>,
+  ): Record<string, unknown> | undefined {
+    const requestId = this.requestContext.getRequestId();
+
+    if (requestId === undefined) {
+      return attributes;
+    }
+
+    return { requestId, ...attributes };
   }
 
   /**
