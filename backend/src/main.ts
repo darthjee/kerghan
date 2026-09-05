@@ -4,6 +4,7 @@ import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
 import cookieParser from 'cookie-parser';
 import { AppModule } from './app.module.js';
+import { LoggerService } from './core/logger.service.js';
 
 /**
  * Boots the Nest application, wiring cookie parsing (needed for the
@@ -16,16 +17,17 @@ import { AppModule } from './app.module.js';
 async function bootstrap(): Promise<void> {
   const app = await NestFactory.create(AppModule);
   const configService = app.get(ConfigService);
+  const logger = app.get(LoggerService);
 
   app.use(cookieParser(configService.get<string>('KERGHAN_SECRET_KEY')));
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
 
   const port = configService.get<number>('PORT', 8080);
   await app.listen(port);
-  // eslint-disable-next-line no-console
-  console.warn(`Kerghan backend listening on port ${port}`);
+  logger.info('backend listening', { port });
 }
 
+// Raw console: this runs when NestFactory.create may have thrown, so the DI container (and LoggerService) may not exist.
 bootstrap().catch((err: unknown) => {
   // eslint-disable-next-line no-console
   console.error(err);
