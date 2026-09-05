@@ -8,6 +8,7 @@ import { getRepositoryToken } from '@nestjs/typeorm';
 import cookieParser from 'cookie-parser';
 import request from 'supertest';
 import { JwtGuard } from '../../core/jwt.guard.js';
+import { LoggingModule } from '../../core/logging.module.js';
 import { Public } from '../../core/public.decorator.js';
 import { AuthModule } from '../auth.module.js';
 import { PasswordResetToken } from '../entities/password-reset-token.entity.js';
@@ -110,6 +111,7 @@ describe('AuthController (e2e)', () => {
         ConfigModule.forRoot({ isGlobal: true }),
         EventEmitterModule.forRoot(),
         JwtModule.register({ global: true, secret: 'test-secret', signOptions: { expiresIn: '15m' } }),
+        LoggingModule,
         AuthModule,
       ],
       controllers: [ProtectedTestController, PublicTestController],

@@ -1,10 +1,10 @@
 import { Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import nodemailer, { type Transporter } from 'nodemailer';
-import { LoggerService } from '../core/logger.service.js';
 import { buildMailConfig, type MailConfig } from './mail.config.js';
 import { MailService } from './mail.service.js';
 import { MAIL_CONFIG, MAIL_TRANSPORT } from './mail.tokens.js';
+import { LoggerService } from '../core/logger.service.js';
 
 export { MAIL_CONFIG, MAIL_TRANSPORT } from './mail.tokens.js';
 

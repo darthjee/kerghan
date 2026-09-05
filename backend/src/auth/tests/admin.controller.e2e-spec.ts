@@ -9,6 +9,7 @@ import cookieParser from 'cookie-parser';
 import request from 'supertest';
 import { AdminGuard } from '../../core/admin.guard.js';
 import { JwtGuard } from '../../core/jwt.guard.js';
+import { LoggingModule } from '../../core/logging.module.js';
 import { AuthModule } from '../auth.module.js';
 import { PasswordResetToken } from '../entities/password-reset-token.entity.js';
 import { RefreshToken } from '../entities/refresh-token.entity.js';
@@ -109,6 +110,7 @@ describe('AdminController (e2e)', () => {
         ConfigModule.forRoot({ isGlobal: true }),
         EventEmitterModule.forRoot(),
         JwtModule.register({ global: true, secret: 'test-secret', signOptions: { expiresIn: '15m' } }),
+        LoggingModule,
         AuthModule,
       ],
       providers: [

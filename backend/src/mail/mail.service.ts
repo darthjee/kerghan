@@ -1,8 +1,8 @@
 import { Inject, Injectable } from '@nestjs/common';
 import type { Transporter } from 'nodemailer';
-import { LoggerService } from '../core/logger.service.js';
 import type { MailConfig } from './mail.config.js';
 import { MAIL_CONFIG, MAIL_TRANSPORT } from './mail.tokens.js';
+import { LoggerService } from '../core/logger.service.js';
 
 /**
  * Arguments accepted by {@link MailService.send}.
@@ -46,7 +46,7 @@ export class MailService {
   constructor(
     @Inject(MAIL_TRANSPORT) transporter: Transporter | null,
     @Inject(MAIL_CONFIG) config: MailConfig,
-    logger: LoggerService,
+      logger: LoggerService,
   ) {
     this.transporter = transporter;
     this.config = config;
