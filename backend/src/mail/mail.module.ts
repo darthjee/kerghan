@@ -1,6 +1,7 @@
-import { Logger, Module } from '@nestjs/common';
+import { Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import nodemailer, { type Transporter } from 'nodemailer';
+import { LoggerService } from '../core/logger.service.js';
 import { buildMailConfig, type MailConfig } from './mail.config.js';
 import { MailService } from './mail.service.js';
 import { MAIL_CONFIG, MAIL_TRANSPORT } from './mail.tokens.js';
@@ -9,21 +10,24 @@ export { MAIL_CONFIG, MAIL_TRANSPORT } from './mail.tokens.js';
 
 /**
  * Builds the boot-time transporter from the resolved config. Returns
- * `null` (and logs once) when outbound email is disabled; otherwise logs
- * `enabled` plus the host only — never the whole config, which holds the
- * SMTP password.
+ * `null` when outbound email is disabled; otherwise builds the transporter.
+ * Uses the injected Core logger to emit one line about the resulting state,
+ * carrying the host only — never the whole config, which holds the SMTP
+ * password.
  * @param {MailConfig} config - The frozen config from `buildMailConfig`.
+ * @param {LoggerService} logger - The injected Core logger.
  * @returns {Transporter | null} The transporter, or `null` when disabled.
  */
-function createMailTransport(config: MailConfig): Transporter | null {
-  const logger = new Logger('MailModule');
-
+function createMailTransport(config: MailConfig, logger: LoggerService): Transporter | null {
   if (!config.enabled || !config.transport) {
-    logger.log('outbound email disabled');
+    logger.info('outbound email disabled', { context: 'MailModule' });
     return null;
   }
 
-  logger.log(`outbound email enabled (host=${config.transport.host})`);
+  logger.info('outbound email enabled', {
+    context: 'MailModule',
+    host: config.transport.host,
+  });
   return nodemailer.createTransport(config.transport);
 }
 
@@ -43,8 +47,9 @@ function createMailTransport(config: MailConfig): Transporter | null {
     },
     {
       provide: MAIL_TRANSPORT,
-      inject: [MAIL_CONFIG],
-      useFactory: (config: MailConfig): Transporter | null => createMailTransport(config),
+      inject: [MAIL_CONFIG, LoggerService],
+      useFactory: (config: MailConfig, logger: LoggerService): Transporter | null =>
+        createMailTransport(config, logger),
     },
     MailService,
   ],
