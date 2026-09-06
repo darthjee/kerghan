@@ -1,13 +1,12 @@
 import { BadRequestException, UnauthorizedException } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import { JwtService } from '@nestjs/jwt';
 import bcrypt from 'bcryptjs';
 import { IsNull } from 'typeorm';
 import { AuthService } from '../auth.service.js';
 import { RefreshToken } from '../entities/refresh-token.entity.js';
-import { Session } from '../entities/session.entity.js';
 import { User } from '../entities/user.entity.js';
 import { PasswordResetService } from '../password-reset.service.js';
+import { TokenService } from '../token.service.js';
 
 type RepoMock<T extends object> = {
   findOne: jest.Mock;
@@ -30,8 +29,7 @@ function repoMock<T extends object>(): RepoMock<T> {
 describe('AuthService', () => {
   let userRepository: RepoMock<User>;
   let refreshTokenRepository: RepoMock<RefreshToken>;
-  let sessionRepository: RepoMock<Session>;
-  let jwtService: { sign: jest.Mock };
+  let tokenService: { issueTokens: jest.Mock; hashToken: jest.Mock };
   let eventEmitter: { emit: jest.Mock };
   let passwordResetService: { recover: jest.Mock; resetPassword: jest.Mock };
   let service: AuthService;
@@ -39,16 +37,21 @@ describe('AuthService', () => {
   beforeEach(() => {
     userRepository = repoMock<User>();
     refreshTokenRepository = repoMock<RefreshToken>();
-    sessionRepository = repoMock<Session>();
-    jwtService = { sign: jest.fn().mockReturnValue('signed-access-token') };
+    tokenService = {
+      issueTokens: jest.fn(async (user: User) => ({
+        user,
+        accessToken: 'signed-access-token',
+        refreshToken: 'new-refresh-token',
+      })),
+      hashToken: jest.fn((token: string) => `hashed:${token}`),
+    };
     eventEmitter = { emit: jest.fn() };
     passwordResetService = { recover: jest.fn(), resetPassword: jest.fn() };
 
     service = new AuthService(
       userRepository as never,
       refreshTokenRepository as never,
-      sessionRepository as never,
-      jwtService as unknown as JwtService,
+      tokenService as unknown as TokenService,
       eventEmitter as unknown as EventEmitter2,
       passwordResetService as unknown as PasswordResetService,
     );
@@ -85,32 +88,10 @@ describe('AuthService', () => {
         expect(userRepository.findOneBy).toHaveBeenCalledWith({ username: 'darthjee' });
       });
 
-      it('signs the access token with isAdmin: false for a non-admin user', async () => {
+      it('delegates session minting to TokenService with the authenticated user', async () => {
         await service.login({ username: 'darthjee', password: 'correct-password' });
 
-        expect(jwtService.sign).toHaveBeenCalledWith(expect.objectContaining({ isAdmin: false }));
-      });
-
-      it('persists a hashed refresh token and a session for the user', async () => {
-        const result = await service.login({ username: 'darthjee', password: 'correct-password' });
-
-        expect(refreshTokenRepository.save).toHaveBeenCalledWith(
-          expect.objectContaining({ userId: 1, tokenHash: expect.any(String), revokedAt: null }),
-        );
-        expect(refreshTokenRepository.save.mock.calls[0][0].tokenHash).not.toBe(result.refreshToken);
-        expect(sessionRepository.save).toHaveBeenCalledWith(expect.objectContaining({ userId: 1 }));
-      });
-    });
-
-    describe('when the user is an admin', () => {
-      beforeEach(() => {
-        userRepository.findOneBy.mockResolvedValue({ ...user, isAdmin: true });
-      });
-
-      it('signs the access token with isAdmin: true', async () => {
-        await service.login({ username: 'darthjee', password: 'correct-password' });
-
-        expect(jwtService.sign).toHaveBeenCalledWith(expect.objectContaining({ isAdmin: true }));
+        expect(tokenService.issueTokens).toHaveBeenCalledWith(user);
       });
     });
 
@@ -123,6 +104,14 @@ describe('AuthService', () => {
         await expect(
           service.login({ username: 'darthjee', password: 'wrong-password' }),
         ).rejects.toThrow(new UnauthorizedException('Invalid username or password'));
+      });
+
+      it('does not mint a session', async () => {
+        await expect(
+          service.login({ username: 'darthjee', password: 'wrong-password' }),
+        ).rejects.toThrow(UnauthorizedException);
+
+        expect(tokenService.issueTokens).not.toHaveBeenCalled();
       });
     });
 
@@ -171,14 +160,16 @@ describe('AuthService', () => {
         expect(result.accessToken).toBe('signed-access-token');
       });
 
-      it('signs the access token with isAdmin: false for a newly registered user', async () => {
+      it('delegates session minting to TokenService with the created user', async () => {
         await service.register({
           username: 'darthjee',
           email: 'darthjee@example.com',
           password: 'my-password',
         });
 
-        expect(jwtService.sign).toHaveBeenCalledWith(expect.objectContaining({ isAdmin: false }));
+        expect(tokenService.issueTokens).toHaveBeenCalledWith(
+          expect.objectContaining({ username: 'darthjee', isAdmin: false }),
+        );
       });
 
       it('creates the user with a hashed password digest', async () => {
@@ -252,7 +243,7 @@ describe('AuthService', () => {
         userRepository.findOneBy.mockResolvedValue(user);
       });
 
-      it('revokes the presented token and issues a new pair', async () => {
+      it('revokes the presented token before issuing a new pair', async () => {
         const result = await service.refresh('a-refresh-token');
 
         expect(refreshTokenRepository.update).toHaveBeenCalledWith(10, { revokedAt: expect.any(Date) });
@@ -261,23 +252,10 @@ describe('AuthService', () => {
         expect(result.refreshToken).not.toBe('a-refresh-token');
       });
 
-      it('signs the access token with the reloaded user isAdmin claim', async () => {
+      it('delegates session minting to TokenService with the reloaded user', async () => {
         await service.refresh('a-refresh-token');
 
-        expect(jwtService.sign).toHaveBeenCalledWith(expect.objectContaining({ isAdmin: false }));
-      });
-    });
-
-    describe('when the refreshed user is an admin', () => {
-      beforeEach(() => {
-        refreshTokenRepository.findOneBy.mockResolvedValue(activeToken);
-        userRepository.findOneBy.mockResolvedValue({ ...user, isAdmin: true });
-      });
-
-      it('signs the access token with isAdmin: true', async () => {
-        await service.refresh('a-refresh-token');
-
-        expect(jwtService.sign).toHaveBeenCalledWith(expect.objectContaining({ isAdmin: true }));
+        expect(tokenService.issueTokens).toHaveBeenCalledWith(user);
       });
     });
 
@@ -340,8 +318,9 @@ describe('AuthService', () => {
     it('revokes the matching refresh token by its hash', async () => {
       await service.logout('a-refresh-token');
 
+      expect(tokenService.hashToken).toHaveBeenCalledWith('a-refresh-token');
       expect(refreshTokenRepository.update).toHaveBeenCalledWith(
-        { tokenHash: expect.any(String) },
+        { tokenHash: 'hashed:a-refresh-token' },
         { revokedAt: expect.any(Date) },
       );
     });
