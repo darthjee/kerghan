@@ -1,7 +1,5 @@
-import { randomBytes, createHash } from 'node:crypto';
 import { BadRequestException, Injectable, UnauthorizedException } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import { JwtService } from '@nestjs/jwt';
 import { InjectRepository } from '@nestjs/typeorm';
 import bcrypt from 'bcryptjs';
 import { IsNull, Repository } from 'typeorm';
@@ -10,24 +8,18 @@ import { RecoverDto } from './dto/recover.dto.js';
 import { RegisterDto } from './dto/register.dto.js';
 import { ResetPasswordDto } from './dto/reset-password.dto.js';
 import { RefreshToken } from './entities/refresh-token.entity.js';
-import { Session } from './entities/session.entity.js';
 import { User } from './entities/user.entity.js';
 import { UserRegisteredEvent } from './events/user-registered.event.js';
 import { PasswordResetService } from './password-reset.service.js';
+import { TokenService, type AuthResult } from './token.service.js';
+
+export type { AuthResult };
 
 // A pre-computed bcrypt hash of a value nobody will ever submit, compared
 // against when no user is found so lookups for unknown usernames take the
 // same time as a wrong-password check (avoids trivial timing-based
 // username enumeration) — ported from the old Authenticator.
 const DUMMY_DIGEST = '$2a$10$CwTycUXWue0Thq9StjUM0uJ8Q1eLXfPJvXQF4RUOgtnJhmiQq6Zsy';
-
-const REFRESH_TOKEN_TTL_MS = 7 * 24 * 60 * 60 * 1000;
-
-export interface AuthResult {
-  user: User;
-  accessToken: string;
-  refreshToken: string;
-}
 
 /**
  * Auth module business logic: credential verification, registration,
@@ -41,16 +33,16 @@ export interface AuthResult {
 export class AuthService {
   private readonly userRepository: Repository<User>;
   private readonly refreshTokenRepository: Repository<RefreshToken>;
-  private readonly sessionRepository: Repository<Session>;
-  private readonly jwtService: JwtService;
+  private readonly tokenService: TokenService;
   private readonly eventEmitter: EventEmitter2;
   private readonly passwordResetService: PasswordResetService;
 
   /**
    * @param {Repository<User>} userRepository - The Auth module's user repository.
    * @param {Repository<RefreshToken>} refreshTokenRepository - The refresh-token repository.
-   * @param {Repository<Session>} sessionRepository - The session repository.
-   * @param {JwtService} jwtService - Signs/verifies the access token.
+   * @param {TokenService} tokenService - Mints login sessions (access-token
+   *   JWT, rotating refresh token, `auth_sessions` row) and hashes refresh
+   *   tokens for the read paths.
    * @param {EventEmitter2} eventEmitter - Fires the `user.registered` event.
    * @param {PasswordResetService} passwordResetService - The password
    *   recovery/reset flow's business logic, delegated to for `recover`/
@@ -59,15 +51,13 @@ export class AuthService {
   constructor(
     @InjectRepository(User) userRepository: Repository<User>,
     @InjectRepository(RefreshToken) refreshTokenRepository: Repository<RefreshToken>,
-    @InjectRepository(Session) sessionRepository: Repository<Session>,
-      jwtService: JwtService,
+      tokenService: TokenService,
       eventEmitter: EventEmitter2,
       passwordResetService: PasswordResetService,
   ) {
     this.userRepository = userRepository;
     this.refreshTokenRepository = refreshTokenRepository;
-    this.sessionRepository = sessionRepository;
-    this.jwtService = jwtService;
+    this.tokenService = tokenService;
     this.eventEmitter = eventEmitter;
     this.passwordResetService = passwordResetService;
   }
@@ -97,7 +87,7 @@ export class AuthService {
       new UserRegisteredEvent(user.id, user.username, user.email),
     );
 
-    return this.#issueTokens(user);
+    return this.tokenService.issueTokens(user);
   }
 
   /**
@@ -109,7 +99,7 @@ export class AuthService {
   async login(dto: LoginDto): Promise<AuthResult> {
     const user = await this.#validateCredentials(dto.username, dto.password);
 
-    return this.#issueTokens(user);
+    return this.tokenService.issueTokens(user);
   }
 
   /**
@@ -148,7 +138,7 @@ export class AuthService {
 
     await this.refreshTokenRepository.update(tokenRow.id, { revokedAt: new Date() });
 
-    return this.#issueTokens(user);
+    return this.tokenService.issueTokens(user);
   }
 
   /**
@@ -158,7 +148,7 @@ export class AuthService {
    * @returns {Promise<void>} Resolves once the token has been revoked.
    */
   async logout(refreshToken: string): Promise<void> {
-    const tokenHash = this.#hashToken(refreshToken);
+    const tokenHash = this.tokenService.hashToken(refreshToken);
 
     await this.refreshTokenRepository.update({ tokenHash }, { revokedAt: new Date() });
   }
@@ -220,7 +210,7 @@ export class AuthService {
   }
 
   async #findActiveRefreshToken(refreshToken: string): Promise<RefreshToken> {
-    const tokenHash = this.#hashToken(refreshToken);
+    const tokenHash = this.tokenService.hashToken(refreshToken);
     const tokenRow = await this.refreshTokenRepository.findOneBy({ tokenHash });
 
     if (!tokenRow) {
@@ -239,50 +229,18 @@ export class AuthService {
     return tokenRow;
   }
 
-  #hashToken(token: string): string {
-    return createHash('sha256').update(token).digest('hex');
-  }
-
   async #findActiveTokenRow(refreshToken: string): Promise<RefreshToken | null> {
-    const tokenHash = this.#hashToken(refreshToken);
+    const tokenHash = this.tokenService.hashToken(refreshToken);
     const tokenRow = await this.refreshTokenRepository.findOneBy({ tokenHash });
     const isActive = !!tokenRow && !tokenRow.revokedAt && tokenRow.expiresAt > new Date();
 
     return isActive ? tokenRow : null;
   }
 
-  async #issueTokens(user: User): Promise<AuthResult> {
-    const accessToken = this.jwtService.sign({
-      sub: user.id,
-      username: user.username,
-      isAdmin: user.isAdmin,
-    });
-    const refreshToken = randomBytes(48).toString('hex');
-
-    await this.refreshTokenRepository.save(
-      this.refreshTokenRepository.create({
-        tokenHash: this.#hashToken(refreshToken),
-        userId: user.id,
-        expiresAt: new Date(Date.now() + REFRESH_TOKEN_TTL_MS),
-        revokedAt: null,
-      }),
-    );
-
-    await this.#touchSession(user.id);
-
-    return { user, accessToken, refreshToken };
-  }
-
   async #revokeTokenFamily(userId: number): Promise<void> {
     await this.refreshTokenRepository.update(
       { userId, revokedAt: IsNull() },
       { revokedAt: new Date() },
-    );
-  }
-
-  async #touchSession(userId: number): Promise<void> {
-    await this.sessionRepository.save(
-      this.sessionRepository.create({ userId, lastSeenAt: new Date() }),
     );
   }
 

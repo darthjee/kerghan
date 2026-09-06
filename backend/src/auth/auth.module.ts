@@ -11,6 +11,7 @@ import { Session } from './entities/session.entity.js';
 import { User } from './entities/user.entity.js';
 import { PasswordRecoveryRequestedListener } from './events/password-recovery-requested.listener.js';
 import { PasswordResetService } from './password-reset.service.js';
+import { TokenService } from './token.service.js';
 
 /**
  * The Auth module — always-on (imported directly into `AppModule`, not
@@ -22,7 +23,13 @@ import { PasswordResetService } from './password-reset.service.js';
 @Module({
   imports: [TypeOrmModule.forFeature([User, RefreshToken, Session, PasswordResetToken]), MailModule],
   controllers: [AuthController, AdminController],
-  providers: [AuthService, AdminService, PasswordResetService, PasswordRecoveryRequestedListener],
+  providers: [
+    AuthService,
+    AdminService,
+    PasswordResetService,
+    TokenService,
+    PasswordRecoveryRequestedListener,
+  ],
   exports: [AuthService],
 })
 // NestJS module classes are intentionally empty; all behavior lives in @Module().
