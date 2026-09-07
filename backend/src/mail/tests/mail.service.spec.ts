@@ -45,7 +45,7 @@ describe('MailService', () => {
     });
 
     it('calls sendMail once with the message fields and returns a sent result', async () => {
-      const service = new MailService(transporter as never, enabledConfig, logger as never);
+      const service = new MailService(transporter as never, enabledConfig, {} as never, logger as never);
 
       const result = await service.send({ ...validParams });
 
@@ -61,7 +61,7 @@ describe('MailService', () => {
     });
 
     it('falls back to the configured from address when params omit it', async () => {
-      const service = new MailService(transporter as never, enabledConfig, logger as never);
+      const service = new MailService(transporter as never, enabledConfig, {} as never, logger as never);
 
       await service.send({ ...validParams });
 
@@ -69,7 +69,7 @@ describe('MailService', () => {
     });
 
     it('uses an explicit from address when params provide one', async () => {
-      const service = new MailService(transporter as never, enabledConfig, logger as never);
+      const service = new MailService(transporter as never, enabledConfig, {} as never, logger as never);
 
       await service.send({ ...validParams, from: 'alerts@kerghan.local' });
 
@@ -79,7 +79,7 @@ describe('MailService', () => {
 
   describe('when email is disabled', () => {
     it('skips the send, logs a debug line and never touches the transporter', async () => {
-      const service = new MailService(transporter as never, disabledConfig, logger as never);
+      const service = new MailService(transporter as never, disabledConfig, {} as never, logger as never);
 
       const result = await service.send({ ...validParams });
 
@@ -100,7 +100,7 @@ describe('MailService', () => {
     it('rejects with the same error and logs without leaking the bodies', async () => {
       const error = new Error('transport exploded');
       sendMail.mockRejectedValue(error);
-      const service = new MailService(transporter as never, enabledConfig, logger as never);
+      const service = new MailService(transporter as never, enabledConfig, {} as never, logger as never);
 
       await expect(service.send({ ...validParams })).rejects.toBe(error);
 
@@ -116,7 +116,7 @@ describe('MailService', () => {
   describe('when the recipient is rejected', () => {
     it('rejects with an error naming the rejected recipient', async () => {
       sendMail.mockResolvedValue({ accepted: [], rejected: ['user@example.com'] });
-      const service = new MailService(transporter as never, enabledConfig, logger as never);
+      const service = new MailService(transporter as never, enabledConfig, {} as never, logger as never);
 
       await expect(service.send({ ...validParams })).rejects.toThrow('user@example.com');
     });
@@ -124,7 +124,7 @@ describe('MailService', () => {
 
   describe('when the to field is blank', () => {
     it.each([['empty', ''], ['whitespace', '   ']])('rejects without calling sendMail (%s)', async (_label, to) => {
-      const service = new MailService(transporter as never, enabledConfig, logger as never);
+      const service = new MailService(transporter as never, enabledConfig, {} as never, logger as never);
 
       await expect(service.send({ ...validParams, to })).rejects.toThrow("mail: 'to' is required");
       expect(sendMail).not.toHaveBeenCalled();
@@ -133,7 +133,7 @@ describe('MailService', () => {
 
   describe('when enabled but the transporter was never built', () => {
     it('rejects instead of dereferencing a null transporter', async () => {
-      const service = new MailService(null as never, enabledConfig, logger as never);
+      const service = new MailService(null as never, enabledConfig, {} as never, logger as never);
 
       await expect(service.send({ ...validParams })).rejects.toThrow(
         'mail: transporter is not configured',
@@ -143,7 +143,7 @@ describe('MailService', () => {
 
   describe('when a header field contains a newline', () => {
     it('rejects via the header-injection guard without calling sendMail', async () => {
-      const service = new MailService(transporter as never, enabledConfig, logger as never);
+      const service = new MailService(transporter as never, enabledConfig, {} as never, logger as never);
 
       await expect(
         service.send({ ...validParams, subject: 'Hi\nBcc: evil@example.com' }),

@@ -1,7 +1,8 @@
 import { Inject, Injectable } from '@nestjs/common';
 import type { Transporter } from 'nodemailer';
 import type { MailConfig } from './mail.config.js';
-import { MAIL_CONFIG, MAIL_TRANSPORT } from './mail.tokens.js';
+import type { EmailMethod } from './mail.method.js';
+import { MAIL_CONFIG, MAIL_METHODS, MAIL_TRANSPORT } from './mail.tokens.js';
 import { LoggerService } from '../core/logger.service.js';
 
 /**
@@ -36,20 +37,25 @@ export class MailService {
   private readonly logger: LoggerService;
   private readonly transporter: Transporter | null;
   private readonly config: MailConfig;
+  private readonly methods: Record<string, EmailMethod>;
 
   /**
    * @param {Transporter | null} transporter - The nodemailer transporter, or
    *   `null` when `config.enabled` is `false`.
    * @param {MailConfig} config - The frozen outbound-email config.
+   * @param {Record<string, EmailMethod>} methods - The `EmailMethod`
+   *   registry keyed by method name, built by `MailModule`.
    * @param {LoggerService} logger - The injected Core logger.
    */
   constructor(
     @Inject(MAIL_TRANSPORT) transporter: Transporter | null,
     @Inject(MAIL_CONFIG) config: MailConfig,
+    @Inject(MAIL_METHODS) methods: Record<string, EmailMethod>,
       logger: LoggerService,
   ) {
     this.transporter = transporter;
     this.config = config;
+    this.methods = methods;
     this.logger = logger;
   }
 
