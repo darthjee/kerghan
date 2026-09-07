@@ -13,8 +13,26 @@ describe('buildMailConfig', () => {
     ])('returns a frozen disabled config when KERGHAN_EMAILS_ENABLED is %s', (_label, value) => {
       const config = buildMailConfig(fakeConfigService({ KERGHAN_EMAILS_ENABLED: value }));
 
-      expect(config).toEqual({ enabled: false, from: '', transport: null });
+      expect(config).toEqual({ enabled: false, from: '', transport: null, method: 'native' });
       expect(Object.isFrozen(config)).toBe(true);
+    });
+
+    it('defaults method to native when KERGHAN_EMAIL_METHOD is unset', () => {
+      const config = buildMailConfig(fakeConfigService({}));
+
+      expect(config.method).toBe('native');
+    });
+
+    it('resolves an explicit known method', () => {
+      const config = buildMailConfig(fakeConfigService({ KERGHAN_EMAIL_METHOD: 'native' }));
+
+      expect(config.method).toBe('native');
+    });
+
+    it('throws naming KERGHAN_EMAIL_METHOD when it is set to an unknown value', () => {
+      const config = fakeConfigService({ KERGHAN_EMAIL_METHOD: 'carrier-pigeon' });
+
+      expect(() => buildMailConfig(config)).toThrow('KERGHAN_EMAIL_METHOD');
     });
   });
 
@@ -32,6 +50,24 @@ describe('buildMailConfig', () => {
       expect(config.from).toBe('no-reply@kerghan.local');
       expect(config.transport).not.toBeNull();
       expect(Object.isFrozen(config)).toBe(true);
+    });
+
+    it('defaults method to native when KERGHAN_EMAIL_METHOD is unset', () => {
+      const config = buildMailConfig(fakeConfigService(base));
+
+      expect(config.method).toBe('native');
+    });
+
+    it('resolves an explicit known method', () => {
+      const config = buildMailConfig(fakeConfigService({ ...base, KERGHAN_EMAIL_METHOD: 'native' }));
+
+      expect(config.method).toBe('native');
+    });
+
+    it('throws naming KERGHAN_EMAIL_METHOD when it is set to an unknown value', () => {
+      const config = fakeConfigService({ ...base, KERGHAN_EMAIL_METHOD: 'carrier-pigeon' });
+
+      expect(() => buildMailConfig(config)).toThrow('KERGHAN_EMAIL_METHOD');
     });
 
     it('throws naming KERGHAN_EMAIL_HOST when the host is missing', () => {

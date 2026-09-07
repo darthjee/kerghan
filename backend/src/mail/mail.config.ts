@@ -1,9 +1,12 @@
 import { ConfigService } from '@nestjs/config';
+import { MAIL_METHOD_NAMES } from './mail.tokens.js';
 
 // Default SMTP submission port, used when `KERGHAN_EMAIL_PORT` is unset/blank.
 const DEFAULT_EMAIL_PORT = 587;
 // Default per-phase SMTP timeout (ms), used when `KERGHAN_EMAIL_TIMEOUT_MS` is unset/blank.
 const DEFAULT_EMAIL_TIMEOUT_MS = 10000;
+// Default `EmailMethod` name, used when `KERGHAN_EMAIL_METHOD` is unset/blank.
+const DEFAULT_EMAIL_METHOD: string = MAIL_METHOD_NAMES[0];
 
 /**
  * The object handed to `nodemailer.createTransport` — a local structural
@@ -25,20 +28,15 @@ export interface TransportOptions {
 /**
  * Frozen, plain-data outbound-email configuration resolved once at boot
  * from the `KERGHAN_EMAIL_*` env vars. When disabled, `transport` is
- * `null` and `from` is `''`.
+ * `null` and `from` is `''`; `method` is always resolved+validated,
+ * regardless of `enabled`.
  */
 export interface MailConfig {
   enabled: boolean;
   from: string;
   transport: TransportOptions | null;
+  method: string;
 }
-
-// The single shared instance returned whenever email is disabled.
-const DISABLED_MAIL_CONFIG: MailConfig = Object.freeze({
-  enabled: false,
-  from: '',
-  transport: null,
-});
 
 /**
  * Validated primitive inputs to `buildTransportOptions`.
@@ -60,15 +58,19 @@ export interface TransportOptionsInput {
  * @param {ConfigService} configService - Supplies the `KERGHAN_EMAIL_*` values.
  * @returns {MailConfig} The frozen config: a disabled placeholder when
  *   `KERGHAN_EMAILS_ENABLED` is not exactly `'true'`, otherwise an enabled
- *   config carrying resolved transport options.
- * @throws {Error} When email is enabled but required vars are missing or
- *   set to an invalid value.
+ *   config carrying resolved transport options. `method` is resolved and
+ *   validated on both paths.
+ * @throws {Error} When `KERGHAN_EMAIL_METHOD` is set to a value outside
+ *   {@link MAIL_METHOD_NAMES}, or — when email is enabled — any other
+ *   required var is missing or set to an invalid value.
  */
 export function buildMailConfig(configService: ConfigService): MailConfig {
   const enabled = configService.get<string>('KERGHAN_EMAILS_ENABLED') === 'true';
+  const method = resolveMethod(configService);
 
   if (!enabled) {
-    return DISABLED_MAIL_CONFIG;
+    throwIfInvalid(false, collectMethodInvalid(method));
+    return Object.freeze({ enabled: false, from: '', transport: null, method });
   }
 
   const host = readTrimmed(configService, 'KERGHAN_EMAIL_HOST');
@@ -78,13 +80,9 @@ export function buildMailConfig(configService: ConfigService): MailConfig {
   const port = parseOptionalNumber(portRaw, DEFAULT_EMAIL_PORT);
   const timeoutMs = parseOptionalNumber(timeoutRaw, DEFAULT_EMAIL_TIMEOUT_MS);
 
-  const invalid = collectInvalid({ host, from, portRaw, port, timeoutRaw, timeoutMs });
+  const invalid = collectInvalid({ host, from, portRaw, port, timeoutRaw, timeoutMs, method });
 
-  if (invalid.length > 0) {
-    throw new Error(
-      `mail: KERGHAN_EMAILS_ENABLED is true but the following are missing/invalid: ${invalid.join(', ')}`,
-    );
-  }
+  throwIfInvalid(true, invalid);
 
   const user = readTrimmed(configService, 'KERGHAN_EMAIL_USER');
   const pass = readTrimmed(configService, 'KERGHAN_EMAIL_PASSWORD');
@@ -94,6 +92,7 @@ export function buildMailConfig(configService: ConfigService): MailConfig {
     enabled: true,
     from,
     transport: buildTransportOptions({ host, port, user, pass, useTls, timeoutMs }),
+    method,
   });
 }
 
@@ -138,6 +137,56 @@ function readTrimmed(configService: ConfigService, name: string): string {
 }
 
 /**
+ * Resolves `KERGHAN_EMAIL_METHOD`, defaulting to {@link DEFAULT_EMAIL_METHOD}
+ * when unset/blank. Read on both the enabled and disabled paths.
+ * @param {ConfigService} configService - Source of the raw value.
+ * @returns {string} The trimmed method name, or the default when unset.
+ */
+function resolveMethod(configService: ConfigService): string {
+  const raw = readTrimmed(configService, 'KERGHAN_EMAIL_METHOD');
+
+  return raw === '' ? DEFAULT_EMAIL_METHOD : raw;
+}
+
+/**
+ * @param {string} method - The resolved method name.
+ * @returns {boolean} `true` when `method` is one of {@link MAIL_METHOD_NAMES}.
+ */
+function isKnownMethod(method: string): boolean {
+  return (MAIL_METHOD_NAMES as readonly string[]).includes(method);
+}
+
+/**
+ * @param {string} method - The resolved method name.
+ * @returns {string[]} `['KERGHAN_EMAIL_METHOD']` when `method` is unknown,
+ *   empty otherwise.
+ */
+function collectMethodInvalid(method: string): string[] {
+  return isKnownMethod(method) ? [] : ['KERGHAN_EMAIL_METHOD'];
+}
+
+/**
+ * Throws the shared "missing/invalid" error when `invalid` is non-empty.
+ * Reuses the same message shape on both the enabled and disabled paths,
+ * varying only the phrase naming why validation ran.
+ * @param {boolean} enabled - Whether `KERGHAN_EMAILS_ENABLED` resolved to `true`.
+ * @param {string[]} invalid - The offending env var names, if any.
+ * @returns {void} Returns normally when `invalid` is empty.
+ * @throws {Error} Naming every entry in `invalid`, when non-empty.
+ */
+function throwIfInvalid(enabled: boolean, invalid: string[]): void {
+  if (invalid.length === 0) {
+    return;
+  }
+
+  const prefix = enabled
+    ? 'mail: KERGHAN_EMAILS_ENABLED is true but the following are missing/invalid: '
+    : 'mail: the following are missing/invalid: ';
+
+  throw new Error(`${prefix}${invalid.join(', ')}`);
+}
+
+/**
  * Parses an optional numeric env var.
  * @param {string} raw - The already-trimmed raw value (`''` when unset).
  * @param {number} fallback - Returned when `raw` is `''`.
@@ -163,6 +212,7 @@ function parseOptionalNumber(raw: string, fallback: number): number {
  * @param {number} input.port - Parsed port.
  * @param {string} input.timeoutRaw - Raw trimmed `KERGHAN_EMAIL_TIMEOUT_MS`.
  * @param {number} input.timeoutMs - Parsed timeout.
+ * @param {string} input.method - Resolved `KERGHAN_EMAIL_METHOD`.
  * @returns {string[]} The offending env var names, empty when all valid.
  */
 function collectInvalid(input: {
@@ -172,6 +222,7 @@ function collectInvalid(input: {
   port: number;
   timeoutRaw: string;
   timeoutMs: number;
+  method: string;
 }): string[] {
   const invalid: string[] = [];
 
@@ -190,6 +241,8 @@ function collectInvalid(input: {
   if (input.timeoutRaw !== '' && !isPositiveFinite(input.timeoutMs)) {
     invalid.push('KERGHAN_EMAIL_TIMEOUT_MS');
   }
+
+  invalid.push(...collectMethodInvalid(input.method));
 
   return invalid;
 }
