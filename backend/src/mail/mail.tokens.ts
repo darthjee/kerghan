@@ -13,3 +13,21 @@ export const MAIL_CONFIG = 'MAIL_CONFIG';
  * is disabled).
  */
 export const MAIL_TRANSPORT = 'MAIL_TRANSPORT';
+
+/**
+ * Injection token for the `EmailMethod` registry — a plain object keyed by
+ * method name (see `mail.module.ts`'s `MAIL_METHODS` provider).
+ */
+export const MAIL_METHODS = 'MAIL_METHODS';
+
+/**
+ * The known `EmailMethod` names, shared between the registry built in
+ * `mail.module.ts` and the `KERGHAN_EMAIL_METHOD` validation in
+ * `mail.config.ts`, so the two lists never drift apart.
+ */
+export const MAIL_METHOD_NAMES = ['native'] as const;
+
+/**
+ * Union of the values in {@link MAIL_METHOD_NAMES}.
+ */
+export type MailMethodName = (typeof MAIL_METHOD_NAMES)[number];

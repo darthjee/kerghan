@@ -20,13 +20,13 @@ function userRepoMock(): UserRepoMock {
 describe('AdminService', () => {
   let userRepository: UserRepoMock;
   let passwordResetService: { issueToken: jest.Mock };
-  let mailService: { send: jest.Mock };
+  let mailService: { sendEmail: jest.Mock };
   let service: AdminService;
 
   beforeEach(() => {
     userRepository = userRepoMock();
     passwordResetService = { issueToken: jest.fn() };
-    mailService = { send: jest.fn() };
+    mailService = { sendEmail: jest.fn() };
 
     service = new AdminService(
       userRepository as never,
@@ -118,7 +118,7 @@ describe('AdminService', () => {
 
       describe('and the mail transport accepts the message', () => {
         beforeEach(() => {
-          mailService.send.mockResolvedValue({ status: 'sent', messageId: 'abc' });
+          mailService.sendEmail.mockResolvedValue({ status: 'sent', messageId: 'abc' });
         });
 
         it('resolves with sent: true', async () => {
@@ -128,17 +128,17 @@ describe('AdminService', () => {
         it('sends to the user email with the recovery email content', async () => {
           await service.sendRecoveryEmail(1);
 
-          expect(mailService.send).toHaveBeenCalledWith({
+          expect(mailService.sendEmail).toHaveBeenCalledWith({
             to: 'darthjee@example.com',
             subject: expect.any(String),
-            text: expect.stringContaining('http://localhost:3000/#/recover-password?token=plaintext-token'),
+            body: expect.stringContaining('http://localhost:3000/#/recover-password?token=plaintext-token'),
           });
         });
       });
 
       describe('and email is disabled (skipped)', () => {
         beforeEach(() => {
-          mailService.send.mockResolvedValue({ status: 'skipped' });
+          mailService.sendEmail.mockResolvedValue({ status: 'skipped' });
         });
 
         it('resolves with sent: false', async () => {
@@ -148,7 +148,7 @@ describe('AdminService', () => {
 
       describe('and the mail transport throws', () => {
         beforeEach(() => {
-          mailService.send.mockRejectedValue(new Error('smtp exploded'));
+          mailService.sendEmail.mockRejectedValue(new Error('smtp exploded'));
         });
 
         it('resolves with sent: false rather than propagating the error', async () => {

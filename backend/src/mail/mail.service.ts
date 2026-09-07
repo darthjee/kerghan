@@ -1,77 +1,92 @@
 import { Inject, Injectable } from '@nestjs/common';
-import type { Transporter } from 'nodemailer';
 import type { MailConfig } from './mail.config.js';
-import { MAIL_CONFIG, MAIL_TRANSPORT } from './mail.tokens.js';
+import type { EmailMethod } from './mail.method.js';
+import { MAIL_CONFIG, MAIL_METHODS } from './mail.tokens.js';
 import { LoggerService } from '../core/logger.service.js';
 
 /**
- * Arguments accepted by {@link MailService.send}.
+ * Arguments accepted by {@link MailService.sendEmail}. `method`, when
+ * given, overrides the configured default `EmailMethod` for this one call.
  */
-export interface SendMailParams {
+export interface SendEmailParams {
   to: string;
   subject: string;
-  text: string;
+  body: string;
   html?: string;
   from?: string;
+  method?: string;
 }
 
 /**
- * Outcome of {@link MailService.send}: `'skipped'` when email is disabled
- * (no transporter touched), `'sent'` with the transport `messageId`
- * otherwise.
+ * Outcome of {@link MailService.sendEmail}: `'skipped'` when email is
+ * disabled (no method touched), `'sent'` with the delivering method's
+ * `messageId` otherwise. `method` names whichever `EmailMethod` was
+ * resolved, on both outcomes.
  */
-export interface SendMailResult {
+export interface SendEmailResult {
   status: 'sent' | 'skipped';
+  method: string;
   messageId?: string;
 }
 
 /**
- * Always-on wrapper around the injected nodemailer transporter. Holds no
- * env access of its own — the frozen {@link MailConfig} and the transporter
- * (or `null`, when email is disabled) are supplied by `MailModule`'s
- * providers.
+ * Always-on outbound-email facade. Holds no env access of its own — the
+ * frozen {@link MailConfig} and the `EmailMethod` registry (keyed by
+ * method name) are supplied by `MailModule`'s providers. Delivery itself is
+ * delegated to the resolved `EmailMethod`; this class owns only method
+ * resolution, disabled short-circuiting, and the send-time guards.
  */
 @Injectable()
 export class MailService {
   private readonly logger: LoggerService;
-  private readonly transporter: Transporter | null;
   private readonly config: MailConfig;
+  private readonly methods: Record<string, EmailMethod>;
 
   /**
-   * @param {Transporter | null} transporter - The nodemailer transporter, or
-   *   `null` when `config.enabled` is `false`.
    * @param {MailConfig} config - The frozen outbound-email config.
+   * @param {Record<string, EmailMethod>} methods - The `EmailMethod`
+   *   registry keyed by method name, built by `MailModule`.
    * @param {LoggerService} logger - The injected Core logger.
    */
   constructor(
-    @Inject(MAIL_TRANSPORT) transporter: Transporter | null,
     @Inject(MAIL_CONFIG) config: MailConfig,
+    @Inject(MAIL_METHODS) methods: Record<string, EmailMethod>,
       logger: LoggerService,
   ) {
-    this.transporter = transporter;
     this.config = config;
+    this.methods = methods;
     this.logger = logger;
   }
 
   /**
-   * Sends one message through the configured transporter. When email is
-   * disabled the call is a no-op that resolves to `{ status: 'skipped' }`.
-   * A configured send that the transport rejects (or that throws) rejects
-   * this promise — best-effort swallowing is the caller's responsibility.
-   * @param {SendMailParams} params - Recipient, subject, bodies, optional `from`.
-   * @returns {Promise<SendMailResult>} `{ status: 'skipped' }` when disabled,
-   *   otherwise `{ status: 'sent', messageId }`.
-   * @throws {Error} When `to` is missing, a header field contains a
-   *   newline, the recipient is rejected, or the transport throws.
+   * Sends one message through the resolved `EmailMethod`. `method` resolves
+   * to `params.method ?? config.method` and is validated against the
+   * registry before anything else — an unknown method always throws, even
+   * when email is disabled. When email is disabled the call is otherwise a
+   * no-op that resolves to `{ status: 'skipped', method }`. A configured
+   * send that the method rejects (or that throws) rejects this promise —
+   * best-effort swallowing is the caller's responsibility.
+   * @param {SendEmailParams} params - Recipient, subject, body, optional
+   *   `html`/`from`/`method`.
+   * @returns {Promise<SendEmailResult>} `{ status: 'skipped', method }`
+   *   when disabled, otherwise `{ status: 'sent', method, messageId }`.
+   * @throws {Error} When `method` is not a registered `EmailMethod`, `to`
+   *   is missing, a header field contains a newline, the recipient is
+   *   rejected, or the method throws.
    */
-  async send(params: SendMailParams): Promise<SendMailResult> {
+  async sendEmail(params: SendEmailParams): Promise<SendEmailResult> {
+    const method = params.method ?? this.config.method;
+
+    this.#assertKnownMethod(method);
+
     if (!this.config.enabled) {
       this.logger.debug('email disabled; skipping send', {
         context: 'MailService',
         to: params.to,
         subject: params.subject,
+        method,
       });
-      return { status: 'skipped' };
+      return { status: 'skipped', method };
     }
 
     const from = params.from ?? this.config.from;
@@ -79,40 +94,39 @@ export class MailService {
     this.#assertSendable(params, from);
 
     try {
-      return await this.#deliver(params, from);
+      return await this.#deliver(params, from, method);
     } catch (err) {
       const reason = err instanceof Error ? err.message : String(err);
       this.logger.error('mail send failed', {
         context: 'MailService',
         to: params.to,
         subject: params.subject,
+        method,
         reason,
       });
       throw err;
     }
   }
 
-  async #deliver(params: SendMailParams, from: string): Promise<SendMailResult> {
-    if (!this.transporter) {
-      throw new Error('mail: transporter is not configured');
-    }
-
-    const info = await this.transporter.sendMail({
+  async #deliver(params: SendEmailParams, from: string, method: string): Promise<SendEmailResult> {
+    const { messageId } = await this.methods[method].deliver({
       from,
       to: params.to,
       subject: params.subject,
-      text: params.text,
+      text: params.body,
       html: params.html,
     });
 
-    if (info.rejected?.length && !info.accepted?.length) {
-      throw new Error(`mail: recipient rejected: ${info.rejected.join(', ')}`);
-    }
-
-    return { status: 'sent', messageId: info.messageId };
+    return { status: 'sent', method, messageId };
   }
 
-  #assertSendable(params: SendMailParams, from: string): void {
+  #assertKnownMethod(method: string): void {
+    if (!this.methods[method]) {
+      throw new Error(`mail: unknown method: ${method}`);
+    }
+  }
+
+  #assertSendable(params: SendEmailParams, from: string): void {
     if (!params.to.trim()) {
       throw new Error("mail: 'to' is required");
     }

@@ -9,15 +9,15 @@ describe('PasswordRecoveryRequestedListener', () => {
     email: 'darthjee@example.com',
   };
 
-  let send: jest.Mock;
+  let sendEmail: jest.Mock;
   let logger: { debug: jest.Mock; info: jest.Mock; warn: jest.Mock; error: jest.Mock };
   let listener: PasswordRecoveryRequestedListener;
 
   beforeEach(() => {
-    send = jest.fn();
+    sendEmail = jest.fn();
     logger = { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn() };
     listener = new PasswordRecoveryRequestedListener(
-      { send } as unknown as MailService,
+      { sendEmail } as unknown as MailService,
       logger as never,
     );
   });
@@ -28,24 +28,24 @@ describe('PasswordRecoveryRequestedListener', () => {
 
   describe('when the send succeeds', () => {
     beforeEach(() => {
-      send.mockResolvedValue({ status: 'sent', messageId: 'mid-1' });
+      sendEmail.mockResolvedValue({ status: 'sent', messageId: 'mid-1' });
     });
 
     it('sends exactly one message to the account address', async () => {
       await listener.handlePasswordRecoveryRequested(event);
 
-      expect(send).toHaveBeenCalledTimes(1);
-      expect(send).toHaveBeenCalledWith({
+      expect(sendEmail).toHaveBeenCalledTimes(1);
+      expect(sendEmail).toHaveBeenCalledWith({
         to: 'darthjee@example.com',
         subject: 'Reset your Kerghan password',
-        text: expect.stringContaining(event.resetUrl),
+        body: expect.stringContaining(event.resetUrl),
       });
     });
 
     it('passes no from or html key', async () => {
       await listener.handlePasswordRecoveryRequested(event);
 
-      const params = send.mock.calls[0][0];
+      const params = sendEmail.mock.calls[0][0];
 
       expect(params).not.toHaveProperty('from');
       expect(params).not.toHaveProperty('html');
@@ -71,7 +71,7 @@ describe('PasswordRecoveryRequestedListener', () => {
 
   describe('when email is disabled', () => {
     beforeEach(() => {
-      send.mockResolvedValue({ status: 'skipped' });
+      sendEmail.mockResolvedValue({ status: 'skipped' });
     });
 
     it('resolves without logging', async () => {
@@ -83,7 +83,7 @@ describe('PasswordRecoveryRequestedListener', () => {
 
   describe('when the transport fails', () => {
     beforeEach(() => {
-      send.mockRejectedValue(new Error('transport exploded'));
+      sendEmail.mockRejectedValue(new Error('transport exploded'));
     });
 
     it('resolves instead of throwing', async () => {
@@ -111,7 +111,7 @@ describe('PasswordRecoveryRequestedListener', () => {
 
   describe('when the recipient is rejected', () => {
     beforeEach(() => {
-      send.mockRejectedValue(new Error('mail: recipient rejected: darthjee@example.com'));
+      sendEmail.mockRejectedValue(new Error('mail: recipient rejected: darthjee@example.com'));
     });
 
     it('still resolves and logs a warn line', async () => {
