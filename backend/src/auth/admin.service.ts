@@ -86,7 +86,7 @@ export class AdminService {
     const { subject, text } = buildPasswordRecoveryEmail(resetUrl);
 
     try {
-      const result = await this.mailService.send({ to: user.email, subject, text });
+      const result = await this.mailService.sendEmail({ to: user.email, subject, body: text });
 
       return { sent: result.status === 'sent' };
     } catch {

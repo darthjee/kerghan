@@ -42,7 +42,7 @@ export class PasswordRecoveryRequestedListener {
     const { subject, text } = buildPasswordRecoveryEmail(event.resetUrl);
 
     try {
-      const result = await this.mailService.send({ to: event.email, subject, text });
+      const result = await this.mailService.sendEmail({ to: event.email, subject, body: text });
 
       if (result.status === 'sent') {
         this.logger.debug('recovery email sent', {
