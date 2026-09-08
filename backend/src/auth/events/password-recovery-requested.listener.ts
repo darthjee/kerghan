@@ -1,14 +1,13 @@
 import { Injectable } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
-import { buildPasswordRecoveryEmail } from './password-recovery-email.content.js';
 import { PasswordRecoveryRequestedEvent } from './password-recovery-requested.event.js';
 import { LoggerService } from '../../core/logger.service.js';
 import { MailService } from '../../mail/mail.service.js';
 
 /**
- * In-module consumer of the `password-recovery.requested` event: builds the
- * plain-text recovery email (via `buildPasswordRecoveryEmail`) and sends it
- * to the account's address through `MailService`. Best-effort — the whole
+ * In-module consumer of the `password-recovery.requested` event: renders the
+ * `password-recovery` mail template and sends it to the account's address via
+ * `MailService.sendEmailTemplate`. Best-effort — the whole
  * body is wrapped in `try/catch`, a disabled-mail `skipped` result is a
  * normal outcome, and a send failure is logged at `warn` and never
  * propagated back to the already-responded `/auth/recover.json` request.
@@ -39,10 +38,12 @@ export class PasswordRecoveryRequestedListener {
    */
   @OnEvent('password-recovery.requested')
   async handlePasswordRecoveryRequested(event: PasswordRecoveryRequestedEvent): Promise<void> {
-    const { subject, text } = buildPasswordRecoveryEmail(event.resetUrl);
-
     try {
-      const result = await this.mailService.sendEmail({ to: event.email, subject, body: text });
+      const result = await this.mailService.sendEmailTemplate({
+        to: event.email,
+        template: 'password-recovery',
+        variables: { resetUrl: event.resetUrl },
+      });
 
       if (result.status === 'sent') {
         this.logger.debug('recovery email sent', {

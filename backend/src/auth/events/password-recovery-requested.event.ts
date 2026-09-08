@@ -2,8 +2,8 @@
  * Fired (via `EventEmitter2`, event name `password-recovery.requested`) when
  * a `POST /auth/recover.json` request matches an existing account and a
  * `PasswordResetToken` has been created for it. Consumed in-module by
- * `password-recovery-requested.listener.ts`, which builds the recovery-email
- * copy (via `password-recovery-email.content.ts`) and sends it to `email`
+ * `password-recovery-requested.listener.ts`, which renders the
+ * `password-recovery` mail template and sends it to `email`
  * through `MailService` — best-effort, a send failure is logged and never
  * propagated back to the request. The plaintext `token` exists only in-flight
  * (in this payload and the reset link); only its hash is ever persisted.
