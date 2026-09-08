@@ -2,7 +2,6 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { ILike, Repository } from 'typeorm';
 import { User } from './entities/user.entity.js';
-import { buildPasswordRecoveryEmail } from './events/password-recovery-email.content.js';
 import { PasswordResetService } from './password-reset.service.js';
 import { MailService } from '../mail/mail.service.js';
 
@@ -83,10 +82,13 @@ export class AdminService {
   async sendRecoveryEmail(userId: number): Promise<{ sent: boolean }> {
     const user = await this.#findUserOrThrow(userId);
     const { resetUrl } = await this.passwordResetService.issueToken(user);
-    const { subject, text } = buildPasswordRecoveryEmail(resetUrl);
 
     try {
-      const result = await this.mailService.sendEmail({ to: user.email, subject, body: text });
+      const result = await this.mailService.sendEmailTemplate({
+        to: user.email,
+        template: 'password-recovery',
+        variables: { resetUrl },
+      });
 
       return { sent: result.status === 'sent' };
     } catch {
