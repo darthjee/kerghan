@@ -30,10 +30,25 @@ const validParams = {
   html: '<p>HTML_BODY_SECRET</p>',
 };
 
+const templates = Object.freeze({
+  welcome: Object.freeze({
+    subject: 'Hi {{name}}',
+    text: 'Body {{name}} PLAIN_BODY_SECRET',
+    html: '<p>{{name}} HTML_BODY_SECRET</p>',
+  }),
+});
+
 describe('MailService', () => {
   let deliver: jest.Mock;
   let methods: { native: { deliver: jest.Mock } };
   let logger: { debug: jest.Mock; info: jest.Mock; warn: jest.Mock; error: jest.Mock };
+
+  const makeService = (
+    config: MailConfig,
+    methodsArg: unknown = methods,
+    templatesArg: unknown = templates,
+  ): MailService =>
+    new MailService(config, methodsArg as never, templatesArg as never, logger as never);
 
   beforeEach(() => {
     deliver = jest.fn();
@@ -51,7 +66,7 @@ describe('MailService', () => {
     });
 
     it('calls the resolved method once with the message fields and returns a sent result', async () => {
-      const service = new MailService(enabledConfig, methods as never, logger as never);
+      const service = makeService(enabledConfig);
 
       const result = await service.sendEmail({ ...validParams });
 
@@ -67,7 +82,7 @@ describe('MailService', () => {
     });
 
     it('falls back to the configured from address when params omit it', async () => {
-      const service = new MailService(enabledConfig, methods as never, logger as never);
+      const service = makeService(enabledConfig);
 
       await service.sendEmail({ ...validParams });
 
@@ -75,7 +90,7 @@ describe('MailService', () => {
     });
 
     it('uses an explicit from address when params provide one', async () => {
-      const service = new MailService(enabledConfig, methods as never, logger as never);
+      const service = makeService(enabledConfig);
 
       await service.sendEmail({ ...validParams, from: 'alerts@kerghan.local' });
 
@@ -84,11 +99,10 @@ describe('MailService', () => {
 
     it('uses the per-call method when params provide one', async () => {
       const otherDeliver = jest.fn().mockResolvedValue({ messageId: 'xyz' });
-      const service = new MailService(
-        enabledConfig,
-        { native: { deliver }, other: { deliver: otherDeliver } } as never,
-        logger as never,
-      );
+      const service = makeService(enabledConfig, {
+        native: { deliver },
+        other: { deliver: otherDeliver },
+      });
 
       const result = await service.sendEmail({ ...validParams, method: 'other' });
 
@@ -100,7 +114,7 @@ describe('MailService', () => {
 
   describe('when email is disabled', () => {
     it('skips the send, logs a debug line carrying the method and never touches a method', async () => {
-      const service = new MailService(disabledConfig, methods as never, logger as never);
+      const service = makeService(disabledConfig);
 
       const result = await service.sendEmail({ ...validParams });
 
@@ -118,7 +132,7 @@ describe('MailService', () => {
     });
 
     it('still throws for an unknown method even though nothing else would happen', async () => {
-      const service = new MailService(disabledConfig, methods as never, logger as never);
+      const service = makeService(disabledConfig);
 
       await expect(service.sendEmail({ ...validParams, method: 'carrier-pigeon' })).rejects.toThrow(
         'mail: unknown method: carrier-pigeon',
@@ -129,7 +143,7 @@ describe('MailService', () => {
 
   describe('when the method is unknown', () => {
     it('rejects before any delivery attempt', async () => {
-      const service = new MailService(enabledConfig, methods as never, logger as never);
+      const service = makeService(enabledConfig);
 
       await expect(service.sendEmail({ ...validParams, method: 'carrier-pigeon' })).rejects.toThrow(
         'mail: unknown method: carrier-pigeon',
@@ -142,7 +156,7 @@ describe('MailService', () => {
     it('rejects with the same error and logs the method without leaking the bodies', async () => {
       const error = new Error('transport exploded');
       deliver.mockRejectedValue(error);
-      const service = new MailService(enabledConfig, methods as never, logger as never);
+      const service = makeService(enabledConfig);
 
       await expect(service.sendEmail({ ...validParams })).rejects.toBe(error);
 
@@ -159,7 +173,7 @@ describe('MailService', () => {
   describe('when the recipient is rejected', () => {
     it('propagates the rejection naming the rejected recipient', async () => {
       deliver.mockRejectedValue(new Error('mail: recipient rejected: user@example.com'));
-      const service = new MailService(enabledConfig, methods as never, logger as never);
+      const service = makeService(enabledConfig);
 
       await expect(service.sendEmail({ ...validParams })).rejects.toThrow('user@example.com');
     });
@@ -167,7 +181,7 @@ describe('MailService', () => {
 
   describe('when the to field is blank', () => {
     it.each([['empty', ''], ['whitespace', '   ']])('rejects without calling deliver (%s)', async (_label, to) => {
-      const service = new MailService(enabledConfig, methods as never, logger as never);
+      const service = makeService(enabledConfig);
 
       await expect(service.sendEmail({ ...validParams, to })).rejects.toThrow("mail: 'to' is required");
       expect(deliver).not.toHaveBeenCalled();
@@ -176,12 +190,145 @@ describe('MailService', () => {
 
   describe('when a header field contains a newline', () => {
     it('rejects via the header-injection guard without calling deliver', async () => {
-      const service = new MailService(enabledConfig, methods as never, logger as never);
+      const service = makeService(enabledConfig);
 
       await expect(
         service.sendEmail({ ...validParams, subject: 'Hi\nBcc: evil@example.com' }),
       ).rejects.toThrow('mail: header field contains a newline');
       expect(deliver).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('sendEmailTemplate', () => {
+    const templateParams = {
+      to: 'user@example.com',
+      template: 'welcome',
+      variables: { name: 'Sam' },
+    };
+
+    describe('when enabled', () => {
+      beforeEach(() => {
+        deliver.mockResolvedValue({ messageId: 'abc' });
+      });
+
+      it('renders the template and delegates to the resolved method', async () => {
+        const service = makeService(enabledConfig);
+
+        const result = await service.sendEmailTemplate({ ...templateParams });
+
+        expect(deliver).toHaveBeenCalledTimes(1);
+        expect(deliver).toHaveBeenCalledWith({
+          from: 'no-reply@kerghan.local',
+          to: 'user@example.com',
+          subject: 'Hi Sam',
+          text: 'Body Sam PLAIN_BODY_SECRET',
+          html: '<p>Sam HTML_BODY_SECRET</p>',
+        });
+        expect(result).toEqual({ status: 'sent', method: 'native', messageId: 'abc' });
+      });
+
+      it('uses an explicit from address when params provide one', async () => {
+        const service = makeService(enabledConfig);
+
+        await service.sendEmailTemplate({ ...templateParams, from: 'alerts@kerghan.local' });
+
+        expect(deliver).toHaveBeenCalledWith(
+          expect.objectContaining({ from: 'alerts@kerghan.local' }),
+        );
+      });
+
+      it('uses the per-call method when params provide one', async () => {
+        const otherDeliver = jest.fn().mockResolvedValue({ messageId: 'xyz' });
+        const service = makeService(enabledConfig, {
+          native: { deliver },
+          other: { deliver: otherDeliver },
+        });
+
+        const result = await service.sendEmailTemplate({ ...templateParams, method: 'other' });
+
+        expect(deliver).not.toHaveBeenCalled();
+        expect(otherDeliver).toHaveBeenCalledTimes(1);
+        expect(result).toEqual({ status: 'sent', method: 'other', messageId: 'xyz' });
+      });
+
+      it('rejects for an unknown template without calling deliver', async () => {
+        const service = makeService(enabledConfig);
+
+        await expect(
+          service.sendEmailTemplate({ ...templateParams, template: 'nope' }),
+        ).rejects.toThrow('mail: unknown template: nope');
+        expect(deliver).not.toHaveBeenCalled();
+      });
+
+      it('rejects when a referenced variable is missing without calling deliver', async () => {
+        const service = makeService(enabledConfig);
+
+        await expect(
+          service.sendEmailTemplate({ ...templateParams, variables: {} }),
+        ).rejects.toThrow("mail: template 'welcome' is missing variable 'name'");
+        expect(deliver).not.toHaveBeenCalled();
+      });
+
+      it('rejects for an unknown method before rendering or delivery', async () => {
+        const service = makeService(enabledConfig);
+
+        await expect(
+          service.sendEmailTemplate({ ...templateParams, method: 'carrier-pigeon' }),
+        ).rejects.toThrow('mail: unknown method: carrier-pigeon');
+        expect(deliver).not.toHaveBeenCalled();
+      });
+
+      it('applies the header-injection guard to the rendered subject', async () => {
+        const service = makeService(enabledConfig);
+
+        await expect(
+          service.sendEmailTemplate({
+            ...templateParams,
+            variables: { name: 'x\nBcc: e@e' },
+          }),
+        ).rejects.toThrow('mail: header field contains a newline');
+        expect(deliver).not.toHaveBeenCalled();
+      });
+
+      it('does not leak the rendered bodies when delivery fails', async () => {
+        deliver.mockRejectedValue(new Error('boom'));
+        const service = makeService(enabledConfig);
+
+        await expect(service.sendEmailTemplate({ ...templateParams })).rejects.toThrow('boom');
+
+        const [, attrs] = logger.error.mock.calls[0] as [string, Record<string, unknown>];
+        expect(JSON.stringify(attrs)).not.toContain('PLAIN_BODY_SECRET');
+        expect(JSON.stringify(attrs)).not.toContain('HTML_BODY_SECRET');
+      });
+    });
+
+    describe('when email is disabled', () => {
+      it('skips before rendering, never rejecting on a would-be missing variable', async () => {
+        const service = makeService(disabledConfig);
+
+        const result = await service.sendEmailTemplate({ ...templateParams, variables: {} });
+
+        expect(result).toEqual({ status: 'skipped', method: 'native' });
+        expect(deliver).not.toHaveBeenCalled();
+        expect(logger.debug).toHaveBeenCalledWith(
+          'email disabled; skipping send',
+          expect.objectContaining({
+            context: 'MailService',
+            to: 'user@example.com',
+            template: 'welcome',
+            method: 'native',
+          }),
+        );
+      });
+
+      it('still rejects for an unknown method', async () => {
+        const service = makeService(disabledConfig);
+
+        await expect(
+          service.sendEmailTemplate({ ...templateParams, method: 'carrier-pigeon' }),
+        ).rejects.toThrow('mail: unknown method: carrier-pigeon');
+        expect(deliver).not.toHaveBeenCalled();
+      });
     });
   });
 });
