@@ -300,6 +300,18 @@ describe('MailService', () => {
         expect(JSON.stringify(attrs)).not.toContain('PLAIN_BODY_SECRET');
         expect(JSON.stringify(attrs)).not.toContain('HTML_BODY_SECRET');
       });
+
+      it('stringifies a non-Error rejection for the failure log', async () => {
+        deliver.mockRejectedValue('plain string failure');
+        const service = makeService(enabledConfig);
+
+        await expect(service.sendEmailTemplate({ ...templateParams })).rejects.toBe(
+          'plain string failure',
+        );
+
+        const [, attrs] = logger.error.mock.calls[0] as [string, Record<string, unknown>];
+        expect(attrs.reason).toBe('plain string failure');
+      });
     });
 
     describe('when email is disabled', () => {

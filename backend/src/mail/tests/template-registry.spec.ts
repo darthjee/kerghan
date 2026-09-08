@@ -39,9 +39,15 @@ describe('buildTemplateRegistry', () => {
     });
   });
 
-  it('throws naming the first missing file for a broken template', () => {
+  it('throws when a template is missing body.txt', () => {
     expect(() => buildTemplateRegistry(fixture('templates-broken'))).toThrow(
       "mail: template 'broken' is missing body.txt",
+    );
+  });
+
+  it('throws when a template is missing subject.txt', () => {
+    expect(() => buildTemplateRegistry(fixture('templates-missing-subject'))).toThrow(
+      "mail: template 'no-subject' is missing subject.txt",
     );
   });
 

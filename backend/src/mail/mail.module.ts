@@ -1,13 +1,13 @@
-import { Module } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { Module } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import nodemailer, { type Transporter } from 'nodemailer';
 import { buildMailConfig, type MailConfig } from './mail.config.js';
 import { NativeEmailMethod, type EmailMethod } from './mail.method.js';
 import { MailService } from './mail.service.js';
-import { buildTemplateRegistry, type TemplateRegistry } from './template-registry.js';
 import { MAIL_CONFIG, MAIL_METHODS, MAIL_TEMPLATES, MAIL_TRANSPORT } from './mail.tokens.js';
+import { buildTemplateRegistry, type TemplateRegistry } from './template-registry.js';
 import { LoggerService } from '../core/logger.service.js';
 
 export { MAIL_CONFIG, MAIL_METHODS, MAIL_TEMPLATES, MAIL_TRANSPORT } from './mail.tokens.js';

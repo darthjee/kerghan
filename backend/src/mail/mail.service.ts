@@ -1,9 +1,9 @@
 import { Inject, Injectable } from '@nestjs/common';
 import type { MailConfig } from './mail.config.js';
 import type { EmailMethod } from './mail.method.js';
+import { MAIL_CONFIG, MAIL_METHODS, MAIL_TEMPLATES } from './mail.tokens.js';
 import { renderTemplate } from './render-template.js';
 import type { TemplateRegistry } from './template-registry.js';
-import { MAIL_CONFIG, MAIL_METHODS, MAIL_TEMPLATES } from './mail.tokens.js';
 import { LoggerService } from '../core/logger.service.js';
 
 /**
