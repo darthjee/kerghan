@@ -159,6 +159,13 @@ export class MailService {
   async #send(params: SendEmailParams, method: string): Promise<SendEmailResult> {
     const from = params.from ?? this.config.from;
 
+    this.logger.debug('email enabled; sending', {
+      context: 'MailService',
+      to: params.to,
+      subject: params.subject,
+      method,
+    });
+
     this.#assertSendable(params, from);
 
     try {
