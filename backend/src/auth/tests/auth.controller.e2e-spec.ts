@@ -11,6 +11,7 @@ import { JwtGuard } from '../../core/jwt.guard.js';
 import { LoggingModule } from '../../core/logging.module.js';
 import { Public } from '../../core/public.decorator.js';
 import { AuthModule } from '../auth.module.js';
+import { AuthorizationRequest } from '../entities/authorization-request.entity.js';
 import { PasswordResetToken } from '../entities/password-reset-token.entity.js';
 import { RefreshToken } from '../entities/refresh-token.entity.js';
 import { Session } from '../entities/session.entity.js';
@@ -105,6 +106,7 @@ describe('AuthController (e2e)', () => {
     refreshTokenRepo = createInMemoryRepo<RefreshToken>();
     const sessionRepo = createInMemoryRepo<Session>();
     passwordResetTokenRepo = createInMemoryRepo<PasswordResetToken>();
+    const authorizationRequestRepo = createInMemoryRepo<AuthorizationRequest>();
 
     const moduleRef = await Test.createTestingModule({
       imports: [
@@ -125,6 +127,8 @@ describe('AuthController (e2e)', () => {
       .useValue(sessionRepo)
       .overrideProvider(getRepositoryToken(PasswordResetToken))
       .useValue(passwordResetTokenRepo)
+      .overrideProvider(getRepositoryToken(AuthorizationRequest))
+      .useValue(authorizationRequestRepo)
       .compile();
 
     app = moduleRef.createNestApplication();

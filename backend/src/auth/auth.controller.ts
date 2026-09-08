@@ -1,26 +1,16 @@
 import { Body, Controller, Delete, HttpCode, HttpStatus, Post, Res } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import type { Response } from 'express';
-import { AuthResult, AuthService } from './auth.service.js';
+import { respondWithSession, SKIP_CACHE_HEADER } from './auth-response.js';
+import { AuthService } from './auth.service.js';
 import { Public } from '../core/public.decorator.js';
 import { LoginDto } from './dto/login.dto.js';
 import { RecoverDto } from './dto/recover.dto.js';
 import { RefreshTokenDto } from './dto/refresh-token.dto.js';
 import { RegisterDto } from './dto/register.dto.js';
 import { ResetPasswordDto } from './dto/reset-password.dto.js';
-import { User } from './entities/user.entity.js';
 
 const ACCESS_TOKEN_COOKIE = 'access_token';
-// Default access-token lifetime (15 minutes, in milliseconds) used when
-// `KERGHAN_ACCESS_TOKEN_TTL_MS` is unset — must match `app.module.ts`'s
-// `JwtModule.registerAsync` default so the cookie's `maxAge` always tracks
-// the signed JWT's actual expiry.
-const DEFAULT_ACCESS_TOKEN_TTL_MS = 15 * 60 * 1000;
-// Tent's `default_proxy` rule (`proxy/*_configuration/rules/backend.php`) caches any 2xx
-// response to a `*.json` URL by method-agnostic, query-string-only key — these POST routes have
-// no query string, so without this header a second caller could be served the first caller's
-// cached credentials/tokens. See `docs/agents/architecture/proxy.md`'s "Cache bypass" section.
-const SKIP_CACHE_HEADER = 'X-Skip-Cache';
 
 /**
  * Auth module routes — thin, delegating all business logic to
@@ -56,7 +46,7 @@ export class AuthController {
   @Public()
   @Post('login.json')
   async login(@Body() dto: LoginDto, @Res({ passthrough: true }) res: Response): Promise<object> {
-    return this.#respond(await this.authService.login(dto), res);
+    return respondWithSession(await this.authService.login(dto), res, this.configService);
   }
 
   /**
@@ -106,7 +96,7 @@ export class AuthController {
     @Body() dto: RefreshTokenDto,
     @Res({ passthrough: true }) res: Response,
   ): Promise<object> {
-    return this.#respond(await this.authService.refresh(dto.refreshToken), res);
+    return respondWithSession(await this.authService.refresh(dto.refreshToken), res, this.configService);
   }
 
   /**
@@ -121,7 +111,7 @@ export class AuthController {
     @Body() dto: RegisterDto,
     @Res({ passthrough: true }) res: Response,
   ): Promise<object> {
-    return this.#respond(await this.authService.register(dto), res);
+    return respondWithSession(await this.authService.register(dto), res, this.configService);
   }
 
   /**
@@ -163,21 +153,5 @@ export class AuthController {
     res.set(SKIP_CACHE_HEADER, 'true');
 
     return this.authService.status(dto.refreshToken);
-  }
-
-  #respond({ user, accessToken, refreshToken }: AuthResult, res: Response): object {
-    res.cookie(ACCESS_TOKEN_COOKIE, accessToken, {
-      httpOnly: true,
-      secure: true,
-      sameSite: 'strict',
-      maxAge: this.configService.get<number>('KERGHAN_ACCESS_TOKEN_TTL_MS', DEFAULT_ACCESS_TOKEN_TTL_MS),
-    });
-    res.set(SKIP_CACHE_HEADER, 'true');
-
-    return { user: this.#serialize(user), refreshToken };
-  }
-
-  #serialize(user: User): object {
-    return { id: user.id, username: user.username, email: user.email, isAdmin: user.isAdmin };
   }
 }
