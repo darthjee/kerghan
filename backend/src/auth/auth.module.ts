@@ -4,7 +4,10 @@ import { AdminController } from './admin.controller.js';
 import { AdminService } from './admin.service.js';
 import { AuthController } from './auth.controller.js';
 import { AuthService } from './auth.service.js';
+import { AuthorizationRequestController } from './authorization-request.controller.js';
+import { AuthorizationRequestService } from './authorization-request.service.js';
 import { MailModule } from '../mail/mail.module.js';
+import { AuthorizationRequest } from './entities/authorization-request.entity.js';
 import { PasswordResetToken } from './entities/password-reset-token.entity.js';
 import { RefreshToken } from './entities/refresh-token.entity.js';
 import { Session } from './entities/session.entity.js';
@@ -21,13 +24,17 @@ import { TokenService } from './token.service.js';
  * reads happen only through the exported service).
  */
 @Module({
-  imports: [TypeOrmModule.forFeature([User, RefreshToken, Session, PasswordResetToken]), MailModule],
-  controllers: [AuthController, AdminController],
+  imports: [
+    TypeOrmModule.forFeature([User, RefreshToken, Session, PasswordResetToken, AuthorizationRequest]),
+    MailModule,
+  ],
+  controllers: [AuthController, AdminController, AuthorizationRequestController],
   providers: [
     AuthService,
     AdminService,
     PasswordResetService,
     TokenService,
+    AuthorizationRequestService,
     PasswordRecoveryRequestedListener,
   ],
   exports: [AuthService],
