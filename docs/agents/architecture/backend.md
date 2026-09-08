@@ -52,7 +52,11 @@ backend/src/
     ├── mail.module.ts
     ├── mail.config.ts
     ├── mail.service.ts
+    ├── mail.method.ts
     ├── mail.tokens.ts
+    ├── render-template.ts
+    ├── template-registry.ts
+    ├── templates/            # Filesystem email templates — subject.txt / body.txt / body.html per <name>/
     └── tests/
 ```
 
@@ -65,6 +69,10 @@ directly — `tsconfig.build.json` extends the base config but excludes `**/*.sp
 `deleteOutDir: true`, an incremental build's `.tsbuildinfo` cache can believe stale output is
 still current after `dist/` is wiped externally (e.g. a container restart) and skip re-emitting
 entirely, breaking `nest start --watch`.
+
+`nest-cli.json`'s `compilerOptions.assets` copies the non-TS files under `mail/templates/**`
+into `dist/`, and the mail template registry resolves that directory via `import.meta.url` so it
+works from `dist/mail/` as well as `src/mail/`.
 
 ## Routing convention
 

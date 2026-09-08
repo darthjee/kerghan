@@ -51,6 +51,18 @@ Three boot states:
   the effective `from` rejects with `mail: header field contains a newline` (header-injection
   protection).
 
+`MailService.sendEmailTemplate(params: SendEmailTemplateParams): Promise<SendEmailResult>`
+
+- `SendEmailTemplateParams` — `{ to, template, variables, from?, method? }`. `from` / `method`
+  behave exactly as in `SendEmailParams`; `template` names a directory under
+  `backend/src/mail/templates/` and `variables` are interpolated into its `{{placeholder}}`
+  slots (see **Templates** below).
+- Shares `sendEmail`'s send path: same method resolution, the same header guards (applied to the
+  **rendered** subject), the same failure logging, and the same `SendEmailResult`.
+- When email is **disabled** it returns `{ status: 'skipped', method }` **without rendering the
+  template** — so an unknown template or a missing variable only rejects when mail is
+  **enabled**. An unknown `method` still throws disabled or not.
+
 ## Send methods
 
 Delivery is abstracted behind the `EmailMethod` interface (`mail.method.ts`): one async
@@ -69,19 +81,35 @@ transporter, and injects it into `MailService` as `MAIL_METHODS`.
   resolves `method = params.method ?? config.method` and validates it against the registry
   **before** the disabled short-circuit and before any transport work — an unknown method always
   throws `mail: unknown method: <name>`, disabled or not.
-- No other method is registered yet — no real provider beyond `native`, and no
-  `sendEmailTemplate`/template rendering (tracked separately).
+- No other method is registered yet — no real provider beyond `native`.
 
-## No templates
+## Templates
 
-Message content — subject, plain-text body, optional HTML body — is entirely the caller's
-responsibility. The Mail module ships no templating engine or layout.
+- **Location** — `backend/src/mail/templates/<name>/`: `subject.txt` (required), `body.txt`
+  (required), `body.html` (optional).
+- **Discovery** — a boot-time directory scan (`template-registry.ts`'s `buildTemplateRegistry`)
+  reads each `<name>/` into a frozen raw (pre-interpolation) record, provided as `MAIL_TEMPLATES`
+  from `mail.module.ts`. The module resolves the templates directory relative to its own compiled
+  location (`import.meta.url`), and `nest-cli.json`'s `compilerOptions.assets` copies
+  `mail/templates/**` into `dist/` so the scan works under `node dist/main.js` too.
+- **Boot behaviour** — a template directory missing `subject.txt` or `body.txt` **fails boot**,
+  naming the missing file. An empty or absent `templates/` directory is **not** an error (empty
+  registry) — no production template ships yet, and a `.gitkeep` holds the directory. The
+  subject's single trailing newline is stripped so it never trips the header-injection guard.
+- **Rendering** — `renderTemplate(registry, name, variables)` (pure, `render-template.ts`) →
+  `{ subject, text, html? }`. `{{variable}}` placeholders (whitespace inside the braces
+  tolerated) are interpolated; a placeholder with no matching key **throws**, naming the template
+  and key; extra keys are ignored. Substituted values are HTML-escaped (`& < > " '`) in
+  `body.html` **only**, and inserted verbatim in `subject.txt` / `body.txt`. `html` is present in
+  the result only when the template defines a `body.html`. The template owns the subject.
 
 ## Logging
 
 - Boot: one `log` line stating `enabled` (with the host) or `disabled` — never the whole config
   object, which holds the SMTP password.
-- Per call, when disabled: one `debug` line with the recipient, subject, and resolved `method`.
+- Per call, when disabled: one `debug` line with the recipient, resolved `method`, and either the
+  `subject` (`sendEmail`) or the `template` name (`sendEmailTemplate`, which skips before
+  rendering).
 - On send failure: one `error` line with the recipient, subject, and resolved `method`. Message
   `body`/`html` and credentials are never logged.
 
@@ -93,7 +121,17 @@ responsibility. The Mail module ships no templating engine or layout.
 - `mail/tests/mail.method.spec.ts` — unit specs for `NativeEmailMethod.deliver`: the `sendMail`
   call shape, the resolved `messageId`, and the recipient-rejection throw.
 - `mail/tests/mail.service.spec.ts` — unit specs that `new MailService(config, fakeMethods,
-  logger)`: successful `sendEmail` (default and per-call `method`), `from` fallback/override, the
-  disabled skip path, delivery-failure logging (asserting the bodies are not leaked), recipient
-  rejection, the `to`/header-injection guards, and the unknown-method throw (both enabled and
-  disabled).
+  fakeTemplates, logger)`: successful `sendEmail` (default and per-call `method`), `from`
+  fallback/override, the disabled skip path, delivery-failure logging (asserting the bodies are
+  not leaked), recipient rejection, the `to`/header-injection guards, and the unknown-method
+  throw (both enabled and disabled). Also the `sendEmailTemplate` cases: render + delegate,
+  `from`/`method` passthrough, disabled-skips-before-rendering, unknown template, missing
+  variable, unknown method, the header-injection guard on the rendered subject, and non-leaking
+  failure logs.
+- `mail/tests/render-template.spec.ts` — unit specs for `renderTemplate` against a synthetic
+  in-memory registry: verbatim vs. HTML-escaped substitution, spaced placeholders, missing
+  variable / unknown template throws, ignored extra keys, and the absent-`html` branch.
+- `mail/tests/template-registry.spec.ts` — unit specs for `buildTemplateRegistry` over a
+  `tests/fixtures/` template tree: keying, trailing-newline strip, verbatim bodies, the
+  optional-`html` branch, frozen output, the missing-`body.txt` throw, and the
+  empty/absent-directory branches.

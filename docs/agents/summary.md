@@ -21,7 +21,8 @@ full file before loading it. For a bare link-only table of contents instead, see
     `password-recovery.requested` events.
   - **[Mail](modules/mail.md)** — Always-on, general-purpose transactional email sender. No HTTP
     surface; consumed via the exported `MailService`. `KERGHAN_EMAIL_*` config read once at boot;
-    disabled by default (log-and-skip). First consumer: #39.
+    disabled by default (log-and-skip). Templated sends via `sendEmailTemplate`, backed by
+    filesystem templates under `mail/templates/` read once at boot. First consumer: #39.
 - **[Routes](backend/routes.md)** — Per-endpoint backend route reference, one file per domain
   under `backend/routes/` (`auth.md` today), complementing the entity/event-focused
   `modules/` pages.
