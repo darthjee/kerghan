@@ -27,6 +27,7 @@ describe('PasswordResetService', () => {
   let passwordResetTokenRepository: RepoMock<PasswordResetToken>;
   let eventEmitter: { emit: jest.Mock };
   let configService: { get: jest.Mock };
+  let logger: { info: jest.Mock; debug: jest.Mock; warn: jest.Mock; error: jest.Mock };
   let service: PasswordResetService;
 
   beforeEach(() => {
@@ -42,17 +43,29 @@ describe('PasswordResetService', () => {
         return defaultValue;
       }),
     };
+    logger = { info: jest.fn(), debug: jest.fn(), warn: jest.fn(), error: jest.fn() };
 
     service = new PasswordResetService(
       userRepository as never,
       passwordResetTokenRepository as never,
       eventEmitter as unknown as EventEmitter2,
       configService as unknown as ConfigService,
+      logger as never,
     );
   });
 
   describe('recover', () => {
     const user = { id: 1, username: 'darthjee', email: 'darthjee@example.com' } as User;
+
+    it('logs that a password recovery was requested', async () => {
+      userRepository.findOneBy.mockResolvedValue(null);
+
+      await service.recover({ email: 'nobody@example.com' });
+
+      expect(logger.info).toHaveBeenCalledWith('password recovery requested', {
+        context: 'PasswordResetService',
+      });
+    });
 
     describe('when the email matches an account', () => {
       beforeEach(() => {
@@ -89,6 +102,16 @@ describe('PasswordResetService', () => {
 
         expect(savedTokenHash).not.toBe(emittedToken);
       });
+
+      it('logs that the recovery user was found', async () => {
+        await service.recover({ email: 'darthjee@example.com' });
+
+        expect(logger.info).toHaveBeenCalledWith('password recovery user found', {
+          context: 'PasswordResetService',
+          email: 'darthjee@example.com',
+          userId: 1,
+        });
+      });
     });
 
     describe('when the email does not match an account', () => {
@@ -110,6 +133,15 @@ describe('PasswordResetService', () => {
         await service.recover({ email: 'nobody@example.com' });
 
         expect(eventEmitter.emit).not.toHaveBeenCalled();
+      });
+
+      it('logs that the recovery user was not found', async () => {
+        await service.recover({ email: 'nobody@example.com' });
+
+        expect(logger.info).toHaveBeenCalledWith('password recovery user not found', {
+          context: 'PasswordResetService',
+          email: 'nobody@example.com',
+        });
       });
     });
   });
