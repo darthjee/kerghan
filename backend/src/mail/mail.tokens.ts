@@ -21,6 +21,12 @@ export const MAIL_TRANSPORT = 'MAIL_TRANSPORT';
 export const MAIL_METHODS = 'MAIL_METHODS';
 
 /**
+ * Injection token for the frozen raw template registry built at boot by
+ * `template-registry.ts` (see `mail.module.ts`'s `MAIL_TEMPLATES` provider).
+ */
+export const MAIL_TEMPLATES = 'MAIL_TEMPLATES';
+
+/**
  * The known `EmailMethod` names, shared between the registry built in
  * `mail.module.ts` and the `KERGHAN_EMAIL_METHOD` validation in
  * `mail.config.ts`, so the two lists never drift apart.
