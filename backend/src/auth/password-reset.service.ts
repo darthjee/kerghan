@@ -10,6 +10,7 @@ import { ResetPasswordDto } from './dto/reset-password.dto.js';
 import { PasswordResetToken } from './entities/password-reset-token.entity.js';
 import { User } from './entities/user.entity.js';
 import { PasswordRecoveryRequestedEvent } from './events/password-recovery-requested.event.js';
+import { LoggerService } from '../core/logger.service.js';
 
 // Default password-reset-token lifetime (30 minutes, in milliseconds) used
 // when `KERGHAN_PASSWORD_RESET_TOKEN_TTL_MS` is unset.
@@ -29,6 +30,7 @@ export class PasswordResetService {
   private readonly passwordResetTokenRepository: Repository<PasswordResetToken>;
   private readonly eventEmitter: EventEmitter2;
   private readonly configService: ConfigService;
+  private readonly logger: LoggerService;
 
   /**
    * @param {Repository<User>} userRepository - The Auth module's user repository.
@@ -37,17 +39,20 @@ export class PasswordResetService {
    * @param {EventEmitter2} eventEmitter - Fires the `password-recovery.requested` event.
    * @param {ConfigService} configService - Supplies `FRONTEND_BASE_URL` and
    *   the password-reset-token TTL.
+   * @param {LoggerService} logger - The injected Core logger.
    */
   constructor(
     @InjectRepository(User) userRepository: Repository<User>,
     @InjectRepository(PasswordResetToken) passwordResetTokenRepository: Repository<PasswordResetToken>,
       eventEmitter: EventEmitter2,
       configService: ConfigService,
+      logger: LoggerService,
   ) {
     this.userRepository = userRepository;
     this.passwordResetTokenRepository = passwordResetTokenRepository;
     this.eventEmitter = eventEmitter;
     this.configService = configService;
+    this.logger = logger;
   }
 
   /**
@@ -62,11 +67,23 @@ export class PasswordResetService {
    *   been created, whether or not the email matched an account.
    */
   async recover(dto: RecoverDto): Promise<void> {
+    this.logger.info('password recovery requested', { context: 'PasswordResetService' });
+
     const user = await this.userRepository.findOneBy({ email: dto.email });
 
     if (!user) {
+      this.logger.info('password recovery user not found', {
+        context: 'PasswordResetService',
+        email: dto.email,
+      });
       return;
     }
+
+    this.logger.info('password recovery user found', {
+      context: 'PasswordResetService',
+      email: dto.email,
+      userId: user.id,
+    });
 
     const { token, resetUrl } = await this.issueToken(user);
 
