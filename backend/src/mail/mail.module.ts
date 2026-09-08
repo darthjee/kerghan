@@ -1,13 +1,18 @@
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import nodemailer, { type Transporter } from 'nodemailer';
 import { buildMailConfig, type MailConfig } from './mail.config.js';
 import { NativeEmailMethod, type EmailMethod } from './mail.method.js';
 import { MailService } from './mail.service.js';
-import { MAIL_CONFIG, MAIL_METHODS, MAIL_TRANSPORT } from './mail.tokens.js';
+import { MAIL_CONFIG, MAIL_METHODS, MAIL_TEMPLATES, MAIL_TRANSPORT } from './mail.tokens.js';
+import { buildTemplateRegistry, type TemplateRegistry } from './template-registry.js';
 import { LoggerService } from '../core/logger.service.js';
 
-export { MAIL_CONFIG, MAIL_METHODS, MAIL_TRANSPORT } from './mail.tokens.js';
+export { MAIL_CONFIG, MAIL_METHODS, MAIL_TEMPLATES, MAIL_TRANSPORT } from './mail.tokens.js';
+
+const TEMPLATES_DIR = join(dirname(fileURLToPath(import.meta.url)), 'templates');
 
 /**
  * Builds the boot-time transporter from the resolved config. Returns
@@ -74,6 +79,10 @@ function createMailMethods(transport: Transporter | null): Record<string, EmailM
       inject: [MAIL_TRANSPORT],
       useFactory: (transport: Transporter | null): Record<string, EmailMethod> =>
         createMailMethods(transport),
+    },
+    {
+      provide: MAIL_TEMPLATES,
+      useFactory: (): TemplateRegistry => buildTemplateRegistry(TEMPLATES_DIR),
     },
     MailService,
   ],

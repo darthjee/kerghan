@@ -1,7 +1,9 @@
 import { Inject, Injectable } from '@nestjs/common';
 import type { MailConfig } from './mail.config.js';
 import type { EmailMethod } from './mail.method.js';
-import { MAIL_CONFIG, MAIL_METHODS } from './mail.tokens.js';
+import { MAIL_CONFIG, MAIL_METHODS, MAIL_TEMPLATES } from './mail.tokens.js';
+import { renderTemplate } from './render-template.js';
+import type { TemplateRegistry } from './template-registry.js';
 import { LoggerService } from '../core/logger.service.js';
 
 /**
@@ -13,6 +15,20 @@ export interface SendEmailParams {
   subject: string;
   body: string;
   html?: string;
+  from?: string;
+  method?: string;
+}
+
+/**
+ * Arguments accepted by {@link MailService.sendEmailTemplate}. The named
+ * template supplies the subject and body; `variables` are interpolated into
+ * `{{placeholder}}` slots. `from` / `method` behave exactly as in
+ * {@link SendEmailParams}.
+ */
+export interface SendEmailTemplateParams {
+  to: string;
+  template: string;
+  variables: Record<string, string>;
   from?: string;
   method?: string;
 }
@@ -31,30 +47,36 @@ export interface SendEmailResult {
 
 /**
  * Always-on outbound-email facade. Holds no env access of its own — the
- * frozen {@link MailConfig} and the `EmailMethod` registry (keyed by
- * method name) are supplied by `MailModule`'s providers. Delivery itself is
- * delegated to the resolved `EmailMethod`; this class owns only method
- * resolution, disabled short-circuiting, and the send-time guards.
+ * frozen {@link MailConfig}, the `EmailMethod` registry (keyed by method
+ * name), and the raw template registry are supplied by `MailModule`'s
+ * providers. Delivery itself is delegated to the resolved `EmailMethod`;
+ * this class owns only method resolution, disabled short-circuiting,
+ * template rendering, and the send-time guards.
  */
 @Injectable()
 export class MailService {
   private readonly logger: LoggerService;
   private readonly config: MailConfig;
   private readonly methods: Record<string, EmailMethod>;
+  private readonly templates: TemplateRegistry;
 
   /**
    * @param {MailConfig} config - The frozen outbound-email config.
    * @param {Record<string, EmailMethod>} methods - The `EmailMethod`
    *   registry keyed by method name, built by `MailModule`.
+   * @param {TemplateRegistry} templates - The frozen raw template registry
+   *   built at boot by `MailModule`.
    * @param {LoggerService} logger - The injected Core logger.
    */
   constructor(
     @Inject(MAIL_CONFIG) config: MailConfig,
     @Inject(MAIL_METHODS) methods: Record<string, EmailMethod>,
+    @Inject(MAIL_TEMPLATES) templates: TemplateRegistry,
       logger: LoggerService,
   ) {
     this.config = config;
     this.methods = methods;
+    this.templates = templates;
     this.logger = logger;
   }
 
@@ -80,15 +102,61 @@ export class MailService {
     this.#assertKnownMethod(method);
 
     if (!this.config.enabled) {
-      this.logger.debug('email disabled; skipping send', {
-        context: 'MailService',
-        to: params.to,
-        subject: params.subject,
-        method,
-      });
-      return { status: 'skipped', method };
+      return this.#skip(method, { to: params.to, subject: params.subject });
     }
 
+    return this.#send(params, method);
+  }
+
+  /**
+   * Renders the named template against `variables` and sends the result
+   * through the resolved `EmailMethod`. Method resolution and the
+   * disabled short-circuit behave exactly as in {@link sendEmail} — an
+   * unknown method throws before rendering, and a disabled send resolves to
+   * `{ status: 'skipped', method }` with the template left unrendered.
+   * Rendering happens only when email is enabled, so a bad template or a
+   * missing variable rejects the promise only in that case. The
+   * header-injection guard applies to the rendered subject.
+   * @param {SendEmailTemplateParams} params - Recipient, template name,
+   *   `variables`, optional `from`/`method`.
+   * @returns {Promise<SendEmailResult>} `{ status: 'skipped', method }`
+   *   when disabled, otherwise `{ status: 'sent', method, messageId }`.
+   * @throws {Error} When `method` is not a registered `EmailMethod`, the
+   *   template is unknown, a referenced variable is missing, `to` is
+   *   missing, a header field contains a newline, the recipient is
+   *   rejected, or the method throws.
+   */
+  async sendEmailTemplate(params: SendEmailTemplateParams): Promise<SendEmailResult> {
+    const method = params.method ?? this.config.method;
+
+    this.#assertKnownMethod(method);
+
+    if (!this.config.enabled) {
+      return this.#skip(method, { to: params.to, template: params.template });
+    }
+
+    const { subject, text, html } = renderTemplate(
+      this.templates,
+      params.template,
+      params.variables,
+    );
+
+    return this.#send(
+      { to: params.to, subject, body: text, html, from: params.from, method: params.method },
+      method,
+    );
+  }
+
+  #skip(method: string, logAttrs: Record<string, string>): SendEmailResult {
+    this.logger.debug('email disabled; skipping send', {
+      context: 'MailService',
+      method,
+      ...logAttrs,
+    });
+    return { status: 'skipped', method };
+  }
+
+  async #send(params: SendEmailParams, method: string): Promise<SendEmailResult> {
     const from = params.from ?? this.config.from;
 
     this.#assertSendable(params, from);
