@@ -33,7 +33,7 @@ export class AuthorizationRequest {
   @Column()
     username!: string;
 
-  @Column({ name: 'user_id', nullable: true })
+  @Column({ name: 'user_id', type: 'int', nullable: true })
     userId!: number | null;
 
   @Column({ type: 'enum', enum: ['open', 'approved', 'denied', 'logged', 'expired'], default: 'open' })
@@ -49,7 +49,7 @@ export class AuthorizationRequest {
   @Column({ name: 'request_user_agent', type: 'varchar', length: 512 })
     requestUserAgent!: string;
 
-  @Column({ name: 'approved_by_user_id', nullable: true })
+  @Column({ name: 'approved_by_user_id', type: 'int', nullable: true })
     approvedByUserId!: number | null;
 
   @CreateDateColumn({ name: 'created_at' })
