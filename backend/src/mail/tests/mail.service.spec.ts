@@ -110,6 +110,24 @@ describe('MailService', () => {
       expect(otherDeliver).toHaveBeenCalledTimes(1);
       expect(result).toEqual({ status: 'sent', method: 'other', messageId: 'xyz' });
     });
+
+    it('logs a debug line confirming the enabled flag check passed before sending', async () => {
+      const service = makeService(enabledConfig);
+
+      await service.sendEmail({ ...validParams });
+
+      expect(logger.debug).toHaveBeenCalledWith(
+        'email enabled; sending',
+        expect.objectContaining({
+          context: 'MailService',
+          to: 'user@example.com',
+          subject: 'Subject line',
+          method: 'native',
+        }),
+      );
+      expect(logger.info).not.toHaveBeenCalled();
+      expect(logger.warn).not.toHaveBeenCalled();
+    });
   });
 
   describe('when email is disabled', () => {
@@ -249,6 +267,24 @@ describe('MailService', () => {
         expect(deliver).not.toHaveBeenCalled();
         expect(otherDeliver).toHaveBeenCalledTimes(1);
         expect(result).toEqual({ status: 'sent', method: 'other', messageId: 'xyz' });
+      });
+
+      it('logs a debug line confirming the enabled flag check passed, with the rendered subject', async () => {
+        const service = makeService(enabledConfig);
+
+        await service.sendEmailTemplate({ ...templateParams });
+
+        expect(logger.debug).toHaveBeenCalledWith(
+          'email enabled; sending',
+          expect.objectContaining({
+            context: 'MailService',
+            to: 'user@example.com',
+            subject: 'Hi Sam',
+            method: 'native',
+          }),
+        );
+        expect(logger.info).not.toHaveBeenCalled();
+        expect(logger.warn).not.toHaveBeenCalled();
       });
 
       it('rejects for an unknown template without calling deliver', async () => {
