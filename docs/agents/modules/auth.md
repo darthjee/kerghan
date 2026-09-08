@@ -45,7 +45,7 @@ both, `where: [...]`); an absent/empty `q` returns every account, unpaginated. T
 routes both mint a fresh `PasswordResetToken` via `PasswordResetService#issueToken` (shared with
 self-service `recover()`) for the given `:id`, never invalidating that user's other outstanding
 tokens, and `404`s when `:id` doesn't match an account. `send-recovery-email.json` additionally
-calls `MailService.send(...)` directly and synchronously (not the fire-and-forget
+calls `MailService.sendEmailTemplate(...)` directly and synchronously (not the fire-and-forget
 `password-recovery.requested` event self-service uses), so the admin gets a real
 `sent: true`/`false` result instead of a always-`true` response — `sent: false` covers both a
 disabled mail transport and a thrown send error, never a `500`.
@@ -145,10 +145,10 @@ per the modular pattern's event-driven communication rule.
 `PasswordResetService#recover` fires `password-recovery.requested` (via `EventEmitter2`) with a
 `PasswordRecoveryRequestedEvent { userId, token, resetUrl, email }` payload whenever a recovery
 is requested for a known email — see `events/password-recovery-requested.event.ts`. It is
-consumed in-module by `events/password-recovery-requested.listener.ts`, which builds the
-plain-text message with `events/password-recovery-email.content.ts` and sends it through
-`MailService` (Mail module, direct DI — `AuthModule` imports `MailModule`). Delivery is
-best-effort: the listener swallows every send error (one `warn` line, `userId` only) and treats
+consumed in-module by `events/password-recovery-requested.listener.ts`, which renders the
+`password-recovery` mail template and sends it through `MailService.sendEmailTemplate` (Mail
+module, direct DI — `AuthModule` imports `MailModule`). Delivery is best-effort: the listener
+swallows every send error (one `warn` line, `userId` only) and treats
 a disabled-mail `{ status: 'skipped' }` as success, so a mail problem never affects the
 already-responded `/auth/recover.json` request.
 

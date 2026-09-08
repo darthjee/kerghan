@@ -8,7 +8,7 @@ direct DI. First consumer: the password-recovery email (see
 [#39](../issues/39-send-password-recovery-email-when-a-reset-token-is-created.md)), an
 `@OnEvent('password-recovery.requested')` listener in the **Auth** module
 (`backend/src/auth/events/password-recovery-requested.listener.ts`) that calls
-`MailService.sendEmail`.
+`MailService.sendEmailTemplate` with the `password-recovery` template.
 
 ## Configuration
 
@@ -94,8 +94,15 @@ transporter, and injects it into `MailService` as `MAIL_METHODS`.
   `mail/templates/**` into `dist/` so the scan works under `node dist/main.js` too.
 - **Boot behaviour** — a template directory missing `subject.txt` or `body.txt` **fails boot**,
   naming the missing file. An empty or absent `templates/` directory is **not** an error (empty
-  registry) — no production template ships yet, and a `.gitkeep` holds the directory. The
-  subject's single trailing newline is stripped so it never trips the header-injection guard.
+  registry). `password-recovery` is the first shipped template (see **Shipped templates**
+  below). The subject's single trailing newline is stripped so it never trips the
+  header-injection guard.
+- **Shipped templates**
+  - `password-recovery` — subject `Reset your Kerghan password`; the only variable is
+    `{{resetUrl}}` (on its own line so mail clients linkify it); no `body.html`. Consumed by
+    `auth/events/password-recovery-requested.listener.ts` (best-effort, on
+    `password-recovery.requested`) and `Auth`'s `AdminService.sendRecoveryEmail` (synchronous),
+    both via `sendEmailTemplate`.
 - **Rendering** — `renderTemplate(registry, name, variables)` (pure, `render-template.ts`) →
   `{ subject, text, html? }`. `{{variable}}` placeholders (whitespace inside the braces
   tolerated) are interpolated; a placeholder with no matching key **throws**, naming the template
@@ -131,6 +138,10 @@ transporter, and injects it into `MailService` as `MAIL_METHODS`.
 - `mail/tests/render-template.spec.ts` — unit specs for `renderTemplate` against a synthetic
   in-memory registry: verbatim vs. HTML-escaped substitution, spaced placeholders, missing
   variable / unknown template throws, ignored extra keys, and the absent-`html` branch.
+- `mail/tests/password-recovery.template.spec.ts` — unit specs that render the real on-disk
+  `password-recovery` template (via `buildTemplateRegistry` + `renderTemplate`) from
+  `{ resetUrl }`: registry key present, static subject, the URL on its own line, the two
+  reassurance sentences present, no `html`, and the missing-`resetUrl` throw.
 - `mail/tests/template-registry.spec.ts` — unit specs for `buildTemplateRegistry` over a
   `tests/fixtures/` template tree: keying, trailing-newline strip, verbatim bodies, the
   optional-`html` branch, frozen output, the missing-`body.txt` throw, and the
