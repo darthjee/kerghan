@@ -7,15 +7,19 @@ describe('LoginModalController', () => {
   let setFields;
   let setFieldErrors;
   let setSubmitError;
+  let setResultPanel;
   let client;
 
   const passwordFields = { username: 'foo', password: 'secret' };
   const registerFields = {
     username: 'foo', email: 'foo@example.com', password: 'secret', passwordConfirmation: 'secret',
   };
+  const recoverFields = { email: 'foo@example.com' };
+  const resetFields = { password: 'secret', passwordConfirmation: 'secret' };
+  const resetToken = 'reset-token';
 
   const build = () => new LoginModalController(
-    setMode, setFields, setFieldErrors, setSubmitError, client,
+    setMode, setFields, setFieldErrors, setSubmitError, setResultPanel, client,
   );
 
   beforeEach(() => {
@@ -23,7 +27,8 @@ describe('LoginModalController', () => {
     setFields = jasmine.createSpy('setFields');
     setFieldErrors = jasmine.createSpy('setFieldErrors');
     setSubmitError = jasmine.createSpy('setSubmitError');
-    client = jasmine.createSpyObj('client', ['login', 'register']);
+    setResultPanel = jasmine.createSpy('setResultPanel');
+    client = jasmine.createSpyObj('client', ['login', 'register', 'recover', 'resetPassword']);
     spyOn(AuthEvents, 'emit');
     spyOn(LoginModalEvents, 'close');
   });
@@ -38,11 +43,12 @@ describe('LoginModalController', () => {
       });
     });
 
-    it('clears both field errors and the submit error', () => {
+    it('clears the field errors, the submit error, and any shown result panel', () => {
       build().switchMode('password');
 
       expect(setFieldErrors).toHaveBeenCalledWith({});
       expect(setSubmitError).toHaveBeenCalledWith(null);
+      expect(setResultPanel).toHaveBeenCalledWith(null);
     });
   });
 
@@ -122,6 +128,73 @@ describe('LoginModalController', () => {
 
       expect(setSubmitError).toHaveBeenCalledWith('username is not available');
       expect(AuthEvents.emit).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('#handleSubmit recover mode', () => {
+    it('requests a recovery email and shows the neutral panel on success', async () => {
+      client.recover.and.resolveTo({ sent: true });
+
+      await build().handleSubmit('recover', recoverFields);
+
+      expect(setSubmitError).toHaveBeenCalledWith(null);
+      expect(client.recover).toHaveBeenCalledWith('foo@example.com');
+      expect(setResultPanel).toHaveBeenCalledWith('recover');
+    });
+
+    it('still shows the neutral panel when the recovery request fails', async () => {
+      client.recover.and.rejectWith(new Error('network down'));
+
+      await expectAsync(build().handleSubmit('recover', recoverFields)).toBeRejected();
+
+      expect(setResultPanel).toHaveBeenCalledWith('recover');
+    });
+
+    it('never announces auth state or closes the modal', async () => {
+      client.recover.and.resolveTo({ sent: true });
+
+      await build().handleSubmit('recover', recoverFields);
+
+      expect(AuthEvents.emit).not.toHaveBeenCalled();
+      expect(LoginModalEvents.close).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('#handleSubmit resetPassword mode', () => {
+    it('sets field errors and skips the API call when the form is invalid', async () => {
+      await build().handleSubmit('resetPassword', { ...resetFields, password: '' }, resetToken);
+
+      expect(setFieldErrors).toHaveBeenCalledWith(
+        jasmine.objectContaining({ password: jasmine.any(String) }),
+      );
+      expect(client.resetPassword).not.toHaveBeenCalled();
+    });
+
+    it('submits the token and new password and shows the success panel', async () => {
+      client.resetPassword.and.resolveTo({ reset: true });
+      const fakeWindow = { location: { hash: '' } };
+      globalThis.window = fakeWindow;
+
+      try {
+        await build().handleSubmit('resetPassword', resetFields, resetToken);
+
+        expect(client.resetPassword).toHaveBeenCalledWith({ token: resetToken, ...resetFields });
+        expect(setResultPanel).toHaveBeenCalledWith('resetPassword');
+        expect(AuthEvents.emit).not.toHaveBeenCalled();
+        expect(LoginModalEvents.close).not.toHaveBeenCalled();
+        expect(fakeWindow.location.hash).toBe('');
+      } finally {
+        delete globalThis.window;
+      }
+    });
+
+    it('sets a submit error and shows no panel when the request fails', async () => {
+      client.resetPassword.and.rejectWith(new Error('Invalid or expired token'));
+
+      await build().handleSubmit('resetPassword', resetFields, resetToken);
+
+      expect(setSubmitError).toHaveBeenCalledWith('Invalid or expired token');
+      expect(setResultPanel).not.toHaveBeenCalledWith('resetPassword');
     });
   });
 });

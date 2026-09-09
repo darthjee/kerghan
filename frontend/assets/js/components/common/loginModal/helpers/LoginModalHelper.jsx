@@ -1,7 +1,12 @@
 import Modal from 'react-bootstrap/cjs/Modal.js';
 import LoginModalFormsHelper from './LoginModalFormsHelper.jsx';
 
-const TITLES = { password: 'Log in', register: 'Create an account' };
+const TITLES = {
+  password: 'Log in',
+  register: 'Create an account',
+  recover: 'Recover password',
+  resetPassword: 'Set a new password',
+};
 
 /**
  * Rendering helper for the login modal shell: a `react-bootstrap` `Modal` whose body is the
@@ -14,8 +19,8 @@ export default class LoginModalHelper {
    * Render the login modal. Renders nothing visible while `state.open` is false.
    *
    * @param {{open: boolean, mode: string, username: string, email: string, password: string,
-   *   passwordConfirmation: string, fieldErrors: object, submitError: (string|null)}} state -
-   *   Modal state.
+   *   passwordConfirmation: string, fieldErrors: object, submitError: (string|null),
+   *   resultPanel: (string|null)}} state - Modal state.
    * @param {{onClose: Function, onSelectMode: Function, onSubmit: Function,
    *   onUsernameChange: Function, onEmailChange: Function, onPasswordChange: Function,
    *   onPasswordConfirmationChange: Function}} handlers - Event handlers.
@@ -37,10 +42,11 @@ export default class LoginModalHelper {
   /**
    * Resolve the modal title for the active mode.
    *
-   * @param {string} mode - The active mode (`'password'` or `'register'`).
+   * @param {string} mode - The active mode (`'password'`, `'register'`, `'recover'`, or
+   *   `'resetPassword'`).
    * @returns {string} The title text.
    */
   static #title(mode) {
-    return mode === 'register' ? TITLES.register : TITLES.password;
+    return TITLES[mode] ?? TITLES.password;
   }
 }

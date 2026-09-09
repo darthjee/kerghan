@@ -4,6 +4,8 @@ import LoginModalEvents from '../../../../../../../assets/js/client/LoginModalEv
 describe('useLoginModal', () => {
   let controller;
   let setOpen;
+  let setResetToken;
+  let setResultPanel;
   let setters;
   let originalWindow;
 
@@ -14,7 +16,9 @@ describe('useLoginModal', () => {
     globalThis.window = new EventTarget();
     controller = jasmine.createSpyObj('controller', ['switchMode']);
     setOpen = jasmine.createSpy('setOpen');
-    setters = { setOpen };
+    setResetToken = jasmine.createSpy('setResetToken');
+    setResultPanel = jasmine.createSpy('setResultPanel');
+    setters = { setOpen, setResetToken, setResultPanel };
     spyOn(LoginModalEvents, 'subscribe').and.callThrough();
     spyOn(LoginModalEvents, 'unsubscribe').and.callThrough();
   });
@@ -39,6 +43,24 @@ describe('useLoginModal', () => {
       expect(controller.switchMode).toHaveBeenCalledWith('register');
     });
 
+    it('stores the reset token and clears the result panel on an open event with a token', () => {
+      buildLoginModalEffect(controller, setters)();
+
+      LoginModalEvents.open('resetPassword', { token: 'abc' });
+
+      expect(setResetToken).toHaveBeenCalledWith('abc');
+      expect(setResultPanel).toHaveBeenCalledWith(null);
+      expect(controller.switchMode).toHaveBeenCalledWith('resetPassword');
+    });
+
+    it('stores an empty reset token on an open event without a token', () => {
+      buildLoginModalEffect(controller, setters)();
+
+      LoginModalEvents.open('recover');
+
+      expect(setResetToken).toHaveBeenCalledWith('');
+    });
+
     it('closes the modal without switching mode on a close event', () => {
       buildLoginModalEffect(controller, setters)();
 
@@ -46,6 +68,7 @@ describe('useLoginModal', () => {
 
       expect(setOpen).toHaveBeenCalledWith(false);
       expect(controller.switchMode).not.toHaveBeenCalled();
+      expect(setResetToken).not.toHaveBeenCalled();
     });
 
     it('unsubscribes from LoginModalEvents on cleanup', () => {

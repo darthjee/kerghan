@@ -9,34 +9,54 @@ const FIELDS_BY_MODE = {
     ['password', 'password', 'Password'],
     ['passwordConfirmation', 'password', 'Confirm password'],
   ],
+  recover: [
+    ['email', 'email', 'Email'],
+  ],
+  resetPassword: [
+    ['password', 'password', 'New password'],
+    ['passwordConfirmation', 'password', 'Confirm new password'],
+  ],
 };
 
 const MODE_TABS = [
   ['password', 'Password'],
   ['register', 'Register'],
+  ['recover', 'Recover'],
 ];
 
-const SUBMIT_LABELS = { password: 'Log in', register: 'Register' };
+const SUBMIT_LABELS = {
+  password: 'Log in',
+  register: 'Register',
+  recover: 'Send reset link',
+  resetPassword: 'Set new password',
+};
 
 /**
- * Rendering helper for the login modal's body: the Password/Register mode selector and the
- * active mode's sub-form. Kept separate from {@link LoginModalHelper} (the `Modal` shell) so
- * its plain markup stays unit-testable without a DOM. Follows the same
- * static-class-with-`#render*`-methods convention as `LoginHelper` / `RegisterHelper`.
+ * Rendering helper for the login modal's body: the Password / Register / Recover mode selector
+ * and the active mode's sub-form, or — when `state.resultPanel` is set — the neutral Recover
+ * or the Set-new-password success panel in place of the selector + form. Kept separate from
+ * {@link LoginModalHelper} (the `Modal` shell) so its plain markup stays unit-testable without
+ * a DOM. Follows the same static-class-with-`#render*`-methods convention as `LoginHelper` /
+ * `RegisterHelper`.
  */
 export default class LoginModalFormsHelper {
   /**
-   * Render the mode selector and the active mode's sub-form.
+   * Render either the result panel (when `state.resultPanel` is set) or the mode selector plus
+   * the active mode's sub-form.
    *
    * @param {{mode: string, username: string, email: string, password: string,
-   *   passwordConfirmation: string, fieldErrors: object, submitError: (string|null)}} state -
-   *   Modal state.
+   *   passwordConfirmation: string, fieldErrors: object, submitError: (string|null),
+   *   resultPanel: (string|null)}} state - Modal state.
    * @param {{onSelectMode: Function, onSubmit: Function, onUsernameChange: Function,
    *   onEmailChange: Function, onPasswordChange: Function,
    *   onPasswordConfirmationChange: Function}} handlers - Event handlers.
    * @returns {React.ReactElement} The rendered modal body.
    */
   static render(state, handlers) {
+    if (state.resultPanel) {
+      return <div>{LoginModalFormsHelper.#renderResultPanel(state.resultPanel, handlers)}</div>;
+    }
+
     return (
       <div>
         {LoginModalFormsHelper.#renderModeSelector(state, handlers)}
@@ -46,7 +66,33 @@ export default class LoginModalFormsHelper {
   }
 
   /**
-   * Render the Password/Register mode selector, marking the active mode.
+   * Render the post-submission result panel for the Recover / Set-new-password modes.
+   *
+   * @param {string} panel - Which panel to render (`'recover'` or `'resetPassword'`).
+   * @param {{onSelectMode: Function}} handlers - Event handlers.
+   * @returns {React.ReactElement} The rendered result panel.
+   */
+  static #renderResultPanel(panel, handlers) {
+    if (panel === 'resetPassword') {
+      return (
+        <div>
+          <p>Your password has been updated.</p>
+          <button
+            type="button"
+            className="btn btn-link p-0"
+            onClick={() => handlers.onSelectMode('password')}
+          >
+            Back to log in
+          </button>
+        </div>
+      );
+    }
+
+    return <p>If that email matches an account, a reset link is on its way.</p>;
+  }
+
+  /**
+   * Render the Password / Register / Recover mode selector, marking the active mode.
    *
    * @param {{mode: string}} state - Modal state.
    * @param {{onSelectMode: Function}} handlers - Event handlers.
@@ -78,7 +124,7 @@ export default class LoginModalFormsHelper {
    * @returns {React.ReactElement} The rendered sub-form.
    */
   static #renderForm(state, handlers) {
-    const mode = state.mode === 'register' ? 'register' : 'password';
+    const mode = FIELDS_BY_MODE[state.mode] ? state.mode : 'password';
     const onChangeByField = {
       username: handlers.onUsernameChange,
       email: handlers.onEmailChange,
