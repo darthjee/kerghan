@@ -26,7 +26,7 @@ describe('AccountsClient', () => {
       });
     });
 
-    it('resolves with the created account and refresh token', async () => {
+    it('persists the returned refresh token and resolves with the response', async () => {
       const result = {
         user: { id: 1, username: 'foo', email: 'foo@example.com' },
         refreshToken: 'refresh-token',
@@ -38,18 +38,6 @@ describe('AccountsClient', () => {
       });
 
       expect(response).toEqual(result);
-    });
-
-    it('persists the returned refresh token', async () => {
-      spyOn(ApiClient, 'postJson').and.resolveTo({
-        user: { id: 1, username: 'foo', email: 'foo@example.com' },
-        refreshToken: 'refresh-token',
-      });
-
-      await AccountsClient.register({
-        username: 'foo', email: 'foo@example.com', password: 'secret', passwordConfirmation: 'secret',
-      });
-
       expect(AuthSession.get()).toBe('refresh-token');
     });
   });
@@ -171,21 +159,14 @@ describe('AccountsClient', () => {
   });
 
   describe('.recover', () => {
-    it('posts the email to the recover endpoint', async () => {
-      spyOn(ApiClient, 'postJson').and.resolveTo({ sent: true });
-
-      await AccountsClient.recover('foo@example.com');
-
-      expect(ApiClient.postJson).toHaveBeenCalledWith('/auth/recover.json', {
-        email: 'foo@example.com',
-      });
-    });
-
-    it('resolves with the parsed response', async () => {
+    it('posts the email to the recover endpoint and resolves with the parsed response', async () => {
       spyOn(ApiClient, 'postJson').and.resolveTo({ sent: true });
 
       const response = await AccountsClient.recover('foo@example.com');
 
+      expect(ApiClient.postJson).toHaveBeenCalledWith('/auth/recover.json', {
+        email: 'foo@example.com',
+      });
       expect(response).toEqual({ sent: true });
     });
 
@@ -237,34 +218,22 @@ describe('AccountsClient', () => {
   });
 
   describe('.createAuthorizationRequest', () => {
-    it('posts the username to the authorization-requests endpoint', async () => {
-      spyOn(ApiClient, 'postJson').and.resolveTo({
-        uuid: 'req-uuid', pollToken: 'poll-token', expiresAt: '2026-09-09T00:05:00.000Z',
-      });
+    const request = { uuid: 'req-uuid', pollToken: 'poll-token', expiresAt: '2026-09-09T00:05:00.000Z' };
 
-      await AccountsClient.createAuthorizationRequest('foo');
+    it('posts the username and resolves with the uuid, poll token and expiry', async () => {
+      spyOn(ApiClient, 'postJson').and.resolveTo(request);
+
+      const response = await AccountsClient.createAuthorizationRequest('foo');
 
       expect(ApiClient.postJson).toHaveBeenCalledWith('/auth/authorization-requests.json', {
         username: 'foo',
       });
-    });
-
-    it('resolves with the uuid, poll token and expiry', async () => {
-      const result = {
-        uuid: 'req-uuid', pollToken: 'poll-token', expiresAt: '2026-09-09T00:05:00.000Z',
-      };
-      spyOn(ApiClient, 'postJson').and.resolveTo(result);
-
-      const response = await AccountsClient.createAuthorizationRequest('foo');
-
-      expect(response).toEqual(result);
+      expect(response).toEqual(request);
     });
 
     it('does not touch the stored refresh token', async () => {
       AuthSession.set('refresh-token');
-      spyOn(ApiClient, 'postJson').and.resolveTo({
-        uuid: 'req-uuid', pollToken: 'poll-token', expiresAt: '2026-09-09T00:05:00.000Z',
-      });
+      spyOn(ApiClient, 'postJson').and.resolveTo(request);
 
       await AccountsClient.createAuthorizationRequest('foo');
 

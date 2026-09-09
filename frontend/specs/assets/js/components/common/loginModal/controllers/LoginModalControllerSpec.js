@@ -3,12 +3,8 @@ import AuthEvents from '../../../../../../../assets/js/client/AuthEvents.js';
 import LoginModalEvents from '../../../../../../../assets/js/client/LoginModalEvents.js';
 import AuthorizationRequestPoller from '../../../../../../../assets/js/utils/polling/AuthorizationRequestPoller.js';
 
-/**
- * Drain pending microtasks so a real poll tick started by `jasmine.clock().tick()` runs to
- * completion.
- *
- * @returns {Promise<void>} Resolves once the microtask queue has been flushed a few times.
- */
+// Drain pending microtasks so a real poll tick started by `jasmine.clock().tick()` runs to
+// completion.
 async function flush() {
   await Promise.resolve();
   await Promise.resolve();
@@ -23,6 +19,7 @@ describe('LoginModalController', () => {
   let setResultPanel;
   let setDeviceExpiresAt;
   let client;
+  let originalWindow;
 
   const passwordFields = { username: 'foo', password: 'secret' };
   const registerFields = {
@@ -49,21 +46,22 @@ describe('LoginModalController', () => {
     ]);
     spyOn(AuthEvents, 'emit');
     spyOn(LoginModalEvents, 'close');
+    originalWindow = globalThis.window;
+    globalThis.window = { location: { hash: '' } };
+  });
+
+  afterEach(() => {
+    globalThis.window = originalWindow;
   });
 
   describe('#switchMode', () => {
-    it('sets the new mode and resets every form field', () => {
+    it('sets the new mode and clears every field, error, and shown result panel', () => {
       build().switchMode('register');
 
       expect(setMode).toHaveBeenCalledWith('register');
       expect(setFields).toHaveBeenCalledWith({
         username: '', email: '', password: '', passwordConfirmation: '',
       });
-    });
-
-    it('clears the field errors, the submit error, and any shown result panel', () => {
-      build().switchMode('password');
-
       expect(setFieldErrors).toHaveBeenCalledWith({});
       expect(setSubmitError).toHaveBeenCalledWith(null);
       expect(setResultPanel).toHaveBeenCalledWith(null);
@@ -103,35 +101,16 @@ describe('LoginModalController', () => {
   });
 
   describe('#handleSubmit password mode', () => {
-    it('clears the submit error and logs in with the current fields', async () => {
-      client.login.and.resolveTo({ user: { id: 1, username: 'foo', isAdmin: false }, refreshToken: 't' });
-      const fakeWindow = { location: { hash: '' } };
-      globalThis.window = fakeWindow;
-
-      try {
-        await build().handleSubmit('password', passwordFields);
-
-        expect(setSubmitError).toHaveBeenCalledWith(null);
-        expect(client.login).toHaveBeenCalledWith(passwordFields);
-      } finally {
-        delete globalThis.window;
-      }
-    });
-
-    it('runs the shared success path once on success', async () => {
+    it('clears the submit error, logs in, and runs the shared success path once', async () => {
       client.login.and.resolveTo({ user: { id: 1, username: 'foo', isAdmin: true }, refreshToken: 't' });
-      const fakeWindow = { location: { hash: '' } };
-      globalThis.window = fakeWindow;
 
-      try {
-        await build().handleSubmit('password', passwordFields);
+      await build().handleSubmit('password', passwordFields);
 
-        expect(AuthEvents.emit).toHaveBeenCalledOnceWith(true, true);
-        expect(LoginModalEvents.close).toHaveBeenCalledTimes(1);
-        expect(fakeWindow.location.hash).toBe('/');
-      } finally {
-        delete globalThis.window;
-      }
+      expect(setSubmitError).toHaveBeenCalledWith(null);
+      expect(client.login).toHaveBeenCalledWith(passwordFields);
+      expect(AuthEvents.emit).toHaveBeenCalledOnceWith(true, true);
+      expect(LoginModalEvents.close).toHaveBeenCalledTimes(1);
+      expect(globalThis.window.location.hash).toBe('/');
     });
 
     it('sets a submit error and skips the success path when the request fails', async () => {
@@ -155,20 +134,14 @@ describe('LoginModalController', () => {
 
     it('registers and runs the shared success path once on a clean form', async () => {
       client.register.and.resolveTo({ user: { id: 1, username: 'foo', isAdmin: false }, refreshToken: 't' });
-      const fakeWindow = { location: { hash: '' } };
-      globalThis.window = fakeWindow;
 
-      try {
-        await build().handleSubmit('register', registerFields);
+      await build().handleSubmit('register', registerFields);
 
-        expect(setFieldErrors).toHaveBeenCalledWith({});
-        expect(client.register).toHaveBeenCalledWith(registerFields);
-        expect(AuthEvents.emit).toHaveBeenCalledOnceWith(true, false);
-        expect(LoginModalEvents.close).toHaveBeenCalledTimes(1);
-        expect(fakeWindow.location.hash).toBe('/');
-      } finally {
-        delete globalThis.window;
-      }
+      expect(setFieldErrors).toHaveBeenCalledWith({});
+      expect(client.register).toHaveBeenCalledWith(registerFields);
+      expect(AuthEvents.emit).toHaveBeenCalledOnceWith(true, false);
+      expect(LoginModalEvents.close).toHaveBeenCalledTimes(1);
+      expect(globalThis.window.location.hash).toBe('/');
     });
 
     it('sets a submit error when the register request fails', async () => {
@@ -182,7 +155,7 @@ describe('LoginModalController', () => {
   });
 
   describe('#handleSubmit recover mode', () => {
-    it('requests a recovery email and shows the neutral panel on success', async () => {
+    it('requests a recovery email, shows the neutral panel, and never announces auth state', async () => {
       client.recover.and.resolveTo({ sent: true });
 
       await build().handleSubmit('recover', recoverFields);
@@ -190,6 +163,8 @@ describe('LoginModalController', () => {
       expect(setSubmitError).toHaveBeenCalledWith(null);
       expect(client.recover).toHaveBeenCalledWith('foo@example.com');
       expect(setResultPanel).toHaveBeenCalledWith('recover');
+      expect(AuthEvents.emit).not.toHaveBeenCalled();
+      expect(LoginModalEvents.close).not.toHaveBeenCalled();
     });
 
     it('still shows the neutral panel when the recovery request fails', async () => {
@@ -199,43 +174,26 @@ describe('LoginModalController', () => {
 
       expect(setResultPanel).toHaveBeenCalledWith('recover');
     });
-
-    it('never announces auth state or closes the modal', async () => {
-      client.recover.and.resolveTo({ sent: true });
-
-      await build().handleSubmit('recover', recoverFields);
-
-      expect(AuthEvents.emit).not.toHaveBeenCalled();
-      expect(LoginModalEvents.close).not.toHaveBeenCalled();
-    });
   });
 
   describe('#handleSubmit resetPassword mode', () => {
     it('sets field errors and skips the API call when the form is invalid', async () => {
       await build().handleSubmit('resetPassword', { ...resetFields, password: '' }, resetToken);
 
-      expect(setFieldErrors).toHaveBeenCalledWith(
-        jasmine.objectContaining({ password: jasmine.any(String) }),
-      );
+      expect(setFieldErrors).toHaveBeenCalledWith(jasmine.objectContaining({ password: jasmine.any(String) }));
       expect(client.resetPassword).not.toHaveBeenCalled();
     });
 
     it('submits the token and new password and shows the success panel', async () => {
       client.resetPassword.and.resolveTo({ reset: true });
-      const fakeWindow = { location: { hash: '' } };
-      globalThis.window = fakeWindow;
 
-      try {
-        await build().handleSubmit('resetPassword', resetFields, resetToken);
+      await build().handleSubmit('resetPassword', resetFields, resetToken);
 
-        expect(client.resetPassword).toHaveBeenCalledWith({ token: resetToken, ...resetFields });
-        expect(setResultPanel).toHaveBeenCalledWith('resetPassword');
-        expect(AuthEvents.emit).not.toHaveBeenCalled();
-        expect(LoginModalEvents.close).not.toHaveBeenCalled();
-        expect(fakeWindow.location.hash).toBe('');
-      } finally {
-        delete globalThis.window;
-      }
+      expect(client.resetPassword).toHaveBeenCalledWith({ token: resetToken, ...resetFields });
+      expect(setResultPanel).toHaveBeenCalledWith('resetPassword');
+      expect(AuthEvents.emit).not.toHaveBeenCalled();
+      expect(LoginModalEvents.close).not.toHaveBeenCalled();
+      expect(globalThis.window.location.hash).toBe('');
     });
 
     it('sets a submit error and shows no panel when the request fails', async () => {
@@ -250,9 +208,7 @@ describe('LoginModalController', () => {
 
   describe('#handleSubmit device mode', () => {
     const deviceFields = { username: 'foo' };
-    const request = {
-      uuid: 'req-uuid', pollToken: 'poll-token', expiresAt: '2999-01-01T00:00:00.000Z',
-    };
+    const request = { uuid: 'req-uuid', pollToken: 'poll-token', expiresAt: '2999-01-01T00:00:00.000Z' };
 
     beforeEach(() => {
       jasmine.clock().install();
@@ -299,21 +255,15 @@ describe('LoginModalController', () => {
       client.pollAuthorizationRequest.and.resolveTo({
         status: 'approved', user: { id: 1, username: 'foo', isAdmin: true }, refreshToken: 't',
       });
-      const fakeWindow = { location: { hash: '' } };
-      globalThis.window = fakeWindow;
       const controller = build();
 
-      try {
-        await controller.handleSubmit('device', deviceFields);
-        jasmine.clock().tick(5000);
-        await flush();
+      await controller.handleSubmit('device', deviceFields);
+      jasmine.clock().tick(5000);
+      await flush();
 
-        expect(AuthEvents.emit).toHaveBeenCalledOnceWith(true, true);
-        expect(LoginModalEvents.close).toHaveBeenCalledTimes(1);
-        expect(fakeWindow.location.hash).toBe('/');
-      } finally {
-        delete globalThis.window;
-      }
+      expect(AuthEvents.emit).toHaveBeenCalledOnceWith(true, true);
+      expect(LoginModalEvents.close).toHaveBeenCalledTimes(1);
+      expect(globalThis.window.location.hash).toBe('/');
     });
 
     ['denied', 'expired', 'logged'].forEach((status) => {

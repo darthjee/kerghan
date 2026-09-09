@@ -45,10 +45,10 @@ const resetPasswordValidator = new ResetPasswordController();
  * {@link AccountsClient.recover} and always shows the neutral "check your email" panel;
  * Set-new-password mode validates with {@link ResetPasswordController}'s rules then calls
  * {@link AccountsClient.resetPassword} and shows a success panel — neither closes the modal,
- * emits auth state, nor redirects. Authorize-with-logged-device mode opens an authorization
- * request via {@link AccountsClient.createAuthorizationRequest} and drives it to completion
- * with an {@link AuthorizationRequestPoller}: an approval reuses the shared success handler,
- * every other outcome shows its own result panel.
+ * emits auth state, nor redirects. Authorize-with-logged-device mode opens a request via
+ * {@link AccountsClient.createAuthorizationRequest} and polls it with an
+ * {@link AuthorizationRequestPoller}: approval reuses the success handler, every other outcome
+ * shows its own panel.
  */
 export default class LoginModalController {
   /**
@@ -65,12 +65,7 @@ export default class LoginModalController {
    * @param {typeof AccountsClient} [client] - Accounts HTTP client override, for testability.
    */
   constructor(
-    setMode,
-    setFields,
-    setFieldErrors,
-    setSubmitError,
-    setResultPanel,
-    setDeviceExpiresAt,
+    setMode, setFields, setFieldErrors, setSubmitError, setResultPanel, setDeviceExpiresAt,
     client = AccountsClient,
   ) {
     this.setMode = setMode;
@@ -253,10 +248,7 @@ export default class LoginModalController {
     this.setResultPanel('device:waiting');
 
     this.poller = new AuthorizationRequestPoller({
-      uuid,
-      pollToken,
-      expiresAt,
-      client: this.client,
+      uuid, pollToken, expiresAt, client: this.client,
       onApproved: (result) => this.#handleSuccess(result),
       onRejected: (status) => this.#handleDeviceRejection(status),
     });

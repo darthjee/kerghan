@@ -2,12 +2,8 @@ import AuthorizationRequestPoller, {
   buildPollTick,
 } from '../../../../../assets/js/utils/polling/AuthorizationRequestPoller.js';
 
-/**
- * Drain pending microtasks so an async poll tick started by `jasmine.clock().tick()` runs to
- * completion (its `await` continuation, the dispatch, and the synchronous reschedule).
- *
- * @returns {Promise<void>} Resolves once the microtask queue has been flushed a few times.
- */
+// Drain pending microtasks so an async poll tick started by `jasmine.clock().tick()` runs to
+// completion (its `await` continuation, the dispatch, and the synchronous reschedule).
 async function flush() {
   await Promise.resolve();
   await Promise.resolve();
