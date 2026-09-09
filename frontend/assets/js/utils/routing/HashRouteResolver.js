@@ -10,6 +10,7 @@ import Router from './Router.js';
 const ROUTES = [
   ['/recover-password', 'reset-password'],
   ['/admin/users', 'admin-users'],
+  ['/account/authorization-requests', 'authorization-requests'],
   ['/', 'home'],
 ];
 
