@@ -33,6 +33,8 @@ describe('LoginModal', () => {
       fieldErrors: {},
       submitError: null,
       resultPanel: null,
+      deviceExpiresAt: null,
+      now: jasmine.any(Number),
     });
   });
 
@@ -70,6 +72,25 @@ describe('LoginModal', () => {
     lastHandlers.onSelectMode('register');
 
     expect(LoginModalController.prototype.switchMode).toHaveBeenCalledWith('register');
+  });
+
+  it('switches to device mode through the controller', () => {
+    spyOn(LoginModalController.prototype, 'switchMode');
+    render();
+
+    lastHandlers.onSelectMode('device');
+
+    expect(LoginModalController.prototype.switchMode).toHaveBeenCalledWith('device');
+  });
+
+  it('constructs the controller with a device-expiry setter', () => {
+    spyOn(LoginModalController.prototype, 'switchMode');
+    render();
+
+    lastHandlers.onSelectMode('device');
+    const controllerInstance = LoginModalController.prototype.switchMode.calls.mostRecent().object;
+
+    expect(typeof controllerInstance.setDeviceExpiresAt).toBe('function');
   });
 
   it('closes via the shared LoginModalEvents bus', () => {

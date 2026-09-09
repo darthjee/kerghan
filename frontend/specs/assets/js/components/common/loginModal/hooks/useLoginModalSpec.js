@@ -14,7 +14,7 @@ describe('useLoginModal', () => {
     // `EventTarget` provides the same event-target shape LoginModalEvents relies on.
     originalWindow = globalThis.window;
     globalThis.window = new EventTarget();
-    controller = jasmine.createSpyObj('controller', ['switchMode']);
+    controller = jasmine.createSpyObj('controller', ['switchMode', 'stopPoller']);
     setOpen = jasmine.createSpy('setOpen');
     setResetToken = jasmine.createSpy('setResetToken');
     setResultPanel = jasmine.createSpy('setResultPanel');
@@ -71,12 +71,36 @@ describe('useLoginModal', () => {
       expect(setResetToken).not.toHaveBeenCalled();
     });
 
+    it('tears down any running poller on a close event', () => {
+      buildLoginModalEffect(controller, setters)();
+
+      LoginModalEvents.close();
+
+      expect(controller.stopPoller).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not tear down the poller on an open event', () => {
+      buildLoginModalEffect(controller, setters)();
+
+      LoginModalEvents.open('device');
+
+      expect(controller.stopPoller).not.toHaveBeenCalled();
+    });
+
     it('unsubscribes from LoginModalEvents on cleanup', () => {
       const cleanup = buildLoginModalEffect(controller, setters)();
 
       cleanup();
 
       expect(LoginModalEvents.unsubscribe).toHaveBeenCalledWith(jasmine.any(Function));
+    });
+
+    it('tears down any running poller on cleanup', () => {
+      const cleanup = buildLoginModalEffect(controller, setters)();
+
+      cleanup();
+
+      expect(controller.stopPoller).toHaveBeenCalledTimes(1);
     });
 
     it('does not update state once cleanup has run', () => {
