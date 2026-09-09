@@ -1,6 +1,7 @@
 import HeaderController from '../../../../../../../assets/js/components/common/header/controllers/HeaderController.js';
 import AuthSession from '../../../../../../../assets/js/client/AuthSession.js';
 import AuthEvents from '../../../../../../../assets/js/client/AuthEvents.js';
+import LoginModalEvents from '../../../../../../../assets/js/client/LoginModalEvents.js';
 
 describe('HeaderController', () => {
   let client;
@@ -94,6 +95,17 @@ describe('HeaderController', () => {
       } finally {
         delete globalThis.window;
       }
+    });
+  });
+
+  describe('#openLoginModal', () => {
+    it('opens the login modal in the given mode via LoginModalEvents', () => {
+      spyOn(LoginModalEvents, 'open');
+      const controller = new HeaderController(client);
+
+      controller.openLoginModal('register');
+
+      expect(LoginModalEvents.open).toHaveBeenCalledWith('register');
     });
   });
 

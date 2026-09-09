@@ -2,9 +2,9 @@ import AppController from '../../../../assets/js/components/AppController.js';
 
 describe('AppController', () => {
   it('resolves the current page from the hash', () => {
-    const controller = new AppController(() => undefined, null, () => '#/register');
+    const controller = new AppController(() => undefined, null, () => '#/recover');
 
-    expect(controller.getPage()).toBe('register');
+    expect(controller.getPage()).toBe('recover');
   });
 
   it('subscribes to hashchange when an event target is given', () => {
@@ -24,10 +24,10 @@ describe('AppController', () => {
 
     controller.buildEffect()();
     const handler = eventTarget.addEventListener.calls.mostRecent().args[1];
-    hash = '#/register';
+    hash = '#/recover';
     handler();
 
-    expect(setPage).toHaveBeenCalledWith('register');
+    expect(setPage).toHaveBeenCalledWith('recover');
   });
 
   it('unsubscribes on cleanup', () => {

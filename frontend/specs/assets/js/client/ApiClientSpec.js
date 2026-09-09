@@ -1,6 +1,7 @@
 import ApiClient from '../../../../assets/js/client/ApiClient.js';
 import ApiError from '../../../../assets/js/client/ApiError.js';
 import AuthSession from '../../../../assets/js/client/AuthSession.js';
+import LoginModalEvents from '../../../../assets/js/client/LoginModalEvents.js';
 
 /**
  * Build a fake `fetch` `Response`-like object whose `json`/`text` behave like a real one: an
@@ -47,6 +48,7 @@ describe('ApiClient', () => {
     originalFetch = globalThis.fetch;
     originalWindow = globalThis.window;
     globalThis.window = { location: { hash: '' } };
+    spyOn(LoginModalEvents, 'open');
   });
 
   afterEach(() => {
@@ -138,9 +140,10 @@ describe('ApiClient', () => {
       expect(AuthSession.set).toHaveBeenCalledWith('new-refresh-token');
       expect(AuthSession.clear).not.toHaveBeenCalled();
       expect(globalThis.window.location.hash).toBe('');
+      expect(LoginModalEvents.open).not.toHaveBeenCalled();
     });
 
-    it('treats a failed refresh as a session expiry: clears the session and redirects to login', async () => {
+    it('treats a failed refresh as a session expiry: clears the session and opens the login modal', async () => {
       spyOn(AuthSession, 'get').and.returnValue('old-refresh-token');
       spyOn(AuthSession, 'clear');
       globalThis.fetch = fetchSequence([
@@ -153,7 +156,8 @@ describe('ApiClient', () => {
       expect(data).toBeUndefined();
       expect(globalThis.fetch).toHaveBeenCalledTimes(2);
       expect(AuthSession.clear).toHaveBeenCalled();
-      expect(globalThis.window.location.hash).toBe('/login');
+      expect(LoginModalEvents.open).toHaveBeenCalledWith('password');
+      expect(globalThis.window.location.hash).toBe('');
     });
 
     it('treats a missing refresh token as a session expiry, without attempting a refresh call', async () => {
@@ -168,7 +172,8 @@ describe('ApiClient', () => {
       expect(data).toBeUndefined();
       expect(globalThis.fetch).toHaveBeenCalledTimes(1);
       expect(AuthSession.clear).toHaveBeenCalled();
-      expect(globalThis.window.location.hash).toBe('/login');
+      expect(LoginModalEvents.open).toHaveBeenCalledWith('password');
+      expect(globalThis.window.location.hash).toBe('');
     });
 
     it('does not attempt a second refresh when the retried request also returns 401', async () => {
@@ -186,7 +191,8 @@ describe('ApiClient', () => {
       expect(data).toBeUndefined();
       expect(globalThis.fetch).toHaveBeenCalledTimes(3);
       expect(AuthSession.clear).toHaveBeenCalled();
-      expect(globalThis.window.location.hash).toBe('/login');
+      expect(LoginModalEvents.open).toHaveBeenCalledWith('password');
+      expect(globalThis.window.location.hash).toBe('');
     });
   });
 });
