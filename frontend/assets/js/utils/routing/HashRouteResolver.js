@@ -8,8 +8,6 @@ import Router from './Router.js';
  * @type {Array<Array<string>>}
  */
 const ROUTES = [
-  ['/register', 'register'],
-  ['/login', 'login'],
   ['/recover', 'recover'],
   ['/recover-password', 'reset-password'],
   ['/admin/users', 'admin-users'],

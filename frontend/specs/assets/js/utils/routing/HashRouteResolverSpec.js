@@ -1,16 +1,16 @@
 import HashRouteResolver from '../../../../../assets/js/utils/routing/HashRouteResolver.js';
 
 describe('HashRouteResolver', () => {
-  it('resolves the register route', () => {
+  it('no longer resolves the removed register route, falling back to home', () => {
     const resolver = new HashRouteResolver(() => '#/register');
 
-    expect(resolver.getPage()).toBe('register');
+    expect(resolver.getPage()).toBe('home');
   });
 
-  it('resolves the login route', () => {
+  it('no longer resolves the removed login route, falling back to home', () => {
     const resolver = new HashRouteResolver(() => '#/login');
 
-    expect(resolver.getPage()).toBe('login');
+    expect(resolver.getPage()).toBe('home');
   });
 
   it('resolves the recover route', () => {
