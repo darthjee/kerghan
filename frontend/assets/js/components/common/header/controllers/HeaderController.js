@@ -1,6 +1,7 @@
 import AccountsClient from '../../../../client/AccountsClient.js';
 import AuthSession from '../../../../client/AuthSession.js';
 import AuthEvents from '../../../../client/AuthEvents.js';
+import LoginModalEvents from '../../../../client/LoginModalEvents.js';
 
 /**
  * Controller for the Header's logout action and mount-time auth-status confirmation. Logout ends
@@ -34,6 +35,17 @@ export default class HeaderController {
       AuthEvents.emit(false, false);
       this.#redirectHome();
     }
+  }
+
+  /**
+   * Open the login modal in the given mode via the shared {@link LoginModalEvents} bus. A pure
+   * client-side state transition — issues no API call of its own.
+   *
+   * @param {string} mode - Which mode to open the modal in (`'password'` or `'register'`).
+   * @returns {void} Nothing.
+   */
+  openLoginModal(mode) {
+    LoginModalEvents.open(mode);
   }
 
   /**

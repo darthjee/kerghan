@@ -12,9 +12,11 @@ export default class HeaderHelper {
    * @param {boolean} isLoggedIn - Whether a session is currently active.
    * @param {boolean} isAdmin - Whether the current session belongs to an admin user.
    * @param {Function} onLogout - Click handler for the Logout link, used when logged in.
+   * @param {Function} onOpenLogin - Called with a mode string (`'password'` / `'register'`) to
+   *   open the login modal, used by the Login/Register links when logged out.
    * @returns {React.ReactElement} The rendered navigation bar.
    */
-  static render(isLoggedIn, isAdmin, onLogout) {
+  static render(isLoggedIn, isAdmin, onLogout, onOpenLogin) {
     return (
       <Navbar bg="light" expand="md">
         <Container fluid>
@@ -22,7 +24,7 @@ export default class HeaderHelper {
           <Navbar.Toggle aria-controls="header-navbar" />
           <Navbar.Collapse id="header-navbar">
             <Nav className="me-auto">
-              {HeaderHelper.#renderAuthLinks(isLoggedIn, isAdmin, onLogout)}
+              {HeaderHelper.#renderAuthLinks(isLoggedIn, isAdmin, onLogout, onOpenLogin)}
             </Nav>
           </Navbar.Collapse>
         </Container>
@@ -37,9 +39,11 @@ export default class HeaderHelper {
    * @param {boolean} isLoggedIn - Whether a session is currently active.
    * @param {boolean} isAdmin - Whether the current session belongs to an admin user.
    * @param {Function} onLogout - Click handler for the Logout link, used when logged in.
+   * @param {Function} onOpenLogin - Called with a mode string to open the login modal, used by
+   *   the Login/Register links.
    * @returns {React.ReactElement} The rendered auth nav links.
    */
-  static #renderAuthLinks(isLoggedIn, isAdmin, onLogout) {
+  static #renderAuthLinks(isLoggedIn, isAdmin, onLogout, onOpenLogin) {
     if (isLoggedIn) {
       return (
         <>
@@ -51,11 +55,28 @@ export default class HeaderHelper {
 
     return (
       <>
-        <Nav.Link href="#/login">Login</Nav.Link>
-        <Nav.Link href="#/register">Register</Nav.Link>
+        {HeaderHelper.#renderLoginLink('password', 'Login', onOpenLogin)}
+        {HeaderHelper.#renderLoginLink('register', 'Register', onOpenLogin)}
         <Nav.Link href="#/recover">Recover</Nav.Link>
       </>
     );
+  }
+
+  /**
+   * Render a single link that opens the login modal in a given mode instead of navigating.
+   *
+   * @param {string} mode - Mode to open the modal in (`'password'` or `'register'`).
+   * @param {string} label - Link text.
+   * @param {Function} onOpenLogin - Called with `mode` when the link is clicked.
+   * @returns {React.ReactElement} The rendered link.
+   */
+  static #renderLoginLink(mode, label, onOpenLogin) {
+    const handleClick = (event) => {
+      event.preventDefault();
+      onOpenLogin(mode);
+    };
+
+    return <Nav.Link href="#" onClick={handleClick}>{label}</Nav.Link>;
   }
 
   /**

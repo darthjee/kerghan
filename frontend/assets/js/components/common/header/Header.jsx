@@ -29,9 +29,11 @@ export default function Header({ children }) {
     return controller.handleLogout();
   };
 
+  const handleOpenLogin = (mode) => controller.openLoginModal(mode);
+
   return (
     <>
-      {HeaderHelper.render(loggedIn, isAdmin, handleLogout)}
+      {HeaderHelper.render(loggedIn, isAdmin, handleLogout, handleOpenLogin)}
       {children}
     </>
   );
