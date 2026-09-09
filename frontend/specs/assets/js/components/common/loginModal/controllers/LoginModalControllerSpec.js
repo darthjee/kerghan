@@ -145,7 +145,7 @@ describe('LoginModalController', () => {
     it('still shows the neutral panel when the recovery request fails', async () => {
       client.recover.and.rejectWith(new Error('network down'));
 
-      await build().handleSubmit('recover', recoverFields);
+      await expectAsync(build().handleSubmit('recover', recoverFields)).toBeRejected();
 
       expect(setResultPanel).toHaveBeenCalledWith('recover');
     });
