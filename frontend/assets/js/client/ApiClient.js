@@ -1,8 +1,8 @@
 import ApiError from './ApiError.js';
 import AuthSession from './AuthSession.js';
+import LoginModalEvents from './LoginModalEvents.js';
 
 const REFRESH_PATH = '/auth/refresh.json';
-const LOGIN_HASH = '/login';
 
 /**
  * Generic JSON HTTP client used by resource-specific clients. Transparently recovers from an
@@ -136,9 +136,10 @@ export default class ApiClient {
   }
 
   /**
-   * End the client-side session: clear the stored refresh token and redirect to the login
-   * route. SSR/spec-safe — a no-op when `window` is not defined, the same way
-   * `RegisterController#redirectHome` guards it.
+   * End the client-side session: clear the stored refresh token and open the login modal in
+   * Password mode via the shared {@link LoginModalEvents} bus — a pure client-side state
+   * transition, with no API call of its own. SSR/spec-safe — a no-op when `window` is not
+   * defined, the same way `RegisterController#redirectHome` guards it.
    *
    * @returns {undefined} Always `undefined`, so callers can `return` it directly.
    */
@@ -146,7 +147,7 @@ export default class ApiClient {
     AuthSession.clear();
 
     if (typeof window !== 'undefined') {
-      window.location.hash = LOGIN_HASH;
+      LoginModalEvents.open('password');
     }
 
     return undefined;
