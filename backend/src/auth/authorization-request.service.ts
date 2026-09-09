@@ -34,6 +34,14 @@ const DEFAULT_AUTHORIZATION_REQUEST_CREATE_WINDOW_MS = 60000;
 // `KERGHAN_AUTHORIZATION_REQUEST_MAX_OPEN_PER_USER` is unset.
 const DEFAULT_AUTHORIZATION_REQUEST_MAX_OPEN_PER_USER = 5;
 
+// Default consecutive-wrong-password threshold, per request row, that trips the `authorize`
+// cool-off, used when `KERGHAN_AUTHORIZATION_REQUEST_AUTHORIZE_MAX_ATTEMPTS` is unset.
+const DEFAULT_AUTHORIZATION_REQUEST_AUTHORIZE_MAX_ATTEMPTS = 5;
+
+// Default `authorize` cool-off duration (5 minutes, in milliseconds) used when
+// `KERGHAN_AUTHORIZATION_REQUEST_AUTHORIZE_LOCK_MS` is unset.
+const DEFAULT_AUTHORIZATION_REQUEST_AUTHORIZE_LOCK_MS = 300000;
+
 // Uniform failure message shared by every `authorize`/`deny` rejection branch, so a business
 // rejection never leaks which specific check failed.
 const AUTHORIZE_FAILURE_MESSAGE = 'Unable to authorize this request';
@@ -196,13 +204,17 @@ export class AuthorizationRequestService {
   /**
    * Authorizes an open request raised against the caller's own username, re-verifying the
    * approver's current password (mirroring `AuthService#validateCredentials`). Every failure
-   * branch — missing row, wrong owner, wrong status, expired, or wrong password — throws the same
-   * `BadRequestException`, so a business rejection never surfaces as `401`/`403`.
+   * branch — missing row, wrong owner, wrong status, expired, wrong password, or locked-out —
+   * throws the same `BadRequestException`, so a business rejection never surfaces as `401`/`403`.
+   * A per-row cool-off tracks consecutive wrong-password attempts: once the configured threshold
+   * is reached, the row is locked for a configured duration. A locked-out attempt still runs the
+   * same password compare (against `DUMMY_DIGEST` if needed) before rejecting, so it is not
+   * measurably faster than a normal wrong-password attempt.
    * @param {string} uuid - The authorization request's UUID.
    * @param {number} approverUserId - The approver's own user ID (`request.user.sub`).
    * @param {string} password - The approver's current plaintext password.
    * @returns {Promise<void>} Resolves once the request is marked `approved`.
-   * @throws {BadRequestException} On any ownership, status, expiry, or password failure.
+   * @throws {BadRequestException} On any ownership, status, expiry, password, or lock-out failure.
    */
   async authorize(uuid: string, approverUserId: number, password: string): Promise<void> {
     const request = await this.#loadOwnedOpenRequest(uuid, approverUserId, AUTHORIZE_FAILURE_MESSAGE);
@@ -211,12 +223,23 @@ export class AuthorizationRequestService {
       throw new BadRequestException(AUTHORIZE_FAILURE_MESSAGE);
     }
 
-    await this.#verifyApproverPassword(approverUserId, password);
+    const lockedOut = this.#isLockedOut(request);
+    const passwordValid = await this.#approverPasswordValid(approverUserId, password);
+
+    if (lockedOut || !passwordValid) {
+      if (!lockedOut) {
+        await this.#registerAuthorizeFailure(request);
+      }
+
+      throw new BadRequestException(AUTHORIZE_FAILURE_MESSAGE);
+    }
 
     await this.authorizationRequestRepository.update(request.id, {
       status: 'approved',
       approvedByUserId: approverUserId,
       resolvedAt: new Date(),
+      authorizeFailedAttempts: 0,
+      authorizeLockedUntil: null,
     });
 
     this.eventEmitter.emit(
@@ -318,6 +341,20 @@ export class AuthorizationRequestService {
     );
   }
 
+  #authorizeMaxAttempts(): number {
+    return Number(
+      this.configService.get('KERGHAN_AUTHORIZATION_REQUEST_AUTHORIZE_MAX_ATTEMPTS') ??
+        DEFAULT_AUTHORIZATION_REQUEST_AUTHORIZE_MAX_ATTEMPTS,
+    );
+  }
+
+  #authorizeLockMs(): number {
+    return Number(
+      this.configService.get('KERGHAN_AUTHORIZATION_REQUEST_AUTHORIZE_LOCK_MS') ??
+        DEFAULT_AUTHORIZATION_REQUEST_AUTHORIZE_LOCK_MS,
+    );
+  }
+
   /**
    * Evicts the resolved user's oldest `open` request (flips it to `expired`) when they are
    * already at/over the configured concurrent-open cap, making room for the row `create` is about
@@ -379,13 +416,31 @@ export class AuthorizationRequestService {
     return request;
   }
 
-  async #verifyApproverPassword(approverUserId: number, password: string): Promise<void> {
+  #isLockedOut(request: AuthorizationRequest): boolean {
+    return request.authorizeLockedUntil !== null && request.authorizeLockedUntil > new Date();
+  }
+
+  async #approverPasswordValid(approverUserId: number, password: string): Promise<boolean> {
     const approver = await this.userRepository.findOneBy({ id: approverUserId });
     const digest = approver?.passwordDigest ?? DUMMY_DIGEST;
-    const valid = await bcrypt.compare(password, digest);
 
-    if (!valid) {
-      throw new BadRequestException(AUTHORIZE_FAILURE_MESSAGE);
-    }
+    return bcrypt.compare(password, digest);
+  }
+
+  /**
+   * Records one more consecutive wrong-password `authorize` attempt against `request`, locking it
+   * (setting `authorizeLockedUntil`) once the configured max-attempts threshold is reached.
+   * @param {AuthorizationRequest} request - The authorization request row being attempted against.
+   * @returns {Promise<void>} Resolves once the row's attempt counter (and lock, if tripped) is persisted.
+   */
+  async #registerAuthorizeFailure(request: AuthorizationRequest): Promise<void> {
+    const attempts = request.authorizeFailedAttempts + 1;
+    const lockedUntil =
+      attempts >= this.#authorizeMaxAttempts() ? new Date(Date.now() + this.#authorizeLockMs()) : null;
+
+    await this.authorizationRequestRepository.update(request.id, {
+      authorizeFailedAttempts: attempts,
+      authorizeLockedUntil: lockedUntil,
+    });
   }
 }

@@ -63,4 +63,10 @@ export class AuthorizationRequest {
 
   @Column({ name: 'logged_at', type: 'datetime', nullable: true })
     loggedAt!: Date | null;
+
+  @Column({ name: 'authorize_failed_attempts', type: 'int', default: 0 })
+    authorizeFailedAttempts!: number;
+
+  @Column({ name: 'authorize_locked_until', type: 'datetime', nullable: true })
+    authorizeLockedUntil!: Date | null;
 }
