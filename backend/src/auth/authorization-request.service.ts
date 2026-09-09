@@ -22,6 +22,14 @@ import { TokenService } from './token.service.js';
 // `KERGHAN_AUTHORIZATION_REQUEST_TTL_MS` is unset.
 const DEFAULT_AUTHORIZATION_REQUEST_TTL_MS = 3600000;
 
+// Default per-IP/per-username `create` rate limit (request count) used when
+// `KERGHAN_AUTHORIZATION_REQUEST_CREATE_LIMIT` is unset.
+const DEFAULT_AUTHORIZATION_REQUEST_CREATE_LIMIT = 5;
+
+// Default `create` rate-limit sliding window (1 minute, in milliseconds) used when
+// `KERGHAN_AUTHORIZATION_REQUEST_CREATE_WINDOW_MS` is unset.
+const DEFAULT_AUTHORIZATION_REQUEST_CREATE_WINDOW_MS = 60000;
+
 // Uniform failure message shared by every `authorize`/`deny` rejection branch, so a business
 // rejection never leaks which specific check failed.
 const AUTHORIZE_FAILURE_MESSAGE = 'Unable to authorize this request';
@@ -72,7 +80,12 @@ export class AuthorizationRequestService {
    * Creates an `open` authorization request for `username`. Never branches
    * its return shape (or timing) on whether `username` resolves to a real
    * user, per the enumeration-safety contract — a non-matching username
-   * stores `userId: null` and such a row can never be approved.
+   * stores `userId: null` and such a row can never be approved. When either
+   * the requesting IP or the target username is at/over its configured
+   * sliding-window `create` rate limit, a throwaway response with the same
+   * shape is returned instead — no row is persisted and no event fires —
+   * keeping the outcome enumeration-safe and cost-equivalent regardless of
+   * which limit (if any) tripped.
    * @param {string} username - The username the requesting device asks another device to vouch for.
    * @param {string} ip - The requesting device's IP address.
    * @param {string} userAgent - The requesting device's User-Agent string.
@@ -81,9 +94,14 @@ export class AuthorizationRequestService {
    */
   async create(username: string, ip: string, userAgent: string): Promise<CreatedAuthorizationRequest> {
     const user = await this.userRepository.findOneBy({ username });
+    const overLimit = await this.#isOverCreateLimit(ip, username);
     const pollToken = randomBytes(48).toString('hex');
     const uuid = randomUUID();
     const expiresAt = new Date(Date.now() + this.#ttlMs());
+
+    if (overLimit) {
+      return { uuid, pollToken, expiresAt };
+    }
 
     await this.authorizationRequestRepository.save(
       this.authorizationRequestRepository.create({
@@ -266,6 +284,39 @@ export class AuthorizationRequestService {
     return Number(
       this.configService.get('KERGHAN_AUTHORIZATION_REQUEST_TTL_MS') ?? DEFAULT_AUTHORIZATION_REQUEST_TTL_MS,
     );
+  }
+
+  #createLimit(): number {
+    return Number(
+      this.configService.get('KERGHAN_AUTHORIZATION_REQUEST_CREATE_LIMIT') ??
+        DEFAULT_AUTHORIZATION_REQUEST_CREATE_LIMIT,
+    );
+  }
+
+  #createWindowMs(): number {
+    return Number(
+      this.configService.get('KERGHAN_AUTHORIZATION_REQUEST_CREATE_WINDOW_MS') ??
+        DEFAULT_AUTHORIZATION_REQUEST_CREATE_WINDOW_MS,
+    );
+  }
+
+  /**
+   * Counts recent `create` rows matching the requesting IP and, separately, the target username
+   * within the sliding window, always computing both counts (never short-circuiting) so an
+   * attacker cannot fix one variable and binary-search the other to learn which limit tripped.
+   * @param {string} ip - The requesting device's IP address.
+   * @param {string} username - The target username.
+   * @returns {Promise<boolean>} Whether either count is at/over the configured limit.
+   */
+  async #isOverCreateLimit(ip: string, username: string): Promise<boolean> {
+    const windowStart = new Date(Date.now() - this.#createWindowMs());
+    const limit = this.#createLimit();
+    const [ipCount, usernameCount] = await Promise.all([
+      this.authorizationRequestRepository.count({ where: { requestIp: ip, createdAt: MoreThan(windowStart) } }),
+      this.authorizationRequestRepository.count({ where: { username, createdAt: MoreThan(windowStart) } }),
+    ]);
+
+    return ipCount >= limit || usernameCount >= limit;
   }
 
   #hashToken(token: string): string {
