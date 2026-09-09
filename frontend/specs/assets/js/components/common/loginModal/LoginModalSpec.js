@@ -32,6 +32,7 @@ describe('LoginModal', () => {
       mode: 'password',
       fieldErrors: {},
       submitError: null,
+      resultPanel: null,
     });
   });
 
@@ -59,7 +60,7 @@ describe('LoginModal', () => {
     expect(event.preventDefault).toHaveBeenCalled();
     expect(LoginModalController.prototype.handleSubmit).toHaveBeenCalledWith('password', {
       username: '', email: '', password: '', passwordConfirmation: '',
-    });
+    }, '');
   });
 
   it('switches mode through the controller', () => {

@@ -52,5 +52,19 @@ describe('LoginModalHelper', () => {
       expect(passwordTitle).toBe('Log in');
       expect(registerTitle).toBe('Create an account');
     });
+
+    it('titles the modal for the recover and resetPassword modes', () => {
+      const recoverTitle = findTitle(LoginModalHelper.render(buildState({ mode: 'recover' }), buildHandlers()));
+      const resetTitle = findTitle(LoginModalHelper.render(buildState({ mode: 'resetPassword' }), buildHandlers()));
+
+      expect(recoverTitle).toBe('Recover password');
+      expect(resetTitle).toBe('Set a new password');
+    });
+
+    it('falls back to the password title for an unknown mode', () => {
+      const title = findTitle(LoginModalHelper.render(buildState({ mode: 'mystery' }), buildHandlers()));
+
+      expect(title).toBe('Log in');
+    });
   });
 });

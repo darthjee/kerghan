@@ -60,11 +60,15 @@ describe('HeaderHelper', () => {
       expect(onOpenLogin).toHaveBeenCalledWith('register');
     });
 
-    it('renders a Recover placeholder link that still navigates', () => {
+    it('renders a Recover link that opens the modal in recover mode', () => {
       const markup = markupOf(false, false);
 
-      expect(markup).toContain('href="#/recover"');
       expect(markup).toContain('Recover');
+      expect(markup).not.toContain('href="#/recover"');
+
+      clickLink(render(false, false), 'Recover');
+
+      expect(onOpenLogin).toHaveBeenCalledWith('recover');
     });
 
     it('does not render the Logout action', () => {
@@ -86,7 +90,7 @@ describe('HeaderHelper', () => {
 
       expect(markup).not.toContain('>Login<');
       expect(markup).not.toContain('>Register<');
-      expect(markup).not.toContain('href="#/recover"');
+      expect(markup).not.toContain('>Recover<');
     });
 
     it('does not render the Admin Users link for a non-admin', () => {

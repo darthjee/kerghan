@@ -3,6 +3,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import AppHelper from '../../../../../assets/js/components/helpers/AppHelper.jsx';
 import LoginModal from '../../../../../assets/js/components/common/loginModal/LoginModal.jsx';
 import ModalRedirect from '../../../../../assets/js/components/common/ModalRedirect.jsx';
+import ResetPasswordLanding from '../../../../../assets/js/components/resources/accounts/pages/ResetPasswordLanding.jsx';
 
 describe('AppHelper', () => {
   const markupFor = (page) => renderToStaticMarkup(
@@ -30,15 +31,15 @@ describe('AppHelper', () => {
 
   it('mounts the login modal alongside the header, route-independent', () => {
     expect(partsOf('home').loginModal.type).toBe(LoginModal);
-    expect(partsOf('recover').loginModal.type).toBe(LoginModal);
+    expect(partsOf('reset-password').loginModal.type).toBe(LoginModal);
   });
 
-  it('renders the recover page for the recover key', () => {
-    expect(markupFor('recover')).toContain('Recover');
+  it('renders the reset-password landing for the reset-password key', () => {
+    expect(partsOf('reset-password').page.type).toBe(ResetPasswordLanding);
   });
 
-  it('renders the reset-password page for the reset-password key', () => {
-    expect(markupFor('reset-password')).toContain('Reset');
+  it('falls back to the home page for the removed recover key', () => {
+    expect(markupFor('recover')).toContain('Kerghan');
   });
 
   it('renders the admin users page for the admin-users key', () => {

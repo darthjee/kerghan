@@ -2,9 +2,9 @@ import AppController from '../../../../assets/js/components/AppController.js';
 
 describe('AppController', () => {
   it('resolves the current page from the hash', () => {
-    const controller = new AppController(() => undefined, null, () => '#/recover');
+    const controller = new AppController(() => undefined, null, () => '#/recover-password');
 
-    expect(controller.getPage()).toBe('recover');
+    expect(controller.getPage()).toBe('reset-password');
   });
 
   it('subscribes to hashchange when an event target is given', () => {
@@ -24,10 +24,10 @@ describe('AppController', () => {
 
     controller.buildEffect()();
     const handler = eventTarget.addEventListener.calls.mostRecent().args[1];
-    hash = '#/recover';
+    hash = '#/recover-password';
     handler();
 
-    expect(setPage).toHaveBeenCalledWith('recover');
+    expect(setPage).toHaveBeenCalledWith('reset-password');
   });
 
   it('unsubscribes on cleanup', () => {

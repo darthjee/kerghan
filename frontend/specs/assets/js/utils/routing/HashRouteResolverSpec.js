@@ -13,10 +13,10 @@ describe('HashRouteResolver', () => {
     expect(resolver.getPage()).toBe('home');
   });
 
-  it('resolves the recover route', () => {
+  it('no longer resolves the removed recover route, falling back to home', () => {
     const resolver = new HashRouteResolver(() => '#/recover');
 
-    expect(resolver.getPage()).toBe('recover');
+    expect(resolver.getPage()).toBe('home');
   });
 
   it('resolves the reset-password route', () => {
