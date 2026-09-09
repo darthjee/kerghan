@@ -12,8 +12,9 @@ export default class HeaderHelper {
    * @param {boolean} isLoggedIn - Whether a session is currently active.
    * @param {boolean} isAdmin - Whether the current session belongs to an admin user.
    * @param {Function} onLogout - Click handler for the Logout link, used when logged in.
-   * @param {Function} onOpenLogin - Called with a mode string (`'password'` / `'register'`) to
-   *   open the login modal, used by the Login/Register links when logged out.
+   * @param {Function} onOpenLogin - Called with a mode string (`'password'` / `'register'` /
+   *   `'recover'`) to open the login modal, used by the Login/Register/Recover links when
+   *   logged out.
    * @returns {React.ReactElement} The rendered navigation bar.
    */
   static render(isLoggedIn, isAdmin, onLogout, onOpenLogin) {
@@ -39,8 +40,8 @@ export default class HeaderHelper {
    * @param {boolean} isLoggedIn - Whether a session is currently active.
    * @param {boolean} isAdmin - Whether the current session belongs to an admin user.
    * @param {Function} onLogout - Click handler for the Logout link, used when logged in.
-   * @param {Function} onOpenLogin - Called with a mode string to open the login modal, used by
-   *   the Login/Register links.
+   * @param {Function} onOpenLogin - Called with a mode string (`'password'` / `'register'` /
+   *   `'recover'`) to open the login modal, used by the Login/Register/Recover links.
    * @returns {React.ReactElement} The rendered auth nav links.
    */
   static #renderAuthLinks(isLoggedIn, isAdmin, onLogout, onOpenLogin) {
@@ -57,7 +58,7 @@ export default class HeaderHelper {
       <>
         {HeaderHelper.#renderLoginLink('password', 'Login', onOpenLogin)}
         {HeaderHelper.#renderLoginLink('register', 'Register', onOpenLogin)}
-        <Nav.Link href="#/recover">Recover</Nav.Link>
+        {HeaderHelper.#renderLoginLink('recover', 'Recover', onOpenLogin)}
       </>
     );
   }
@@ -65,7 +66,8 @@ export default class HeaderHelper {
   /**
    * Render a single link that opens the login modal in a given mode instead of navigating.
    *
-   * @param {string} mode - Mode to open the modal in (`'password'` or `'register'`).
+   * @param {string} mode - Mode to open the modal in (`'password'`, `'register'`, or
+   *   `'recover'`).
    * @param {string} label - Link text.
    * @param {Function} onOpenLogin - Called with `mode` when the link is clicked.
    * @returns {React.ReactElement} The rendered link.

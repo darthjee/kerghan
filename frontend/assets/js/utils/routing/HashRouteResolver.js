@@ -8,7 +8,6 @@ import Router from './Router.js';
  * @type {Array<Array<string>>}
  */
 const ROUTES = [
-  ['/recover', 'recover'],
   ['/recover-password', 'reset-password'],
   ['/admin/users', 'admin-users'],
   ['/', 'home'],

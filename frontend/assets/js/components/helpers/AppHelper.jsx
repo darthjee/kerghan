@@ -2,15 +2,13 @@ import Header from '../common/header/Header.jsx';
 import LoginModal from '../common/loginModal/LoginModal.jsx';
 import ModalRedirect from '../common/ModalRedirect.jsx';
 import Home from '../resources/home/pages/Home.jsx';
-import Recover from '../resources/accounts/pages/Recover.jsx';
-import ResetPassword from '../resources/accounts/pages/ResetPassword.jsx';
+import ResetPasswordLanding from '../resources/accounts/pages/ResetPasswordLanding.jsx';
 import AdminUsers from '../resources/admin/pages/AdminUsers.jsx';
 
 const PAGES = {
   register: <ModalRedirect mode="register" />,
   login: <ModalRedirect mode="password" />,
-  recover: <Recover />,
-  'reset-password': <ResetPassword />,
+  'reset-password': <ResetPasswordLanding />,
   'admin-users': <AdminUsers />,
   home: <Home />,
 };
