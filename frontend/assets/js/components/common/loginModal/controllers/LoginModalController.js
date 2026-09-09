@@ -25,7 +25,7 @@ const registerValidator = new RegisterController(noop, noop);
 
 // `ResetPasswordController.validate` is a pure method that never touches the instance's setters
 // or client, so a single shared instance is enough to reuse its rules without duplicating them.
-const resetPasswordValidator = new ResetPasswordController(noop, noop, noop);
+const resetPasswordValidator = new ResetPasswordController();
 
 /**
  * Controller for the login modal: owns mode state and per-mode submission. Password mode
