@@ -121,4 +121,45 @@ export default class AccountsClient {
       password_confirmation: passwordConfirmation,
     });
   }
+
+  /**
+   * Open an authorization request so an already-logged-in device can approve this login.
+   * Unlike {@link AccountsClient.login}/{@link AccountsClient.register}, this never touches
+   * `AuthSession` — this flow never issues a refresh token. The response shape is identical
+   * for an unknown username (enumeration-safety).
+   *
+   * @param {string} username - The username attempting to log in.
+   * @returns {Promise<{uuid: string, pollToken: string, expiresAt: string}>} The request
+   *   identifier, the token used to poll it, and its ISO-8601 expiry timestamp.
+   */
+  static async createAuthorizationRequest(username) {
+    return ApiClient.postJson('/auth/authorization-requests.json', { username });
+  }
+
+  /**
+   * Poll an authorization request for its current status. When the status is `approved` the
+   * response also carries `user` and `refreshToken`; the token is persisted via
+   * {@link AuthSession} before resolving, so the modal's success path is identical to
+   * {@link AccountsClient.login}. Every other status (`open`, `denied`, `expired`, `logged`)
+   * resolves untouched. An unknown `uuid` or wrong `pollToken` surfaces as an `ApiError` with
+   * `.status === 404` thrown from {@link ApiClient}; it is not caught here.
+   *
+   * @param {string} uuid - The authorization request identifier.
+   * @param {string} pollToken - The token returned by
+   *   {@link AccountsClient.createAuthorizationRequest}.
+   * @returns {Promise<{status: string, user?: object, refreshToken?: string}>} The current
+   *   status, plus credentials on the winning `approved` poll.
+   */
+  static async pollAuthorizationRequest(uuid, pollToken) {
+    const result = await ApiClient.postJson(
+      `/auth/authorization-requests/${uuid}/poll.json`,
+      { pollToken },
+    );
+
+    if (result.status === 'approved') {
+      AuthSession.set(result.refreshToken);
+    }
+
+    return result;
+  }
 }

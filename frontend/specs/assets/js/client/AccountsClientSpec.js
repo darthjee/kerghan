@@ -235,4 +235,89 @@ describe('AccountsClient', () => {
       expect(AuthSession.get()).toBe('refresh-token');
     });
   });
+
+  describe('.createAuthorizationRequest', () => {
+    it('posts the username to the authorization-requests endpoint', async () => {
+      spyOn(ApiClient, 'postJson').and.resolveTo({
+        uuid: 'req-uuid', pollToken: 'poll-token', expiresAt: '2026-09-09T00:05:00.000Z',
+      });
+
+      await AccountsClient.createAuthorizationRequest('foo');
+
+      expect(ApiClient.postJson).toHaveBeenCalledWith('/auth/authorization-requests.json', {
+        username: 'foo',
+      });
+    });
+
+    it('resolves with the uuid, poll token and expiry', async () => {
+      const result = {
+        uuid: 'req-uuid', pollToken: 'poll-token', expiresAt: '2026-09-09T00:05:00.000Z',
+      };
+      spyOn(ApiClient, 'postJson').and.resolveTo(result);
+
+      const response = await AccountsClient.createAuthorizationRequest('foo');
+
+      expect(response).toEqual(result);
+    });
+
+    it('does not touch the stored refresh token', async () => {
+      AuthSession.set('refresh-token');
+      spyOn(ApiClient, 'postJson').and.resolveTo({
+        uuid: 'req-uuid', pollToken: 'poll-token', expiresAt: '2026-09-09T00:05:00.000Z',
+      });
+
+      await AccountsClient.createAuthorizationRequest('foo');
+
+      expect(AuthSession.get()).toBe('refresh-token');
+    });
+  });
+
+  describe('.pollAuthorizationRequest', () => {
+    it('posts the poll token to the request-specific poll endpoint', async () => {
+      spyOn(ApiClient, 'postJson').and.resolveTo({ status: 'open' });
+
+      await AccountsClient.pollAuthorizationRequest('req-uuid', 'poll-token');
+
+      expect(ApiClient.postJson).toHaveBeenCalledWith(
+        '/auth/authorization-requests/req-uuid/poll.json',
+        { pollToken: 'poll-token' },
+      );
+    });
+
+    it('resolves with the status and persists the refresh token on approved', async () => {
+      const result = {
+        status: 'approved',
+        user: { id: 1, username: 'foo', email: 'foo@example.com', isAdmin: false },
+        refreshToken: 'refresh-token',
+      };
+      spyOn(ApiClient, 'postJson').and.resolveTo(result);
+
+      const response = await AccountsClient.pollAuthorizationRequest('req-uuid', 'poll-token');
+
+      expect(response).toEqual(result);
+      expect(AuthSession.get()).toBe('refresh-token');
+    });
+
+    ['open', 'denied', 'expired', 'logged'].forEach((status) => {
+      it(`resolves untouched and leaves the session alone for ${status}`, async () => {
+        AuthSession.set('existing-token');
+        spyOn(ApiClient, 'postJson').and.resolveTo({ status });
+
+        const response = await AccountsClient.pollAuthorizationRequest('req-uuid', 'poll-token');
+
+        expect(response).toEqual({ status });
+        expect(AuthSession.get()).toBe('existing-token');
+      });
+    });
+
+    it('propagates an ApiError from a wrong uuid or poll token', async () => {
+      const error = new Error('not found');
+      error.status = 404;
+      spyOn(ApiClient, 'postJson').and.rejectWith(error);
+
+      await expectAsync(
+        AccountsClient.pollAuthorizationRequest('bad-uuid', 'poll-token'),
+      ).toBeRejectedWith(error);
+    });
+  });
 });
