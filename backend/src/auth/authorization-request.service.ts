@@ -30,6 +30,10 @@ const DEFAULT_AUTHORIZATION_REQUEST_CREATE_LIMIT = 5;
 // `KERGHAN_AUTHORIZATION_REQUEST_CREATE_WINDOW_MS` is unset.
 const DEFAULT_AUTHORIZATION_REQUEST_CREATE_WINDOW_MS = 60000;
 
+// Default cap on a resolved user's simultaneous `open` requests used when
+// `KERGHAN_AUTHORIZATION_REQUEST_MAX_OPEN_PER_USER` is unset.
+const DEFAULT_AUTHORIZATION_REQUEST_MAX_OPEN_PER_USER = 5;
+
 // Uniform failure message shared by every `authorize`/`deny` rejection branch, so a business
 // rejection never leaks which specific check failed.
 const AUTHORIZE_FAILURE_MESSAGE = 'Unable to authorize this request';
@@ -85,7 +89,10 @@ export class AuthorizationRequestService {
    * sliding-window `create` rate limit, a throwaway response with the same
    * shape is returned instead — no row is persisted and no event fires —
    * keeping the outcome enumeration-safe and cost-equivalent regardless of
-   * which limit (if any) tripped.
+   * which limit (if any) tripped. When `username` does resolve to a real
+   * user and that user is already at/over its configured cap of concurrent
+   * `open` requests, the oldest one is transparently evicted (set to
+   * `expired`) first — `create` itself never rejects because of this cap.
    * @param {string} username - The username the requesting device asks another device to vouch for.
    * @param {string} ip - The requesting device's IP address.
    * @param {string} userAgent - The requesting device's User-Agent string.
@@ -101,6 +108,10 @@ export class AuthorizationRequestService {
 
     if (overLimit) {
       return { uuid, pollToken, expiresAt };
+    }
+
+    if (user) {
+      await this.#enforceOpenCapFor(user.id);
     }
 
     await this.authorizationRequestRepository.save(
@@ -298,6 +309,37 @@ export class AuthorizationRequestService {
       this.configService.get('KERGHAN_AUTHORIZATION_REQUEST_CREATE_WINDOW_MS') ??
         DEFAULT_AUTHORIZATION_REQUEST_CREATE_WINDOW_MS,
     );
+  }
+
+  #maxOpenPerUser(): number {
+    return Number(
+      this.configService.get('KERGHAN_AUTHORIZATION_REQUEST_MAX_OPEN_PER_USER') ??
+        DEFAULT_AUTHORIZATION_REQUEST_MAX_OPEN_PER_USER,
+    );
+  }
+
+  /**
+   * Evicts the resolved user's oldest `open` request (flips it to `expired`) when they are
+   * already at/over the configured concurrent-open cap, making room for the row `create` is about
+   * to insert. Never rejects — a legitimate retry always succeeds.
+   * @param {number} userId - The resolved target user's ID.
+   * @returns {Promise<void>} Resolves once any needed eviction is applied.
+   */
+  async #enforceOpenCapFor(userId: number): Promise<void> {
+    const openCount = await this.authorizationRequestRepository.count({ where: { userId, status: 'open' } });
+
+    if (openCount < this.#maxOpenPerUser()) {
+      return;
+    }
+
+    const oldest = await this.authorizationRequestRepository.findOne({
+      where: { userId, status: 'open' },
+      order: { createdAt: 'ASC' },
+    });
+
+    if (oldest) {
+      await this.authorizationRequestRepository.update(oldest.id, { status: 'expired', resolvedAt: new Date() });
+    }
   }
 
   /**
