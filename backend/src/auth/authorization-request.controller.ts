@@ -6,7 +6,7 @@ import { AuthorizationRequestService } from './authorization-request.service.js'
 import { AuthorizeAuthorizationRequestDto } from './dto/authorize-authorization-request.dto.js';
 import { CreateAuthorizationRequestDto } from './dto/create-authorization-request.dto.js';
 import { PollAuthorizationRequestDto } from './dto/poll-authorization-request.dto.js';
-import { extractClientRequestInfo } from '../core/client-request.js';
+import { DEFAULT_TRUSTED_PROXY_HOPS, extractClientRequestInfo } from '../core/client-request.js';
 import { Public } from '../core/public.decorator.js';
 
 /**
@@ -30,7 +30,7 @@ export class AuthorizationRequestController {
    * @param {AuthorizationRequestService} authorizationRequestService - The device-authorization
    *   flow's business logic.
    * @param {ConfigService} configService - Supplies the access-token TTL used for the winning
-   *   poll's cookie `maxAge`.
+   *   poll's cookie `maxAge`, and the trusted-proxy-hop count used to resolve the requesting IP.
    */
   constructor(authorizationRequestService: AuthorizationRequestService, configService: ConfigService) {
     this.authorizationRequestService = authorizationRequestService;
@@ -53,7 +53,7 @@ export class AuthorizationRequestController {
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ): Promise<object> {
-    const { ip, userAgent } = extractClientRequestInfo(req);
+    const { ip, userAgent } = extractClientRequestInfo(req, this.#trustedProxyHops());
     res.set(SKIP_CACHE_HEADER, 'true');
 
     return this.authorizationRequestService.create(dto.username, ip, userAgent);
@@ -153,5 +153,9 @@ export class AuthorizationRequestController {
     res.set(SKIP_CACHE_HEADER, 'true');
 
     return { denied: true };
+  }
+
+  #trustedProxyHops(): number {
+    return Number(this.configService.get('KERGHAN_TRUSTED_PROXY_HOPS') ?? DEFAULT_TRUSTED_PROXY_HOPS);
   }
 }
