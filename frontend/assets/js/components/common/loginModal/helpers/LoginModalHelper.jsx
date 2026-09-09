@@ -6,6 +6,7 @@ const TITLES = {
   register: 'Create an account',
   recover: 'Recover password',
   resetPassword: 'Set a new password',
+  device: 'Authorize with logged device',
 };
 
 /**
@@ -42,8 +43,8 @@ export default class LoginModalHelper {
   /**
    * Resolve the modal title for the active mode.
    *
-   * @param {string} mode - The active mode (`'password'`, `'register'`, `'recover'`, or
-   *   `'resetPassword'`).
+   * @param {string} mode - The active mode (`'password'`, `'register'`, `'recover'`,
+   *   `'resetPassword'`, or `'device'`).
    * @returns {string} The title text.
    */
   static #title(mode) {

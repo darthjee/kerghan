@@ -21,6 +21,8 @@ describe('LoginModalFormsHelper', () => {
     fieldErrors: {},
     submitError: null,
     resultPanel: null,
+    deviceExpiresAt: null,
+    now: undefined,
     ...overrides,
   });
 
@@ -35,6 +37,27 @@ describe('LoginModalFormsHelper', () => {
       expect(html).toContain('>Password</button>');
       expect(html).toContain('>Register</button>');
       expect(html).toContain('>Recover</button>');
+      expect(html).toContain('>Authorize with logged device</button>');
+    });
+
+    it('renders a lone username field with the Send request label in device mode', () => {
+      const html = markup(buildState({ mode: 'device' }));
+
+      expect(html).toContain('id="login-modal-username"');
+      expect(html).not.toContain('id="login-modal-password"');
+      expect(html).not.toContain('id="login-modal-email"');
+      expect(html).toContain('>Send request</button>');
+    });
+
+    it('invokes onSelectMode with device when the fourth selector button is clicked', () => {
+      const handlers = buildHandlers();
+      const tree = LoginModalFormsHelper.render(buildState(), handlers);
+      const [selector] = tree.props.children;
+      const deviceButton = selector.props.children.find((button) => button.key === 'device');
+
+      deviceButton.props.onClick();
+
+      expect(handlers.onSelectMode).toHaveBeenCalledWith('device');
     });
 
     it('marks the active mode button', () => {
@@ -151,6 +174,59 @@ describe('LoginModalFormsHelper', () => {
       button.props.onClick();
 
       expect(handlers.onSelectMode).toHaveBeenCalledWith('password');
+    });
+  });
+
+  describe('.render device panels', () => {
+    const waitingState = buildState({
+      resultPanel: 'device:waiting',
+      deviceExpiresAt: '2026-01-01T00:05:00.000Z',
+      now: Date.parse('2026-01-01T00:00:00.000Z'),
+    });
+
+    it('renders the waiting panel with a spinner and an mm:ss countdown, no retry', () => {
+      const html = markup(waitingState);
+
+      expect(html).toContain('Waiting for another device to approve');
+      expect(html).toContain('spinner-border');
+      expect(html).toContain('05:00');
+      expect(html).not.toContain('>Try again</button>');
+      expect(html).not.toContain('<form');
+    });
+
+    it('clamps the countdown at 00:00 once the expiry has passed', () => {
+      const html = markup(buildState({
+        resultPanel: 'device:waiting',
+        deviceExpiresAt: '2026-01-01T00:00:00.000Z',
+        now: Date.parse('2026-01-01T00:05:00.000Z'),
+      }));
+
+      expect(html).toContain('00:00');
+    });
+
+    [
+      ['device:denied', 'The request was denied on the other device.'],
+      ['device:expired', 'The request expired before it was approved.'],
+      ['device:logged', 'This login was already completed on another device.'],
+      ['device:notFound', 'That request could not be found.'],
+    ].forEach(([panel, copy]) => {
+      it(`renders the ${panel} copy with a retry button`, () => {
+        const html = markup(buildState({ resultPanel: panel }));
+
+        expect(html).toContain(copy);
+        expect(html).toContain('>Try again</button>');
+        expect(html).not.toContain('<form');
+      });
+
+      it(`routes the ${panel} retry button through onSelectMode('device')`, () => {
+        const handlers = buildHandlers();
+        const tree = LoginModalFormsHelper.render(buildState({ resultPanel: panel }), handlers);
+        const [, button] = tree.props.children.props.children;
+
+        button.props.onClick();
+
+        expect(handlers.onSelectMode).toHaveBeenCalledWith('device');
+      });
     });
   });
 });

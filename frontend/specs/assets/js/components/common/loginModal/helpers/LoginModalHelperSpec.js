@@ -61,6 +61,12 @@ describe('LoginModalHelper', () => {
       expect(resetTitle).toBe('Set a new password');
     });
 
+    it('titles the modal for the device mode', () => {
+      const deviceTitle = findTitle(LoginModalHelper.render(buildState({ mode: 'device' }), buildHandlers()));
+
+      expect(deviceTitle).toBe('Authorize with logged device');
+    });
+
     it('falls back to the password title for an unknown mode', () => {
       const title = findTitle(LoginModalHelper.render(buildState({ mode: 'mystery' }), buildHandlers()));
 
