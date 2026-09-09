@@ -1,6 +1,19 @@
 import LoginModalController from '../../../../../../../assets/js/components/common/loginModal/controllers/LoginModalController.js';
 import AuthEvents from '../../../../../../../assets/js/client/AuthEvents.js';
 import LoginModalEvents from '../../../../../../../assets/js/client/LoginModalEvents.js';
+import AuthorizationRequestPoller from '../../../../../../../assets/js/utils/polling/AuthorizationRequestPoller.js';
+
+/**
+ * Drain pending microtasks so a real poll tick started by `jasmine.clock().tick()` runs to
+ * completion.
+ *
+ * @returns {Promise<void>} Resolves once the microtask queue has been flushed a few times.
+ */
+async function flush() {
+  await Promise.resolve();
+  await Promise.resolve();
+  await Promise.resolve();
+}
 
 describe('LoginModalController', () => {
   let setMode;
@@ -8,6 +21,7 @@ describe('LoginModalController', () => {
   let setFieldErrors;
   let setSubmitError;
   let setResultPanel;
+  let setDeviceExpiresAt;
   let client;
 
   const passwordFields = { username: 'foo', password: 'secret' };
@@ -19,7 +33,7 @@ describe('LoginModalController', () => {
   const resetToken = 'reset-token';
 
   const build = () => new LoginModalController(
-    setMode, setFields, setFieldErrors, setSubmitError, setResultPanel, client,
+    setMode, setFields, setFieldErrors, setSubmitError, setResultPanel, setDeviceExpiresAt, client,
   );
 
   beforeEach(() => {
@@ -28,7 +42,11 @@ describe('LoginModalController', () => {
     setFieldErrors = jasmine.createSpy('setFieldErrors');
     setSubmitError = jasmine.createSpy('setSubmitError');
     setResultPanel = jasmine.createSpy('setResultPanel');
-    client = jasmine.createSpyObj('client', ['login', 'register', 'recover', 'resetPassword']);
+    setDeviceExpiresAt = jasmine.createSpy('setDeviceExpiresAt');
+    client = jasmine.createSpyObj('client', [
+      'login', 'register', 'recover', 'resetPassword',
+      'createAuthorizationRequest', 'pollAuthorizationRequest',
+    ]);
     spyOn(AuthEvents, 'emit');
     spyOn(LoginModalEvents, 'close');
   });
@@ -49,6 +67,38 @@ describe('LoginModalController', () => {
       expect(setFieldErrors).toHaveBeenCalledWith({});
       expect(setSubmitError).toHaveBeenCalledWith(null);
       expect(setResultPanel).toHaveBeenCalledWith(null);
+    });
+
+    it('tears down a running poller and clears the device expiry', () => {
+      const controller = build();
+      const poller = jasmine.createSpyObj('poller', ['stop']);
+      controller.poller = poller;
+
+      controller.switchMode('device');
+
+      expect(poller.stop).toHaveBeenCalledTimes(1);
+      expect(controller.poller).toBeNull();
+      expect(setDeviceExpiresAt).toHaveBeenCalledWith(null);
+    });
+  });
+
+  describe('#stopPoller', () => {
+    it('is null-safe when no poll is running', () => {
+      const controller = build();
+
+      expect(() => controller.stopPoller()).not.toThrow();
+      expect(controller.poller).toBeNull();
+    });
+
+    it('stops and drops the active poller', () => {
+      const controller = build();
+      const poller = jasmine.createSpyObj('poller', ['stop']);
+      controller.poller = poller;
+
+      controller.stopPoller();
+
+      expect(poller.stop).toHaveBeenCalledTimes(1);
+      expect(controller.poller).toBeNull();
     });
   });
 
@@ -195,6 +245,105 @@ describe('LoginModalController', () => {
 
       expect(setSubmitError).toHaveBeenCalledWith('Invalid or expired token');
       expect(setResultPanel).not.toHaveBeenCalledWith('resetPassword');
+    });
+  });
+
+  describe('#handleSubmit device mode', () => {
+    const deviceFields = { username: 'foo' };
+    const request = {
+      uuid: 'req-uuid', pollToken: 'poll-token', expiresAt: '2999-01-01T00:00:00.000Z',
+    };
+
+    beforeEach(() => {
+      jasmine.clock().install();
+    });
+
+    afterEach(() => {
+      jasmine.clock().uninstall();
+    });
+
+    it('opens an authorization request, shows the waiting panel and starts polling', async () => {
+      client.createAuthorizationRequest.and.resolveTo(request);
+      client.pollAuthorizationRequest.and.resolveTo({ status: 'open' });
+      const controller = build();
+
+      await controller.handleSubmit('device', deviceFields);
+
+      expect(setSubmitError).toHaveBeenCalledWith(null);
+      expect(client.createAuthorizationRequest).toHaveBeenCalledWith('foo');
+      expect(setDeviceExpiresAt).toHaveBeenCalledWith(request.expiresAt);
+      expect(setResultPanel).toHaveBeenCalledWith('device:waiting');
+      expect(controller.poller).toBeInstanceOf(AuthorizationRequestPoller);
+
+      jasmine.clock().tick(5000);
+      await flush();
+
+      expect(client.pollAuthorizationRequest).toHaveBeenCalledWith('req-uuid', 'poll-token');
+
+      controller.stopPoller();
+    });
+
+    it('keeps the user on the form with a submit error when the request fails', async () => {
+      client.createAuthorizationRequest.and.rejectWith(new Error('rate limited'));
+      const controller = build();
+
+      await controller.handleSubmit('device', deviceFields);
+
+      expect(setSubmitError).toHaveBeenCalledWith('rate limited');
+      expect(setResultPanel).not.toHaveBeenCalledWith('device:waiting');
+      expect(controller.poller).toBeNull();
+    });
+
+    it('runs the shared success path once when the device approves', async () => {
+      client.createAuthorizationRequest.and.resolveTo(request);
+      client.pollAuthorizationRequest.and.resolveTo({
+        status: 'approved', user: { id: 1, username: 'foo', isAdmin: true }, refreshToken: 't',
+      });
+      const fakeWindow = { location: { hash: '' } };
+      globalThis.window = fakeWindow;
+      const controller = build();
+
+      try {
+        await controller.handleSubmit('device', deviceFields);
+        jasmine.clock().tick(5000);
+        await flush();
+
+        expect(AuthEvents.emit).toHaveBeenCalledOnceWith(true, true);
+        expect(LoginModalEvents.close).toHaveBeenCalledTimes(1);
+        expect(fakeWindow.location.hash).toBe('/');
+      } finally {
+        delete globalThis.window;
+      }
+    });
+
+    ['denied', 'expired', 'logged'].forEach((status) => {
+      it(`shows the ${status} panel and stops the poller on ${status}`, async () => {
+        client.createAuthorizationRequest.and.resolveTo(request);
+        client.pollAuthorizationRequest.and.resolveTo({ status });
+        const controller = build();
+
+        await controller.handleSubmit('device', deviceFields);
+        jasmine.clock().tick(5000);
+        await flush();
+
+        expect(setResultPanel).toHaveBeenCalledWith(`device:${status}`);
+        expect(controller.poller).toBeNull();
+      });
+    });
+
+    it('shows the notFound panel and stops the poller on a 404', async () => {
+      client.createAuthorizationRequest.and.resolveTo(request);
+      const error = new Error('not found');
+      error.status = 404;
+      client.pollAuthorizationRequest.and.rejectWith(error);
+      const controller = build();
+
+      await controller.handleSubmit('device', deviceFields);
+      jasmine.clock().tick(5000);
+      await flush();
+
+      expect(setResultPanel).toHaveBeenCalledWith('device:notFound');
+      expect(controller.poller).toBeNull();
     });
   });
 });

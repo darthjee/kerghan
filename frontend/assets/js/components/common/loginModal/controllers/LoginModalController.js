@@ -1,6 +1,7 @@
 import AccountsClient from '../../../../client/AccountsClient.js';
 import AuthEvents from '../../../../client/AuthEvents.js';
 import LoginModalEvents from '../../../../client/LoginModalEvents.js';
+import AuthorizationRequestPoller from '../../../../utils/polling/AuthorizationRequestPoller.js';
 import RegisterController from '../../../resources/accounts/pages/controllers/RegisterController.js';
 import ResetPasswordController from '../../../resources/accounts/pages/controllers/ResetPasswordController.js';
 
@@ -15,6 +16,15 @@ const MODES = {
   register: 'register',
   recover: 'recover',
   resetPassword: 'resetPassword',
+  device: 'device',
+};
+
+/** Maps an {@link AuthorizationRequestPoller} rejection status to its result-panel value. */
+const DEVICE_REJECTION_PANELS = {
+  denied: 'device:denied',
+  expired: 'device:expired',
+  logged: 'device:logged',
+  notFound: 'device:notFound',
 };
 
 const noop = () => undefined;
@@ -35,7 +45,10 @@ const resetPasswordValidator = new ResetPasswordController();
  * {@link AccountsClient.recover} and always shows the neutral "check your email" panel;
  * Set-new-password mode validates with {@link ResetPasswordController}'s rules then calls
  * {@link AccountsClient.resetPassword} and shows a success panel — neither closes the modal,
- * emits auth state, nor redirects.
+ * emits auth state, nor redirects. Authorize-with-logged-device mode opens an authorization
+ * request via {@link AccountsClient.createAuthorizationRequest} and drives it to completion
+ * with an {@link AuthorizationRequestPoller}: an approval reuses the shared success handler,
+ * every other outcome shows its own result panel.
  */
 export default class LoginModalController {
   /**
@@ -46,29 +59,42 @@ export default class LoginModalController {
    * @param {Function} setFieldErrors - React state setter for per-field validation errors.
    * @param {Function} setSubmitError - React state setter for the submit-time error message.
    * @param {Function} setResultPanel - React state setter for the shown result panel
-   *   (`'recover'`, `'resetPassword'`, or `null`).
+   *   (`'recover'`, `'resetPassword'`, `'device:*'`, or `null`).
+   * @param {Function} setDeviceExpiresAt - React state setter for the current authorization
+   *   request's ISO-8601 expiry, or `null` when not in device mode.
    * @param {typeof AccountsClient} [client] - Accounts HTTP client override, for testability.
    */
   constructor(
-    setMode, setFields, setFieldErrors, setSubmitError, setResultPanel, client = AccountsClient,
+    setMode,
+    setFields,
+    setFieldErrors,
+    setSubmitError,
+    setResultPanel,
+    setDeviceExpiresAt,
+    client = AccountsClient,
   ) {
     this.setMode = setMode;
     this.setFields = setFields;
     this.setFieldErrors = setFieldErrors;
     this.setSubmitError = setSubmitError;
     this.setResultPanel = setResultPanel;
+    this.setDeviceExpiresAt = setDeviceExpiresAt;
     this.client = client;
+    this.poller = null;
   }
 
   /**
-   * Switch the modal between modes, resetting every form field, clearing all errors, and
-   * dropping any shown result panel — no field values carry over between modes.
+   * Switch the modal between modes, tearing down any running authorization-request poller,
+   * resetting every form field, clearing all errors, and dropping any shown result panel — no
+   * field values carry over between modes.
    *
-   * @param {string} mode - The mode to switch to (`'password'`, `'register'`, `'recover'`, or
-   *   `'resetPassword'`).
+   * @param {string} mode - The mode to switch to (`'password'`, `'register'`, `'recover'`,
+   *   `'resetPassword'`, or `'device'`).
    * @returns {void} Nothing.
    */
   switchMode(mode) {
+    this.stopPoller();
+    this.setDeviceExpiresAt(null);
     this.setMode(mode);
     this.setFields({ ...INITIAL_FIELDS });
     this.setFieldErrors({});
@@ -77,10 +103,21 @@ export default class LoginModalController {
   }
 
   /**
+   * Stop and drop the active authorization-request poller, if any. Null-safe and idempotent —
+   * safe to call when no poll is in progress.
+   *
+   * @returns {void} Nothing.
+   */
+  stopPoller() {
+    this.poller?.stop();
+    this.poller = null;
+  }
+
+  /**
    * Submit the modal form for the active mode.
    *
-   * @param {string} mode - The active mode (`'password'`, `'register'`, `'recover'`, or
-   *   `'resetPassword'`).
+   * @param {string} mode - The active mode (`'password'`, `'register'`, `'recover'`,
+   *   `'resetPassword'`, or `'device'`).
    * @param {object} fields - Current form field values.
    * @param {string} resetToken - The recovery token, used only by Set-new-password mode.
    * @returns {Promise<void>} Resolves once submission handling finishes.
@@ -90,6 +127,7 @@ export default class LoginModalController {
       [MODES.register]: () => this.#submitRegister(fields),
       [MODES.recover]: () => this.#submitRecover(fields),
       [MODES.resetPassword]: () => this.#submitResetPassword(fields, resetToken),
+      [MODES.device]: () => this.#submitDevice(fields),
     };
 
     return (handlers[mode] ?? (() => this.#submitPassword(fields)))();
@@ -190,11 +228,60 @@ export default class LoginModalController {
   }
 
   /**
-   * Shared success path for Password / Register modes: the refresh token is already persisted
-   * by the `AccountsClient` call, so announce the new logged-in auth state, close the modal,
-   * and redirect home.
+   * Authorize-with-logged-device submit: open an authorization request for the typed username,
+   * then show the waiting panel and start polling. On approval the poller calls the shared
+   * success handler; any other terminal status routes through {@link #handleDeviceRejection}. A
+   * failed request keeps the user on the form with a submit-error message and starts no poller.
    *
-   * @param {{user: {isAdmin: boolean}}} result - The successful login/register response.
+   * @param {{username: string}} fields - Current form field values.
+   * @returns {Promise<void>} Resolves once the request is opened and polling has started.
+   */
+  async #submitDevice({ username }) {
+    this.setSubmitError(null);
+
+    let request;
+    try {
+      request = await this.client.createAuthorizationRequest(username);
+    } catch (error) {
+      this.setSubmitError(error.message);
+      return;
+    }
+
+    const { uuid, pollToken, expiresAt } = request;
+
+    this.setDeviceExpiresAt(expiresAt);
+    this.setResultPanel('device:waiting');
+
+    this.poller = new AuthorizationRequestPoller({
+      uuid,
+      pollToken,
+      expiresAt,
+      client: this.client,
+      onApproved: (result) => this.#handleSuccess(result),
+      onRejected: (status) => this.#handleDeviceRejection(status),
+    });
+    this.poller.start();
+  }
+
+  /**
+   * Handle a terminal, non-approved authorization-request outcome: show the panel matching the
+   * status (`denied` / `expired` / `logged` / `notFound`) and tear the poller down.
+   *
+   * @param {string} status - The poller's rejection status.
+   * @returns {void} Nothing.
+   */
+  #handleDeviceRejection(status) {
+    this.setResultPanel(DEVICE_REJECTION_PANELS[status]);
+    this.stopPoller();
+  }
+
+  /**
+   * Shared success path for Password / Register / approved-device flows: the refresh token is
+   * already persisted by the `AccountsClient` call, so announce the new logged-in auth state,
+   * close the modal, and redirect home.
+   *
+   * @param {{user: {isAdmin: boolean}}} result - The successful login/register/approval
+   *   response.
    * @returns {void} Nothing.
    */
   #handleSuccess(result) {
