@@ -78,6 +78,10 @@ describe('HeaderHelper', () => {
     it('does not render the Admin Users link, even when isAdmin is true', () => {
       expect(markupOf(false, true)).not.toContain('href="#/admin/users"');
     });
+
+    it('does not render the My account dropdown', () => {
+      expect(markupOf(false, false)).not.toContain('My account');
+    });
   });
 
   describe('when logged in', () => {
@@ -102,6 +106,14 @@ describe('HeaderHelper', () => {
 
       expect(markup).toContain('href="#/admin/users"');
       expect(markup).toContain('Admin Users');
+    });
+
+    it('renders the My account dropdown with an Authorizations item', () => {
+      const markup = markupOf(true, false);
+
+      expect(markup).toContain('My account');
+      expect(markup).toContain('href="#/account/authorization-requests"');
+      expect(markup).toContain('Authorizations');
     });
   });
 });
