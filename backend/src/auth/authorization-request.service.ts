@@ -5,61 +5,38 @@ import { EventEmitter2 } from '@nestjs/event-emitter';
 import { InjectRepository } from '@nestjs/typeorm';
 import bcrypt from 'bcryptjs';
 import { MoreThan, Repository } from 'typeorm';
-import { AuthorizationRequest, type AuthorizationRequestStatus } from './entities/authorization-request.entity.js';
+import type {
+  CreatedAuthorizationRequest,
+  OpenAuthorizationRequest,
+  PollResult,
+} from './authorization-request-result.js';
+import { AuthorizationRequest } from './entities/authorization-request.entity.js';
 import { User } from './entities/user.entity.js';
 import { AuthorizationRequestApprovedEvent } from './events/authorization-request-approved.event.js';
 import { AuthorizationRequestCreatedEvent } from './events/authorization-request-created.event.js';
 import { AuthorizationRequestDeniedEvent } from './events/authorization-request-denied.event.js';
 import { AuthorizationRequestLoggedEvent } from './events/authorization-request-logged.event.js';
-import { TokenService, type AuthResult } from './token.service.js';
+import { TokenService } from './token.service.js';
 
 // Default authorization-request lifetime (1 hour, in milliseconds) used when
 // `KERGHAN_AUTHORIZATION_REQUEST_TTL_MS` is unset.
 const DEFAULT_AUTHORIZATION_REQUEST_TTL_MS = 3600000;
 
-// Uniform failure message shared by every `authorize`/`deny` rejection
-// branch, so a business rejection is indistinguishable from any other (never
-// leaking which specific check failed).
+// Uniform failure message shared by every `authorize`/`deny` rejection branch, so a business
+// rejection never leaks which specific check failed.
 const AUTHORIZE_FAILURE_MESSAGE = 'Unable to authorize this request';
 const DENY_FAILURE_MESSAGE = 'Unable to deny this request';
 
-// A pre-computed bcrypt hash of a value nobody will ever submit, compared
-// against when the approver row is somehow missing, so the timing stays the
-// same as a wrong-password check (mirrors `AuthService#validateCredentials`).
+// A pre-computed bcrypt hash compared against on a missing approver row, keeping the timing the
+// same as a wrong-password check (mirrors `AuthService#validateCredentials`'s `DUMMY_DIGEST`).
 const DUMMY_DIGEST = '$2a$10$CwTycUXWue0Thq9StjUM0uJ8Q1eLXfPJvXQF4RUOgtnJhmiQq6Zsy';
 
-/** The result of `create()`. */
-export interface CreatedAuthorizationRequest {
-  uuid: string;
-  pollToken: string;
-  expiresAt: Date;
-}
-
-/** An `open`, non-expired authorization request owned by the caller, as returned by `listOpenForUser`. */
-export interface OpenAuthorizationRequest {
-  uuid: string;
-  requestIp: string;
-  requestUserAgent: string;
-  createdAt: Date;
-  expiresAt: Date;
-}
-
 /**
- * The result of `poll()`: every non-`approved` status carries no
- * credentials; `approved` (the winning poll only) carries the freshly
- * issued session.
- */
-export type PollResult =
-  | { status: Exclude<AuthorizationRequestStatus, 'approved'> }
-  | { status: 'approved'; authResult: AuthResult };
-
-/**
- * The requesting-device half of the login-by-authorization flow's business
- * logic: creating an `AuthorizationRequest` for a username, and polling it
- * until it is approved (or denied / expired). Not exported from
- * `AuthModule` — an internal collaborator only, like `PasswordResetService`.
- * Depends only on injected repositories and services — never reads env vars
- * or global state directly (per `docs/agents/contributing.md`'s DI rule).
+ * The login-by-authorization flow's business logic, both device sides: the requesting device's
+ * `create`/`poll`, and the approver device's `listOpenForUser`/`authorize`/`deny`. Not exported
+ * from `AuthModule` — an internal collaborator only, like `PasswordResetService`. Depends only on
+ * injected repositories/services — never reads env vars or global state directly (per
+ * `docs/agents/contributing.md`'s DI rule).
  */
 @Injectable()
 export class AuthorizationRequestService {
@@ -167,10 +144,8 @@ export class AuthorizationRequestService {
   }
 
   /**
-   * Lists the caller's own `open`, non-expired authorization requests,
-   * newest first. Rows with `userId: null` or belonging to a different user
-   * are excluded by the `WHERE` clause itself, never filtered after the
-   * fact.
+   * Lists the caller's own `open`, non-expired authorization requests, newest first. Rows with
+   * `userId: null` or belonging to a different user are excluded by the `WHERE` clause itself.
    * @param {number} userId - The approver's own user ID (`request.user.sub`).
    * @returns {Promise<OpenAuthorizationRequest[]>} The caller's open, non-expired requests.
    */
@@ -190,12 +165,10 @@ export class AuthorizationRequestService {
   }
 
   /**
-   * Authorizes an open authorization request raised against the caller's own
-   * username, re-verifying the approver's current password (mirroring
-   * `AuthService#validateCredentials`). Every failure branch — missing row,
-   * wrong owner, wrong status, expired, or wrong password — throws the same
-   * `BadRequestException`, so a business rejection never surfaces as
-   * `401`/`403`.
+   * Authorizes an open request raised against the caller's own username, re-verifying the
+   * approver's current password (mirroring `AuthService#validateCredentials`). Every failure
+   * branch — missing row, wrong owner, wrong status, expired, or wrong password — throws the same
+   * `BadRequestException`, so a business rejection never surfaces as `401`/`403`.
    * @param {string} uuid - The authorization request's UUID.
    * @param {number} approverUserId - The approver's own user ID (`request.user.sub`).
    * @param {string} password - The approver's current plaintext password.

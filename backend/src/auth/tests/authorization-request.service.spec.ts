@@ -1,7 +1,8 @@
 import { createHash } from 'node:crypto';
-import { NotFoundException } from '@nestjs/common';
+import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { EventEmitter2 } from '@nestjs/event-emitter';
+import bcrypt from 'bcryptjs';
 import { AuthorizationRequestService } from '../authorization-request.service.js';
 import { AuthorizationRequest } from '../entities/authorization-request.entity.js';
 import { User } from '../entities/user.entity.js';
@@ -9,6 +10,7 @@ import { TokenService } from '../token.service.js';
 
 type RepoMock<T extends object> = {
   findOneBy: jest.Mock;
+  find: jest.Mock;
   create: jest.Mock;
   save: jest.Mock;
   update: jest.Mock;
@@ -34,6 +36,7 @@ function queryBuilderMock(executeResult: { affected: number }): {
 function repoMock<T extends object>(): RepoMock<T> {
   return {
     findOneBy: jest.fn(),
+    find: jest.fn(async () => []),
     create: jest.fn((attrs) => attrs),
     save: jest.fn(async (entity) => ({ id: 1, ...entity })),
     update: jest.fn(),
@@ -317,6 +320,285 @@ describe('AuthorizationRequestService', () => {
         it('returns { status: "logged" } with no credentials', async () => {
           await expect(service.poll('uuid-1', 'poll-token')).resolves.toEqual({ status: 'logged' });
         });
+      });
+    });
+  });
+
+  describe('listOpenForUser', () => {
+    const openRow = {
+      id: 1,
+      uuid: 'uuid-open',
+      username: 'darthjee',
+      userId: 1,
+      status: 'open',
+      pollTokenHash: sha256('poll-token'),
+      requestIp: '203.0.113.1',
+      requestUserAgent: 'curl/8.0',
+      approvedByUserId: null,
+      createdAt: new Date(),
+      expiresAt: new Date(Date.now() + 60000),
+      resolvedAt: null,
+      loggedAt: null,
+    };
+
+    it('queries only open, non-expired rows for the given userId, newest first', async () => {
+      authorizationRequestRepository.find.mockResolvedValue([openRow]);
+
+      await service.listOpenForUser(1);
+
+      expect(authorizationRequestRepository.find).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ userId: 1, status: 'open' }),
+          order: { createdAt: 'DESC' },
+        }),
+      );
+    });
+
+    it('maps rows to the public shape only, leaking no id/pollTokenHash/username/approvedByUserId', async () => {
+      authorizationRequestRepository.find.mockResolvedValue([openRow]);
+
+      const result = await service.listOpenForUser(1);
+
+      expect(result).toEqual([
+        {
+          uuid: 'uuid-open',
+          requestIp: '203.0.113.1',
+          requestUserAgent: 'curl/8.0',
+          createdAt: openRow.createdAt,
+          expiresAt: openRow.expiresAt,
+        },
+      ]);
+    });
+
+    it('returns an empty array when nothing matches (userId: null / other users / expired / non-open excluded by the WHERE clause)', async () => {
+      authorizationRequestRepository.find.mockResolvedValue([]);
+
+      await expect(service.listOpenForUser(1)).resolves.toEqual([]);
+    });
+  });
+
+  describe('authorize', () => {
+    const approverPasswordDigest = bcrypt.hashSync('approver-password', 10);
+    const approver = { id: 1, username: 'darthjee', passwordDigest: approverPasswordDigest } as User;
+    const openRow = {
+      id: 10,
+      uuid: 'uuid-1',
+      username: 'darthjee',
+      userId: 1,
+      status: 'open',
+      pollTokenHash: sha256('poll-token'),
+      requestIp: '203.0.113.1',
+      requestUserAgent: 'curl/8.0',
+      approvedByUserId: null,
+      createdAt: new Date(),
+      expiresAt: new Date(Date.now() + 60000),
+      resolvedAt: null,
+      loggedAt: null,
+    };
+
+    beforeEach(() => {
+      userRepository.findOneBy.mockResolvedValue(approver);
+    });
+
+    describe('when the row is open, owned by the approver, not expired, and the password is correct', () => {
+      beforeEach(() => {
+        authorizationRequestRepository.findOneBy.mockResolvedValue({ ...openRow });
+      });
+
+      it('marks the row approved with approvedByUserId and resolvedAt set', async () => {
+        await service.authorize('uuid-1', 1, 'approver-password');
+
+        expect(authorizationRequestRepository.update).toHaveBeenCalledWith(10, {
+          status: 'approved',
+          approvedByUserId: 1,
+          resolvedAt: expect.any(Date),
+        });
+      });
+
+      it('emits authorization-request.approved', async () => {
+        await service.authorize('uuid-1', 1, 'approver-password');
+
+        expect(eventEmitter.emit).toHaveBeenCalledWith(
+          'authorization-request.approved',
+          expect.objectContaining({ uuid: 'uuid-1', approvedByUserId: 1 }),
+        );
+      });
+    });
+
+    describe('when the row is missing', () => {
+      beforeEach(() => {
+        authorizationRequestRepository.findOneBy.mockResolvedValue(null);
+      });
+
+      it('rejects with the uniform BadRequestException', async () => {
+        await expect(service.authorize('unknown-uuid', 1, 'approver-password')).rejects.toThrow(
+          new BadRequestException('Unable to authorize this request'),
+        );
+      });
+
+      it('does not emit an event', async () => {
+        await expect(service.authorize('unknown-uuid', 1, 'approver-password')).rejects.toThrow();
+
+        expect(eventEmitter.emit).not.toHaveBeenCalled();
+      });
+    });
+
+    describe('when the row belongs to another user', () => {
+      beforeEach(() => {
+        authorizationRequestRepository.findOneBy.mockResolvedValue({ ...openRow, userId: 2 });
+      });
+
+      it('rejects with the same uniform BadRequestException', async () => {
+        await expect(service.authorize('uuid-1', 1, 'approver-password')).rejects.toThrow(
+          new BadRequestException('Unable to authorize this request'),
+        );
+      });
+
+      it('does not emit an event', async () => {
+        await expect(service.authorize('uuid-1', 1, 'approver-password')).rejects.toThrow();
+
+        expect(eventEmitter.emit).not.toHaveBeenCalled();
+      });
+    });
+
+    describe('when the row is not open', () => {
+      beforeEach(() => {
+        authorizationRequestRepository.findOneBy.mockResolvedValue({ ...openRow, status: 'denied' });
+      });
+
+      it('rejects with the same uniform BadRequestException', async () => {
+        await expect(service.authorize('uuid-1', 1, 'approver-password')).rejects.toThrow(
+          new BadRequestException('Unable to authorize this request'),
+        );
+      });
+    });
+
+    describe('when the row is past its expiresAt', () => {
+      beforeEach(() => {
+        authorizationRequestRepository.findOneBy.mockResolvedValue({
+          ...openRow,
+          expiresAt: new Date(Date.now() - 1000),
+        });
+      });
+
+      it('rejects with the same uniform BadRequestException', async () => {
+        await expect(service.authorize('uuid-1', 1, 'approver-password')).rejects.toThrow(
+          new BadRequestException('Unable to authorize this request'),
+        );
+      });
+    });
+
+    describe('when the password is wrong', () => {
+      beforeEach(() => {
+        authorizationRequestRepository.findOneBy.mockResolvedValue({ ...openRow });
+      });
+
+      it('rejects with the same uniform BadRequestException', async () => {
+        await expect(service.authorize('uuid-1', 1, 'wrong-password')).rejects.toThrow(
+          new BadRequestException('Unable to authorize this request'),
+        );
+      });
+
+      it('does not update the row', async () => {
+        await expect(service.authorize('uuid-1', 1, 'wrong-password')).rejects.toThrow();
+
+        expect(authorizationRequestRepository.update).not.toHaveBeenCalled();
+      });
+    });
+  });
+
+  describe('deny', () => {
+    const openRow = {
+      id: 20,
+      uuid: 'uuid-2',
+      username: 'darthjee',
+      userId: 1,
+      status: 'open',
+      pollTokenHash: sha256('poll-token'),
+      requestIp: '203.0.113.1',
+      requestUserAgent: 'curl/8.0',
+      approvedByUserId: null,
+      createdAt: new Date(),
+      expiresAt: new Date(Date.now() + 60000),
+      resolvedAt: null,
+      loggedAt: null,
+    };
+
+    describe('when the row is open and owned by the approver', () => {
+      beforeEach(() => {
+        authorizationRequestRepository.findOneBy.mockResolvedValue({ ...openRow });
+      });
+
+      it('marks the row denied with resolvedAt set', async () => {
+        await service.deny('uuid-2', 1);
+
+        expect(authorizationRequestRepository.update).toHaveBeenCalledWith(20, {
+          status: 'denied',
+          resolvedAt: expect.any(Date),
+        });
+      });
+
+      it('emits authorization-request.denied', async () => {
+        await service.deny('uuid-2', 1);
+
+        expect(eventEmitter.emit).toHaveBeenCalledWith(
+          'authorization-request.denied',
+          expect.objectContaining({ uuid: 'uuid-2', deniedByUserId: 1 }),
+        );
+      });
+    });
+
+    describe('when the row is expired but still open', () => {
+      beforeEach(() => {
+        authorizationRequestRepository.findOneBy.mockResolvedValue({
+          ...openRow,
+          expiresAt: new Date(Date.now() - 1000),
+        });
+      });
+
+      it('still denies successfully — no expiry check is performed', async () => {
+        await service.deny('uuid-2', 1);
+
+        expect(authorizationRequestRepository.update).toHaveBeenCalledWith(20, {
+          status: 'denied',
+          resolvedAt: expect.any(Date),
+        });
+      });
+    });
+
+    describe('when the row belongs to another user', () => {
+      beforeEach(() => {
+        authorizationRequestRepository.findOneBy.mockResolvedValue({ ...openRow, userId: 2 });
+      });
+
+      it('rejects with the uniform BadRequestException', async () => {
+        await expect(service.deny('uuid-2', 1)).rejects.toThrow(
+          new BadRequestException('Unable to deny this request'),
+        );
+      });
+    });
+
+    describe('when the row is not open', () => {
+      beforeEach(() => {
+        authorizationRequestRepository.findOneBy.mockResolvedValue({ ...openRow, status: 'approved' });
+      });
+
+      it('rejects with the same uniform BadRequestException', async () => {
+        await expect(service.deny('uuid-2', 1)).rejects.toThrow(
+          new BadRequestException('Unable to deny this request'),
+        );
+      });
+    });
+
+    describe('when the row is missing', () => {
+      beforeEach(() => {
+        authorizationRequestRepository.findOneBy.mockResolvedValue(null);
+      });
+
+      it('rejects with the same uniform BadRequestException', async () => {
+        await expect(service.deny('unknown-uuid', 1)).rejects.toThrow(
+          new BadRequestException('Unable to deny this request'),
+        );
       });
     });
   });

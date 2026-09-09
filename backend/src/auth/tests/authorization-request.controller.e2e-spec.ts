@@ -21,8 +21,17 @@ import { User } from '../entities/user.entity.js';
 // `auth.controller.e2e-spec.ts`'s identical helper.
 function matchesCondition(rowValue: unknown, conditionValue: unknown): boolean {
   if (conditionValue && typeof conditionValue === 'object' && 'type' in conditionValue) {
-    const operator = conditionValue as { type: string };
-    return operator.type === 'isNull' ? rowValue === null || rowValue === undefined : false;
+    const operator = conditionValue as { type: string; value: unknown };
+
+    if (operator.type === 'isNull') {
+      return rowValue === null || rowValue === undefined;
+    }
+
+    if (operator.type === 'moreThan') {
+      return (rowValue as Date) > (operator.value as Date);
+    }
+
+    return false;
   }
 
   return rowValue === conditionValue;
@@ -54,6 +63,30 @@ function createInMemoryRepo<T extends { id?: number }>() {
         ) ?? null
       );
     },
+    find: async (
+      { where, order }: { where?: Partial<T> | Partial<T>[]; order?: Partial<Record<keyof T, 'ASC' | 'DESC'>> } = {},
+    ): Promise<T[]> => {
+      const conditions = where ? (Array.isArray(where) ? where : [where]) : [];
+      const matched =
+        conditions.length === 0
+          ? [...rows]
+          : rows.filter((row) =>
+            conditions.some((condition) =>
+              Object.entries(condition).every(([key, value]) => matchesCondition((row as never)[key], value)),
+            ),
+          );
+
+      const [field, direction] = order ? (Object.entries(order)[0] as [string, 'ASC' | 'DESC']) : [];
+
+      if (!field) {
+        return matched;
+      }
+
+      return matched.sort((a, b) => {
+        const diff = new Date((a as never)[field]).getTime() - new Date((b as never)[field]).getTime();
+        return direction === 'DESC' ? -diff : diff;
+      });
+    },
     findOneBy: async (where: Partial<T>): Promise<T | null> =>
       rows.find((row) =>
         Object.entries(where).every(([key, value]) => matchesCondition((row as never)[key], value)),
@@ -61,6 +94,10 @@ function createInMemoryRepo<T extends { id?: number }>() {
     save: async (entity: T): Promise<T> => {
       if (entity.id === undefined) {
         entity.id = nextId++;
+        // Real TypeORM auto-populates `@CreateDateColumn`
+        // (`AuthorizationRequest#createdAt`) on insert — this fake repo has
+        // to do the same so `listOpenForUser`'s `createdAt` field round-trips.
+        (entity as never as { createdAt?: Date }).createdAt ??= new Date();
         rows.push(entity);
       }
       return entity;
@@ -312,6 +349,214 @@ describe('AuthorizationRequestController (e2e)', () => {
         .expect(201);
 
       expect(response.headers['x-skip-cache']).toBe('true');
+    });
+  });
+
+  describe('approver routes', () => {
+    let ownerCookie: string;
+    let attackerCookie: string;
+
+    async function login(username: string, password: string): Promise<string> {
+      const response = await request(app.getHttpServer()).post('/auth/login.json').send({ username, password });
+      return response.headers['set-cookie'][0].split(';')[0];
+    }
+
+    beforeEach(async () => {
+      ownerCookie = await login('darthjee', 'my-password');
+
+      await request(app.getHttpServer())
+        .post('/auth/register.json')
+        .send({ username: 'vader', email: 'vader@example.com', password: 'attacker-password' });
+      attackerCookie = await login('vader', 'attacker-password');
+    });
+
+    describe('mine', () => {
+      it('rejects an unauthenticated call with 401', async () => {
+        await request(app.getHttpServer()).post('/auth/authorization-requests/mine.json').send({}).expect(401);
+      });
+
+      it("returns only the caller's own open, non-expired requests, newest first", async () => {
+        const { uuid } = await createAuthorizationRequest('darthjee');
+
+        const response = await request(app.getHttpServer())
+          .post('/auth/authorization-requests/mine.json')
+          .set('Cookie', [ownerCookie])
+          .send({})
+          .expect(201);
+
+        expect(response.body).toEqual({
+          requests: [
+            {
+              uuid,
+              requestIp: expect.any(String),
+              requestUserAgent: expect.any(String),
+              createdAt: expect.any(String),
+              expiresAt: expect.any(String),
+            },
+          ],
+        });
+      });
+
+      it("never returns a request raised against another user's username", async () => {
+        await createAuthorizationRequest('vader');
+
+        const response = await request(app.getHttpServer())
+          .post('/auth/authorization-requests/mine.json')
+          .set('Cookie', [ownerCookie])
+          .send({})
+          .expect(201);
+
+        expect(response.body).toEqual({ requests: [] });
+      });
+
+      it('never returns a request with userId: null (unresolved username)', async () => {
+        await createAuthorizationRequest('nobody');
+
+        const response = await request(app.getHttpServer())
+          .post('/auth/authorization-requests/mine.json')
+          .set('Cookie', [ownerCookie])
+          .send({})
+          .expect(201);
+
+        expect(response.body).toEqual({ requests: [] });
+      });
+    });
+
+    describe('authorize', () => {
+      it('rejects an unauthenticated call with 401', async () => {
+        const { uuid } = await createAuthorizationRequest('darthjee');
+
+        await request(app.getHttpServer())
+          .post(`/auth/authorization-requests/${uuid}/authorize.json`)
+          .send({ password: 'my-password' })
+          .expect(401);
+      });
+
+      it('rejects a wrong password with 400', async () => {
+        const { uuid } = await createAuthorizationRequest('darthjee');
+
+        await request(app.getHttpServer())
+          .post(`/auth/authorization-requests/${uuid}/authorize.json`)
+          .set('Cookie', [ownerCookie])
+          .send({ password: 'wrong-password' })
+          .expect(400);
+      });
+
+      it("rejects the attacker authorizing the owner's request with 400", async () => {
+        const { uuid } = await createAuthorizationRequest('darthjee');
+
+        await request(app.getHttpServer())
+          .post(`/auth/authorization-requests/${uuid}/authorize.json`)
+          .set('Cookie', [attackerCookie])
+          .send({ password: 'attacker-password' })
+          .expect(400);
+      });
+
+      it('authorizes on the correct password, and a subsequent poll grants credentials exactly once', async () => {
+        const { uuid, pollToken } = await createAuthorizationRequest('darthjee');
+
+        const response = await request(app.getHttpServer())
+          .post(`/auth/authorization-requests/${uuid}/authorize.json`)
+          .set('Cookie', [ownerCookie])
+          .send({ password: 'my-password' })
+          .expect(201);
+
+        expect(response.body).toEqual({ authorized: true });
+
+        const approvedPoll = await request(app.getHttpServer())
+          .post(`/auth/authorization-requests/${uuid}/poll.json`)
+          .send({ pollToken })
+          .expect(201);
+
+        expect(approvedPoll.body).toEqual({
+          status: 'approved',
+          user: { id: expect.any(Number), username: 'darthjee', email: 'darthjee@example.com', isAdmin: false },
+          refreshToken: expect.any(String),
+        });
+
+        const secondPoll = await request(app.getHttpServer())
+          .post(`/auth/authorization-requests/${uuid}/poll.json`)
+          .send({ pollToken })
+          .expect(201);
+
+        expect(secondPoll.body).toEqual({ status: 'logged' });
+      });
+    });
+
+    describe('deny', () => {
+      it('rejects an unauthenticated call with 401', async () => {
+        const { uuid } = await createAuthorizationRequest('darthjee');
+
+        await request(app.getHttpServer())
+          .post(`/auth/authorization-requests/${uuid}/deny.json`)
+          .send({})
+          .expect(401);
+      });
+
+      it("rejects the attacker denying the owner's request with 400", async () => {
+        const { uuid } = await createAuthorizationRequest('darthjee');
+
+        await request(app.getHttpServer())
+          .post(`/auth/authorization-requests/${uuid}/deny.json`)
+          .set('Cookie', [attackerCookie])
+          .send({})
+          .expect(400);
+      });
+
+      it('denies on the owner call, and a subsequent poll returns { status: "denied" }', async () => {
+        const { uuid, pollToken } = await createAuthorizationRequest('darthjee');
+
+        const response = await request(app.getHttpServer())
+          .post(`/auth/authorization-requests/${uuid}/deny.json`)
+          .set('Cookie', [ownerCookie])
+          .send({})
+          .expect(201);
+
+        expect(response.body).toEqual({ denied: true });
+
+        const pollResponse = await request(app.getHttpServer())
+          .post(`/auth/authorization-requests/${uuid}/poll.json`)
+          .send({ pollToken })
+          .expect(201);
+
+        expect(pollResponse.body).toEqual({ status: 'denied' });
+      });
+    });
+
+    describe('X-Skip-Cache header', () => {
+      it('is set on the mine response', async () => {
+        const response = await request(app.getHttpServer())
+          .post('/auth/authorization-requests/mine.json')
+          .set('Cookie', [ownerCookie])
+          .send({})
+          .expect(201);
+
+        expect(response.headers['x-skip-cache']).toBe('true');
+      });
+
+      it('is set on the authorize response', async () => {
+        const { uuid } = await createAuthorizationRequest('darthjee');
+
+        const response = await request(app.getHttpServer())
+          .post(`/auth/authorization-requests/${uuid}/authorize.json`)
+          .set('Cookie', [ownerCookie])
+          .send({ password: 'my-password' })
+          .expect(201);
+
+        expect(response.headers['x-skip-cache']).toBe('true');
+      });
+
+      it('is set on the deny response', async () => {
+        const { uuid } = await createAuthorizationRequest('darthjee');
+
+        const response = await request(app.getHttpServer())
+          .post(`/auth/authorization-requests/${uuid}/deny.json`)
+          .set('Cookie', [ownerCookie])
+          .send({})
+          .expect(201);
+
+        expect(response.headers['x-skip-cache']).toBe('true');
+      });
     });
   });
 });
