@@ -1,6 +1,7 @@
 import Navbar from 'react-bootstrap/cjs/Navbar.js';
 import Nav from 'react-bootstrap/cjs/Nav.js';
 import Container from 'react-bootstrap/cjs/Container.js';
+import NavDropdown from 'react-bootstrap/cjs/NavDropdown.js';
 
 /**
  * Rendering helper for the Header element.
@@ -35,7 +36,7 @@ export default class HeaderHelper {
 
   /**
    * Render the Login/Register/Recover links when logged out, or the Logout action (plus, for an
-   * admin, the Admin Users link) when logged in.
+   * admin, the Admin Users link, and the "My account" dropdown) when logged in.
    *
    * @param {boolean} isLoggedIn - Whether a session is currently active.
    * @param {boolean} isAdmin - Whether the current session belongs to an admin user.
@@ -49,6 +50,7 @@ export default class HeaderHelper {
       return (
         <>
           {HeaderHelper.#renderAdminLink(isAdmin)}
+          {HeaderHelper.#renderMyAccountDropdown()}
           <Nav.Link href="#" onClick={onLogout}>Logout</Nav.Link>
         </>
       );
@@ -93,5 +95,20 @@ export default class HeaderHelper {
     }
 
     return <Nav.Link href="#/admin/users">Admin Users</Nav.Link>;
+  }
+
+  /**
+   * Render the "My account" dropdown, unconditionally shown once logged in — unlike
+   * {@link HeaderHelper.#renderAdminLink}, it takes no `isAdmin`-style gate. Currently holds a
+   * single item; anticipates future account pages nesting under it later.
+   *
+   * @returns {React.ReactElement} The rendered "My account" dropdown.
+   */
+  static #renderMyAccountDropdown() {
+    return (
+      <NavDropdown title="My account" id="my-account-dropdown" renderMenuOnMount>
+        <NavDropdown.Item href="#/account/authorization-requests">Authorizations</NavDropdown.Item>
+      </NavDropdown>
+    );
   }
 }

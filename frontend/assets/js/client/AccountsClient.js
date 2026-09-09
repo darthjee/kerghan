@@ -162,4 +162,48 @@ export default class AccountsClient {
 
     return result;
   }
+
+  /**
+   * List the caller's own open authorization requests, for the approving device to review.
+   * Unlike {@link AccountsClient.login}/{@link AccountsClient.register}, this never touches
+   * `AuthSession` — this flow never issues a refresh token.
+   *
+   * @returns {Promise<{requests: Array<{uuid: string, requestIp: string,
+   *   requestUserAgent: string, createdAt: string, expiresAt: string}>}>} The caller's open
+   *   authorization requests.
+   */
+  static async listAuthorizationRequests() {
+    return ApiClient.postJson('/auth/authorization-requests/mine.json', {});
+  }
+
+  /**
+   * Approve an authorization request as the account owner, confirming with the account
+   * password. Unlike {@link AccountsClient.login}/{@link AccountsClient.register}, this never
+   * touches `AuthSession` — this flow never issues a refresh token. A `400` (wrong password,
+   * wrong owner, wrong status, or expired — the backend collapses all of these into one message)
+   * surfaces as a thrown `ApiError`; it is not caught here.
+   *
+   * @param {string} uuid - The authorization request identifier.
+   * @param {string} password - The account owner's password, confirming the approval.
+   * @returns {Promise<{authorized: boolean}>} Resolves once the request is authorized.
+   */
+  static async authorizeAuthorizationRequest(uuid, password) {
+    return ApiClient.postJson(
+      `/auth/authorization-requests/${uuid}/authorize.json`,
+      { password },
+    );
+  }
+
+  /**
+   * Deny an authorization request as the account owner. Unlike
+   * {@link AccountsClient.login}/{@link AccountsClient.register}, this never touches
+   * `AuthSession` — this flow never issues a refresh token. Same `400`-as-thrown-`ApiError`
+   * behavior as {@link AccountsClient.authorizeAuthorizationRequest}, it is not caught here.
+   *
+   * @param {string} uuid - The authorization request identifier.
+   * @returns {Promise<{denied: boolean}>} Resolves once the request is denied.
+   */
+  static async denyAuthorizationRequest(uuid) {
+    return ApiClient.postJson(`/auth/authorization-requests/${uuid}/deny.json`, {});
+  }
 }

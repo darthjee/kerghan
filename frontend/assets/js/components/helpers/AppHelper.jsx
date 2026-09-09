@@ -4,12 +4,14 @@ import ModalRedirect from '../common/ModalRedirect.jsx';
 import Home from '../resources/home/pages/Home.jsx';
 import ResetPasswordLanding from '../resources/accounts/pages/ResetPasswordLanding.jsx';
 import AdminUsers from '../resources/admin/pages/AdminUsers.jsx';
+import AuthorizationRequests from '../resources/accounts/pages/AuthorizationRequests.jsx';
 
 const PAGES = {
   register: <ModalRedirect mode="register" />,
   login: <ModalRedirect mode="password" />,
   'reset-password': <ResetPasswordLanding />,
   'admin-users': <AdminUsers />,
+  'authorization-requests': <AuthorizationRequests />,
   home: <Home />,
 };
 

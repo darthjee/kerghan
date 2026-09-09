@@ -46,6 +46,10 @@ describe('AppHelper', () => {
     expect(markupFor('admin-users')).toContain('Admin Users');
   });
 
+  it('renders the authorization requests page for the authorization-requests key', () => {
+    expect(markupFor('authorization-requests')).toContain('Authorization Requests');
+  });
+
   it('renders the home page for the home key', () => {
     expect(markupFor('home')).toContain('Kerghan');
   });

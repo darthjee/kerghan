@@ -37,6 +37,12 @@ describe('HashRouteResolver', () => {
     expect(resolver.getPage()).toBe('admin-users');
   });
 
+  it('resolves the authorization-requests route', () => {
+    const resolver = new HashRouteResolver(() => '#/account/authorization-requests');
+
+    expect(resolver.getPage()).toBe('authorization-requests');
+  });
+
   it('resolves the home route', () => {
     const resolver = new HashRouteResolver(() => '#/');
 
