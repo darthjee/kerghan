@@ -20,6 +20,7 @@
 | `docker-compose.yml` | Full stack service definitions |
 | `version` | Base-image version registry |
 | `.env.dev.sample`, `.env`, `.env.prod` | Environment variable files |
+| `.codacy.yml`, `.gitguardian.yaml`, `.trivyignore` | Static analysis / secret-scanning / vulnerability-scan config |
 
 ## `backend/` — Backend
 

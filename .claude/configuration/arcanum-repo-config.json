@@ -1,6 +1,8 @@
 {
-  "version": "0.18.0",
+  "version": "0.22.0",
   "auto-fix-all": {
-    "ignored_check_patterns": ["codacy"]
+    "ignored_check_patterns": [
+      "codacy"
+    ]
   }
 }
