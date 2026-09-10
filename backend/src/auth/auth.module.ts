@@ -4,6 +4,7 @@ import { AdminController } from './admin.controller.js';
 import { AdminService } from './admin.service.js';
 import { AuthController } from './auth.controller.js';
 import { AuthService } from './auth.service.js';
+import { AuthorizationRequestAbuseGuardService } from './authorization-request-abuse-guard.service.js';
 import { AuthorizationRequestController } from './authorization-request.controller.js';
 import { AuthorizationRequestService } from './authorization-request.service.js';
 import { MailModule } from '../mail/mail.module.js';
@@ -35,6 +36,7 @@ import { TokenService } from './token.service.js';
     PasswordResetService,
     TokenService,
     AuthorizationRequestService,
+    AuthorizationRequestAbuseGuardService,
     PasswordRecoveryRequestedListener,
   ],
   exports: [AuthService],

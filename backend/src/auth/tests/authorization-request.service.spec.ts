@@ -3,6 +3,7 @@ import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import bcrypt from 'bcryptjs';
+import { AuthorizationRequestAbuseGuardService } from '../authorization-request-abuse-guard.service.js';
 import { AuthorizationRequestService } from '../authorization-request.service.js';
 import { AuthorizationRequest } from '../entities/authorization-request.entity.js';
 import { User } from '../entities/user.entity.js';
@@ -10,7 +11,9 @@ import { TokenService } from '../token.service.js';
 
 type RepoMock<T extends object> = {
   findOneBy: jest.Mock;
+  findOne: jest.Mock;
   find: jest.Mock;
+  count: jest.Mock;
   create: jest.Mock;
   save: jest.Mock;
   update: jest.Mock;
@@ -36,7 +39,9 @@ function queryBuilderMock(executeResult: { affected: number }): {
 function repoMock<T extends object>(): RepoMock<T> {
   return {
     findOneBy: jest.fn(),
+    findOne: jest.fn(async () => null),
     find: jest.fn(async () => []),
+    count: jest.fn(async () => 0),
     create: jest.fn((attrs) => attrs),
     save: jest.fn(async (entity) => ({ id: 1, ...entity })),
     update: jest.fn(),
@@ -63,12 +68,18 @@ describe('AuthorizationRequestService', () => {
     eventEmitter = { emit: jest.fn() };
     configService = { get: jest.fn().mockReturnValue(undefined) };
 
+    const abuseGuard = new AuthorizationRequestAbuseGuardService(
+      authorizationRequestRepository as never,
+      configService as unknown as ConfigService,
+    );
+
     service = new AuthorizationRequestService(
       authorizationRequestRepository as never,
       userRepository as never,
       tokenService as unknown as TokenService,
       eventEmitter as unknown as EventEmitter2,
       configService as unknown as ConfigService,
+      abuseGuard,
     );
   });
 
@@ -165,6 +176,155 @@ describe('AuthorizationRequestService', () => {
 
       expect(result.expiresAt.getTime()).toBeGreaterThanOrEqual(before + 60000);
       expect(result.expiresAt.getTime()).toBeLessThan(before + 60000 + 5000);
+    });
+
+    describe('rate limiting', () => {
+      function mockConfig(overrides: Record<string, unknown>): void {
+        configService.get.mockImplementation((key: string) => overrides[key]);
+      }
+
+      describe('when the per-IP count is at the configured limit', () => {
+        beforeEach(() => {
+          mockConfig({ KERGHAN_AUTHORIZATION_REQUEST_CREATE_LIMIT: 5 });
+          authorizationRequestRepository.count.mockImplementation(async ({ where }: { where: { requestIp?: string } }) =>
+            where.requestIp ? 5 : 0,
+          );
+        });
+
+        it('does not persist a row', async () => {
+          userRepository.findOneBy.mockResolvedValue(null);
+
+          await service.create('nobody', '203.0.113.1', 'curl/8.0');
+
+          expect(authorizationRequestRepository.save).not.toHaveBeenCalled();
+        });
+
+        it('does not emit authorization-request.created', async () => {
+          userRepository.findOneBy.mockResolvedValue(null);
+
+          await service.create('nobody', '203.0.113.1', 'curl/8.0');
+
+          expect(eventEmitter.emit).not.toHaveBeenCalled();
+        });
+
+        it('still returns the same { uuid, pollToken, expiresAt } shape, identically for a known username', async () => {
+          const user = { id: 1, username: 'darthjee' } as User;
+          userRepository.findOneBy.mockResolvedValue(user);
+
+          const result = await service.create('darthjee', '203.0.113.1', 'curl/8.0');
+
+          expect(result).toEqual({
+            uuid: expect.any(String),
+            pollToken: expect.any(String),
+            expiresAt: expect.any(Date),
+          });
+          expect(authorizationRequestRepository.save).not.toHaveBeenCalled();
+        });
+      });
+
+      describe('when the per-username count is at the configured limit', () => {
+        beforeEach(() => {
+          mockConfig({ KERGHAN_AUTHORIZATION_REQUEST_CREATE_LIMIT: 5 });
+          authorizationRequestRepository.count.mockImplementation(async ({ where }: { where: { username?: string } }) =>
+            where.username ? 5 : 0,
+          );
+        });
+
+        it('does not persist a row', async () => {
+          userRepository.findOneBy.mockResolvedValue(null);
+
+          await service.create('nobody', '203.0.113.1', 'curl/8.0');
+
+          expect(authorizationRequestRepository.save).not.toHaveBeenCalled();
+        });
+      });
+
+      describe('when neither count is at the limit', () => {
+        beforeEach(() => {
+          mockConfig({ KERGHAN_AUTHORIZATION_REQUEST_CREATE_LIMIT: 5 });
+          authorizationRequestRepository.count.mockResolvedValue(4);
+        });
+
+        it('persists the row as usual', async () => {
+          userRepository.findOneBy.mockResolvedValue(null);
+
+          await service.create('nobody', '203.0.113.1', 'curl/8.0');
+
+          expect(authorizationRequestRepository.save).toHaveBeenCalled();
+        });
+      });
+
+      it('always computes both the IP and username counts (never short-circuits)', async () => {
+        userRepository.findOneBy.mockResolvedValue(null);
+
+        await service.create('nobody', '203.0.113.1', 'curl/8.0');
+
+        expect(authorizationRequestRepository.count).toHaveBeenCalledWith(
+          expect.objectContaining({ where: expect.objectContaining({ requestIp: '203.0.113.1' }) }),
+        );
+        expect(authorizationRequestRepository.count).toHaveBeenCalledWith(
+          expect.objectContaining({ where: expect.objectContaining({ username: 'nobody' }) }),
+        );
+      });
+    });
+
+    describe('concurrent-open cap', () => {
+      const user = { id: 1, username: 'darthjee' } as User;
+
+      beforeEach(() => {
+        userRepository.findOneBy.mockResolvedValue(user);
+        configService.get.mockImplementation((key: string) =>
+          key === 'KERGHAN_AUTHORIZATION_REQUEST_MAX_OPEN_PER_USER' ? 2 : undefined,
+        );
+      });
+
+      describe('when the resolved user is at/over the cap', () => {
+        const oldestOpenRow = { id: 5, userId: 1, status: 'open' };
+
+        beforeEach(() => {
+          authorizationRequestRepository.count.mockResolvedValue(2);
+          authorizationRequestRepository.findOne.mockResolvedValue(oldestOpenRow);
+        });
+
+        it("evicts the oldest open row by flipping it to 'expired'", async () => {
+          await service.create('darthjee', '203.0.113.1', 'curl/8.0');
+
+          expect(authorizationRequestRepository.update).toHaveBeenCalledWith(5, {
+            status: 'expired',
+            resolvedAt: expect.any(Date),
+          });
+        });
+
+        it('never rejects — the new row is still persisted', async () => {
+          await service.create('darthjee', '203.0.113.1', 'curl/8.0');
+
+          expect(authorizationRequestRepository.save).toHaveBeenCalled();
+        });
+      });
+
+      describe('when the resolved user is below the cap', () => {
+        beforeEach(() => {
+          authorizationRequestRepository.count.mockResolvedValue(1);
+        });
+
+        it('does not evict anything', async () => {
+          await service.create('darthjee', '203.0.113.1', 'curl/8.0');
+
+          expect(authorizationRequestRepository.findOne).not.toHaveBeenCalled();
+        });
+      });
+
+      describe('when the username does not resolve to a user', () => {
+        beforeEach(() => {
+          userRepository.findOneBy.mockResolvedValue(null);
+        });
+
+        it('never checks or evicts (cap only applies to resolved users)', async () => {
+          await service.create('nobody', '203.0.113.1', 'curl/8.0');
+
+          expect(authorizationRequestRepository.findOne).not.toHaveBeenCalled();
+        });
+      });
     });
   });
 
@@ -394,6 +554,8 @@ describe('AuthorizationRequestService', () => {
       expiresAt: new Date(Date.now() + 60000),
       resolvedAt: null,
       loggedAt: null,
+      authorizeFailedAttempts: 0,
+      authorizeLockedUntil: null,
     };
 
     beforeEach(() => {
@@ -405,13 +567,15 @@ describe('AuthorizationRequestService', () => {
         authorizationRequestRepository.findOneBy.mockResolvedValue({ ...openRow });
       });
 
-      it('marks the row approved with approvedByUserId and resolvedAt set', async () => {
+      it('marks the row approved with approvedByUserId and resolvedAt set, resetting the cool-off counters', async () => {
         await service.authorize('uuid-1', 1, 'approver-password');
 
         expect(authorizationRequestRepository.update).toHaveBeenCalledWith(10, {
           status: 'approved',
           approvedByUserId: 1,
           resolvedAt: expect.any(Date),
+          authorizeFailedAttempts: 0,
+          authorizeLockedUntil: null,
         });
       });
 
@@ -499,10 +663,60 @@ describe('AuthorizationRequestService', () => {
         );
       });
 
-      it('does not update the row', async () => {
+      it('increments authorizeFailedAttempts without locking the row (below threshold)', async () => {
         await expect(service.authorize('uuid-1', 1, 'wrong-password')).rejects.toThrow();
 
-        expect(authorizationRequestRepository.update).not.toHaveBeenCalled();
+        expect(authorizationRequestRepository.update).toHaveBeenCalledWith(10, {
+          authorizeFailedAttempts: 1,
+          authorizeLockedUntil: null,
+        });
+      });
+    });
+
+    describe('cool-off lockout', () => {
+      it('locks the row once authorizeFailedAttempts reaches the configured max-attempts threshold', async () => {
+        configService.get.mockImplementation((key: string) =>
+          key === 'KERGHAN_AUTHORIZATION_REQUEST_AUTHORIZE_MAX_ATTEMPTS' ? 2 : undefined,
+        );
+        authorizationRequestRepository.findOneBy.mockResolvedValue({ ...openRow, authorizeFailedAttempts: 1 });
+
+        await expect(service.authorize('uuid-1', 1, 'wrong-password')).rejects.toThrow();
+
+        expect(authorizationRequestRepository.update).toHaveBeenCalledWith(10, {
+          authorizeFailedAttempts: 2,
+          authorizeLockedUntil: expect.any(Date),
+        });
+      });
+
+      describe('when the row is already locked', () => {
+        beforeEach(() => {
+          authorizationRequestRepository.findOneBy.mockResolvedValue({
+            ...openRow,
+            authorizeFailedAttempts: 5,
+            authorizeLockedUntil: new Date(Date.now() + 60000),
+          });
+        });
+
+        it('rejects with the same uniform BadRequestException as an ordinary wrong-password rejection', async () => {
+          await expect(service.authorize('uuid-1', 1, 'my-password')).rejects.toThrow(
+            new BadRequestException('Unable to authorize this request'),
+          );
+        });
+
+        it('still runs the password compare (equivalent cost to a normal attempt), even with the correct password', async () => {
+          const compareSpy = jest.spyOn(bcrypt, 'compare');
+
+          await expect(service.authorize('uuid-1', 1, 'approver-password')).rejects.toThrow();
+
+          expect(compareSpy).toHaveBeenCalledWith('approver-password', approverPasswordDigest);
+          compareSpy.mockRestore();
+        });
+
+        it('does not increment authorizeFailedAttempts further while already locked', async () => {
+          await expect(service.authorize('uuid-1', 1, 'wrong-password')).rejects.toThrow();
+
+          expect(authorizationRequestRepository.update).not.toHaveBeenCalled();
+        });
       });
     });
   });
