@@ -5,6 +5,7 @@ import Home from '../resources/home/pages/Home.jsx';
 import ResetPasswordLanding from '../resources/accounts/pages/ResetPasswordLanding.jsx';
 import AdminUsers from '../resources/admin/pages/AdminUsers.jsx';
 import AuthorizationRequests from '../resources/accounts/pages/AuthorizationRequests.jsx';
+import MyAccount from '../resources/accounts/pages/MyAccount.jsx';
 
 const PAGES = {
   register: <ModalRedirect mode="register" />,
@@ -12,6 +13,7 @@ const PAGES = {
   'reset-password': <ResetPasswordLanding />,
   'admin-users': <AdminUsers />,
   'authorization-requests': <AuthorizationRequests />,
+  'my-account': <MyAccount />,
   home: <Home />,
 };
 

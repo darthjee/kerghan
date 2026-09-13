@@ -121,6 +121,37 @@ describe('ApiClient', () => {
     });
   });
 
+  describe('.patchJson', () => {
+    it('patches a JSON body with same-origin credentials', async () => {
+      globalThis.fetch = fetchSequence([{ ok: true, status: 200, json: { username: 'foo' } }]);
+
+      await ApiClient.patchJson('/auth/account.json', { currentPassword: 'secret' });
+
+      expect(globalThis.fetch).toHaveBeenCalledWith('/auth/account.json', jasmine.objectContaining({
+        method: 'PATCH',
+        credentials: 'same-origin',
+        body: JSON.stringify({ currentPassword: 'secret' }),
+      }));
+    });
+
+    it('resolves with the parsed JSON body on success', async () => {
+      globalThis.fetch = fetchSequence([{ ok: true, status: 200, json: { username: 'foo', email: 'foo@example.com' } }]);
+
+      const data = await ApiClient.patchJson('/auth/account.json', { currentPassword: 'secret' });
+
+      expect(data).toEqual({ username: 'foo', email: 'foo@example.com' });
+    });
+
+    it('throws an ApiError with the status and message on a non-401 failure', async () => {
+      globalThis.fetch = fetchSequence([{ ok: false, status: 400, json: { error: 'Invalid current password' } }]);
+
+      await expectAsync(ApiClient.patchJson('/auth/account.json', { currentPassword: 'wrong' }))
+        .toBeRejectedWith(jasmine.objectContaining(
+          { status: 400, message: 'Invalid current password' },
+        ));
+    });
+  });
+
   describe('401 handling', () => {
     it('refreshes the access token and retries the original request on success', async () => {
       spyOn(AuthSession, 'get').and.returnValue('old-refresh-token');

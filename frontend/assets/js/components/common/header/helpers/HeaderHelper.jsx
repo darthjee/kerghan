@@ -99,8 +99,8 @@ export default class HeaderHelper {
 
   /**
    * Render the "My account" dropdown, unconditionally shown once logged in — unlike
-   * {@link HeaderHelper.#renderAdminLink}, it takes no `isAdmin`-style gate. Currently holds a
-   * single item; anticipates future account pages nesting under it later.
+   * {@link HeaderHelper.#renderAdminLink}, it takes no `isAdmin`-style gate. Holds one item per
+   * account page; anticipates further account pages nesting under it later.
    *
    * @returns {React.ReactElement} The rendered "My account" dropdown.
    */
@@ -108,6 +108,7 @@ export default class HeaderHelper {
     return (
       <NavDropdown title="My account" id="my-account-dropdown" renderMenuOnMount>
         <NavDropdown.Item href="#/account/authorization-requests">Authorizations</NavDropdown.Item>
+        <NavDropdown.Item href="#/account/my-account">Account</NavDropdown.Item>
       </NavDropdown>
     );
   }

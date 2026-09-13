@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { AccountService } from './account.service.js';
 import { AdminController } from './admin.controller.js';
 import { AdminService } from './admin.service.js';
 import { AuthController } from './auth.controller.js';
@@ -32,6 +33,7 @@ import { TokenService } from './token.service.js';
   controllers: [AuthController, AdminController, AuthorizationRequestController],
   providers: [
     AuthService,
+    AccountService,
     AdminService,
     PasswordResetService,
     TokenService,

@@ -1,5 +1,6 @@
 import { ConfigService } from '@nestjs/config';
-import type { Response } from 'express';
+import type { Request, Response } from 'express';
+import { AccountService } from '../account.service.js';
 import { AuthController } from '../auth.controller.js';
 import { AuthService } from '../auth.service.js';
 import { User } from '../entities/user.entity.js';
@@ -96,6 +97,28 @@ describe('AuthController', () => {
 
       expect(authService.logout).toHaveBeenCalledWith('a-refresh-token');
       expect(res.clearCookie).toHaveBeenCalledWith('access_token');
+      expect(res.set).toHaveBeenCalledWith('X-Skip-Cache', 'true');
+    });
+  });
+
+  describe('PATCH /auth/account.json', () => {
+    it('delegates to AccountService with the session user id, returns its result, and sets X-Skip-Cache', async () => {
+      const configService = { get: jest.fn((_key: string, defaultValue: number) => defaultValue) };
+      const accountService = {
+        updateAccount: jest.fn().mockResolvedValue({ username: 'new-username', email: 'darthjee@example.com' }),
+      };
+      const controller = new AuthController(
+        authService as unknown as AuthService,
+        configService as unknown as ConfigService,
+        accountService as unknown as AccountService,
+      );
+      const dto = { currentPassword: 'my-password', username: 'new-username' };
+      const req = { user: { sub: 1 } } as unknown as Request;
+
+      const result = await controller.updateAccount(dto, req, res as unknown as Response);
+
+      expect(accountService.updateAccount).toHaveBeenCalledWith(1, dto);
+      expect(result).toEqual({ username: 'new-username', email: 'darthjee@example.com' });
       expect(res.set).toHaveBeenCalledWith('X-Skip-Cache', 'true');
     });
   });

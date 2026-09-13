@@ -206,4 +206,29 @@ export default class AccountsClient {
   static async denyAuthorizationRequest(uuid) {
     return ApiClient.postJson(`/auth/authorization-requests/${uuid}/deny.json`, {});
   }
+
+  /**
+   * Update the caller's own account, confirming with the current password. Unlike
+   * {@link AccountsClient.login}/{@link AccountsClient.register}, this never touches
+   * `AuthSession` — no token refresh or re-login is triggered on success. `username`, `email`,
+   * and `newPassword` are only included in the request body when defined, so callers may update
+   * any subset of them; a `newPasswordConfirmation` field is never sent — that check is
+   * client-side only.
+   *
+   * @param {{currentPassword: string, username?: string, email?: string,
+   *   newPassword?: string}} fields - The current password (always required) plus any fields
+   *   to update.
+   * @returns {Promise<{username: string, email: string}>} The account's updated username and
+   *   email.
+   */
+  static async updateAccount({
+    currentPassword, username, email, newPassword,
+  }) {
+    return ApiClient.patchJson('/auth/account.json', {
+      currentPassword,
+      ...(username !== undefined && { username }),
+      ...(email !== undefined && { email }),
+      ...(newPassword !== undefined && { newPassword }),
+    });
+  }
 }
