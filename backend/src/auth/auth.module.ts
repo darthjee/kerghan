@@ -17,6 +17,7 @@ import { User } from './entities/user.entity.js';
 import { PasswordRecoveryRequestedListener } from './events/password-recovery-requested.listener.js';
 import { PasswordResetService } from './password-reset.service.js';
 import { TokenService } from './token.service.js';
+import { UserUpdateService } from './user-update.service.js';
 
 /**
  * The Auth module — always-on (imported directly into `AppModule`, not
@@ -37,6 +38,7 @@ import { TokenService } from './token.service.js';
     AdminService,
     PasswordResetService,
     TokenService,
+    UserUpdateService,
     AuthorizationRequestService,
     AuthorizationRequestAbuseGuardService,
     PasswordRecoveryRequestedListener,
