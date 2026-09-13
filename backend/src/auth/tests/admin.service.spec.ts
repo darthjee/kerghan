@@ -2,8 +2,10 @@ import { NotFoundException } from '@nestjs/common';
 import { ILike } from 'typeorm';
 import { MailService } from '../../mail/mail.service.js';
 import { AdminService } from '../admin.service.js';
+import { AuthService } from '../auth.service.js';
 import { User } from '../entities/user.entity.js';
 import { PasswordResetService } from '../password-reset.service.js';
+import { UserUpdateService } from '../user-update.service.js';
 
 type UserRepoMock = {
   find: jest.Mock;
@@ -19,19 +21,25 @@ function userRepoMock(): UserRepoMock {
 
 describe('AdminService', () => {
   let userRepository: UserRepoMock;
+  let authService: { assertAvailableForUpdate: jest.Mock };
   let passwordResetService: { issueToken: jest.Mock };
   let mailService: { sendEmailTemplate: jest.Mock };
+  let userUpdateService: { applyUserUpdate: jest.Mock };
   let service: AdminService;
 
   beforeEach(() => {
     userRepository = userRepoMock();
+    authService = { assertAvailableForUpdate: jest.fn().mockResolvedValue(undefined) };
     passwordResetService = { issueToken: jest.fn() };
     mailService = { sendEmailTemplate: jest.fn() };
+    userUpdateService = { applyUserUpdate: jest.fn().mockResolvedValue(undefined) };
 
     service = new AdminService(
       userRepository as never,
+      authService as unknown as AuthService,
       passwordResetService as unknown as PasswordResetService,
       mailService as unknown as MailService,
+      userUpdateService as unknown as UserUpdateService,
     );
   });
 
