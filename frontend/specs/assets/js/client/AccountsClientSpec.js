@@ -217,4 +217,58 @@ describe('AccountsClient', () => {
     });
   });
 
+  describe('.updateAccount', () => {
+    it('patches the current password and every filled-in field to the account endpoint', async () => {
+      spyOn(ApiClient, 'patchJson').and.resolveTo({ username: 'newname', email: 'foo@example.com' });
+
+      await AccountsClient.updateAccount({
+        currentPassword: 'secret', username: 'newname', email: 'foo@example.com', newPassword: 'longenough',
+      });
+
+      expect(ApiClient.patchJson).toHaveBeenCalledWith('/auth/account.json', {
+        currentPassword: 'secret',
+        username: 'newname',
+        email: 'foo@example.com',
+        newPassword: 'longenough',
+      });
+    });
+
+    it('omits username, email, and newPassword when not provided', async () => {
+      spyOn(ApiClient, 'patchJson').and.resolveTo({ username: 'foo', email: 'foo@example.com' });
+
+      await AccountsClient.updateAccount({ currentPassword: 'secret' });
+
+      expect(ApiClient.patchJson).toHaveBeenCalledWith('/auth/account.json', {
+        currentPassword: 'secret',
+      });
+    });
+
+    it('resolves with the updated username and email', async () => {
+      const result = { username: 'newname', email: 'foo@example.com' };
+      spyOn(ApiClient, 'patchJson').and.resolveTo(result);
+
+      const response = await AccountsClient.updateAccount({ currentPassword: 'secret', username: 'newname' });
+
+      expect(response).toEqual(result);
+    });
+
+    it('does not touch the stored refresh token', async () => {
+      AuthSession.set('refresh-token');
+      spyOn(ApiClient, 'patchJson').and.resolveTo({ username: 'foo', email: 'foo@example.com' });
+
+      await AccountsClient.updateAccount({ currentPassword: 'secret', username: 'newname' });
+
+      expect(AuthSession.get()).toBe('refresh-token');
+    });
+
+    it('propagates an ApiError from a wrong current password or duplicate field', async () => {
+      const error = new Error('Invalid current password');
+      error.status = 400;
+      spyOn(ApiClient, 'patchJson').and.rejectWith(error);
+
+      await expectAsync(
+        AccountsClient.updateAccount({ currentPassword: 'wrong', username: 'newname' }),
+      ).toBeRejectedWith(error);
+    });
+  });
 });
