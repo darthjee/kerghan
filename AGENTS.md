@@ -1,7 +1,9 @@
 # Project Instructions
 
-Kerghan is a GitHub issue monitoring/dashboard app. Users log in (no GitHub OAuth yet — just a
-GitHub handle, with a per-user GitHub token for private repos planned as a future addition) and
+Kerghan is a GitHub issue monitoring/dashboard app. Users log into a lightweight Kerghan account
+(username/password, a JWT `access_token` cookie, and a rotating refresh token — not GitHub OAuth;
+a per-user GitHub token for private repos is planned as a future addition), either directly or by
+approving the login from an already-logged-in device via the device-authorization flow, and
 choose which of their repos/orgs to monitor; that selection is what the backend persists. Issue
 data itself is fetched live, on demand, by the frontend calling GitHub's public API directly —
 each user's own browser IP absorbs GitHub's unauthenticated rate limit instead of the backend's
@@ -33,7 +35,10 @@ product decision (see `docs/agents/product.md`). See `docs/agents/architecture/b
 - ESLint (linting)
 - Yarn (package manager)
 
-Currently a tooling-only skeleton — `App.jsx` is a placeholder shell.
+Real auth UI exists (a route-independent login/register/device-authorization modal, hash-based
+routing, and a `client/` HTTP layer — see `docs/agents/architecture/frontend.md`); the
+dashboard/analytics views (issue volume, age, label breakdowns, "needs attention" lists) are
+still to come.
 
 ### Infrastructure
 

@@ -60,6 +60,20 @@ backend/src/
     └── tests/
 ```
 
+## Owned tables
+
+Each module owns its tables under a distinct prefix (see [Modular Pattern](./modular-pattern.md)
+for the rule) — only Auth owns tables today (Mail has no HTTP surface and no entities, see
+`docs/agents/modules/mail.md`). Column-level detail lives in `docs/agents/modules/auth.md`'s
+"Entities" section, not repeated here.
+
+| Table | Module | Notes |
+|---|---|---|
+| `auth_users` | Auth | |
+| `auth_refresh_tokens` | Auth | |
+| `auth_sessions` | Auth | |
+| `auth_authorization_requests` | Auth | `user_id` is a logical FK (no physical FK, no cross-module JOIN) — `NULL` when the request's username didn't resolve to a real user |
+
 ## Build
 
 `nest build` (via `nest-cli.json`) compiles against `tsconfig.build.json`, not `tsconfig.json`

@@ -5,7 +5,7 @@
 | Path | Purpose |
 |---|---|
 | `backend/` | Node.js/NestJS app, TypeScript + TypeORM/MySQL (the Auth and Mail modules exist — the tracked-repo/label-rule data model is still open, see `docs/agents/product.md`) |
-| `frontend/` | React 19 + Vite app — dashboard/analytics UI, currently a tooling-only skeleton |
+| `frontend/` | React 19 + Vite app — dashboard/analytics UI; the login modal, device-authorization flow, hash routing, and `client/` HTTP layer already exist, the dashboard/analytics views themselves don't yet |
 | `proxy/` | PHP Tent proxy config (`dev_configuration/`, `prod_configuration/`, `extension/`) |
 | `dockerfiles/` | One directory per built image, `-base`/leaf pairs |
 | `docker_volumes/` | Bind-mount targets for local dev (gitignored contents) |
@@ -40,7 +40,7 @@
 
 | Subdirectory / File | Description |
 |---|---|
-| `assets/js/` | React source code — currently just `App.jsx` (placeholder) + `main.jsx` (entry) |
+| `assets/js/` | React source code — `App.jsx`/`main.jsx` entry, `components/` (login modal, header, resource pages), `client/` (HTTP layer), `utils/routing/` (hash router), `utils/polling/` (device-authorization poller) |
 | `specs/` | Jasmine test files, mirrors `assets/js/`; `specs/support/jsx-loader.mjs` runs JSX under Node |
 | `index.html` | Vite HTML entry point |
 | `vite.config.js`, `eslint.config.mjs`, `package.json` | Tooling config |

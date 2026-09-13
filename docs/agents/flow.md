@@ -17,11 +17,14 @@ being scoped to each user's own browser IP instead.
 
 ## Step by step
 
-1. **Login.** The user logs into Kerghan itself (a lightweight, backend-owned session — not
-   GitHub OAuth). For now, "login" just means giving the backend a GitHub handle; there's no
-   password or identity verification behind it yet. A per-user GitHub token, to unlock private
-   repos, is planned as a future addition — not built yet, and not required for the public-repo
-   flow described here.
+1. **Login.** The user logs into Kerghan itself (a lightweight, backend-owned account — not
+   GitHub OAuth): username/password, verified against a bcrypt digest, backed by a JWT
+   `access_token` cookie and a rotating refresh token (see `docs/agents/modules/auth.md`). The
+   frontend's route-independent login modal (`LoginModal`) is the single entry point for this —
+   Password/Register/Recover modes, plus a device-authorization mode: the user can instead ask an
+   already-logged-in device to vouch for their username, and poll until that device approves or
+   denies the request. A per-user GitHub token, to unlock private repos, is planned as a future
+   addition — not built yet, and not required for the public-repo flow described here.
 
 2. **Repo discovery.** The backend fetches the full list of the handle's public repositories
    from GitHub (`GET /users/{handle}/repos`, paginated) and shows it to the user.
@@ -66,5 +69,4 @@ this section and `cache-warmer.md` together once that lands.
 
 ## Open questions
 
-- Exact session mechanism behind "login" (cookie? something else?) is not yet decided.
 - Whether repo selection is refreshed periodically or only re-fetched on explicit user action.

@@ -16,6 +16,11 @@ running `kerghan_prod_app` locally to sanity-check the production image).
 | `KERGHAN_SECRET_KEY` | **Consumed** | Signs JWT access tokens, derives the HMAC cache token, and signs `cookie-parser`'s cookies. Must be a long random value in production — the dev sample ships an intentionally insecure placeholder. | `backend/src/app.module.ts`, `backend/src/core/cache-token.service.ts`, `backend/src/main.ts` |
 | `KERGHAN_ACCESS_TOKEN_TTL_MS` | **Consumed**, optional | Access-token lifetime, in milliseconds. Drives both the signed JWT's `signOptions.expiresIn` (`app.module.ts`, converted to seconds for `jsonwebtoken`) and the `access_token` cookie's `maxAge` (`auth.controller.ts`, used as-is), so the two always agree. Defaults to `900000` (15 minutes) when unset. | `backend/src/app.module.ts`, `backend/src/auth/auth.controller.ts` |
 | `KERGHAN_AUTHORIZATION_REQUEST_TTL_MS` | **Consumed**, optional | How long a device-authorization request (`POST /auth/authorization-requests.json`) stays pollable before lazily flipping to `expired`, in milliseconds. Defaults to `3600000` (1 hour) when unset. | `backend/src/auth/authorization-request.service.ts` |
+| `KERGHAN_AUTHORIZATION_REQUEST_CREATE_LIMIT` | **Consumed**, optional | Per-IP/per-username request count allowed within the sliding window before `create` is throttled. Defaults to `5`. | `backend/src/auth/authorization-request-abuse-guard.service.ts` |
+| `KERGHAN_AUTHORIZATION_REQUEST_CREATE_WINDOW_MS` | **Consumed**, optional | Sliding window (milliseconds) the `create` rate limit above counts requests over. Defaults to `60000` (1 minute). | `backend/src/auth/authorization-request-abuse-guard.service.ts` |
+| `KERGHAN_AUTHORIZATION_REQUEST_MAX_OPEN_PER_USER` | **Consumed**, optional | Cap on a resolved user's simultaneous `open` authorization requests; the oldest is evicted (flipped to `expired`) to make room for a new one rather than rejecting it. Defaults to `5`. | `backend/src/auth/authorization-request-abuse-guard.service.ts` |
+| `KERGHAN_AUTHORIZATION_REQUEST_AUTHORIZE_MAX_ATTEMPTS` | **Consumed**, optional | Consecutive wrong-password `authorize` attempts, per request row, that trip the cool-off lockout. Defaults to `5`. | `backend/src/auth/authorization-request-abuse-guard.service.ts` |
+| `KERGHAN_AUTHORIZATION_REQUEST_AUTHORIZE_LOCK_MS` | **Consumed**, optional | Cool-off duration (milliseconds) once the max-attempts threshold above is reached. Defaults to `300000` (5 minutes). | `backend/src/auth/authorization-request-abuse-guard.service.ts` |
 | `NODE_ENV` | Reserved, not yet read | No longer consumed since the Express/Sequelize migration (issue #24) — the access-token cookie is always `Secure`/`httpOnly`/`SameSite=Strict` regardless of environment. | — |
 | `PORT` | **Consumed**, optional | Port the Nest HTTP server listens on (defaults to `8080`). Render injects its own `PORT` automatically — only set this explicitly for other hosts. | `backend/src/main.ts` |
 | `KERGHAN_MYSQL_HOST` | **Consumed** | Production MySQL connection. | `backend/src/database/data-source.ts`, `backend/src/app.module.ts` |
@@ -36,6 +41,11 @@ running `kerghan_prod_app` locally to sanity-check the production image).
 | `KERGHAN_EMAIL_TIMEOUT_MS` | **Consumed**, optional | Bounds nodemailer's connection/greeting/socket timeouts. Defaults to `10000`. | `backend/src/mail/mail.config.ts` |
 | `KERGHAN_EMAIL_METHOD` | **Consumed**, optional | Selects the `EmailMethod` `MailService#sendEmail` delivers through (currently only `native`, the nodemailer transport). Defaults to `native`. Boot throws if set to an unregistered name. | `backend/src/mail/mail.config.ts` |
 | `KERGHAN_LOG_LEVEL` | **Consumed**, optional | Log-level threshold (`debug`/`info`/`warn`/`error`) for the Core logger service; defaults to `info` when unset. | `backend/src/core/logger.service.ts` |
+
+**Device-authorization tuning — undocumented-but-defaulted in dev.** None of the six
+`KERGHAN_AUTHORIZATION_REQUEST_*` variables above (TTL plus the five rate-limit/cap/cool-off keys)
+are set in `.env.dev.sample` — local dev runs entirely on their code-level defaults (see each
+row above). Set them explicitly only if a deployment needs different tuning.
 
 **GitHub credentials — deliberately none.** Kerghan reads only public GitHub REST API data,
 unauthenticated (see `docs/agents/product.md`). There is no PAT/OAuth/App var to set for this,
