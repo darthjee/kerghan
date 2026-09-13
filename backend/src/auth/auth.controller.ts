@@ -1,6 +1,7 @@
-import { Body, Controller, Delete, HttpCode, HttpStatus, Post, Res } from '@nestjs/common';
+import { Body, Controller, Delete, HttpCode, HttpStatus, Patch, Post, Req, Res } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import type { Response } from 'express';
+import type { Request, Response } from 'express';
+import { AccountService } from './account.service.js';
 import { respondWithSession, SKIP_CACHE_HEADER } from './auth-response.js';
 import { AuthService } from './auth.service.js';
 import { Public } from '../core/public.decorator.js';
@@ -9,6 +10,7 @@ import { RecoverDto } from './dto/recover.dto.js';
 import { RefreshTokenDto } from './dto/refresh-token.dto.js';
 import { RegisterDto } from './dto/register.dto.js';
 import { ResetPasswordDto } from './dto/reset-password.dto.js';
+import { UpdateAccountDto } from './dto/update-account.dto.js';
 
 const ACCESS_TOKEN_COOKIE = 'access_token';
 
@@ -26,15 +28,39 @@ const ACCESS_TOKEN_COOKIE = 'access_token';
 export class AuthController {
   private readonly authService: AuthService;
   private readonly configService: ConfigService;
+  private readonly accountService: AccountService;
 
   /**
    * @param {AuthService} authService - The Auth module's business logic.
    * @param {ConfigService} configService - Supplies the access-token TTL used
    *   for the cookie's `maxAge`.
+   * @param {AccountService} accountService - The self-service "My Account" update flow's business logic.
    */
-  constructor(authService: AuthService, configService: ConfigService) {
+  constructor(authService: AuthService, configService: ConfigService, accountService: AccountService) {
     this.authService = authService;
     this.configService = configService;
+    this.accountService = accountService;
+  }
+
+  /**
+   * `PATCH /auth/account.json`. Authenticated (default `JwtGuard`, no
+   * `@Public()`). Updates the caller's own username, email, and/or password,
+   * always confirmed by their current password (see `AccountService#updateAccount`).
+   * @param {UpdateAccountDto} dto - The requested changes plus the current password.
+   * @param {Request} req - Used to read the caller's own user ID (`req.user!.sub`).
+   * @param {Response} res - Used only to set the `X-Skip-Cache` header.
+   * @returns {Promise<object>} `{ username, email }` on success.
+   */
+  @Patch('account.json')
+  async updateAccount(
+    @Body() dto: UpdateAccountDto,
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<object> {
+    const result = await this.accountService.updateAccount(req.user!.sub, dto);
+    res.set(SKIP_CACHE_HEADER, 'true');
+
+    return result;
   }
 
   /**
