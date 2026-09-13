@@ -1,6 +1,7 @@
 import { Body, Controller, Param, ParseIntPipe, Post, Res } from '@nestjs/common';
 import type { Response } from 'express';
 import { AdminService } from './admin.service.js';
+import { AdminUpdateUserDto } from './dto/admin-update-user.dto.js';
 import { SearchUsersDto } from './dto/search-users.dto.js';
 import { User } from './entities/user.entity.js';
 import { AdminOnly } from '../core/admin-only.decorator.js';
@@ -28,6 +29,26 @@ export class AdminController {
    */
   constructor(adminService: AdminService) {
     this.adminService = adminService;
+  }
+
+  /**
+   * `POST /admin/users/:id/edit.json`. Updates a target user's username,
+   * email, and/or password on the admin's behalf.
+   * @param {number} id - The id of the user to update.
+   * @param {AdminUpdateUserDto} dto - The requested changes.
+   * @param {Response} res - Used only to set the `X-Skip-Cache` header.
+   * @returns {Promise<object>} `{ user: { id, username, email, isAdmin, createdAt } }`.
+   */
+  @Post('users/:id/edit.json')
+  async edit(
+    @Param('id', ParseIntPipe) id: number,
+      @Body() dto: AdminUpdateUserDto,
+      @Res({ passthrough: true }) res: Response,
+  ): Promise<object> {
+    const user = await this.adminService.editUser(id, dto);
+    res.set(SKIP_CACHE_HEADER, 'true');
+
+    return { user: this.#serializeUser(user) };
   }
 
   /**
