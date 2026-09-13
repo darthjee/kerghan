@@ -2,7 +2,7 @@ import { BadRequestException, Injectable, UnauthorizedException } from '@nestjs/
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { InjectRepository } from '@nestjs/typeorm';
 import bcrypt from 'bcryptjs';
-import { IsNull, Repository } from 'typeorm';
+import { IsNull, Not, Repository } from 'typeorm';
 import { LoginDto } from './dto/login.dto.js';
 import { RecoverDto } from './dto/recover.dto.js';
 import { RegisterDto } from './dto/register.dto.js';
@@ -196,6 +196,31 @@ export class AuthService {
     return { loggedIn: true, isAdmin: user?.isAdmin ?? false };
   }
 
+  /**
+   * Checks that a username/email are available for a user to claim,
+   * excluding that user's own row (so "changing" a field to its current
+   * value never false-positives). Used by `AccountService`; kept separate
+   * from `#assertAvailable` for its distinct error messages.
+   * @param {number} excludeUserId - Id of the user updating their account, excluded from the lookup.
+   * @param {string} [username] - Candidate username, when being changed.
+   * @param {string} [email] - Candidate email, when being changed.
+   * @returns {Promise<void>} Resolves once the provided values are confirmed available.
+   * @throws {BadRequestException} `'Username already in use'` or `'Email already in use'`.
+   */
+  async assertAvailableForUpdate(
+    excludeUserId: number,
+    username?: string,
+    email?: string,
+  ): Promise<void> {
+    if (username) {
+      await this.#assertFieldAvailable('username', username, excludeUserId, 'Username already in use');
+    }
+
+    if (email) {
+      await this.#assertFieldAvailable('email', email, excludeUserId, 'Email already in use');
+    }
+  }
+
   async #assertAvailable(username: string, email: string): Promise<void> {
     const existing = await this.userRepository.findOne({
       where: [{ username }, { email }],
@@ -207,6 +232,21 @@ export class AuthService {
 
     const field = existing.username === username ? 'username' : 'email';
     throw new BadRequestException(`${field} is not available`);
+  }
+
+  async #assertFieldAvailable(
+    field: 'username' | 'email',
+    value: string,
+    excludeUserId: number,
+    message: string,
+  ): Promise<void> {
+    const existing = await this.userRepository.findOne({
+      where: { [field]: value, id: Not(excludeUserId) },
+    });
+
+    if (existing) {
+      throw new BadRequestException(message);
+    }
   }
 
   async #findActiveRefreshToken(refreshToken: string): Promise<RefreshToken> {
