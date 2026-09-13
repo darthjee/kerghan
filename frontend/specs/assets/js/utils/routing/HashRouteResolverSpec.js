@@ -37,6 +37,12 @@ describe('HashRouteResolver', () => {
     expect(resolver.getPage()).toBe('admin-users');
   });
 
+  it('resolves the admin-user-edit route', () => {
+    const resolver = new HashRouteResolver(() => '#/admin/users/42/edit');
+
+    expect(resolver.getPage()).toBe('admin-user-edit');
+  });
+
   it('resolves the authorization-requests route', () => {
     const resolver = new HashRouteResolver(() => '#/account/authorization-requests');
 
