@@ -18,24 +18,26 @@ public API directly, so the backend stays idle between visits. The driving use c
 label-based attention triage — surfacing which of a user's many tracked repos "need my
 attention" in one place. See [docs/agents/flow.md](docs/agents/flow.md) for the full flow.
 
-The application is structured as a Node/Express backend and a React single-page application
+The application is structured as a NestJS backend and a React single-page application
 frontend, served together through the [Tent](https://github.com/darthjee/tent) reverse proxy —
 the same shape as [Majora](https://github.com/darthjee/majora), the project this one's
 infrastructure was bootstrapped from.
 
-**Status:** early infrastructure bootstrap. There are no real models, routes, or components yet
-— the backend is an Express/Sequelize skeleton with a single health-check route, and the
-frontend is a Vite/React tooling skeleton with a placeholder shell. See `docs/agents/product.md`
-for what's decided vs. still open about the actual data model.
+**Status:** the tracked-repo/label-rule data model — the core dashboard/analytics feature — is
+still not built. What does exist: a NestJS/TypeORM backend with a real Auth module
+(username/password login, JWT cookie + rotating refresh token, and a device-authorization flow),
+and a React frontend with a login/register/device-authorization modal, hash-based routing, and a
+full HTTP client layer. See `docs/agents/product.md` for what's decided vs. still open about the
+tracked-repo/label-rule data model.
 
 ## Technology Stack
 
 **Backend**
-- **Node.js / Express** — Application framework
-- **Sequelize** — ORM + migrations
+- **Node.js / NestJS** — Application framework
+- **TypeORM** — ORM + migrations
 - **MySQL 8** — Relational database
 - **Yarn** — Package manager
-- **Jasmine + c8** — Test suite
+- **Jest + `@swc/jest` + `supertest` + `@nestjs/testing`** — Test suite
 - **ESLint** — Linting
 
 **Frontend**
@@ -54,8 +56,8 @@ for what's decided vs. still open about the actual data model.
 
 ```
 kerghan/
-├── backend/              # Node/Express backend, no models yet
-├── frontend/             # React + Vite frontend, tooling skeleton
+├── backend/              # NestJS/TypeORM backend — Auth module, tracked-repo model still open
+├── frontend/             # React + Vite frontend — login modal + auth flow, dashboard views still to come
 ├── proxy/                # PHP proxy (darthjee/tent) configuration and extensions
 ├── dockerfiles/          # Dockerfiles for each service
 ├── docker_volumes/       # Bind-mounted volumes (static assets, proxy cache)

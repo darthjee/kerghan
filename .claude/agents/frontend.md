@@ -18,7 +18,7 @@ You own everything inside `frontend/`:
   added)
 - `frontend/index.html`, `vite.config.js`, `eslint.config.mjs`, `package.json`
 
-Do NOT touch `backend/` (Express backend) or any file outside `frontend/`.
+Do NOT touch `backend/` (NestJS backend) or any file outside `frontend/`.
 
 ## Stack
 
@@ -30,10 +30,16 @@ Do NOT touch `backend/` (Express backend) or any file outside `frontend/`.
 
 ## Current state
 
-The frontend is currently a **tooling-only skeleton**: `App.jsx` is a placeholder shell, no
-real components, client, or router exist yet. There is no data model to build against —
-`docs/agents/product.md` leaves the tracked-repo/label-rule data model open. Don't invent API
-shapes speculatively; build against what `backend` actually exposes.
+Real auth UI already exists: a route-independent `LoginModal` (Password, Register, Recover,
+Set-new-password, and Authorize-with-logged-device modes, opened via the shared
+`LoginModalEvents` bus from the header or from `ApiClient`'s session-expired handling), a
+hash-based `Router`/`Route`/`HashRouteResolver` (`utils/routing/`), a full `client/` HTTP layer
+(`AccountsClient`, `AdminClient`, `ApiClient`, `ApiError`, `AuthSession`, `AuthEvents`,
+`LoginModalEvents`), the `AuthorizationRequestPoller` driving the device-authorization poll loop,
+and Jasmine specs mirroring all of it under `frontend/specs/`. There is still no data model to
+build the dashboard/analytics views against — `docs/agents/product.md` leaves the
+tracked-repo/label-rule data model open. Don't invent API shapes speculatively; build against
+what `backend` actually exposes.
 
 Per `docs/agents/flow.md`, this frontend owns two different data sources once built: repo
 selection comes from the backend, but issue data is fetched live, client-side, directly against
