@@ -38,6 +38,19 @@ export default class ApiClient {
   }
 
   /**
+   * Submit a PATCH request with a JSON body. Same headers/credentials/error-handling shape
+   * as {@link ApiClient.postJson}.
+   *
+   * @param {string} path - Request path.
+   * @param {object} body - Fields to serialize as the JSON request body.
+   * @returns {Promise<object>} The parsed JSON response body, on success; `undefined` when the
+   *   session turned out to be expired.
+   */
+  static async patchJson(path, body) {
+    return ApiClient.#sendJson('PATCH', path, body);
+  }
+
+  /**
    * Submit a JSON request, always sending same-origin credentials so the session cookie set
    * by the backend (via `Set-Cookie`) is stored/sent automatically. On a `401`, delegates to
    * {@link ApiClient.#handleUnauthorized} unless this is already a retried request, in which
