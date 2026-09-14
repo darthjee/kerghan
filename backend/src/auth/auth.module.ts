@@ -9,6 +9,7 @@ import { AuthorizationRequestAbuseGuardService } from './authorization-request-a
 import { AuthorizationRequestController } from './authorization-request.controller.js';
 import { AuthorizationRequestService } from './authorization-request.service.js';
 import { MailModule } from '../mail/mail.module.js';
+import { AccountEditLockout } from './entities/account-edit-lockout.entity.js';
 import { AuthorizationRequest } from './entities/authorization-request.entity.js';
 import { PasswordResetToken } from './entities/password-reset-token.entity.js';
 import { RefreshToken } from './entities/refresh-token.entity.js';
@@ -28,7 +29,14 @@ import { UserUpdateService } from './user-update.service.js';
  */
 @Module({
   imports: [
-    TypeOrmModule.forFeature([User, RefreshToken, Session, PasswordResetToken, AuthorizationRequest]),
+    TypeOrmModule.forFeature([
+      User,
+      RefreshToken,
+      Session,
+      PasswordResetToken,
+      AuthorizationRequest,
+      AccountEditLockout,
+    ]),
     MailModule,
   ],
   controllers: [AuthController, AdminController, AuthorizationRequestController],
