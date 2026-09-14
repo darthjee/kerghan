@@ -10,6 +10,7 @@ import request from 'supertest';
 import { JwtGuard } from '../../core/jwt.guard.js';
 import { LoggingModule } from '../../core/logging.module.js';
 import { AuthModule } from '../auth.module.js';
+import { AccountEditLockout } from '../entities/account-edit-lockout.entity.js';
 import { AuthorizationRequest } from '../entities/authorization-request.entity.js';
 import { PasswordResetToken } from '../entities/password-reset-token.entity.js';
 import { RefreshToken } from '../entities/refresh-token.entity.js';
@@ -166,6 +167,7 @@ async function buildTestApp(configOverrides: Record<string, string> = {}): Promi
   const sessionRepo = createInMemoryRepo<Session>();
   const passwordResetTokenRepo = createInMemoryRepo<PasswordResetToken>();
   const authorizationRequestRepo = createInMemoryRepo<AuthorizationRequest>();
+  const accountEditLockoutRepo = createInMemoryRepo<AccountEditLockout>();
 
   const moduleBuilder = Test.createTestingModule({
     imports: [
@@ -186,7 +188,9 @@ async function buildTestApp(configOverrides: Record<string, string> = {}): Promi
     .overrideProvider(getRepositoryToken(PasswordResetToken))
     .useValue(passwordResetTokenRepo)
     .overrideProvider(getRepositoryToken(AuthorizationRequest))
-    .useValue(authorizationRequestRepo);
+    .useValue(authorizationRequestRepo)
+    .overrideProvider(getRepositoryToken(AccountEditLockout))
+    .useValue(accountEditLockoutRepo);
 
   if (Object.keys(configOverrides).length > 0) {
     moduleBuilder.overrideProvider(ConfigService).useValue({ get: (key: string) => configOverrides[key] });

@@ -11,6 +11,7 @@ import { AdminGuard } from '../../core/admin.guard.js';
 import { JwtGuard } from '../../core/jwt.guard.js';
 import { LoggingModule } from '../../core/logging.module.js';
 import { AuthModule } from '../auth.module.js';
+import { AccountEditLockout } from '../entities/account-edit-lockout.entity.js';
 import { AuthorizationRequest } from '../entities/authorization-request.entity.js';
 import { PasswordResetToken } from '../entities/password-reset-token.entity.js';
 import { RefreshToken } from '../entities/refresh-token.entity.js';
@@ -106,6 +107,7 @@ describe('AdminController (e2e)', () => {
     const sessionRepo = createInMemoryRepo<Session>();
     const passwordResetTokenRepo = createInMemoryRepo<PasswordResetToken>();
     const authorizationRequestRepo = createInMemoryRepo<AuthorizationRequest>();
+    const accountEditLockoutRepo = createInMemoryRepo<AccountEditLockout>();
 
     const moduleRef = await Test.createTestingModule({
       imports: [
@@ -130,6 +132,8 @@ describe('AdminController (e2e)', () => {
       .useValue(passwordResetTokenRepo)
       .overrideProvider(getRepositoryToken(AuthorizationRequest))
       .useValue(authorizationRequestRepo)
+      .overrideProvider(getRepositoryToken(AccountEditLockout))
+      .useValue(accountEditLockoutRepo)
       .compile();
 
     app = moduleRef.createNestApplication();
