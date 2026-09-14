@@ -16,13 +16,15 @@ describe('UserUpdateService', () => {
   let userRepository: RepoMock<User>;
   let service: UserUpdateService;
   let user: User;
+  let originalDigest: string;
 
-  beforeEach(() => {
+  beforeEach(async () => {
+    originalDigest = await bcrypt.hash('original-password', 4);
     user = {
       id: 1,
       username: 'darthjee',
       email: 'darthjee@example.com',
-      passwordDigest: 'original-digest',
+      passwordDigest: originalDigest,
       isAdmin: false,
     } as User;
 
@@ -41,7 +43,7 @@ describe('UserUpdateService', () => {
       it('leaves the password digest untouched', async () => {
         await service.applyUserUpdate(user, { username: 'new-username' });
 
-        expect(user.passwordDigest).toBe('original-digest');
+        expect(user.passwordDigest).toBe(originalDigest);
       });
     });
 
@@ -57,7 +59,7 @@ describe('UserUpdateService', () => {
       it('hashes and stores the new password digest', async () => {
         await service.applyUserUpdate(user, { newPassword: 'brand-new-password' });
 
-        expect(user.passwordDigest).not.toBe('original-digest');
+        expect(user.passwordDigest).not.toBe(originalDigest);
         await expect(bcrypt.compare('brand-new-password', user.passwordDigest)).resolves.toBe(true);
       });
 
