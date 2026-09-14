@@ -1,4 +1,4 @@
-import { BadRequestException, HttpException, HttpStatus, Injectable, UnauthorizedException } from '@nestjs/common';
+import { BadRequestException, HttpException, Injectable, UnauthorizedException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import bcrypt from 'bcryptjs';
 import { Repository } from 'typeorm';
@@ -7,6 +7,10 @@ import { AuthService } from './auth.service.js';
 import { UpdateAccountDto } from './dto/update-account.dto.js';
 import { User } from './entities/user.entity.js';
 import { AccountSummary, UserUpdateService } from './user-update.service.js';
+
+// The installed `@nestjs/common` version's `HttpStatus` enum has no `LOCKED` member (423 is not
+// yet part of its `HttpStatus`), so the status code is applied literally here.
+const HTTP_STATUS_LOCKED = 423;
 
 /**
  * The self-service "My Account" update flow's business logic (`PATCH
@@ -79,7 +83,7 @@ export class AccountService {
 
   async #assertNotLockedOut(userId: number): Promise<void> {
     if (await this.accountEditAbuseGuardService.isLockedOut(userId)) {
-      throw new HttpException('Account temporarily locked due to too many failed attempts', HttpStatus.LOCKED);
+      throw new HttpException('Account temporarily locked due to too many failed attempts', HTTP_STATUS_LOCKED);
     }
   }
 

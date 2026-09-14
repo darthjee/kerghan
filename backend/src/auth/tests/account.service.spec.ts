@@ -1,5 +1,6 @@
-import { BadRequestException, UnauthorizedException } from '@nestjs/common';
+import { BadRequestException, HttpException, UnauthorizedException } from '@nestjs/common';
 import bcrypt from 'bcryptjs';
+import { AccountEditAbuseGuardService } from '../account-edit-abuse-guard.service.js';
 import { AccountService } from '../account.service.js';
 import { AuthService } from '../auth.service.js';
 import { User } from '../entities/user.entity.js';
@@ -20,6 +21,11 @@ function repoMock<T extends object>(): RepoMock<T> {
 describe('AccountService', () => {
   let userRepository: RepoMock<User>;
   let authService: { assertAvailableForUpdate: jest.Mock };
+  let accountEditAbuseGuardService: {
+    isLockedOut: jest.Mock;
+    registerFailure: jest.Mock;
+    reset: jest.Mock;
+  };
   let service: AccountService;
   let user: User;
 
@@ -35,6 +41,11 @@ describe('AccountService', () => {
     userRepository = repoMock<User>();
     userRepository.findOneBy.mockResolvedValue(user);
     authService = { assertAvailableForUpdate: jest.fn().mockResolvedValue(undefined) };
+    accountEditAbuseGuardService = {
+      isLockedOut: jest.fn().mockResolvedValue(false),
+      registerFailure: jest.fn().mockResolvedValue(undefined),
+      reset: jest.fn().mockResolvedValue(undefined),
+    };
 
     const userUpdateService = new UserUpdateService(userRepository as never);
 
@@ -42,6 +53,7 @@ describe('AccountService', () => {
       userRepository as never,
       authService as unknown as AuthService,
       userUpdateService,
+      accountEditAbuseGuardService as unknown as AccountEditAbuseGuardService,
     );
   });
 
@@ -54,6 +66,15 @@ describe('AccountService', () => {
         });
 
         expect(result).toEqual({ username: 'new-username', email: 'darthjee@example.com' });
+      });
+
+      it('resets the abuse-guard lockout counter on success', async () => {
+        await service.updateAccount(1, {
+          currentPassword: 'current-password',
+          username: 'new-username',
+        });
+
+        expect(accountEditAbuseGuardService.reset).toHaveBeenCalledWith(1);
       });
     });
 
@@ -117,6 +138,14 @@ describe('AccountService', () => {
 
         expect(userRepository.save).not.toHaveBeenCalled();
       });
+
+      it('registers a failure with the abuse guard', async () => {
+        await expect(
+          service.updateAccount(1, { currentPassword: 'wrong-password', username: 'new-username' }),
+        ).rejects.toThrow(BadRequestException);
+
+        expect(accountEditAbuseGuardService.registerFailure).toHaveBeenCalledWith(1);
+      });
     });
 
     describe('when the new username is already taken by another user', () => {
@@ -133,6 +162,14 @@ describe('AccountService', () => {
 
         expect(userRepository.save).not.toHaveBeenCalled();
       });
+
+      it('registers a failure with the abuse guard', async () => {
+        await expect(
+          service.updateAccount(1, { currentPassword: 'current-password', username: 'taken-username' }),
+        ).rejects.toThrow(BadRequestException);
+
+        expect(accountEditAbuseGuardService.registerFailure).toHaveBeenCalledWith(1);
+      });
     });
 
     describe('when the new email is already taken by another user', () => {
@@ -147,6 +184,46 @@ describe('AccountService', () => {
           service.updateAccount(1, { currentPassword: 'current-password', email: 'taken@example.com' }),
         ).rejects.toThrow(new BadRequestException('Email already in use'));
 
+        expect(userRepository.save).not.toHaveBeenCalled();
+      });
+
+      it('registers a failure with the abuse guard', async () => {
+        await expect(
+          service.updateAccount(1, { currentPassword: 'current-password', email: 'taken@example.com' }),
+        ).rejects.toThrow(BadRequestException);
+
+        expect(accountEditAbuseGuardService.registerFailure).toHaveBeenCalledWith(1);
+      });
+    });
+
+    describe('when the caller is locked out', () => {
+      beforeEach(() => {
+        accountEditAbuseGuardService.isLockedOut.mockResolvedValue(true);
+      });
+
+      it('rejects with a 423 Locked HttpException without loading the user', async () => {
+        await expect(
+          service.updateAccount(1, { currentPassword: 'current-password', username: 'new-username' }),
+        ).rejects.toThrow(new HttpException('Account temporarily locked due to too many failed attempts', 423));
+
+        expect(userRepository.findOneBy).not.toHaveBeenCalled();
+      });
+
+      it('rejects with status 423', async () => {
+        try {
+          await service.updateAccount(1, { currentPassword: 'current-password', username: 'new-username' });
+          throw new Error('expected updateAccount to reject');
+        } catch (error) {
+          expect((error as HttpException).getStatus()).toBe(423);
+        }
+      });
+
+      it('does not register another failure or save any changes', async () => {
+        await expect(
+          service.updateAccount(1, { currentPassword: 'current-password', username: 'new-username' }),
+        ).rejects.toThrow(HttpException);
+
+        expect(accountEditAbuseGuardService.registerFailure).not.toHaveBeenCalled();
         expect(userRepository.save).not.toHaveBeenCalled();
       });
     });

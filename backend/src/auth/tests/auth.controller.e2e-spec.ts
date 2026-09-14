@@ -11,6 +11,7 @@ import { JwtGuard } from '../../core/jwt.guard.js';
 import { LoggingModule } from '../../core/logging.module.js';
 import { Public } from '../../core/public.decorator.js';
 import { AuthModule } from '../auth.module.js';
+import { AccountEditLockout } from '../entities/account-edit-lockout.entity.js';
 import { AuthorizationRequest } from '../entities/authorization-request.entity.js';
 import { PasswordResetToken } from '../entities/password-reset-token.entity.js';
 import { RefreshToken } from '../entities/refresh-token.entity.js';
@@ -107,6 +108,7 @@ describe('AuthController (e2e)', () => {
     const sessionRepo = createInMemoryRepo<Session>();
     passwordResetTokenRepo = createInMemoryRepo<PasswordResetToken>();
     const authorizationRequestRepo = createInMemoryRepo<AuthorizationRequest>();
+    const accountEditLockoutRepo = createInMemoryRepo<AccountEditLockout>();
 
     const moduleRef = await Test.createTestingModule({
       imports: [
@@ -129,6 +131,8 @@ describe('AuthController (e2e)', () => {
       .useValue(passwordResetTokenRepo)
       .overrideProvider(getRepositoryToken(AuthorizationRequest))
       .useValue(authorizationRequestRepo)
+      .overrideProvider(getRepositoryToken(AccountEditLockout))
+      .useValue(accountEditLockoutRepo)
       .compile();
 
     app = moduleRef.createNestApplication();
@@ -614,6 +618,28 @@ describe('AuthController (e2e)', () => {
         .send({ refreshToken: login.body.refreshToken })
         .expect(201);
     });
+
+    it(
+      'locks the account out with 423 after 5 failed attempts, even with the right password',
+      async () => {
+        const cookie = await loginCookie();
+
+        for (let i = 0; i < 5; i += 1) {
+          await request(app.getHttpServer())
+            .patch('/auth/account.json')
+            .set('Cookie', [cookie])
+            .send({ currentPassword: 'wrong-password', username: 'new-username' })
+            .expect(400);
+        }
+
+        await request(app.getHttpServer())
+          .patch('/auth/account.json')
+          .set('Cookie', [cookie])
+          .send({ currentPassword: 'my-password', username: 'new-username' })
+          .expect(423);
+      },
+      15000,
+    );
   });
 
   describe('JwtGuard', () => {
