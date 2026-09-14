@@ -9,6 +9,7 @@ import Router from './Router.js';
  */
 const ROUTES = [
   ['/recover-password', 'reset-password'],
+  ['/admin/users/:id/edit', 'admin-user-edit'],
   ['/admin/users', 'admin-users'],
   ['/account/authorization-requests', 'authorization-requests'],
   ['/account/my-account', 'my-account'],

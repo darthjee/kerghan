@@ -10,3 +10,5 @@ secret:
   ignored_matches:
     - name: Demo-user dev/manual-testing seed password (non-production only)
       match: kerghan-demo
+    - name: UserUpdateService spec fixture — non-secret placeholder digest value flagged as a false-positive "Username Password" pair (issue #89, historical commit 013dc43)
+      match: original-digest

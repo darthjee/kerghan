@@ -41,4 +41,25 @@ export default class AdminClient {
   static async sendRecoveryEmail(userId) {
     return ApiClient.postJson(`/admin/users/${userId}/send-recovery-email.json`, {});
   }
+
+  /**
+   * Update a target user's username, email, and/or password, with no current-password check
+   * (matching #88's self-service plumbing but ungated, since this is admin-only). `username`,
+   * `email`, and `newPassword` are only included in the request body when defined, so callers
+   * may update any subset of them; a `newPasswordConfirmation` field is never sent — that check
+   * is client-side only.
+   *
+   * @param {number} userId - The target user's numeric id.
+   * @param {{username?: string, email?: string, newPassword?: string}} fields - The fields to
+   *   update.
+   * @returns {Promise<{user: {id: number, username: string, email: string, isAdmin: boolean,
+   *   createdAt: string}}>} The updated account.
+   */
+  static async editUser(userId, { username, email, newPassword }) {
+    return ApiClient.postJson(`/admin/users/${userId}/edit.json`, {
+      ...(username !== undefined && { username }),
+      ...(email !== undefined && { email }),
+      ...(newPassword !== undefined && { newPassword }),
+    });
+  }
 }

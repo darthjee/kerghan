@@ -69,6 +69,13 @@ describe('AdminUsersHelper', () => {
         expect(html).toContain('Send email');
       });
 
+      it('renders an Edit link pointing at the user\'s edit route', () => {
+        const html = renderToStaticMarkup(AdminUsersHelper.render(buildState({ users }), buildHandlers()));
+
+        expect(html).toContain('href="#/admin/users/1/edit"');
+        expect(html).toContain('>Edit<');
+      });
+
       it('renders a copyable recovery link when one has been generated', () => {
         const html = renderToStaticMarkup(
           AdminUsersHelper.render(

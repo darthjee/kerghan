@@ -1,9 +1,11 @@
-import { NotFoundException } from '@nestjs/common';
+import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { ILike } from 'typeorm';
 import { MailService } from '../../mail/mail.service.js';
 import { AdminService } from '../admin.service.js';
+import { AuthService } from '../auth.service.js';
 import { User } from '../entities/user.entity.js';
 import { PasswordResetService } from '../password-reset.service.js';
+import { UserUpdateService } from '../user-update.service.js';
 
 type UserRepoMock = {
   find: jest.Mock;
@@ -19,19 +21,25 @@ function userRepoMock(): UserRepoMock {
 
 describe('AdminService', () => {
   let userRepository: UserRepoMock;
+  let authService: { assertAvailableForUpdate: jest.Mock };
   let passwordResetService: { issueToken: jest.Mock };
   let mailService: { sendEmailTemplate: jest.Mock };
+  let userUpdateService: { applyUserUpdate: jest.Mock };
   let service: AdminService;
 
   beforeEach(() => {
     userRepository = userRepoMock();
+    authService = { assertAvailableForUpdate: jest.fn().mockResolvedValue(undefined) };
     passwordResetService = { issueToken: jest.fn() };
     mailService = { sendEmailTemplate: jest.fn() };
+    userUpdateService = { applyUserUpdate: jest.fn().mockResolvedValue(undefined) };
 
     service = new AdminService(
       userRepository as never,
+      authService as unknown as AuthService,
       passwordResetService as unknown as PasswordResetService,
       mailService as unknown as MailService,
+      userUpdateService as unknown as UserUpdateService,
     );
   });
 
@@ -158,6 +166,117 @@ describe('AdminService', () => {
         it('resolves with sent: false rather than propagating the error', async () => {
           await expect(service.sendRecoveryEmail(1)).resolves.toEqual({ sent: false });
         });
+      });
+    });
+  });
+
+  describe('editUser', () => {
+    const user = { id: 1, username: 'darthjee', email: 'darthjee@example.com' } as User;
+
+    describe('when the user exists', () => {
+      beforeEach(() => {
+        userRepository.findOneBy.mockResolvedValue(user);
+      });
+
+      it('applies a username change', async () => {
+        const result = await service.editUser(1, { username: 'new-username' });
+
+        expect(result).toBe(user);
+        expect(userUpdateService.applyUserUpdate).toHaveBeenCalledWith(user, {
+          username: 'new-username',
+        });
+      });
+
+      it('applies an email change', async () => {
+        await service.editUser(1, { email: 'new-email@example.com' });
+
+        expect(userUpdateService.applyUserUpdate).toHaveBeenCalledWith(user, {
+          email: 'new-email@example.com',
+        });
+      });
+
+      it('applies a password change', async () => {
+        await service.editUser(1, { newPassword: 'brand-new-password' });
+
+        expect(userUpdateService.applyUserUpdate).toHaveBeenCalledWith(user, {
+          newPassword: 'brand-new-password',
+        });
+      });
+
+      it('checks availability excluding the target user itself', async () => {
+        await service.editUser(1, { username: 'new-username', email: 'new-email@example.com' });
+
+        expect(authService.assertAvailableForUpdate).toHaveBeenCalledWith(
+          1,
+          'new-username',
+          'new-email@example.com',
+        );
+      });
+
+      it('does not treat the value the user already has as a duplicate (self-exclusion)', async () => {
+        await service.editUser(1, { username: 'darthjee', email: 'darthjee@example.com' });
+
+        expect(authService.assertAvailableForUpdate).toHaveBeenCalledWith(1, undefined, undefined);
+      });
+
+      it('works identically when the target user is the calling admin', async () => {
+        const result = await service.editUser(1, { username: 'new-username' });
+
+        expect(result).toBe(user);
+      });
+    });
+
+    describe('when the new username is already taken by another user', () => {
+      beforeEach(() => {
+        userRepository.findOneBy.mockResolvedValue(user);
+        authService.assertAvailableForUpdate.mockRejectedValue(
+          new BadRequestException('Username already in use'),
+        );
+      });
+
+      it('rejects with BadRequestException without applying any changes', async () => {
+        await expect(
+          service.editUser(1, { username: 'taken-username' }),
+        ).rejects.toThrow(new BadRequestException('Username already in use'));
+
+        expect(userUpdateService.applyUserUpdate).not.toHaveBeenCalled();
+      });
+    });
+
+    describe('when the new email is already taken by another user', () => {
+      beforeEach(() => {
+        userRepository.findOneBy.mockResolvedValue(user);
+        authService.assertAvailableForUpdate.mockRejectedValue(
+          new BadRequestException('Email already in use'),
+        );
+      });
+
+      it('rejects with BadRequestException without applying any changes', async () => {
+        await expect(
+          service.editUser(1, { email: 'taken@example.com' }),
+        ).rejects.toThrow(new BadRequestException('Email already in use'));
+
+        expect(userUpdateService.applyUserUpdate).not.toHaveBeenCalled();
+      });
+    });
+
+    describe('when no username, email, or newPassword is provided', () => {
+      it('rejects with BadRequestException without loading the user', async () => {
+        await expect(service.editUser(1, {})).rejects.toThrow(BadRequestException);
+
+        expect(userRepository.findOneBy).not.toHaveBeenCalled();
+      });
+    });
+
+    describe('when the user does not exist', () => {
+      beforeEach(() => {
+        userRepository.findOneBy.mockResolvedValue(null);
+      });
+
+      it('rejects with NotFoundException', async () => {
+        await expect(service.editUser(404, { username: 'new-username' })).rejects.toThrow(
+          NotFoundException,
+        );
       });
     });
   });

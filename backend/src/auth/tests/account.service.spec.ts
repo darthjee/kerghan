@@ -3,6 +3,7 @@ import bcrypt from 'bcryptjs';
 import { AccountService } from '../account.service.js';
 import { AuthService } from '../auth.service.js';
 import { User } from '../entities/user.entity.js';
+import { UserUpdateService } from '../user-update.service.js';
 
 type RepoMock<T extends object> = {
   findOneBy: jest.Mock;
@@ -35,7 +36,13 @@ describe('AccountService', () => {
     userRepository.findOneBy.mockResolvedValue(user);
     authService = { assertAvailableForUpdate: jest.fn().mockResolvedValue(undefined) };
 
-    service = new AccountService(userRepository as never, authService as unknown as AuthService);
+    const userUpdateService = new UserUpdateService(userRepository as never);
+
+    service = new AccountService(
+      userRepository as never,
+      authService as unknown as AuthService,
+      userUpdateService,
+    );
   });
 
   describe('updateAccount', () => {

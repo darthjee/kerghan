@@ -5,12 +5,7 @@ import { Repository } from 'typeorm';
 import { AuthService } from './auth.service.js';
 import { UpdateAccountDto } from './dto/update-account.dto.js';
 import { User } from './entities/user.entity.js';
-
-/** The `{username, email}` shape returned to the caller after an account update. */
-export interface AccountSummary {
-  username: string;
-  email: string;
-}
+import { AccountSummary, UserUpdateService } from './user-update.service.js';
 
 /**
  * The self-service "My Account" update flow's business logic (`PATCH
@@ -22,18 +17,23 @@ export interface AccountSummary {
 export class AccountService {
   private readonly userRepository: Repository<User>;
   private readonly authService: AuthService;
+  private readonly userUpdateService: UserUpdateService;
 
   /**
    * @param {Repository<User>} userRepository - The Auth module's user repository.
    * @param {AuthService} authService - Supplies the self-exclusion
    *   username/email availability check for updates.
+   * @param {UserUpdateService} userUpdateService - Applies/hashes/persists
+   *   the requested changes, shared with `AdminService#editUser`.
    */
   constructor(
     @InjectRepository(User) userRepository: Repository<User>,
       authService: AuthService,
+      userUpdateService: UserUpdateService,
   ) {
     this.userRepository = userRepository;
     this.authService = authService;
+    this.userUpdateService = userUpdateService;
   }
 
   /**
@@ -54,25 +54,7 @@ export class AccountService {
     await this.#verifyCurrentPassword(user, dto.currentPassword);
     await this.#assertNewValuesAvailable(user, dto);
 
-    return this.#applyUpdates(user, dto);
-  }
-
-  async #applyUpdates(user: User, dto: UpdateAccountDto): Promise<AccountSummary> {
-    if (dto.username) {
-      user.username = dto.username;
-    }
-
-    if (dto.email) {
-      user.email = dto.email;
-    }
-
-    if (dto.newPassword) {
-      user.passwordDigest = await bcrypt.hash(dto.newPassword, 10);
-    }
-
-    const saved = await this.userRepository.save(user);
-
-    return { username: saved.username, email: saved.email };
+    return this.userUpdateService.applyUserUpdate(user, dto);
   }
 
   #assertAnyFieldPresent(dto: UpdateAccountDto): void {

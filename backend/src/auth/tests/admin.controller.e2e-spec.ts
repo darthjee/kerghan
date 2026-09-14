@@ -154,6 +154,13 @@ describe('AdminController (e2e)', () => {
     it('rejects send-recovery-email.json with 401', async () => {
       await request(app.getHttpServer()).post('/admin/users/1/send-recovery-email.json').expect(401);
     });
+
+    it('rejects edit.json with 401', async () => {
+      await request(app.getHttpServer())
+        .post('/admin/users/1/edit.json')
+        .send({ username: 'new-username' })
+        .expect(401);
+    });
   });
 
   describe('when the caller is authenticated but not an admin', () => {
@@ -182,6 +189,14 @@ describe('AdminController (e2e)', () => {
       await request(app.getHttpServer())
         .post('/admin/users/1/send-recovery-email.json')
         .set('Cookie', [cookie])
+        .expect(403);
+    });
+
+    it('rejects edit.json with 403', async () => {
+      await request(app.getHttpServer())
+        .post('/admin/users/1/edit.json')
+        .set('Cookie', [cookie])
+        .send({ username: 'new-username' })
         .expect(403);
     });
   });
@@ -304,6 +319,64 @@ describe('AdminController (e2e)', () => {
           .post('/admin/users/999999/send-recovery-email.json')
           .set('Cookie', [adminCookie])
           .expect(404);
+      });
+    });
+
+    describe('POST /admin/users/:id/edit.json', () => {
+      it('updates the username, email, and password for an existing user', async () => {
+        const response = await request(app.getHttpServer())
+          .post(`/admin/users/${targetUserId}/edit.json`)
+          .set('Cookie', [adminCookie])
+          .send({
+            username: 'darthjee-renamed',
+            email: 'darthjee-renamed@example.com',
+            newPassword: 'brand-new-password',
+          })
+          .expect(201);
+
+        expect(response.body).toEqual({
+          user: expect.objectContaining({
+            id: targetUserId,
+            username: 'darthjee-renamed',
+            email: 'darthjee-renamed@example.com',
+            isAdmin: false,
+            createdAt: expect.any(String),
+          }),
+        });
+      });
+
+      it('sets the X-Skip-Cache header', async () => {
+        const response = await request(app.getHttpServer())
+          .post(`/admin/users/${targetUserId}/edit.json`)
+          .set('Cookie', [adminCookie])
+          .send({ username: 'darthjee-renamed' })
+          .expect(201);
+
+        expect(response.headers['x-skip-cache']).toBe('true');
+      });
+
+      it('responds 404 for an unknown user id', async () => {
+        await request(app.getHttpServer())
+          .post('/admin/users/999999/edit.json')
+          .set('Cookie', [adminCookie])
+          .send({ username: 'new-username' })
+          .expect(404);
+      });
+
+      it('responds 400 without applying changes when no field is given', async () => {
+        await request(app.getHttpServer())
+          .post(`/admin/users/${targetUserId}/edit.json`)
+          .set('Cookie', [adminCookie])
+          .send({})
+          .expect(400);
+      });
+
+      it('responds 400 (not a raw 500) when newPassword is shorter than 8 characters', async () => {
+        await request(app.getHttpServer())
+          .post(`/admin/users/${targetUserId}/edit.json`)
+          .set('Cookie', [adminCookie])
+          .send({ newPassword: 'short' })
+          .expect(400);
       });
     });
   });

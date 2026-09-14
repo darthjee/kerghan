@@ -67,4 +67,44 @@ describe('AdminClient', () => {
       expect(response).toEqual({ sent: true });
     });
   });
+
+  describe('.editUser', () => {
+    const user = {
+      id: 42, username: 'foo', email: 'foo@example.com', isAdmin: false, createdAt: '2026-01-01',
+    };
+
+    it('posts only the defined fields to the edit endpoint for the given user', async () => {
+      spyOn(ApiClient, 'postJson').and.resolveTo({ user });
+
+      await AdminClient.editUser(42, { username: 'foo' });
+
+      expect(ApiClient.postJson).toHaveBeenCalledWith('/admin/users/42/edit.json', { username: 'foo' });
+    });
+
+    it('posts every defined field together', async () => {
+      spyOn(ApiClient, 'postJson').and.resolveTo({ user });
+
+      await AdminClient.editUser(42, { username: 'foo', email: 'foo@example.com', newPassword: 'longenough' });
+
+      expect(ApiClient.postJson).toHaveBeenCalledWith('/admin/users/42/edit.json', {
+        username: 'foo', email: 'foo@example.com', newPassword: 'longenough',
+      });
+    });
+
+    it('omits fields that were not provided', async () => {
+      spyOn(ApiClient, 'postJson').and.resolveTo({ user });
+
+      await AdminClient.editUser(42, {});
+
+      expect(ApiClient.postJson).toHaveBeenCalledWith('/admin/users/42/edit.json', {});
+    });
+
+    it('resolves with the parsed user response', async () => {
+      spyOn(ApiClient, 'postJson').and.resolveTo({ user });
+
+      const response = await AdminClient.editUser(42, { username: 'foo' });
+
+      expect(response).toEqual({ user });
+    });
+  });
 });

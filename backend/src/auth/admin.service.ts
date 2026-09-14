@@ -1,8 +1,11 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { ILike, Repository } from 'typeorm';
+import { AuthService } from './auth.service.js';
+import { AdminUpdateUserDto } from './dto/admin-update-user.dto.js';
 import { User } from './entities/user.entity.js';
 import { PasswordResetService } from './password-reset.service.js';
+import { UserUpdateService } from './user-update.service.js';
 import { MailService } from '../mail/mail.service.js';
 
 /**
@@ -17,23 +20,33 @@ import { MailService } from '../mail/mail.service.js';
 @Injectable()
 export class AdminService {
   private readonly userRepository: Repository<User>;
+  private readonly authService: AuthService;
   private readonly passwordResetService: PasswordResetService;
   private readonly mailService: MailService;
+  private readonly userUpdateService: UserUpdateService;
 
   /**
    * @param {Repository<User>} userRepository - The Auth module's user repository.
+   * @param {AuthService} authService - Supplies the self-exclusion
+   *   username/email availability check for `editUser`.
    * @param {PasswordResetService} passwordResetService - Mints password-reset
    *   tokens via its shared `issueToken` method.
    * @param {MailService} mailService - The Mail module's send pipe (direct DI).
+   * @param {UserUpdateService} userUpdateService - Applies/hashes/persists
+   *   the requested changes for `editUser`, shared with `AccountService`.
    */
   constructor(
     @InjectRepository(User) userRepository: Repository<User>,
+      authService: AuthService,
       passwordResetService: PasswordResetService,
       mailService: MailService,
+      userUpdateService: UserUpdateService,
   ) {
     this.userRepository = userRepository;
+    this.authService = authService;
     this.passwordResetService = passwordResetService;
     this.mailService = mailService;
+    this.userUpdateService = userUpdateService;
   }
 
   /**
@@ -93,6 +106,40 @@ export class AdminService {
       return { sent: result.status === 'sent' };
     } catch {
       return { sent: false };
+    }
+  }
+
+  /**
+   * Updates a target user's username, email, and/or password on the
+   * admin's behalf — no current-password confirmation, unlike
+   * `AccountService#updateAccount`'s self-service flow, since the admin is
+   * confirming their own already-authenticated session, not the target
+   * user's credentials. Works identically when `userId` is the calling
+   * admin's own id — no special-casing needed, since there is no
+   * current-password check to skip in the first place.
+   * @param {number} userId - The id of the user to update.
+   * @param {AdminUpdateUserDto} dto - The requested changes.
+   * @returns {Promise<User>} The user's resulting row.
+   * @throws {BadRequestException} When no field is being changed, or the
+   *   new username/email is already taken.
+   * @throws {NotFoundException} When no user matches `userId`.
+   */
+  async editUser(userId: number, dto: AdminUpdateUserDto): Promise<User> {
+    this.#assertAnyFieldPresent(dto);
+
+    const user = await this.#findUserOrThrow(userId);
+    const username = dto.username && dto.username !== user.username ? dto.username : undefined;
+    const email = dto.email && dto.email !== user.email ? dto.email : undefined;
+
+    await this.authService.assertAvailableForUpdate(user.id, username, email);
+    await this.userUpdateService.applyUserUpdate(user, dto);
+
+    return this.#findUserOrThrow(userId);
+  }
+
+  #assertAnyFieldPresent(dto: AdminUpdateUserDto): void {
+    if (!dto.username && !dto.email && !dto.newPassword) {
+      throw new BadRequestException('At least one of username, email, or newPassword is required');
     }
   }
 

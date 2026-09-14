@@ -97,8 +97,8 @@ export default class AdminUsersHelper {
   }
 
   /**
-   * Render a single user row, with its "Generate link"/"Send email" actions and whatever
-   * per-row result the controller is currently holding for that user.
+   * Render a single user row, with an "Edit" link plus its "Generate link"/"Send email"
+   * actions and whatever per-row result the controller is currently holding for that user.
    *
    * @param {{id: number, username: string, email: string, isAdmin: boolean}} user - The row's
    *   user account.
@@ -114,6 +114,12 @@ export default class AdminUsersHelper {
         <td>{user.email}</td>
         <td>{user.isAdmin ? 'Yes' : 'No'}</td>
         <td>
+          <a
+            href={`#/admin/users/${user.id}/edit`}
+            className="btn btn-sm btn-secondary me-2"
+          >
+            Edit
+          </a>
           <button
             type="button"
             className="btn btn-sm btn-secondary me-2"
