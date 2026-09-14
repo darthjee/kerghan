@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { AccountEditAbuseGuardService } from './account-edit-abuse-guard.service.js';
 import { AccountService } from './account.service.js';
 import { AdminController } from './admin.controller.js';
 import { AdminService } from './admin.service.js';
@@ -43,6 +44,7 @@ import { UserUpdateService } from './user-update.service.js';
   providers: [
     AuthService,
     AccountService,
+    AccountEditAbuseGuardService,
     AdminService,
     PasswordResetService,
     TokenService,
