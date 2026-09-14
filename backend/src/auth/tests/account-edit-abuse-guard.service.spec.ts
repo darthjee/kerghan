@@ -1,4 +1,5 @@
 import { ConfigService } from '@nestjs/config';
+import { QueryFailedError } from 'typeorm';
 import { AccountEditAbuseGuardService } from '../account-edit-abuse-guard.service.js';
 import { AccountEditLockout } from '../entities/account-edit-lockout.entity.js';
 
@@ -123,6 +124,40 @@ describe('AccountEditAbuseGuardService', () => {
         failedAttempts: 2,
         lockedUntil: expect.any(Date),
       });
+    });
+
+    it('falls back to updating the winner row when a concurrent first failure loses the unique-index race', async () => {
+      // The initial lookup finds nothing (as if this were the very first failure for the user)...
+      accountEditLockoutRepository.findOne.mockResolvedValueOnce(null);
+      // ...but the insert loses the race against a concurrent request that created the row first,
+      // so it fails with the same duplicate-key error MySQL raises for `auth_account_edit_lockouts`'
+      // unique `user_id` index.
+      accountEditLockoutRepository.save.mockRejectedValueOnce(
+        new QueryFailedError('INSERT INTO auth_account_edit_lockouts ...', [], {
+          code: 'ER_DUP_ENTRY',
+        } as never),
+      );
+      // The recovery re-fetch sees the winner's row, already at failedAttempts: 1.
+      accountEditLockoutRepository.findOne.mockResolvedValueOnce({
+        id: 10,
+        failedAttempts: 1,
+        lockedUntil: null,
+      } as AccountEditLockout);
+
+      await guard.registerFailure(1);
+
+      expect(accountEditLockoutRepository.update).toHaveBeenCalledWith(10, {
+        failedAttempts: 2,
+        lockedUntil: null,
+      });
+    });
+
+    it('re-throws a save error that is not a unique-constraint violation', async () => {
+      accountEditLockoutRepository.findOne.mockResolvedValueOnce(null);
+      const error = new Error('connection lost');
+      accountEditLockoutRepository.save.mockRejectedValueOnce(error);
+
+      await expect(guard.registerFailure(1)).rejects.toThrow(error);
     });
   });
 

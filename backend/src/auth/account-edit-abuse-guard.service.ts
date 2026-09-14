@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { QueryFailedError, Repository } from 'typeorm';
 import { AccountEditLockout } from './entities/account-edit-lockout.entity.js';
 
 // Default consecutive-failed-attempt threshold, per user, that trips the `PATCH
@@ -11,6 +11,10 @@ const DEFAULT_ACCOUNT_EDIT_MAX_ATTEMPTS = 5;
 // Default cool-off duration (5 minutes, in milliseconds) used when
 // `KERGHAN_ACCOUNT_EDIT_LOCK_MS` is unset.
 const DEFAULT_ACCOUNT_EDIT_LOCK_MS = 300000;
+
+// MySQL's driver error code for a unique-index violation, used to detect the
+// `registerFailure` insert race (see its JSDoc) without depending on the message text.
+const MYSQL_DUPLICATE_ENTRY_CODE = 'ER_DUP_ENTRY';
 
 /**
  * Brute-force cool-off lockout for `PATCH /auth/account.json`, mirroring
@@ -54,22 +58,24 @@ export class AccountEditAbuseGuardService {
   /**
    * Records one more failed `PATCH /auth/account.json` attempt for `userId`, creating the
    * user's lockout row on the first failure, and locking it (setting `lockedUntil`) once the
-   * configured max-attempts threshold is reached.
+   * configured max-attempts threshold is reached. `userId` is uniquely indexed, so two
+   * concurrent first failures for the same user can both race past the initial lookup finding no
+   * row; the loser's insert is caught and retried as an update against the winner's now-existing
+   * row instead of propagating an unhandled unique-constraint error and silently dropping the
+   * attempt.
    * @param {number} userId - The authenticated user's ID.
    * @returns {Promise<void>} Resolves once the user's attempt counter (and lock, if tripped) is persisted.
    */
   async registerFailure(userId: number): Promise<void> {
     const lockout = await this.accountEditLockoutRepository.findOne({ where: { userId } });
-    const attempts = (lockout?.failedAttempts ?? 0) + 1;
-    const lockedUntil = attempts >= this.#maxAttempts() ? new Date(Date.now() + this.#lockMs()) : null;
 
     if (lockout) {
-      await this.accountEditLockoutRepository.update(lockout.id, { failedAttempts: attempts, lockedUntil });
-    } else {
-      await this.accountEditLockoutRepository.save(
-        this.accountEditLockoutRepository.create({ userId, failedAttempts: attempts, lockedUntil }),
-      );
+      await this.#applyFailure(lockout.id, lockout.failedAttempts);
+
+      return;
     }
+
+    await this.#insertFirstFailure(userId);
   }
 
   /**
@@ -84,6 +90,49 @@ export class AccountEditAbuseGuardService {
     if (lockout) {
       await this.accountEditLockoutRepository.update(lockout.id, { failedAttempts: 0, lockedUntil: null });
     }
+  }
+
+  async #applyFailure(id: number, currentAttempts: number): Promise<void> {
+    const { attempts, lockedUntil } = this.#nextAttemptState(currentAttempts);
+
+    await this.accountEditLockoutRepository.update(id, { failedAttempts: attempts, lockedUntil });
+  }
+
+  async #insertFirstFailure(userId: number): Promise<void> {
+    const { attempts, lockedUntil } = this.#nextAttemptState(0);
+
+    try {
+      await this.accountEditLockoutRepository.save(
+        this.accountEditLockoutRepository.create({ userId, failedAttempts: attempts, lockedUntil }),
+      );
+    } catch (error) {
+      await this.#recoverFromInsertRace(userId, error);
+    }
+  }
+
+  async #recoverFromInsertRace(userId: number, error: unknown): Promise<void> {
+    if (!this.#isDuplicateUserIdError(error)) {
+      throw error;
+    }
+
+    const lockout = await this.accountEditLockoutRepository.findOne({ where: { userId } });
+
+    if (lockout) {
+      await this.#applyFailure(lockout.id, lockout.failedAttempts);
+    }
+  }
+
+  #isDuplicateUserIdError(error: unknown): boolean {
+    const code = (error as { driverError?: { code?: string } })?.driverError?.code;
+
+    return error instanceof QueryFailedError && code === MYSQL_DUPLICATE_ENTRY_CODE;
+  }
+
+  #nextAttemptState(currentAttempts: number): { attempts: number; lockedUntil: Date | null } {
+    const attempts = currentAttempts + 1;
+    const lockedUntil = attempts >= this.#maxAttempts() ? new Date(Date.now() + this.#lockMs()) : null;
+
+    return { attempts, lockedUntil };
   }
 
   #maxAttempts(): number {
