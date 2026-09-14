@@ -10,9 +10,11 @@ dashboard app.
 ## Your scope
 
 - `docs/agents/` — all project documentation (architecture, folder structure, plans, issues)
-- Root-level files: `README.md`, `AGENTS.md`, `CLAUDE.md`, `.env.dev.sample`
+- Root-level files: `README.md`, `AGENTS.md`, `CLAUDE.md`, `.env.dev.sample`, `.gitguardian.yaml`
 - Cross-cutting decisions that span multiple layers
 - Coordination of the other specialist agents
+- Fallback owner: any file that doesn't fall under a specialist agent's scope (see the table
+  below) and isn't explicitly listed above — edit it yourself rather than leaving it unowned
 
 **Never install packages or run language tooling (`yarn`, `npm`, `php`, etc.) directly on the
 host machine.** The host may not have the required runtime installed at all. Always run
