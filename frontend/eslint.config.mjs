@@ -15,6 +15,7 @@ const codacyRuleStubs = {
   xss: { rules: { 'no-mixed-html': { create: () => ({}) } } },
   security: { rules: { 'detect-object-injection': { create: () => ({}) } } },
   '@typescript-eslint': { rules: { 'no-extraneous-class': { create: () => ({}) } } },
+  'security-node': { rules: { 'non-literal-reg-expr': { create: () => ({}) } } },
 };
 
 export default [
@@ -90,6 +91,7 @@ export default [
       'assets/js/client/AuthSession.js',
       'assets/js/client/LoginModalEvents.js',
       'assets/js/components/resources/admin/pages/helpers/AdminUsersHelper.jsx',
+      'assets/js/utils/routing/Route.js',
       'specs/assets/js/client/ApiClientSpec.js',
     ],
     linterOptions: { reportUnusedDisableDirectives: 'off' },

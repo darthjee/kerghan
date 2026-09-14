@@ -24,6 +24,10 @@ export default class Route {
       })
       .join('/');
 
+    // eslint-disable-next-line security-node/non-literal-reg-expr -- `pattern` is built
+    // exclusively from statically-escaped literal segments (`Route.#escapeRegex`) and a bounded
+    // `(?<name>[^/]+)` capture group for `:param` segments — never from external/untrusted
+    // input — so no catastrophic backtracking is possible regardless of the input path.
     this.#regex = new RegExp(`^${pattern}/?$`);
     this.#page = page;
   }
