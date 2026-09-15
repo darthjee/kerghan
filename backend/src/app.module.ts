@@ -104,6 +104,6 @@ export class AppModule implements NestModule {
    * @returns {void}
    */
   configure(consumer: MiddlewareConsumer): void {
-    consumer.apply(RequestContextMiddleware).forRoutes('*');
+    consumer.apply(RequestContextMiddleware).forRoutes('{*splat}');
   }
 }
