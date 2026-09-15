@@ -1,7 +1,7 @@
 import { INestApplication } from '@nestjs/common';
 import request from 'supertest';
-import { AuthorizationRequest } from '../entities/authorization-request.entity.js';
 import { buildTestApp, createInMemoryRepo } from './authorization-request.controller.e2e-test-support.js';
+import { AuthorizationRequest } from '../entities/authorization-request.entity.js';
 
 describe('AuthorizationRequestController (e2e)', () => {
   let app: INestApplication;
