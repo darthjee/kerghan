@@ -13,19 +13,23 @@ export interface RenderedTemplate {
 
 const PLACEHOLDER = /\{\{\s*([A-Za-z0-9_]+)\s*\}\}/g;
 
+const HTML_ESCAPES: Record<string, string> = {
+  '&': '&amp;',
+  '<': '&lt;',
+  '>': '&gt;',
+  '"': '&quot;',
+  "'": '&#39;',
+};
+const HTML_ESCAPE_PATTERN = /[&<>"']/g;
+
 /**
- * HTML-escapes a substituted value. Escapes `&` first so the entities
- * introduced by the later replacements are not double-escaped.
+ * HTML-escapes a substituted value in a single pass, looking up each
+ * matched character's entity in {@link HTML_ESCAPES}.
  * @param {string} value - The raw substitution value.
  * @returns {string} The value with `& < > " '` replaced by entities.
  */
 function escapeHtml(value: string): string {
-  return value
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
+  return value.replace(HTML_ESCAPE_PATTERN, (char) => HTML_ESCAPES[char]);
 }
 
 /**
