@@ -1,13 +1,13 @@
 import { BadRequestException } from '@nestjs/common';
 import bcrypt from 'bcryptjs';
 import { AuthorizationRequestService } from '../authorization-request.service.js';
-import { AuthorizationRequest } from '../entities/authorization-request.entity.js';
-import { User } from '../entities/user.entity.js';
 import {
   createAuthorizationRequestServiceTestContext,
   RepoMock,
   sha256,
 } from './authorization-request.service.test-support.js';
+import { AuthorizationRequest } from '../entities/authorization-request.entity.js';
+import { User } from '../entities/user.entity.js';
 
 describe('AuthorizationRequestService', () => {
   let authorizationRequestRepository: RepoMock<AuthorizationRequest>;

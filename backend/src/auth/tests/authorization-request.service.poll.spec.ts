@@ -1,13 +1,13 @@
 import { NotFoundException } from '@nestjs/common';
 import { AuthorizationRequestService } from '../authorization-request.service.js';
-import { AuthorizationRequest } from '../entities/authorization-request.entity.js';
-import { User } from '../entities/user.entity.js';
 import {
   createAuthorizationRequestServiceTestContext,
   queryBuilderMock,
   RepoMock,
   sha256,
 } from './authorization-request.service.test-support.js';
+import { AuthorizationRequest } from '../entities/authorization-request.entity.js';
+import { User } from '../entities/user.entity.js';
 
 describe('AuthorizationRequestService', () => {
   let authorizationRequestRepository: RepoMock<AuthorizationRequest>;

@@ -22,6 +22,7 @@ export type RepoMock<T extends object> = {
  * Builds a fake TypeORM query builder mock resolving to a fixed UPDATE result.
  *
  * @param executeResult - the `{ affected }` shape returned by `execute()`.
+ * @param executeResult.affected - the number of rows the UPDATE affected.
  * @returns a chainable `update/set/where/execute` mock.
  */
 export function queryBuilderMock(executeResult: { affected: number }): {
