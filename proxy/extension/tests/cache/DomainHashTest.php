@@ -34,6 +34,9 @@ class DomainHashTest extends TestCase
     {
         $request = $this->makeRequest('kerghan-a.example.com', 'id=1');
 
+        // @SuppressWarnings(PHPMD.StaticAccess) DomainHash::hash() is a pure,
+        // stateless static helper (no I/O, no collaborators to substitute —
+        // see the class's own docblock).
         $result = DomainHash::hash($request);
 
         $this->assertSame('domain_' . hash('sha256', 'kerghan-a.example.com'), $result);
@@ -41,6 +44,10 @@ class DomainHashTest extends TestCase
 
     /**
      * The same domain always hashes identically.
+     *
+     * @SuppressWarnings(PHPMD.StaticAccess) DomainHash::hash() is a pure,
+     *     stateless static helper (no I/O, no collaborators to substitute —
+     *     see the class's own docblock).
      */
     public function testSameDomainHashesIdentically(): void
     {
@@ -53,6 +60,10 @@ class DomainHashTest extends TestCase
     /**
      * Different domains hash differently — this is the whole point of
      * partitioning the cache by domain via the folder name.
+     *
+     * @SuppressWarnings(PHPMD.StaticAccess) DomainHash::hash() is a pure,
+     *     stateless static helper (no I/O, no collaborators to substitute —
+     *     see the class's own docblock).
      */
     public function testDifferentDomainsHashDifferently(): void
     {
@@ -67,6 +78,10 @@ class DomainHashTest extends TestCase
      * old HostQueryRequestHasher, which mixed domain and query into the
      * cache-key hash. Domain-only partitioning via the folder (not
      * domain+query mixed into the key) is the whole point of this change.
+     *
+     * @SuppressWarnings(PHPMD.StaticAccess) DomainHash::hash() is a pure,
+     *     stateless static helper (no I/O, no collaborators to substitute —
+     *     see the class's own docblock).
      */
     public function testQueryStringDoesNotAffectHash(): void
     {
