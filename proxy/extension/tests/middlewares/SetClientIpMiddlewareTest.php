@@ -15,25 +15,6 @@ use Tent\Models\ProcessingRequest;
 class SetClientIpMiddlewareTest extends TestCase
 {
     /**
-     * @var string|null Original REMOTE_ADDR, restored after each test.
-     */
-    private $originalRemoteAddr;
-
-    protected function setUp(): void
-    {
-        $this->originalRemoteAddr = $_SERVER['REMOTE_ADDR'] ?? null;
-    }
-
-    protected function tearDown(): void
-    {
-        if ($this->originalRemoteAddr === null) {
-            unset($_SERVER['REMOTE_ADDR']);
-        } else {
-            $_SERVER['REMOTE_ADDR'] = $this->originalRemoteAddr;
-        }
-    }
-
-    /**
      * Builds a real ProcessingRequest instance with the given headers.
      */
     private function makeRequest(array $headers): ProcessingRequest
@@ -47,9 +28,8 @@ class SetClientIpMiddlewareTest extends TestCase
      */
     public function testAddsHeaderWhenAbsent(): void
     {
-        $_SERVER['REMOTE_ADDR'] = '203.0.113.7';
         $request = $this->makeRequest(['Content-Type' => 'application/json']);
-        $middleware = new SetClientIpMiddleware();
+        $middleware = new SetClientIpMiddleware(fn(): string => '203.0.113.7');
 
         $result = $middleware->processRequest($request);
 
@@ -66,12 +46,11 @@ class SetClientIpMiddlewareTest extends TestCase
      */
     public function testReplacesSpoofedHeader(): void
     {
-        $_SERVER['REMOTE_ADDR'] = '203.0.113.7';
         $request = $this->makeRequest([
             'Content-Type' => 'application/json',
             'X-Forwarded-For' => '10.0.0.1',
         ]);
-        $middleware = new SetClientIpMiddleware();
+        $middleware = new SetClientIpMiddleware(fn(): string => '203.0.113.7');
 
         $result = $middleware->processRequest($request);
 
@@ -87,11 +66,10 @@ class SetClientIpMiddlewareTest extends TestCase
      */
     public function testReplacesSpoofedHeaderRegardlessOfCase(): void
     {
-        $_SERVER['REMOTE_ADDR'] = '203.0.113.7';
         $request = $this->makeRequest([
             'x-forwarded-for' => '10.0.0.1',
         ]);
-        $middleware = new SetClientIpMiddleware();
+        $middleware = new SetClientIpMiddleware(fn(): string => '203.0.113.7');
 
         $result = $middleware->processRequest($request);
 
@@ -105,13 +83,12 @@ class SetClientIpMiddlewareTest extends TestCase
      */
     public function testOnlyForwardedForHeaderIsChanged(): void
     {
-        $_SERVER['REMOTE_ADDR'] = '203.0.113.7';
         $request = $this->makeRequest([
             'Host' => 'backend:8080',
             'Authorization' => 'Bearer token',
             'X-Forwarded-For' => '10.0.0.1',
         ]);
-        $middleware = new SetClientIpMiddleware();
+        $middleware = new SetClientIpMiddleware(fn(): string => '203.0.113.7');
 
         $result = $middleware->processRequest($request);
 
@@ -124,16 +101,28 @@ class SetClientIpMiddlewareTest extends TestCase
 
     /**
      * build() ignores its attributes argument and always returns a usable
-     * instance, since this middleware is not configurable.
+     * instance, since this middleware is not configurable. This is also the
+     * one remaining exercise of the default provider, which reads the real
+     * `$_SERVER['REMOTE_ADDR']`.
      */
     public function testBuildReturnsUsableInstance(): void
     {
+        $originalRemoteAddr = $_SERVER['REMOTE_ADDR'] ?? null;
         $_SERVER['REMOTE_ADDR'] = '198.51.100.42';
-        $middleware = SetClientIpMiddleware::build([]);
-        $request = $this->makeRequest([]);
 
-        $result = $middleware->processRequest($request);
+        try {
+            $middleware = SetClientIpMiddleware::build([]);
+            $request = $this->makeRequest([]);
 
-        $this->assertSame(['X-Forwarded-For' => '198.51.100.42'], $result->headers());
+            $result = $middleware->processRequest($request);
+
+            $this->assertSame(['X-Forwarded-For' => '198.51.100.42'], $result->headers());
+        } finally {
+            if ($originalRemoteAddr === null) {
+                unset($_SERVER['REMOTE_ADDR']);
+            } else {
+                $_SERVER['REMOTE_ADDR'] = $originalRemoteAddr;
+            }
+        }
     }
 }
