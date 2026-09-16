@@ -33,6 +33,49 @@ export async function resolve(specifier, context, nextResolve) {
 }
 
 /**
+ * Transforms a `.jsx` file into plain JavaScript via Babel.
+ *
+ * @param {string} filePath - The absolute filesystem path of the `.jsx` file.
+ * @returns {{format: string, source: string, shortCircuit: boolean}} The transformed module.
+ */
+function loadJsx(filePath) {
+  const source = readFileSync(filePath, 'utf-8');
+  const transformed = transformSync(source, {
+    filename: filePath,
+    presets: [
+      ['@babel/preset-react', { runtime: 'automatic' }],
+    ],
+    sourceType: 'module',
+  });
+  return {
+    format: 'module',
+    source: transformed.code,
+    shortCircuit: true,
+  };
+}
+
+/**
+ * Shims `import.meta.env` from `process.env` for plain `.js` modules that read it. Vite
+ * statically replaces `import.meta.env.VITE_*` at build/dev time, but plain Node never
+ * populates `import.meta.env`.
+ *
+ * @param {string} filePath - The absolute filesystem path of the `.js` file.
+ * @param {string} source - The file's source code.
+ * @returns {{format: string, source: string, shortCircuit: boolean}|null} The shimmed module,
+ *   or `null` when the source doesn't reference `import.meta.env`.
+ */
+function shimImportMetaEnv(filePath, source) {
+  if (!source.includes('import.meta.env')) {
+    return null;
+  }
+  return {
+    format: 'module',
+    source: `import.meta.env = import.meta.env ?? { ...process.env };\n${source}`,
+    shortCircuit: true,
+  };
+}
+
+/**
  * Load hook for the Node.js module loader.
  * Transforms JSX files to plain JavaScript.
  *
@@ -52,20 +95,7 @@ export async function load(url, context, nextLoad) {
     };
   }
   if (url.endsWith('.jsx')) {
-    const filePath = fileURLToPath(url);
-    const source = readFileSync(filePath, 'utf-8');
-    const transformed = transformSync(source, {
-      filename: filePath,
-      presets: [
-        ['@babel/preset-react', { runtime: 'automatic' }],
-      ],
-      sourceType: 'module',
-    });
-    return {
-      format: 'module',
-      source: transformed.code,
-      shortCircuit: true,
-    };
+    return loadJsx(fileURLToPath(url));
   }
   if (url.endsWith('.css') || url.endsWith('.scss')) {
     // Frontend entrypoints import stylesheets, but Node-based specs only need the JS module graph.
@@ -87,15 +117,9 @@ export async function load(url, context, nextLoad) {
   const [bareUrl] = url.split('?');
   if (bareUrl.endsWith('.js') && !bareUrl.includes('/node_modules/')) {
     const filePath = fileURLToPath(bareUrl);
-    const source = readFileSync(filePath, 'utf-8');
-    if (source.includes('import.meta.env')) {
-      // Vite statically replaces `import.meta.env.VITE_*` at build/dev time; plain Node never
-      // populates `import.meta.env`, so shim it from `process.env` before the module's own code runs.
-      return {
-        format: 'module',
-        source: `import.meta.env = import.meta.env ?? { ...process.env };\n${source}`,
-        shortCircuit: true,
-      };
+    const shimmed = shimImportMetaEnv(filePath, readFileSync(filePath, 'utf-8'));
+    if (shimmed) {
+      return shimmed;
     }
   }
   return nextLoad(url, context);
