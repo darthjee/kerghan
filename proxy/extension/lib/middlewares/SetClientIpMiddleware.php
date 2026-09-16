@@ -42,6 +42,24 @@ class SetClientIpMiddleware extends Middleware
     private const HEADER_NAME = 'X-Forwarded-For';
 
     /**
+     * @var callable(): string Provides the current request's remote address.
+     */
+    private $remoteAddrProvider;
+
+    /**
+     * @param callable(): string|null $remoteAddrProvider Provides the
+     *                           current request's remote address. Defaults
+     *                           to reading PHP's own `$_SERVER['REMOTE_ADDR']`.
+     */
+    public function __construct(?callable $remoteAddrProvider = null)
+    {
+        $this->remoteAddrProvider = $remoteAddrProvider ?? static function (): string {
+            // @SuppressWarnings(PHPMD.Superglobals)
+            return (string) ($_SERVER['REMOTE_ADDR'] ?? '');
+        };
+    }
+
+    /**
      * Builds a SetClientIpMiddleware instance.
      *
      * This middleware takes no configurable attributes.
@@ -74,7 +92,7 @@ class SetClientIpMiddleware extends Middleware
             }
         }
 
-        $request->setHeader(self::HEADER_NAME, (string) ($_SERVER['REMOTE_ADDR'] ?? ''));
+        $request->setHeader(self::HEADER_NAME, ($this->remoteAddrProvider)());
 
         return $request;
     }
