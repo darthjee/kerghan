@@ -111,6 +111,11 @@ class SetClientIpMiddlewareTest extends TestCase
         $_SERVER['REMOTE_ADDR'] = '198.51.100.42';
 
         try {
+            // @SuppressWarnings(PHPMD.StaticAccess) SetClientIpMiddleware::build()
+            // is the static factory contract mandated by the Tent middleware
+            // framework (see the class's own "Usage in configuration"
+            // docblock); this test exists specifically to exercise that
+            // static contract.
             $middleware = SetClientIpMiddleware::build([]);
             $request = $this->makeRequest([]);
 
