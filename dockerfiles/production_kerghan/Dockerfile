@@ -1,5 +1,6 @@
+ARG BASE_VERSION=latest
 FROM darthjee/scripts:0.8.0 as scripts
-FROM darthjee/production_kerghan-base:latest as base
+FROM darthjee/production_kerghan-base:${BASE_VERSION} as base
 
 ######################################
 
