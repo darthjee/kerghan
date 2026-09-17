@@ -53,6 +53,9 @@ const DEVICE_PANEL_MESSAGES = {
  * unit-testable without a DOM. Follows the same static-class-with-`#render*`-methods convention
  * as `LoginHelper` / `RegisterHelper`.
  */
+// eslint-disable-next-line @typescript-eslint/no-extraneous-class -- static-methods-only
+// utility/client class is this codebase's deliberate convention, matching
+// components/common/loginModal/helpers/LoginModalHelper.jsx.
 export default class LoginModalFormsHelper {
   /**
    * Render either the result panel (when `state.resultPanel` is set) or the mode selector plus

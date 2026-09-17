@@ -11,6 +11,9 @@ const PASSWORD_FIELDS = [
 /**
  * Rendering helper for the "My account" page.
  */
+// eslint-disable-next-line @typescript-eslint/no-extraneous-class -- static-methods-only
+// utility/client class is this codebase's deliberate convention, matching
+// components/resources/accounts/pages/helpers/AuthorizationRequestsHelper.jsx.
 export default class MyAccountHelper {
   /**
    * Render the My Account page: editable username/email fields, the required current-password

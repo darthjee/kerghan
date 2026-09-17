@@ -3,6 +3,9 @@ import Table from 'react-bootstrap/cjs/Table.js';
 /**
  * Rendering helper for the Admin Users page.
  */
+// eslint-disable-next-line @typescript-eslint/no-extraneous-class -- static-methods-only
+// utility/client class is this codebase's deliberate convention, matching
+// components/resources/admin/pages/helpers/AdminUserEditHelper.jsx.
 export default class AdminUsersHelper {
   /**
    * Render the Admin Users page: a search form and, once searched, a table of matching

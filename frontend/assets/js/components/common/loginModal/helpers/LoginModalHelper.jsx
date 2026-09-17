@@ -15,6 +15,9 @@ const TITLES = {
  * Follows the same static-class-with-`#render*`-methods convention as `LoginHelper` /
  * `HeaderHelper`.
  */
+// eslint-disable-next-line @typescript-eslint/no-extraneous-class -- static-methods-only
+// utility/client class is this codebase's deliberate convention, matching
+// components/common/loginModal/helpers/LoginModalFormsHelper.jsx.
 export default class LoginModalHelper {
   /**
    * Render the login modal. Renders nothing visible while `state.open` is false.

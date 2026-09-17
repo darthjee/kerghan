@@ -7,6 +7,8 @@ import AuthSession from './AuthSession.js';
  * and `logout` clears it regardless of whether the request itself succeeds — the client-side
  * session should still end.
  */
+// eslint-disable-next-line @typescript-eslint/no-extraneous-class -- static-methods-only
+// utility/client class is this codebase's deliberate convention, matching client/ApiClient.js.
 export default class AccountsClient {
   /**
    * Register a new account.
