@@ -11,6 +11,9 @@ const PASSWORD_FIELDS = [
 /**
  * Rendering helper for the Admin User Edit page.
  */
+// eslint-disable-next-line @typescript-eslint/no-extraneous-class -- static-methods-only
+// utility/client class is this codebase's deliberate convention, matching
+// components/resources/admin/pages/helpers/AdminUsersHelper.jsx.
 export default class AdminUserEditHelper {
   /**
    * Render the Admin User Edit page: editable username/email fields, a change-password

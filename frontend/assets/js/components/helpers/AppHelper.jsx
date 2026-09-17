@@ -22,6 +22,9 @@ const PAGES = {
 /**
  * Helper for application page rendering: maps a page key to its component.
  */
+// eslint-disable-next-line @typescript-eslint/no-extraneous-class -- static-methods-only
+// utility/client class is this codebase's deliberate convention, matching
+// components/common/header/helpers/HeaderHelper.jsx.
 export default class AppHelper {
   /**
    * Render the app shell wrapping the page matching the given key, plus the route-independent

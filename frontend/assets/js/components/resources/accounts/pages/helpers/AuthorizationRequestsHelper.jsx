@@ -3,6 +3,9 @@ import Table from 'react-bootstrap/cjs/Table.js';
 /**
  * Rendering helper for the "My account → Authorizations" page.
  */
+// eslint-disable-next-line @typescript-eslint/no-extraneous-class -- static-methods-only
+// utility/client class is this codebase's deliberate convention, matching
+// components/resources/accounts/pages/helpers/MyAccountHelper.jsx.
 export default class AuthorizationRequestsHelper {
   /**
    * Render the Authorization Requests page: a list of the caller's own open authorization

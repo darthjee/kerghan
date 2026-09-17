@@ -7,6 +7,9 @@ import ApiClient from './ApiClient.js';
  * UI / redirect away". Unlike {@link module:client/AccountsClient}, none of these touch
  * `AuthSession` — none of them affect the caller's own session.
  */
+// eslint-disable-next-line @typescript-eslint/no-extraneous-class -- static-methods-only
+// utility/client class is this codebase's deliberate convention, matching
+// client/AccountsClient.js.
 export default class AdminClient {
   /**
    * Search user accounts by username/email.

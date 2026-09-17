@@ -10,6 +10,8 @@ const REFRESH_PATH = '/auth/refresh.json';
  * token) and retries the original request; if there is no refresh token to use, or the
  * refresh itself fails, the session is treated as expired.
  */
+// eslint-disable-next-line @typescript-eslint/no-extraneous-class -- static-methods-only
+// utility/client class is this codebase's deliberate convention, matching client/AuthSession.js.
 export default class ApiClient {
   /**
    * Submit a POST request with a JSON body. Always sends same-origin credentials so the
