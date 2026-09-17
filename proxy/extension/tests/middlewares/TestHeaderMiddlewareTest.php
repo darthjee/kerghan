@@ -4,7 +4,6 @@ namespace Tent\Middlewares\Tests;
 
 use PHPUnit\Framework\TestCase;
 use Tent\Middlewares\TestHeaderMiddleware;
-use Tent\Models\Request;
 use Tent\Models\Response;
 
 /**
@@ -17,7 +16,6 @@ class TestHeaderMiddlewareTest extends TestCase
 {
     public function testAddsTestHeader(): void
     {
-        $request    = $this->createMock(Request::class);
         $response   = $this->createMock(Response::class);
         $middleware = new TestHeaderMiddleware();
 
@@ -26,6 +24,6 @@ class TestHeaderMiddlewareTest extends TestCase
             ->method('setHeaders')
             ->with(['x-test-header' => 'added']);
 
-        $middleware->handle($request, $response);
+        $middleware->handle($response);
     }
 }
