@@ -64,10 +64,12 @@ make setup
 
 Backend runs on port `3030`, frontend dev server on `3010`, full stack proxy on `3000`.
 
-**Always run project commands through `docker-compose`.** (unless the user says otherwise).
+**Always run project commands through `docker-compose`.** (unless the user explicitly asks
+otherwise in the conversation).
 Never install packages or invoke tooling (`yarn`, `npm`, `php`, etc.) directly on the host
-machine (unless the user says otherwise). The host may not even have the required runtime
-installed, and dependencies must stay reproducible inside the project's containers. Examples:
+machine (unless the user explicitly asks otherwise in the conversation). The host may not even
+have the required runtime installed, and dependencies must stay reproducible inside the
+project's containers. Examples:
 
 ```bash
 docker-compose run --rm kerghan_fe yarn lint
@@ -76,7 +78,7 @@ docker-compose run --rm kerghan_tests yarn test
 
 ## Conventions
 
-- All documentation and code comments must be written in **English**.
+- All documentation and code comments must always be written in **English**, with no exceptions.
 - Backend code lives in `backend/`, frontend in `frontend/`.
 - Backend source lives under `backend/src/`, one folder per module (e.g. `backend/src/auth/`),
   following the standard module structure (`<name>.module.ts`, `.controller.ts`, `.service.ts`,
