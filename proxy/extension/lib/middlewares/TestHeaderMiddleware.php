@@ -2,7 +2,6 @@
 
 namespace Tent\Middlewares;
 
-use Tent\Models\Request;
 use Tent\Models\Response;
 
 /**
@@ -17,10 +16,9 @@ class TestHeaderMiddleware
     /**
      * Add the x-test-header response header.
      *
-     * @param Request  $request  The incoming HTTP request.
      * @param Response $response The HTTP response to be sent to the client.
      */
-    public function handle(Request $request, Response $response): void
+    public function handle(Response $response): void
     {
         $headers = $response->headers();
         $headers['x-test-header'] = 'added';

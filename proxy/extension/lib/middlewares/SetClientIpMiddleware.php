@@ -68,6 +68,7 @@ class SetClientIpMiddleware extends Middleware
      *                           Middleware::build() contract.
      * @return SetClientIpMiddleware The constructed middleware instance.
      */
+    // @SuppressWarnings(PHPMD.UnusedFormalParameter)
     public static function build(array $attributes): SetClientIpMiddleware
     {
         return new self();
