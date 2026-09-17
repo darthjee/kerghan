@@ -57,7 +57,7 @@ export class AdminService {
    * @returns {Promise<User[]>} The matching users, `passwordDigest` included
    *   (serialization to the public shape happens in the controller).
    */
-  async searchUsers(q?: string): Promise<User[]> {
+  searchUsers(q?: string): Promise<User[]> {
     if (!q) {
       return this.userRepository.find();
     }

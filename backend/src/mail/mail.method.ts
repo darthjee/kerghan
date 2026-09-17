@@ -29,13 +29,13 @@ export interface EmailMethodResult {
 export interface EmailMethod {
   /**
    * Delivers one message.
-   * @param {EmailMethodMessage} message - The resolved from/to/subject/bodies.
+   * @param {EmailMethodMessage} _message - The resolved from/to/subject/bodies.
    * @returns {Promise<EmailMethodResult>} Resolves with the provider's
    *   message id, when available.
    * @throws {Error} When the recipient is rejected or the underlying
    *   transport throws.
    */
-  deliver(message: EmailMethodMessage): Promise<EmailMethodResult>;
+  deliver(_message: EmailMethodMessage): Promise<EmailMethodResult>;
 }
 
 /**
