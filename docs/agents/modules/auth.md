@@ -130,7 +130,7 @@ token), `requestIp`/`requestUserAgent` (captured at creation), `approvedByUserId
 `expiresAt`/`resolvedAt`/`loggedAt`, and the hardening columns `authorizeFailedAttempts`/
 `authorizeLockedUntil` (see "Hardening limits" below).
 
-### Routes
+### Device-authorization routes
 
 Same compact-table convention as "Routes" above — see [Auth routes](../backend/routes/auth.md)
 for the full per-endpoint reference. Unlike the four classic routes, only `create`/`poll` are
