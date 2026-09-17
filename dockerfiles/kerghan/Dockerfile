@@ -1,5 +1,6 @@
+ARG BASE_VERSION=latest
 FROM darthjee/scripts:0.8.0 as scripts
-FROM darthjee/kerghan-base:latest as base
+FROM darthjee/kerghan-base:${BASE_VERSION} as base
 
 COPY --chown=node:node \
   ./backend/package.json backend/yarn.lock \
