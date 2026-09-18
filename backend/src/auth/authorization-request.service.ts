@@ -1,4 +1,4 @@
-import { randomBytes, randomUUID, createHash } from 'node:crypto';
+import { randomBytes, randomUUID } from 'node:crypto';
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { EventEmitter2 } from '@nestjs/event-emitter';
@@ -18,6 +18,7 @@ import { AuthorizationRequestCreatedEvent } from './events/authorization-request
 import { AuthorizationRequestDeniedEvent } from './events/authorization-request-denied.event.js';
 import { AuthorizationRequestLoggedEvent } from './events/authorization-request-logged.event.js';
 import { TokenService } from './token.service.js';
+import { hashToken } from '../core/token-hash.js';
 
 // Default authorization-request lifetime (1 hour, ms), used when `KERGHAN_AUTHORIZATION_REQUEST_TTL_MS` is unset.
 const DEFAULT_AUTHORIZATION_REQUEST_TTL_MS = 3600000;
@@ -106,7 +107,7 @@ export class AuthorizationRequestService {
         username,
         userId: user?.id ?? null,
         status: 'open',
-        pollTokenHash: this.#hashToken(pollToken),
+        pollTokenHash: hashToken(pollToken),
         requestIp: ip,
         requestUserAgent: userAgent,
         approvedByUserId: null,
@@ -137,7 +138,7 @@ export class AuthorizationRequestService {
   async poll(uuid: string, pollToken: string): Promise<PollResult> {
     const request = await this.authorizationRequestRepository.findOneBy({
       uuid,
-      pollTokenHash: this.#hashToken(pollToken),
+      pollTokenHash: hashToken(pollToken),
     });
 
     if (!request) {
@@ -275,10 +276,6 @@ export class AuthorizationRequestService {
     return Number(
       this.configService.get('KERGHAN_AUTHORIZATION_REQUEST_TTL_MS') ?? DEFAULT_AUTHORIZATION_REQUEST_TTL_MS,
     );
-  }
-
-  #hashToken(token: string): string {
-    return createHash('sha256').update(token).digest('hex');
   }
 
   async #loadOwnedOpenRequest(uuid: string, approverUserId: number, failureMessage: string): Promise<AuthorizationRequest> {

@@ -1,4 +1,4 @@
-import { randomBytes, createHash } from 'node:crypto';
+import { randomBytes } from 'node:crypto';
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { EventEmitter2 } from '@nestjs/event-emitter';
@@ -11,6 +11,7 @@ import { PasswordResetToken } from './entities/password-reset-token.entity.js';
 import { User } from './entities/user.entity.js';
 import { PasswordRecoveryRequestedEvent } from './events/password-recovery-requested.event.js';
 import { LoggerService } from '../core/logger.service.js';
+import { hashToken } from '../core/token-hash.js';
 
 // Default password-reset-token lifetime (30 minutes, in milliseconds) used
 // when `KERGHAN_PASSWORD_RESET_TOKEN_TTL_MS` is unset.
@@ -115,7 +116,7 @@ export class PasswordResetService {
     await this.passwordResetTokenRepository.save(
       this.passwordResetTokenRepository.create({
         userId: user.id,
-        tokenHash: this.#hashToken(token),
+        tokenHash: hashToken(token),
         expiresAt: new Date(Date.now() + ttlMs),
         usedAt: null,
       }),
@@ -148,7 +149,7 @@ export class PasswordResetService {
   }
 
   async #findActiveToken(token: string): Promise<PasswordResetToken> {
-    const tokenHash = this.#hashToken(token);
+    const tokenHash = hashToken(token);
     const tokenRow = await this.passwordResetTokenRepository.findOneBy({ tokenHash });
 
     if (!tokenRow || tokenRow.usedAt || tokenRow.expiresAt < new Date()) {
@@ -156,9 +157,5 @@ export class PasswordResetService {
     }
 
     return tokenRow;
-  }
-
-  #hashToken(token: string): string {
-    return createHash('sha256').update(token).digest('hex');
   }
 }
