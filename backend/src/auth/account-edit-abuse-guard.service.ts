@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { QueryFailedError, Repository } from 'typeorm';
+import { computeLockoutState } from '../core/lockout-state.js';
 import { getNumberConfig } from '../core/numeric-config.js';
 import { AccountEditLockout } from './entities/account-edit-lockout.entity.js';
 
@@ -130,10 +131,7 @@ export class AccountEditAbuseGuardService {
   }
 
   #nextAttemptState(currentAttempts: number): { attempts: number; lockedUntil: Date | null } {
-    const attempts = currentAttempts + 1;
-    const lockedUntil = attempts >= this.#maxAttempts() ? new Date(Date.now() + this.#lockMs()) : null;
-
-    return { attempts, lockedUntil };
+    return computeLockoutState(currentAttempts, this.#maxAttempts(), this.#lockMs());
   }
 
   #maxAttempts(): number {
