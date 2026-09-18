@@ -1,6 +1,7 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { ILike, Repository } from 'typeorm';
+import { assertAnyFieldPresent } from './assert-any-field-present.js';
 import { AuthService } from './auth.service.js';
 import { AdminUpdateUserDto } from './dto/admin-update-user.dto.js';
 import { User } from './entities/user.entity.js';
@@ -125,7 +126,7 @@ export class AdminService {
    * @throws {NotFoundException} When no user matches `userId`.
    */
   async editUser(userId: number, dto: AdminUpdateUserDto): Promise<User> {
-    this.#assertAnyFieldPresent(dto);
+    assertAnyFieldPresent(dto);
 
     const user = await this.#findUserOrThrow(userId);
     const username = dto.username && dto.username !== user.username ? dto.username : undefined;
@@ -135,12 +136,6 @@ export class AdminService {
     await this.userUpdateService.applyUserUpdate(user, dto);
 
     return this.#findUserOrThrow(userId);
-  }
-
-  #assertAnyFieldPresent(dto: AdminUpdateUserDto): void {
-    if (!dto.username && !dto.email && !dto.newPassword) {
-      throw new BadRequestException('At least one of username, email, or newPassword is required');
-    }
   }
 
   async #findUserOrThrow(id: number): Promise<User> {
