@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import bcrypt from 'bcryptjs';
 import { Repository } from 'typeorm';
 import { AccountEditAbuseGuardService } from './account-edit-abuse-guard.service.js';
+import { assertAnyFieldPresent } from './assert-any-field-present.js';
 import { AuthService } from './auth.service.js';
 import { UpdateAccountDto } from './dto/update-account.dto.js';
 import { User } from './entities/user.entity.js';
@@ -63,7 +64,7 @@ export class AccountService {
    *   lockout is currently active.
    */
   async updateAccount(userId: number, dto: UpdateAccountDto): Promise<AccountSummary> {
-    this.#assertAnyFieldPresent(dto);
+    assertAnyFieldPresent(dto);
     await this.#assertNotLockedOut(userId);
 
     const user = await this.#loadUser(userId);
@@ -73,12 +74,6 @@ export class AccountService {
     await this.accountEditAbuseGuardService.reset(userId);
 
     return result;
-  }
-
-  #assertAnyFieldPresent(dto: UpdateAccountDto): void {
-    if (!dto.username && !dto.email && !dto.newPassword) {
-      throw new BadRequestException('At least one of username, email, or newPassword is required');
-    }
   }
 
   async #assertNotLockedOut(userId: number): Promise<void> {
