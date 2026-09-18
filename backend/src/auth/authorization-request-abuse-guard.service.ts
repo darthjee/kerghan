@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { MoreThan, Repository } from 'typeorm';
+import { getNumberConfig } from '../core/numeric-config.js';
 import { AuthorizationRequest } from './entities/authorization-request.entity.js';
 
 // Default per-IP/per-username `create` rate limit (request count) used when
@@ -121,37 +122,42 @@ export class AuthorizationRequestAbuseGuardService {
   }
 
   #createLimit(): number {
-    return Number(
-      this.configService.get('KERGHAN_AUTHORIZATION_REQUEST_CREATE_LIMIT') ??
-        DEFAULT_AUTHORIZATION_REQUEST_CREATE_LIMIT,
+    return getNumberConfig(
+      this.configService,
+      'KERGHAN_AUTHORIZATION_REQUEST_CREATE_LIMIT',
+      DEFAULT_AUTHORIZATION_REQUEST_CREATE_LIMIT,
     );
   }
 
   #createWindowMs(): number {
-    return Number(
-      this.configService.get('KERGHAN_AUTHORIZATION_REQUEST_CREATE_WINDOW_MS') ??
-        DEFAULT_AUTHORIZATION_REQUEST_CREATE_WINDOW_MS,
+    return getNumberConfig(
+      this.configService,
+      'KERGHAN_AUTHORIZATION_REQUEST_CREATE_WINDOW_MS',
+      DEFAULT_AUTHORIZATION_REQUEST_CREATE_WINDOW_MS,
     );
   }
 
   #maxOpenPerUser(): number {
-    return Number(
-      this.configService.get('KERGHAN_AUTHORIZATION_REQUEST_MAX_OPEN_PER_USER') ??
-        DEFAULT_AUTHORIZATION_REQUEST_MAX_OPEN_PER_USER,
+    return getNumberConfig(
+      this.configService,
+      'KERGHAN_AUTHORIZATION_REQUEST_MAX_OPEN_PER_USER',
+      DEFAULT_AUTHORIZATION_REQUEST_MAX_OPEN_PER_USER,
     );
   }
 
   #authorizeMaxAttempts(): number {
-    return Number(
-      this.configService.get('KERGHAN_AUTHORIZATION_REQUEST_AUTHORIZE_MAX_ATTEMPTS') ??
-        DEFAULT_AUTHORIZATION_REQUEST_AUTHORIZE_MAX_ATTEMPTS,
+    return getNumberConfig(
+      this.configService,
+      'KERGHAN_AUTHORIZATION_REQUEST_AUTHORIZE_MAX_ATTEMPTS',
+      DEFAULT_AUTHORIZATION_REQUEST_AUTHORIZE_MAX_ATTEMPTS,
     );
   }
 
   #authorizeLockMs(): number {
-    return Number(
-      this.configService.get('KERGHAN_AUTHORIZATION_REQUEST_AUTHORIZE_LOCK_MS') ??
-        DEFAULT_AUTHORIZATION_REQUEST_AUTHORIZE_LOCK_MS,
+    return getNumberConfig(
+      this.configService,
+      'KERGHAN_AUTHORIZATION_REQUEST_AUTHORIZE_LOCK_MS',
+      DEFAULT_AUTHORIZATION_REQUEST_AUTHORIZE_LOCK_MS,
     );
   }
 }

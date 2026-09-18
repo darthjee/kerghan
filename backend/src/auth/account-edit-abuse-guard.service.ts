@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { QueryFailedError, Repository } from 'typeorm';
+import { getNumberConfig } from '../core/numeric-config.js';
 import { AccountEditLockout } from './entities/account-edit-lockout.entity.js';
 
 // Default consecutive-failed-attempt threshold, per user, that trips the `PATCH
@@ -136,10 +137,10 @@ export class AccountEditAbuseGuardService {
   }
 
   #maxAttempts(): number {
-    return Number(this.configService.get('KERGHAN_ACCOUNT_EDIT_MAX_ATTEMPTS') ?? DEFAULT_ACCOUNT_EDIT_MAX_ATTEMPTS);
+    return getNumberConfig(this.configService, 'KERGHAN_ACCOUNT_EDIT_MAX_ATTEMPTS', DEFAULT_ACCOUNT_EDIT_MAX_ATTEMPTS);
   }
 
   #lockMs(): number {
-    return Number(this.configService.get('KERGHAN_ACCOUNT_EDIT_LOCK_MS') ?? DEFAULT_ACCOUNT_EDIT_LOCK_MS);
+    return getNumberConfig(this.configService, 'KERGHAN_ACCOUNT_EDIT_LOCK_MS', DEFAULT_ACCOUNT_EDIT_LOCK_MS);
   }
 }
