@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { MoreThan, Repository } from 'typeorm';
+import { computeLockoutState } from '../core/lockout-state.js';
 import { getNumberConfig } from '../core/numeric-config.js';
 import { AuthorizationRequest } from './entities/authorization-request.entity.js';
 
@@ -111,9 +112,11 @@ export class AuthorizationRequestAbuseGuardService {
    * @returns {Promise<void>} Resolves once the row's attempt counter (and lock, if tripped) is persisted.
    */
   async registerAuthorizeFailure(request: AuthorizationRequest): Promise<void> {
-    const attempts = request.authorizeFailedAttempts + 1;
-    const lockedUntil =
-      attempts >= this.#authorizeMaxAttempts() ? new Date(Date.now() + this.#authorizeLockMs()) : null;
+    const { attempts, lockedUntil } = computeLockoutState(
+      request.authorizeFailedAttempts,
+      this.#authorizeMaxAttempts(),
+      this.#authorizeLockMs(),
+    );
 
     await this.authorizationRequestRepository.update(request.id, {
       authorizeFailedAttempts: attempts,
