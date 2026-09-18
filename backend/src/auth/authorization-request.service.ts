@@ -3,7 +3,6 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import { ConfigService } from '@nestjs/config';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { InjectRepository } from '@nestjs/typeorm';
-import bcrypt from 'bcryptjs';
 import { MoreThan, Repository } from 'typeorm';
 import { AuthorizationRequestAbuseGuardService } from './authorization-request-abuse-guard.service.js';
 import type {
@@ -11,6 +10,7 @@ import type {
   OpenAuthorizationRequest,
   PollResult,
 } from './authorization-request-result.js';
+import { compareOrDummy } from './dummy-digest.js';
 import { AuthorizationRequest } from './entities/authorization-request.entity.js';
 import { User } from './entities/user.entity.js';
 import { AuthorizationRequestApprovedEvent } from './events/authorization-request-approved.event.js';
@@ -27,10 +27,6 @@ const DEFAULT_AUTHORIZATION_REQUEST_TTL_MS = 3600000;
 // rejection never leaks which specific check failed.
 const AUTHORIZE_FAILURE_MESSAGE = 'Unable to authorize this request';
 const DENY_FAILURE_MESSAGE = 'Unable to deny this request';
-
-// A pre-computed bcrypt hash compared on a missing approver row, keeping timing equivalent to a
-// wrong-password check (mirrors `AuthService#validateCredentials`'s `DUMMY_DIGEST`).
-const DUMMY_DIGEST = '$2a$10$CwTycUXWue0Thq9StjUM0uJ8Q1eLXfPJvXQF4RUOgtnJhmiQq6Zsy';
 
 /**
  * The login-by-authorization flow's business logic, both device sides: the requesting device's
@@ -183,7 +179,8 @@ export class AuthorizationRequestService {
    * expired, wrong password, or locked-out — throws the same `BadRequestException`. A per-row
    * cool-off tracks consecutive wrong-password attempts, locking the row for a configured
    * duration once the threshold is reached. A locked-out attempt still runs the password compare
-   * (against `DUMMY_DIGEST` if needed), so it is not measurably faster than a normal attempt.
+   * (against `compareOrDummy`'s dummy digest if needed), so it is not measurably faster than a
+   * normal attempt.
    * @param {string} uuid - The authorization request's UUID.
    * @param {number} approverUserId - The approver's own user ID (`request.user.sub`).
    * @param {string} password - The approver's current plaintext password.
@@ -290,8 +287,7 @@ export class AuthorizationRequestService {
 
   async #approverPasswordValid(approverUserId: number, password: string): Promise<boolean> {
     const approver = await this.userRepository.findOneBy({ id: approverUserId });
-    const digest = approver?.passwordDigest ?? DUMMY_DIGEST;
 
-    return bcrypt.compare(password, digest);
+    return compareOrDummy(password, approver?.passwordDigest);
   }
 }
