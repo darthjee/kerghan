@@ -7,6 +7,7 @@ import { LoginDto } from './dto/login.dto.js';
 import { RecoverDto } from './dto/recover.dto.js';
 import { RegisterDto } from './dto/register.dto.js';
 import { ResetPasswordDto } from './dto/reset-password.dto.js';
+import { compareOrDummy } from './dummy-digest.js';
 import { RefreshToken } from './entities/refresh-token.entity.js';
 import { User } from './entities/user.entity.js';
 import { UserRegisteredEvent } from './events/user-registered.event.js';
@@ -14,12 +15,6 @@ import { PasswordResetService } from './password-reset.service.js';
 import { TokenService, type AuthResult } from './token.service.js';
 
 export type { AuthResult };
-
-// A pre-computed bcrypt hash of a value nobody will ever submit, compared
-// against when no user is found so lookups for unknown usernames take the
-// same time as a wrong-password check (avoids trivial timing-based
-// username enumeration) — ported from the old Authenticator.
-const DUMMY_DIGEST = '$2a$10$CwTycUXWue0Thq9StjUM0uJ8Q1eLXfPJvXQF4RUOgtnJhmiQq6Zsy';
 
 /**
  * Auth module business logic: credential verification, registration,
@@ -286,8 +281,7 @@ export class AuthService {
 
   async #validateCredentials(username: string, password: string): Promise<User> {
     const user = await this.userRepository.findOneBy({ username });
-    const digest = user?.passwordDigest ?? DUMMY_DIGEST;
-    const valid = await bcrypt.compare(password, digest);
+    const valid = await compareOrDummy(password, user?.passwordDigest);
 
     if (!user || !valid) {
       throw new UnauthorizedException('Invalid username or password');
