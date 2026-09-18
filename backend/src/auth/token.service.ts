@@ -1,8 +1,9 @@
-import { randomBytes, createHash } from 'node:crypto';
+import { randomBytes } from 'node:crypto';
 import { Injectable } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { hashToken } from '../core/token-hash.js';
 import { RefreshToken } from './entities/refresh-token.entity.js';
 import { Session } from './entities/session.entity.js';
 import { User } from './entities/user.entity.js';
@@ -89,7 +90,7 @@ export class TokenService {
    * @returns {string} The SHA-256 hex digest of the token.
    */
   hashToken(token: string): string {
-    return createHash('sha256').update(token).digest('hex');
+    return hashToken(token);
   }
 
   async #touchSession(userId: number): Promise<void> {
