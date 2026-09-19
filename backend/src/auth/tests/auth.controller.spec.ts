@@ -97,12 +97,11 @@ describe('AuthController', () => {
 
       expect(authService.logout).toHaveBeenCalledWith('a-refresh-token');
       expect(res.clearCookie).toHaveBeenCalledWith('access_token');
-      expect(res.set).toHaveBeenCalledWith('X-Skip-Cache', 'true');
     });
   });
 
   describe('PATCH /auth/account.json', () => {
-    it('delegates to AccountService with the session user id, returns its result, and sets X-Skip-Cache', async () => {
+    it('delegates to AccountService with the session user id and returns its result', async () => {
       const configService = { get: jest.fn((_key: string, defaultValue: number) => defaultValue) };
       const accountService = {
         updateAccount: jest.fn().mockResolvedValue({ username: 'new-username', email: 'darthjee@example.com' }),
@@ -115,11 +114,10 @@ describe('AuthController', () => {
       const dto = { currentPassword: 'my-password', username: 'new-username' };
       const req = { user: { sub: 1 } } as unknown as Request;
 
-      const result = await controller.updateAccount(dto, req, res as unknown as Response);
+      const result = await controller.updateAccount(dto, req);
 
       expect(accountService.updateAccount).toHaveBeenCalledWith(1, dto);
       expect(result).toEqual({ username: 'new-username', email: 'darthjee@example.com' });
-      expect(res.set).toHaveBeenCalledWith('X-Skip-Cache', 'true');
     });
   });
 
@@ -138,7 +136,7 @@ describe('AuthController', () => {
         authService.status.mockResolvedValue({ loggedIn: true, isAdmin: false });
         const controller = buildController();
 
-        const result = await controller.status({ refreshToken: 'a-refresh-token' }, res as unknown as Response);
+        const result = await controller.status({ refreshToken: 'a-refresh-token' });
 
         expect(authService.status).toHaveBeenCalledWith('a-refresh-token');
         expect(result).toEqual({ loggedIn: true, isAdmin: false });
@@ -150,20 +148,10 @@ describe('AuthController', () => {
         authService.status.mockResolvedValue({ loggedIn: false, isAdmin: false });
         const controller = buildController();
 
-        const result = await controller.status({ refreshToken: 'unknown-token' }, res as unknown as Response);
+        const result = await controller.status({ refreshToken: 'unknown-token' });
 
         expect(result).toEqual({ loggedIn: false, isAdmin: false });
       });
-    });
-
-    it('sets the X-Skip-Cache header and never sets the access-token cookie', async () => {
-      authService.status.mockResolvedValue({ loggedIn: true, isAdmin: false });
-      const controller = buildController();
-
-      await controller.status({ refreshToken: 'a-refresh-token' }, res as unknown as Response);
-
-      expect(res.set).toHaveBeenCalledWith('X-Skip-Cache', 'true');
-      expect(res.cookie).not.toHaveBeenCalled();
     });
   });
 });
