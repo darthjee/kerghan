@@ -8,6 +8,7 @@ import { Reflector } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
 import type { Request } from 'express';
 import type { AccessTokenPayload } from './access-token-payload.js';
+import { readBooleanMetadata } from './boolean-metadata.js';
 import { IS_PUBLIC_KEY } from './public.decorator.js';
 
 /**
@@ -37,7 +38,7 @@ export class JwtGuard implements CanActivate {
    * @returns {boolean} Whether the request may proceed.
    */
   canActivate(context: ExecutionContext): boolean {
-    if (this.#isPublic(context)) {
+    if (readBooleanMetadata(this.reflector, IS_PUBLIC_KEY, context)) {
       return true;
     }
 
@@ -56,15 +57,6 @@ export class JwtGuard implements CanActivate {
     }
 
     return token;
-  }
-
-  #isPublic(context: ExecutionContext): boolean {
-    return Boolean(
-      this.reflector.getAllAndOverride<boolean>(IS_PUBLIC_KEY, [
-        context.getHandler(),
-        context.getClass(),
-      ]),
-    );
   }
 
   #verify(token: string): AccessTokenPayload {
