@@ -1,0 +1,6 @@
+# Update the auth.controller unit spec
+
+`backend/src/auth/tests/auth.controller.spec.ts` builds `AuthController` directly (`new AuthController(...)`) and calls its methods without going through Nest's request pipeline, so a hand-rolled `res` mock (`{ cookie, set, clearCookie }` as `jest.fn()`s) is passed in directly. It currently asserts `expect(res.set).toHaveBeenCalledWith('X-Skip-Cache', 'true')` for `logout`, `updateAccount`, and `status` (around lines 100, 122, 165). Once step 03 removes the manual `res.set(SKIP_CACHE_HEADER, 'true')` call from those three handlers (the header is now set by the globally-registered interceptor instead, which this unit spec's direct-instantiation style never exercises), these three assertions will fail — remove them. Do not replace them with an interceptor-level assertion here: `SkipCacheInterceptor` already has its own unit spec from step 01, and the header's real end-to-end presence on these three routes is already covered by the existing e2e specs (see [backend.md](../backend.md)'s Notes for the full list), so no new coverage is needed in this file.
+
+## Files to Change
+- `backend/src/auth/tests/auth.controller.spec.ts` — remove the 3 `res.set` / `X-Skip-Cache` assertions in the `logout`, `updateAccount`, and `status` test cases; leave the rest of each test case (cookie/response-shape assertions) unchanged.
