@@ -1,5 +1,6 @@
 import bcrypt from 'bcryptjs';
 import type { MigrationInterface, QueryRunner } from 'typeorm';
+import { skipInProduction } from './helpers.js';
 
 // Dev/manual-testing convenience only — ported from the old Sequelize
 // seeder (backend/seeders/20260808060903-demo-user.js). This migration
@@ -23,14 +24,7 @@ const PASSWORD = process.env.KERGHAN_DEMO_PASSWORD ?? 'kerghan-demo-placeholder'
  */
 export class AuthSeedDemoUser20260824120004 implements MigrationInterface {
   public async up(queryRunner: QueryRunner): Promise<void> {
-    if (process.env.STAGE === 'production') {
-      // Raw console: migrations run via the TypeORM CLI, outside the Nest DI lifecycle — no LoggerService available.
-      // eslint-disable-next-line no-console
-      console.warn(
-        `Skipping ${AuthSeedDemoUser20260824120004.name}: STAGE=production, refusing to seed the demo user.`,
-      );
-      return;
-    }
+    if (skipInProduction(AuthSeedDemoUser20260824120004.name, 'seed the demo user')) return;
 
     const passwordDigest = await bcrypt.hash(PASSWORD, 10);
 

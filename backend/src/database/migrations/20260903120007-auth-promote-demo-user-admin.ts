@@ -1,4 +1,5 @@
 import type { MigrationInterface, QueryRunner } from 'typeorm';
+import { skipInProduction } from './helpers.js';
 
 const USERNAME = 'demo';
 
@@ -14,14 +15,7 @@ const USERNAME = 'demo';
  */
 export class AuthPromoteDemoUserAdmin20260903120007 implements MigrationInterface {
   public async up(queryRunner: QueryRunner): Promise<void> {
-    if (process.env.STAGE === 'production') {
-      // Raw console: migrations run via the TypeORM CLI, outside the Nest DI lifecycle — no LoggerService available.
-      // eslint-disable-next-line no-console
-      console.warn(
-        `Skipping ${AuthPromoteDemoUserAdmin20260903120007.name}: STAGE=production, refusing to promote the demo user to admin.`,
-      );
-      return;
-    }
+    if (skipInProduction(AuthPromoteDemoUserAdmin20260903120007.name, 'promote the demo user to admin')) return;
 
     await queryRunner.query('UPDATE auth_users SET is_admin = ? WHERE username = ?', [true, USERNAME]);
   }
