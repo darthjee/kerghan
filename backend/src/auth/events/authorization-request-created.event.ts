@@ -5,20 +5,12 @@
  * right payload.
  */
 export class AuthorizationRequestCreatedEvent {
-  readonly uuid: string;
-  readonly username: string;
-  readonly userId: number | null;
-
-  /**
-   * @param {string} uuid - The newly created authorization request's UUID.
-   * @param {string} username - The username originally submitted, whether or
-   *   not it resolved to a real user.
-   * @param {number | null} userId - The resolved user's ID, or `null` when
-   *   `username` did not resolve to a real user.
-   */
-  constructor(uuid: string, username: string, userId: number | null) {
-    this.uuid = uuid;
-    this.username = username;
-    this.userId = userId;
-  }
+  constructor(
+    /** The newly created authorization request's UUID. */
+    readonly uuid: string,
+    /** The username originally submitted, whether or not it resolved to a real user. */
+    readonly username: string,
+    /** The resolved user's ID, or `null` when `username` did not resolve to a real user. */
+    readonly userId: number | null,
+  ) {}
 }

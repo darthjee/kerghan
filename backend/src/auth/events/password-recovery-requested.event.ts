@@ -9,26 +9,25 @@
  * (in this payload and the reset link); only its hash is ever persisted.
  */
 export class PasswordRecoveryRequestedEvent {
-  readonly userId: number;
-  readonly token: string;
-  readonly resetUrl: string;
-  readonly email: string;
-
-  /**
-   * @param {number} userId - The account the recovery token was issued for.
-   * @param {string} token - The plaintext, one-time recovery token value —
-   *   only its hash is persisted, this is the only place the plaintext
-   *   exists outside the request that created it.
-   * @param {string} resetUrl - The full recovery link
-   *   (`${FRONTEND_BASE_URL}/#/recover-password?token=<token>`) to embed in
-   *   the recovery email.
-   * @param {string} email - The account's email address; the recovery email's
-   *   recipient. Carried in the payload so the listener needs no DB lookup.
-   */
-  constructor(userId: number, token: string, resetUrl: string, email: string) {
-    this.userId = userId;
-    this.token = token;
-    this.resetUrl = resetUrl;
-    this.email = email;
-  }
+  constructor(
+    /** The account the recovery token was issued for. */
+    readonly userId: number,
+    /**
+     * The plaintext, one-time recovery token value — only its hash is
+     * persisted, this is the only place the plaintext exists outside the
+     * request that created it.
+     */
+    readonly token: string,
+    /**
+     * The full recovery link
+     * (`${FRONTEND_BASE_URL}/#/recover-password?token=<token>`) to embed in
+     * the recovery email.
+     */
+    readonly resetUrl: string,
+    /**
+     * The account's email address; the recovery email's recipient. Carried
+     * in the payload so the listener needs no DB lookup.
+     */
+    readonly email: string,
+  ) {}
 }

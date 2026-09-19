@@ -4,18 +4,12 @@
  * this issue — it only needs to fire with the right payload.
  */
 export class UserRegisteredEvent {
-  readonly userId: number;
-  readonly username: string;
-  readonly email: string;
-
-  /**
-   * @param {number} userId - The newly created user's ID.
-   * @param {string} username - The newly created user's username.
-   * @param {string} email - The newly created user's email.
-   */
-  constructor(userId: number, username: string, email: string) {
-    this.userId = userId;
-    this.username = username;
-    this.email = email;
-  }
+  constructor(
+    /** The newly created user's ID. */
+    readonly userId: number,
+    /** The newly created user's username. */
+    readonly username: string,
+    /** The newly created user's email. */
+    readonly email: string,
+  ) {}
 }
