@@ -2,9 +2,10 @@ import { Body, Controller, Delete, HttpCode, HttpStatus, Patch, Post, Req, Res }
 import { ConfigService } from '@nestjs/config';
 import type { Request, Response } from 'express';
 import { AccountService } from './account.service.js';
-import { respondWithSession, SKIP_CACHE_HEADER } from './auth-response.js';
+import { respondWithSession } from './auth-response.js';
 import { AuthService } from './auth.service.js';
 import { Public } from '../core/public.decorator.js';
+import { SkipCache } from '../core/skip-cache.decorator.js';
 import { LoginDto } from './dto/login.dto.js';
 import { RecoverDto } from './dto/recover.dto.js';
 import { RefreshTokenDto } from './dto/refresh-token.dto.js';
@@ -20,11 +21,12 @@ const ACCESS_TOKEN_COOKIE = 'access_token';
  * `@Public()`: the first four exist precisely to establish or renew
  * credentials, and `status` exists to let an already-logged-out client
  * check its session without one — so all of them must stay reachable
- * without an already-valid access token. Every route also sets
- * `X-Skip-Cache` on its response so Tent's proxy never caches — and
- * cross-serves — a login/session response between users.
+ * without an already-valid access token. `@SkipCache()` is applied once at
+ * the controller level so Tent's proxy never caches — and cross-serves — a
+ * login/session response between users.
  */
 @Controller('auth')
+@SkipCache()
 export class AuthController {
   private readonly authService: AuthService;
   private readonly configService: ConfigService;
@@ -48,19 +50,11 @@ export class AuthController {
    * always confirmed by their current password (see `AccountService#updateAccount`).
    * @param {UpdateAccountDto} dto - The requested changes plus the current password.
    * @param {Request} req - Used to read the caller's own user ID (`req.user!.sub`).
-   * @param {Response} res - Used only to set the `X-Skip-Cache` header.
    * @returns {Promise<object>} `{ username, email }` on success.
    */
   @Patch('account.json')
-  async updateAccount(
-    @Body() dto: UpdateAccountDto,
-    @Req() req: Request,
-    @Res({ passthrough: true }) res: Response,
-  ): Promise<object> {
-    const result = await this.accountService.updateAccount(req.user!.sub, dto);
-    res.set(SKIP_CACHE_HEADER, 'true');
-
-    return result;
+  async updateAccount(@Body() dto: UpdateAccountDto, @Req() req: Request): Promise<object> {
+    return this.accountService.updateAccount(req.user!.sub, dto);
   }
 
   /**
@@ -88,7 +82,6 @@ export class AuthController {
   async logout(@Body() dto: RefreshTokenDto, @Res({ passthrough: true }) res: Response): Promise<void> {
     await this.authService.logout(dto.refreshToken);
     res.clearCookie(ACCESS_TOKEN_COOKIE);
-    res.set(SKIP_CACHE_HEADER, 'true');
   }
 
   /**
@@ -97,15 +90,13 @@ export class AuthController {
    * timing difference should reveal whether the email is registered (see
    * `AuthService#recover`).
    * @param {RecoverDto} dto - Carries the email to look up.
-   * @param {Response} res - Used only to set the `X-Skip-Cache` header.
    * @returns {Promise<object>} `{ sent: true }`, always `200`.
    */
   @Public()
   @Post('recover.json')
   @HttpCode(HttpStatus.OK)
-  async recover(@Body() dto: RecoverDto, @Res({ passthrough: true }) res: Response): Promise<object> {
+  async recover(@Body() dto: RecoverDto): Promise<object> {
     await this.authService.recover(dto);
-    res.set(SKIP_CACHE_HEADER, 'true');
 
     return { sent: true };
   }
@@ -147,18 +138,13 @@ export class AuthController {
    * `401`, so the frontend's shared `ApiClient` doesn't intercept it as a
    * session-refresh candidate (see `AuthService#resetPassword`).
    * @param {ResetPasswordDto} dto - Carries the token and the new password.
-   * @param {Response} res - Used only to set the `X-Skip-Cache` header.
    * @returns {Promise<object>} `{ reset: true }` on success.
    */
   @Public()
   @Post('reset-password.json')
   @HttpCode(HttpStatus.OK)
-  async resetPassword(
-    @Body() dto: ResetPasswordDto,
-    @Res({ passthrough: true }) res: Response,
-  ): Promise<object> {
+  async resetPassword(@Body() dto: ResetPasswordDto): Promise<object> {
     await this.authService.resetPassword(dto);
-    res.set(SKIP_CACHE_HEADER, 'true');
 
     return { reset: true };
   }
@@ -170,14 +156,11 @@ export class AuthController {
    * mount-time login-state confirmation (e.g. the frontend header), not for
    * establishing or renewing credentials.
    * @param {RefreshTokenDto} dto - Carries the refresh token to check.
-   * @param {Response} res - Used only to set the `X-Skip-Cache` header.
    * @returns {Promise<object>} `{ loggedIn: boolean, isAdmin: boolean }`, always `200`.
    */
   @Public()
   @Post('status.json')
-  async status(@Body() dto: RefreshTokenDto, @Res({ passthrough: true }) res: Response): Promise<object> {
-    res.set(SKIP_CACHE_HEADER, 'true');
-
+  async status(@Body() dto: RefreshTokenDto): Promise<object> {
     return this.authService.status(dto.refreshToken);
   }
 }

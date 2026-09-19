@@ -1,13 +1,14 @@
 import { Body, Controller, Param, Post, Req, Res } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import type { Request, Response } from 'express';
-import { respondWithSession, SKIP_CACHE_HEADER } from './auth-response.js';
+import { respondWithSession } from './auth-response.js';
 import { AuthorizationRequestService } from './authorization-request.service.js';
 import { AuthorizeAuthorizationRequestDto } from './dto/authorize-authorization-request.dto.js';
 import { CreateAuthorizationRequestDto } from './dto/create-authorization-request.dto.js';
 import { PollAuthorizationRequestDto } from './dto/poll-authorization-request.dto.js';
 import { DEFAULT_TRUSTED_PROXY_HOPS, extractClientRequestInfo } from '../core/client-request.js';
 import { Public } from '../core/public.decorator.js';
+import { SkipCache } from '../core/skip-cache.decorator.js';
 
 /**
  * Both halves of the login-by-authorization flow — thin, delegating all
@@ -18,10 +19,11 @@ import { Public } from '../core/public.decorator.js';
  * approver-device routes — the first authenticated, non-admin routes in the
  * codebase — protected only by the default (non-`@Public()`) `JwtGuard`,
  * with no `@AdminOnly()`; the approver's id comes from `req.user!.sub`.
- * Every route sets `X-Skip-Cache` so Tent's proxy never caches — and
- * cross-serves — a per-device/per-caller response.
+ * `@SkipCache()` is applied once at the controller level so Tent's proxy
+ * never caches — and cross-serves — a per-device/per-caller response.
  */
 @Controller('auth')
+@SkipCache()
 export class AuthorizationRequestController {
   private readonly authorizationRequestService: AuthorizationRequestService;
   private readonly configService: ConfigService;
@@ -43,18 +45,12 @@ export class AuthorizationRequestController {
    * username matches a real user, per the enumeration-safety contract.
    * @param {CreateAuthorizationRequestDto} dto - Carries the username to request authorization for.
    * @param {Request} req - Used to capture the requesting IP and User-Agent.
-   * @param {Response} res - Used only to set the `X-Skip-Cache` header.
    * @returns {Promise<object>} `{ uuid, pollToken, expiresAt }`.
    */
   @Public()
   @Post('authorization-requests.json')
-  async create(
-    @Body() dto: CreateAuthorizationRequestDto,
-    @Req() req: Request,
-    @Res({ passthrough: true }) res: Response,
-  ): Promise<object> {
+  async create(@Body() dto: CreateAuthorizationRequestDto, @Req() req: Request): Promise<object> {
     const { ip, userAgent } = extractClientRequestInfo(req, this.#trustedProxyHops());
-    res.set(SKIP_CACHE_HEADER, 'true');
 
     return this.authorizationRequestService.create(dto.username, ip, userAgent);
   }
@@ -68,8 +64,8 @@ export class AuthorizationRequestController {
    * with no credentials.
    * @param {string} uuid - The authorization request's UUID.
    * @param {PollAuthorizationRequestDto} dto - Carries the poll token.
-   * @param {Response} res - Used to set the access-token cookie (on the
-   *   winning poll) and the `X-Skip-Cache` header.
+   * @param {Response} res - Used to set the access-token cookie on the
+   *   winning poll.
    * @returns {Promise<object>} `{ status }`, plus `user`/`refreshToken` on the winning `approved` poll.
    */
   @Public()
@@ -85,8 +81,6 @@ export class AuthorizationRequestController {
       return { status: 'approved', ...respondWithSession(result.authResult, res, this.configService) };
     }
 
-    res.set(SKIP_CACHE_HEADER, 'true');
-
     return { status: result.status };
   }
 
@@ -95,13 +89,11 @@ export class AuthorizationRequestController {
    * `JwtGuard`, no `@Public()`). Lists the caller's own `open`, non-expired
    * authorization requests, newest first.
    * @param {Request} req - Used to read the caller's own user ID (`req.user!.sub`).
-   * @param {Response} res - Used only to set the `X-Skip-Cache` header.
    * @returns {Promise<object>} `{ requests: [{ uuid, requestIp, requestUserAgent, createdAt, expiresAt }] }`.
    */
   @Post('authorization-requests/mine.json')
-  async mine(@Req() req: Request, @Res({ passthrough: true }) res: Response): Promise<object> {
+  async mine(@Req() req: Request): Promise<object> {
     const requests = await this.authorizationRequestService.listOpenForUser(req.user!.sub);
-    res.set(SKIP_CACHE_HEADER, 'true');
 
     return { requests };
   }
@@ -117,7 +109,6 @@ export class AuthorizationRequestController {
    * @param {string} uuid - The authorization request's UUID.
    * @param {AuthorizeAuthorizationRequestDto} dto - Carries the approver's current password.
    * @param {Request} req - Used to read the caller's own user ID (`req.user!.sub`).
-   * @param {Response} res - Used only to set the `X-Skip-Cache` header.
    * @returns {Promise<object>} `{ authorized: true }`.
    */
   @Post('authorization-requests/:uuid/authorize.json')
@@ -125,10 +116,8 @@ export class AuthorizationRequestController {
     @Param('uuid') uuid: string,
     @Body() dto: AuthorizeAuthorizationRequestDto,
     @Req() req: Request,
-    @Res({ passthrough: true }) res: Response,
   ): Promise<object> {
     await this.authorizationRequestService.authorize(uuid, req.user!.sub, dto.password);
-    res.set(SKIP_CACHE_HEADER, 'true');
 
     return { authorized: true };
   }
@@ -140,17 +129,11 @@ export class AuthorizationRequestController {
    * surfaces as the same `400 Bad Request` as `authorize`'s.
    * @param {string} uuid - The authorization request's UUID.
    * @param {Request} req - Used to read the caller's own user ID (`req.user!.sub`).
-   * @param {Response} res - Used only to set the `X-Skip-Cache` header.
    * @returns {Promise<object>} `{ denied: true }`.
    */
   @Post('authorization-requests/:uuid/deny.json')
-  async deny(
-    @Param('uuid') uuid: string,
-      @Req() req: Request,
-      @Res({ passthrough: true }) res: Response,
-  ): Promise<object> {
+  async deny(@Param('uuid') uuid: string, @Req() req: Request): Promise<object> {
     await this.authorizationRequestService.deny(uuid, req.user!.sub);
-    res.set(SKIP_CACHE_HEADER, 'true');
 
     return { denied: true };
   }

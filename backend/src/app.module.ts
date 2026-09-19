@@ -1,6 +1,6 @@
 import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
-import { APP_GUARD } from '@nestjs/core';
+import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { EventEmitterModule } from '@nestjs/event-emitter';
 import { JwtModule } from '@nestjs/jwt';
 import { TypeOrmModule } from '@nestjs/typeorm';
@@ -11,6 +11,7 @@ import { JwtGuard } from './core/jwt.guard.js';
 import { LazyModuleLoaderService } from './core/lazy-module-loader.service.js';
 import { LoggingModule } from './core/logging.module.js';
 import { RequestContextMiddleware } from './core/request-context.middleware.js';
+import { SkipCacheInterceptor } from './core/skip-cache.interceptor.js';
 import { HealthController } from './health/health.controller.js';
 import { MailModule } from './mail/mail.module.js';
 
@@ -93,6 +94,10 @@ export function buildJwtSignOptions(configService: ConfigService): { expiresIn: 
     {
       provide: APP_GUARD,
       useClass: AdminGuard,
+    },
+    {
+      provide: APP_INTERCEPTOR,
+      useClass: SkipCacheInterceptor,
     },
   ],
 })

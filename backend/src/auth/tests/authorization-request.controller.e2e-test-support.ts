@@ -1,6 +1,6 @@
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
-import { APP_GUARD } from '@nestjs/core';
+import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { EventEmitterModule } from '@nestjs/event-emitter';
 import { JwtModule } from '@nestjs/jwt';
 import { Test } from '@nestjs/testing';
@@ -9,6 +9,7 @@ import cookieParser from 'cookie-parser';
 import request from 'supertest';
 import { JwtGuard } from '../../core/jwt.guard.js';
 import { LoggingModule } from '../../core/logging.module.js';
+import { SkipCacheInterceptor } from '../../core/skip-cache.interceptor.js';
 import { AuthModule } from '../auth.module.js';
 import { AccountEditLockout } from '../entities/account-edit-lockout.entity.js';
 import { AuthorizationRequest } from '../entities/authorization-request.entity.js';
@@ -177,7 +178,10 @@ export async function buildTestApp(configOverrides: Record<string, string> = {})
       LoggingModule,
       AuthModule,
     ],
-    providers: [{ provide: APP_GUARD, useClass: JwtGuard }],
+    providers: [
+      { provide: APP_GUARD, useClass: JwtGuard },
+      { provide: APP_INTERCEPTOR, useClass: SkipCacheInterceptor },
+    ],
   })
     .overrideProvider(getRepositoryToken(User))
     .useValue(userRepo)
