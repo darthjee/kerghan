@@ -2,6 +2,7 @@ import { CallHandler, ExecutionContext, Injectable, NestInterceptor } from '@nes
 import { Reflector } from '@nestjs/core';
 import type { Response } from 'express';
 import type { Observable } from 'rxjs';
+import { readBooleanMetadata } from './boolean-metadata.js';
 import { IS_SKIP_CACHE_KEY } from './skip-cache.decorator.js';
 import { SKIP_CACHE_HEADER } from '../auth/auth-response.js';
 
@@ -32,20 +33,11 @@ export class SkipCacheInterceptor implements NestInterceptor {
    * @returns {Observable<unknown>} The unmodified response stream.
    */
   intercept(context: ExecutionContext, next: CallHandler): Observable<unknown> {
-    if (this.#isSkipCache(context)) {
+    if (readBooleanMetadata(this.reflector, IS_SKIP_CACHE_KEY, context)) {
       const response = context.switchToHttp().getResponse<Response>();
       response.set(SKIP_CACHE_HEADER, 'true');
     }
 
     return next.handle();
-  }
-
-  #isSkipCache(context: ExecutionContext): boolean {
-    return Boolean(
-      this.reflector.getAllAndOverride<boolean>(IS_SKIP_CACHE_KEY, [
-        context.getHandler(),
-        context.getClass(),
-      ]),
-    );
   }
 }

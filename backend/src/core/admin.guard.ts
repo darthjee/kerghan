@@ -2,6 +2,7 @@ import { CanActivate, ExecutionContext, ForbiddenException, Injectable } from '@
 import { Reflector } from '@nestjs/core';
 import type { Request } from 'express';
 import { IS_ADMIN_ONLY_KEY } from './admin-only.decorator.js';
+import { readBooleanMetadata } from './boolean-metadata.js';
 
 /**
  * Global guard enforcing `@AdminOnly()`-annotated routes, independent of
@@ -29,7 +30,7 @@ export class AdminGuard implements CanActivate {
    * @returns {boolean} Whether the request may proceed.
    */
   canActivate(context: ExecutionContext): boolean {
-    if (!this.#isAdminOnly(context)) {
+    if (!readBooleanMetadata(this.reflector, IS_ADMIN_ONLY_KEY, context)) {
       return true;
     }
 
@@ -40,14 +41,5 @@ export class AdminGuard implements CanActivate {
     }
 
     return true;
-  }
-
-  #isAdminOnly(context: ExecutionContext): boolean {
-    return Boolean(
-      this.reflector.getAllAndOverride<boolean>(IS_ADMIN_ONLY_KEY, [
-        context.getHandler(),
-        context.getClass(),
-      ]),
-    );
   }
 }
