@@ -5,15 +5,10 @@
  * fire with the right payload.
  */
 export class AuthorizationRequestApprovedEvent {
-  readonly uuid: string;
-  readonly approvedByUserId: number;
-
-  /**
-   * @param {string} uuid - The authorization request's UUID.
-   * @param {number} approvedByUserId - The ID of the user who approved the request.
-   */
-  constructor(uuid: string, approvedByUserId: number) {
-    this.uuid = uuid;
-    this.approvedByUserId = approvedByUserId;
-  }
+  constructor(
+    /** The authorization request's UUID. */
+    readonly uuid: string,
+    /** The ID of the user who approved the request. */
+    readonly approvedByUserId: number,
+  ) {}
 }
