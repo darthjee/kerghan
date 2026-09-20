@@ -1,5 +1,6 @@
 import ApiClient from './ApiClient.js';
 import AuthSession from './AuthSession.js';
+import pickDefined from './pickDefined.js';
 
 /**
  * HTTP client for auth-related requests (registration, login, refresh, logout). Every method
@@ -228,9 +229,7 @@ export default class AccountsClient {
   }) {
     return ApiClient.patchJson('/auth/account.json', {
       currentPassword,
-      ...(username !== undefined && { username }),
-      ...(email !== undefined && { email }),
-      ...(newPassword !== undefined && { newPassword }),
+      ...pickDefined({ username, email, newPassword }),
     });
   }
 }

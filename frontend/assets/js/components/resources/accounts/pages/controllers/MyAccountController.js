@@ -1,17 +1,15 @@
 import AccountsClient from '../../../../../client/AccountsClient.js';
-
-const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const MIN_PASSWORD_LENGTH = 8;
+import AccountEditFormController from '../../../../common/forms/controllers/AccountEditFormController.js';
 
 /**
  * Controller for the "My account" page: lets the logged-in user update their username, email,
  * and/or password, always confirmed by their current password. There is currently no "get my
  * account" read endpoint, so the username/email fields start blank — leaving one blank means
  * "keep the current value", not "clear it" (prefilling them is a follow-up, once such a read
- * endpoint exists). Client-side validation never sends a `newPasswordConfirmation` field to the
- * backend; the match check happens here only.
+ * endpoint exists). The shared submit/validate/payload flow lives in
+ * {@link AccountEditFormController}; this class only adds the current-password specifics.
  */
-export default class MyAccountController {
+export default class MyAccountController extends AccountEditFormController {
   /**
    * Create a My Account controller.
    *
@@ -24,11 +22,7 @@ export default class MyAccountController {
    * @param {typeof AccountsClient} [client] - Accounts HTTP client override, for testability.
    */
   constructor(setFields, setFieldErrors, setSubmitError, setSuccess, client = AccountsClient) {
-    this.setFields = setFields;
-    this.setFieldErrors = setFieldErrors;
-    this.setSubmitError = setSubmitError;
-    this.setSuccess = setSuccess;
-    this.client = client;
+    super(setFields, setFieldErrors, setSubmitError, setSuccess, client);
   }
 
   /**
@@ -44,125 +38,50 @@ export default class MyAccountController {
    * @returns {Promise<void>} Resolves once submission handling finishes.
    */
   async handleSubmit(fields) {
-    const errors = this.validate(fields);
-
-    this.setFieldErrors(errors);
-    this.setSuccess(false);
-
-    if (Object.keys(errors).length > 0) {
-      return;
-    }
-
-    const payload = this.#buildPayload(fields);
-
-    if (!this.#hasUpdate(payload)) {
-      this.setSubmitError('Provide a username, email, or new password to update.');
-      return;
-    }
-
-    this.setSubmitError(null);
-
-    try {
-      const result = await this.client.updateAccount(payload);
-
-      if (!result) {
-        return;
-      }
-
-      this.#applySuccess(result);
-    } catch (error) {
-      this.setSubmitError(error.message);
-    }
+    await this.submit(fields, (payload) => this.client.updateAccount(payload));
   }
 
   /**
-   * Validate the My Account form fields: the current password is always required, a non-blank
-   * email must be well-formed, and a non-blank new password must meet the backend's minimum
-   * length and match its confirmation.
+   * Validate the My Account form fields: the current password is always required, on top of the
+   * shared email and new-password rules.
    *
    * @param {{email: string, currentPassword: string, newPassword: string,
    *   newPasswordConfirmation: string}} fields - Current form field values.
    * @returns {object} A map of field name to error message, empty when the form is valid.
    */
-  validate({
-    email, currentPassword, newPassword, newPasswordConfirmation,
-  }) {
+  validate(fields) {
     return {
-      ...this.#validateCurrentPassword(currentPassword),
-      ...this.#validateEmail(email),
-      ...this.#validateNewPassword(newPassword, newPasswordConfirmation),
+      ...this.#validateCurrentPassword(fields.currentPassword),
+      ...super.validate(fields),
     };
   }
 
-  #validateCurrentPassword(currentPassword) {
-    return currentPassword ? {} : { currentPassword: 'Current password is required' };
-  }
-
-  #validateEmail(email) {
-    if (!email) {
-      return {};
-    }
-
-    return EMAIL_PATTERN.test(email) ? {} : { email: 'Email is invalid' };
-  }
-
-  #validateNewPassword(newPassword, newPasswordConfirmation) {
-    if (!newPassword) {
-      return {};
-    }
-
-    if (newPassword.length < MIN_PASSWORD_LENGTH) {
-      return { newPassword: `Password must be at least ${MIN_PASSWORD_LENGTH} characters` };
-    }
-
-    if (newPassword !== newPasswordConfirmation) {
-      return { newPasswordConfirmation: 'Passwords do not match' };
-    }
-
-    return {};
-  }
-
   /**
-   * Build the PATCH request body: the always-required current password, plus `username`,
-   * `email`, and `newPassword` only when the user actually filled them in — never a
-   * `newPasswordConfirmation` field.
+   * Build the PATCH request body: the always-required current password, plus the shared
+   * filled-in `username`, `email`, and `newPassword` fields — never a `newPasswordConfirmation`
+   * field.
    *
    * @param {{username: string, email: string, currentPassword: string,
    *   newPassword: string}} fields - Current form field values.
    * @returns {object} The request body for {@link AccountsClient.updateAccount}.
    */
-  #buildPayload({
-    username, email, currentPassword, newPassword,
-  }) {
+  buildPayload(fields) {
     return {
-      currentPassword,
-      ...(username && { username }),
-      ...(email && { email }),
-      ...(newPassword && { newPassword }),
+      currentPassword: fields.currentPassword,
+      ...super.buildPayload(fields),
     };
   }
 
-  #hasUpdate(payload) {
-    return ('username' in payload) || ('email' in payload) || ('newPassword' in payload);
+  /**
+   * Also clear the current password after a successful save, on top of the new-password fields.
+   *
+   * @returns {object} A map of field name to its cleared value.
+   */
+  clearedFields() {
+    return { currentPassword: '', ...super.clearedFields() };
   }
 
-  /**
-   * Apply a successful save: reflect the backend's authoritative username/email back into the
-   * form, clear the current/new password fields (never keep a submitted password around), and
-   * flag the success confirmation.
-   *
-   * @param {{username: string, email: string}} result - The backend's response body.
-   * @returns {void} Nothing.
-   */
-  #applySuccess(result) {
-    this.setFields((current) => ({
-      ...current,
-      username: result.username,
-      email: result.email,
-      currentPassword: '',
-      newPassword: '',
-      newPasswordConfirmation: '',
-    }));
-    this.setSuccess(true);
+  #validateCurrentPassword(currentPassword) {
+    return currentPassword ? {} : { currentPassword: 'Current password is required' };
   }
 }
