@@ -2,6 +2,7 @@ import ApiClient from '../../../../assets/js/client/ApiClient.js';
 import ApiError from '../../../../assets/js/client/ApiError.js';
 import AuthSession from '../../../../assets/js/client/AuthSession.js';
 import LoginModalEvents from '../../../../assets/js/client/LoginModalEvents.js';
+import { installFakeWindow, uninstallFakeWindow } from '../../../support/fakeWindow.js';
 
 /**
  * Build a fake `fetch` `Response`-like object whose `json`/`text` behave like a real one: an
@@ -42,18 +43,16 @@ function fetchSequence(responses) {
 
 describe('ApiClient', () => {
   let originalFetch;
-  let originalWindow;
 
   beforeEach(() => {
     originalFetch = globalThis.fetch;
-    originalWindow = globalThis.window;
-    globalThis.window = { location: { hash: '' } };
+    installFakeWindow({ location: { hash: '' } });
     spyOn(LoginModalEvents, 'open');
   });
 
   afterEach(() => {
     globalThis.fetch = originalFetch;
-    globalThis.window = originalWindow;
+    uninstallFakeWindow();
   });
 
   describe('.postJson', () => {

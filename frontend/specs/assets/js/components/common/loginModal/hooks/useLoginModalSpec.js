@@ -1,5 +1,6 @@
 import { buildLoginModalEffect } from '../../../../../../../assets/js/components/common/loginModal/hooks/useLoginModal.js';
 import LoginModalEvents from '../../../../../../../assets/js/client/LoginModalEvents.js';
+import { installFakeWindow, uninstallFakeWindow } from '../../../../../../support/fakeWindow.js';
 
 describe('useLoginModal', () => {
   let controller;
@@ -7,13 +8,11 @@ describe('useLoginModal', () => {
   let setResetToken;
   let setResultPanel;
   let setters;
-  let originalWindow;
 
   beforeEach(() => {
     // Node-based Jasmine specs run without a DOM, so `window` is undefined there; a plain
     // `EventTarget` provides the same event-target shape LoginModalEvents relies on.
-    originalWindow = globalThis.window;
-    globalThis.window = new EventTarget();
+    installFakeWindow(new EventTarget());
     controller = jasmine.createSpyObj('controller', ['switchMode', 'stopPoller']);
     setOpen = jasmine.createSpy('setOpen');
     setResetToken = jasmine.createSpy('setResetToken');
@@ -24,7 +23,7 @@ describe('useLoginModal', () => {
   });
 
   afterEach(() => {
-    globalThis.window = originalWindow;
+    uninstallFakeWindow();
   });
 
   describe('buildLoginModalEffect', () => {

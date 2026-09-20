@@ -2,18 +2,17 @@ import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import ResetPasswordLanding, { redirectToResetModal } from '../../../../../../../assets/js/components/resources/accounts/pages/ResetPasswordLanding.jsx';
 import LoginModalEvents from '../../../../../../../assets/js/client/LoginModalEvents.js';
+import { installFakeWindow, uninstallFakeWindow } from '../../../../../../support/fakeWindow.js';
 
 describe('ResetPasswordLanding', () => {
-  let originalWindow;
 
   beforeEach(() => {
-    originalWindow = globalThis.window;
-    globalThis.window = { location: { hash: '#/recover-password?token=abc' } };
+    installFakeWindow({ location: { hash: '#/recover-password?token=abc' } });
     spyOn(LoginModalEvents, 'open');
   });
 
   afterEach(() => {
-    globalThis.window = originalWindow;
+    uninstallFakeWindow();
   });
 
   describe('redirectToResetModal', () => {
@@ -30,7 +29,7 @@ describe('ResetPasswordLanding', () => {
     });
 
     it('passes a null token when the hash carries no token query param', () => {
-      globalThis.window = { location: { hash: '#/recover-password' } };
+      installFakeWindow({ location: { hash: '#/recover-password' } });
 
       redirectToResetModal();
 

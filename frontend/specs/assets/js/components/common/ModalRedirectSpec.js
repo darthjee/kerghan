@@ -2,18 +2,17 @@ import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import ModalRedirect, { redirectToModal } from '../../../../../assets/js/components/common/ModalRedirect.jsx';
 import LoginModalEvents from '../../../../../assets/js/client/LoginModalEvents.js';
+import { installFakeWindow, uninstallFakeWindow } from '../../../../support/fakeWindow.js';
 
 describe('ModalRedirect', () => {
-  let originalWindow;
 
   beforeEach(() => {
-    originalWindow = globalThis.window;
-    globalThis.window = { location: { hash: '#/login' } };
+    installFakeWindow({ location: { hash: '#/login' } });
     spyOn(LoginModalEvents, 'open');
   });
 
   afterEach(() => {
-    globalThis.window = originalWindow;
+    uninstallFakeWindow();
   });
 
   describe('redirectToModal', () => {

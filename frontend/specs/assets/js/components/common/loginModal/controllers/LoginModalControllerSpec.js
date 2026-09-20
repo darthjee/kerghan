@@ -2,6 +2,7 @@ import LoginModalController from '../../../../../../../assets/js/components/comm
 import AuthEvents from '../../../../../../../assets/js/client/AuthEvents.js';
 import LoginModalEvents from '../../../../../../../assets/js/client/LoginModalEvents.js';
 import AuthorizationRequestPoller from '../../../../../../../assets/js/utils/polling/AuthorizationRequestPoller.js';
+import { installFakeWindow, uninstallFakeWindow } from '../../../../../../support/fakeWindow.js';
 
 // Drain pending microtasks so a real poll tick started by `jasmine.clock().tick()` runs to
 // completion.
@@ -19,7 +20,6 @@ describe('LoginModalController', () => {
   let setResultPanel;
   let setDeviceExpiresAt;
   let client;
-  let originalWindow;
 
   const passwordFields = { username: 'foo', password: 'secret' };
   const registerFields = {
@@ -46,12 +46,11 @@ describe('LoginModalController', () => {
     ]);
     spyOn(AuthEvents, 'emit');
     spyOn(LoginModalEvents, 'close');
-    originalWindow = globalThis.window;
-    globalThis.window = { location: { hash: '' } };
+    installFakeWindow({ location: { hash: '' } });
   });
 
   afterEach(() => {
-    globalThis.window = originalWindow;
+    uninstallFakeWindow();
   });
 
   describe('#switchMode', () => {

@@ -1,19 +1,18 @@
 import { buildAuthEffect } from '../../../../../../../assets/js/components/common/header/hooks/useAuthEffect.js';
 import AuthEvents from '../../../../../../../assets/js/client/AuthEvents.js';
+import { installFakeWindow, uninstallFakeWindow } from '../../../../../../support/fakeWindow.js';
 
 describe('useAuthEffect', () => {
   let controller;
   let setLoggedIn;
   let setIsAdmin;
   let setters;
-  let originalWindow;
 
   beforeEach(() => {
     // Node-based Jasmine specs run without a DOM, so `window` is undefined there; a plain
     // `EventTarget` provides the same `addEventListener`/`removeEventListener`/`dispatchEvent`
     // shape AuthEvents relies on (matches AuthEventsSpec.js's setup).
-    originalWindow = globalThis.window;
-    globalThis.window = new EventTarget();
+    installFakeWindow(new EventTarget());
     controller = jasmine.createSpyObj('controller', ['checkStatus']);
     controller.checkStatus.and.resolveTo();
     setLoggedIn = jasmine.createSpy('setLoggedIn');
@@ -24,7 +23,7 @@ describe('useAuthEffect', () => {
   });
 
   afterEach(() => {
-    globalThis.window = originalWindow;
+    uninstallFakeWindow();
   });
 
   describe('buildAuthEffect', () => {
