@@ -72,6 +72,34 @@ export function sha256(value: string): string {
 }
 
 /**
+ * Builds a fake, fully populated `AuthorizationRequest` row for service unit
+ * specs. A fresh object (and fresh dates) is created on every call.
+ *
+ * @param overrides - the fields to override on top of the defaults.
+ * @returns a complete open `AuthorizationRequest` row.
+ */
+export function buildFakeAuthorizationRequest(overrides: Partial<AuthorizationRequest> = {}): AuthorizationRequest {
+  return {
+    id: 10,
+    uuid: 'uuid-1',
+    username: 'darthjee',
+    userId: 1,
+    status: 'open',
+    pollTokenHash: sha256('poll-token'),
+    requestIp: '203.0.113.1',
+    requestUserAgent: 'curl/8.0',
+    approvedByUserId: null,
+    createdAt: new Date(),
+    expiresAt: new Date(Date.now() + 60000),
+    resolvedAt: null,
+    loggedAt: null,
+    authorizeFailedAttempts: 0,
+    authorizeLockedUntil: null,
+    ...overrides,
+  };
+}
+
+/**
  * The set of collaborators and the service instance built for each test.
  */
 export interface AuthorizationRequestServiceTestContext {

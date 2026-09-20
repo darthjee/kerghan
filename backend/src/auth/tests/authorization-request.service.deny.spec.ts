@@ -1,9 +1,9 @@
 import { BadRequestException } from '@nestjs/common';
 import { AuthorizationRequestService } from '../authorization-request.service.js';
 import {
+  buildFakeAuthorizationRequest,
   createAuthorizationRequestServiceTestContext,
   RepoMock,
-  sha256,
 } from './authorization-request.service.test-support.js';
 import { AuthorizationRequest } from '../entities/authorization-request.entity.js';
 
@@ -17,21 +17,7 @@ describe('AuthorizationRequestService', () => {
   });
 
   describe('deny', () => {
-    const openRow = {
-      id: 20,
-      uuid: 'uuid-2',
-      username: 'darthjee',
-      userId: 1,
-      status: 'open',
-      pollTokenHash: sha256('poll-token'),
-      requestIp: '203.0.113.1',
-      requestUserAgent: 'curl/8.0',
-      approvedByUserId: null,
-      createdAt: new Date(),
-      expiresAt: new Date(Date.now() + 60000),
-      resolvedAt: null,
-      loggedAt: null,
-    };
+    const openRow = buildFakeAuthorizationRequest({ id: 20, uuid: 'uuid-2' });
 
     describe('when the row is open and owned by the approver', () => {
       beforeEach(() => {
