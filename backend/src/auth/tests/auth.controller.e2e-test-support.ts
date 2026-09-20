@@ -7,6 +7,7 @@ import { Test } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import cookieParser from 'cookie-parser';
 import request from 'supertest';
+import { AdminGuard } from '../../core/admin.guard.js';
 import { JwtGuard } from '../../core/jwt.guard.js';
 import { LoggingModule } from '../../core/logging.module.js';
 import { Public } from '../../core/public.decorator.js';
@@ -52,7 +53,17 @@ export class PublicTestController {
 // `AccountEditLockout` repository tokens with fresh `createInMemoryRepo()`
 // instances; and registers the `darthjee` test user via
 // `POST /auth/register.json`.
-export async function buildTestApp(): Promise<{
+//
+// Options (defaults preserve the behavior described above):
+// - `adminGuard: true` also registers the `APP_GUARD`/`AdminGuard` provider,
+//   after `JwtGuard` (order matters: `JwtGuard` must run first so
+//   `AdminGuard` sees the authenticated user).
+// - `registerDefaultUser: false` skips registering the `darthjee` user, for
+//   specs that register their own users.
+export async function buildTestApp({
+  adminGuard = false,
+  registerDefaultUser = true,
+}: { adminGuard?: boolean; registerDefaultUser?: boolean } = {}): Promise<{
   app: INestApplication;
   userRepo: ReturnType<typeof createInMemoryRepo<User>>;
   refreshTokenRepo: ReturnType<typeof createInMemoryRepo<RefreshToken>>;
@@ -76,6 +87,7 @@ export async function buildTestApp(): Promise<{
     controllers: [ProtectedTestController, PublicTestController],
     providers: [
       { provide: APP_GUARD, useClass: JwtGuard },
+      ...(adminGuard ? [{ provide: APP_GUARD, useClass: AdminGuard }] : []),
       { provide: APP_INTERCEPTOR, useClass: SkipCacheInterceptor },
     ],
   })
@@ -98,9 +110,11 @@ export async function buildTestApp(): Promise<{
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
   await app.init();
 
-  await request(app.getHttpServer())
-    .post('/auth/register.json')
-    .send({ username: 'darthjee', email: 'darthjee@example.com', password: 'my-password' });
+  if (registerDefaultUser) {
+    await request(app.getHttpServer())
+      .post('/auth/register.json')
+      .send({ username: 'darthjee', email: 'darthjee@example.com', password: 'my-password' });
+  }
 
   return { app, userRepo, refreshTokenRepo, passwordResetTokenRepo };
 }
