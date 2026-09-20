@@ -3,7 +3,7 @@ import FormFieldsHelper from '../../../../../../../assets/js/components/common/f
 
 describe('FormFieldsHelper', () => {
   describe('.renderField', () => {
-    const render = (state, onChange = () => {}) => renderToStaticMarkup(
+    const render = (state, onChange = jasmine.createSpy('onChange')) => renderToStaticMarkup(
       FormFieldsHelper.renderField('username', 'text', 'Username', state, onChange, 'my-prefix-'),
     );
 
@@ -38,7 +38,7 @@ describe('FormFieldsHelper', () => {
     });
 
     it('keys the wrapper by the field name and wires the given onChange', () => {
-      const onChange = () => {};
+      const onChange = jasmine.createSpy('onChange');
       const element = FormFieldsHelper.renderField(
         'username', 'text', 'Username', { username: '' }, onChange, 'p-',
       );

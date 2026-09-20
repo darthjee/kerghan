@@ -93,6 +93,8 @@ export default [
       'assets/js/client/AuthEvents.js',
       'assets/js/client/AuthSession.js',
       'assets/js/client/LoginModalEvents.js',
+      'assets/js/components/common/forms/helpers/AccountEditFormHelper.jsx',
+      'assets/js/components/common/forms/helpers/FormFieldsHelper.jsx',
       'assets/js/components/common/header/helpers/HeaderHelper.jsx',
       'assets/js/components/common/loginModal/helpers/LoginModalFormsHelper.jsx',
       'assets/js/components/common/loginModal/helpers/LoginModalHelper.jsx',
