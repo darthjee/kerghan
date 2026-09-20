@@ -19,10 +19,9 @@ Both controllers share an identical constructor (`setFields, setFieldErrors, set
 - [03 — Migrate both controllers onto the base class](frontend/03-migrate-controllers.md)
 
 ## CI Checks
-- `frontend`: `docker-compose run --rm kerghan_frontend yarn lint` (i.e. `npm run lint`; CI job: `frontend-checks`) — ESLint enforces max complexity 10, max 300 lines/file and JSDoc on public API
-- `frontend`: `docker-compose run --rm kerghan_frontend yarn coverage` (i.e. `npm run coverage`; CI job: `jasmine`)
+- `frontend`: `docker-compose run --rm kerghan_fe yarn lint` (i.e. `npm run lint`; CI job: `frontend-checks`) — ESLint enforces max complexity 10, max 300 lines/file and JSDoc on public API
+- `frontend`: `docker-compose run --rm kerghan_fe yarn coverage` (i.e. `npm run coverage`; CI job: `jasmine`)
 
-Confirm the exact docker-compose service name from `docker-compose.yml`; never run `yarn`/`npm` directly on the host (CLAUDE.md boundary).
 
 ## Notes
 - The existing `MyAccountControllerSpec` and `AdminUserEditControllerSpec` must keep passing **unchanged** — that is the behavior-preservation check. Only add new specs for the new files.
