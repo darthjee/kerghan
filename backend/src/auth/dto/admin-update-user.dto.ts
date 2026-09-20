@@ -1,4 +1,4 @@
-import { IsEmail, IsNotEmpty, IsOptional, IsString, MinLength } from 'class-validator';
+import { UserFieldChangesDto } from './user-field-changes.dto.js';
 
 /**
  * Request body for `POST admin/users/:id/edit.json`. At least one of
@@ -10,18 +10,4 @@ import { IsEmail, IsNotEmpty, IsOptional, IsString, MinLength } from 'class-vali
  * client-only UX check). `isAdmin` is deliberately absent — it stays
  * read-only from this endpoint.
  */
-export class AdminUpdateUserDto {
-  @IsOptional()
-  @IsString()
-  @IsNotEmpty()
-    username?: string;
-
-  @IsOptional()
-  @IsEmail()
-    email?: string;
-
-  @IsOptional()
-  @IsString()
-  @MinLength(8)
-    newPassword?: string;
-}
+export class AdminUpdateUserDto extends UserFieldChangesDto {}

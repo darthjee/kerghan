@@ -1,4 +1,5 @@
-import { IsEmail, IsNotEmpty, IsOptional, IsString, MinLength } from 'class-validator';
+import { IsNotEmpty, IsString } from 'class-validator';
+import { UserFieldChangesDto } from './user-field-changes.dto.js';
 
 /**
  * Request body for `PATCH /auth/account.json`. At least one of `username`,
@@ -7,22 +8,8 @@ import { IsEmail, IsNotEmpty, IsOptional, IsString, MinLength } from 'class-vali
  * `newPasswordConfirmation` field — matching `RegisterDto`/`ResetPasswordDto`,
  * password confirmation equality is a client-only UX check.
  */
-export class UpdateAccountDto {
+export class UpdateAccountDto extends UserFieldChangesDto {
   @IsString()
   @IsNotEmpty()
     currentPassword!: string;
-
-  @IsOptional()
-  @IsString()
-  @IsNotEmpty()
-    username?: string;
-
-  @IsOptional()
-  @IsEmail()
-    email?: string;
-
-  @IsOptional()
-  @IsString()
-  @MinLength(8)
-    newPassword?: string;
 }
