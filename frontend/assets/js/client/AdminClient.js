@@ -1,4 +1,5 @@
 import ApiClient from './ApiClient.js';
+import pickDefined from './pickDefined.js';
 
 /**
  * HTTP client for admin-only requests (user lookup, recovery-link generation, and forced
@@ -59,10 +60,9 @@ export default class AdminClient {
    *   createdAt: string}}>} The updated account.
    */
   static async editUser(userId, { username, email, newPassword }) {
-    return ApiClient.postJson(`/admin/users/${userId}/edit.json`, {
-      ...(username !== undefined && { username }),
-      ...(email !== undefined && { email }),
-      ...(newPassword !== undefined && { newPassword }),
-    });
+    return ApiClient.postJson(
+      `/admin/users/${userId}/edit.json`,
+      pickDefined({ username, email, newPassword }),
+    );
   }
 }
