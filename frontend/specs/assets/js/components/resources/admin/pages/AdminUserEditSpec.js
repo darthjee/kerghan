@@ -3,8 +3,13 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import AdminUserEdit from '../../../../../../../assets/js/components/resources/admin/pages/AdminUserEdit.jsx';
 import AdminUserEditHelper from '../../../../../../../assets/js/components/resources/admin/pages/helpers/AdminUserEditHelper.jsx';
 import AdminUserEditController from '../../../../../../../assets/js/components/resources/admin/pages/controllers/AdminUserEditController.js';
+import { installFakeWindow, uninstallFakeWindow } from '../../../../../../support/fakeWindow.js';
 
 describe('AdminUserEdit', () => {
+  afterEach(() => {
+    uninstallFakeWindow();
+  });
+
   it('passes the default state to the helper', () => {
     spyOn(AdminUserEditHelper, 'render').and.returnValue(React.createElement('div', null, 'admin-user-edit'));
 
@@ -36,24 +41,19 @@ describe('AdminUserEdit', () => {
       return React.createElement('div');
     });
 
-    const fakeWindow = { location: { hash: '#/admin/users/42/edit' } };
-    globalThis.window = fakeWindow;
+    installFakeWindow({ location: { hash: '#/admin/users/42/edit' } });
 
-    try {
-      renderToStaticMarkup(React.createElement(AdminUserEdit));
-      const fakeEvent = { preventDefault: jasmine.createSpy('preventDefault') };
-      await capturedHandlers.onSubmit(fakeEvent);
+    renderToStaticMarkup(React.createElement(AdminUserEdit));
+    const fakeEvent = { preventDefault: jasmine.createSpy('preventDefault') };
+    await capturedHandlers.onSubmit(fakeEvent);
 
-      expect(fakeEvent.preventDefault).toHaveBeenCalled();
-      expect(AdminUserEditController.prototype.handleSubmit).toHaveBeenCalledWith('42', {
-        username: '',
-        email: '',
-        newPassword: '',
-        newPasswordConfirmation: '',
-      });
-    } finally {
-      delete globalThis.window;
-    }
+    expect(fakeEvent.preventDefault).toHaveBeenCalled();
+    expect(AdminUserEditController.prototype.handleSubmit).toHaveBeenCalledWith('42', {
+      username: '',
+      email: '',
+      newPassword: '',
+      newPasswordConfirmation: '',
+    });
   });
 
   it('updates a field locally on change, without reaching the controller', () => {

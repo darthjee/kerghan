@@ -1,5 +1,6 @@
 import AdminUsersController from '../../../../../../../../assets/js/components/resources/admin/pages/controllers/AdminUsersController.js';
 import ApiError from '../../../../../../../../assets/js/client/ApiError.js';
+import { installFakeWindow, uninstallFakeWindow } from '../../../../../../../support/fakeWindow.js';
 
 describe('AdminUsersController', () => {
   let setUsers;
@@ -16,6 +17,10 @@ describe('AdminUsersController', () => {
     setRowResults = jasmine.createSpy('setRowResults');
     setSearchError = jasmine.createSpy('setSearchError');
     client = jasmine.createSpyObj('client', ['searchUsers', 'generateRecoveryLink', 'sendRecoveryEmail']);
+  });
+
+  afterEach(() => {
+    uninstallFakeWindow();
   });
 
   describe('#handleSearch', () => {
@@ -43,18 +48,12 @@ describe('AdminUsersController', () => {
     it('redirects home without setting a search error on a 403', async () => {
       client.searchUsers.and.rejectWith(new ApiError(403, 'Forbidden'));
       const controller = new AdminUsersController(setUsers, setRowResults, setSearchError, client);
-      const fakeWindow = { location: { hash: '' } };
+      const fakeWindow = installFakeWindow({ location: { hash: '' } });
 
-      globalThis.window = fakeWindow;
+      await controller.handleSearch('foo');
 
-      try {
-        await controller.handleSearch('foo');
-
-        expect(fakeWindow.location.hash).toBe('/');
-        expect(setSearchError).not.toHaveBeenCalledWith('Forbidden');
-      } finally {
-        delete globalThis.window;
-      }
+      expect(fakeWindow.location.hash).toBe('/');
+      expect(setSearchError).not.toHaveBeenCalledWith('Forbidden');
     });
   });
 
@@ -85,18 +84,12 @@ describe('AdminUsersController', () => {
     it('redirects home without touching row results on a 403', async () => {
       client.generateRecoveryLink.and.rejectWith(new ApiError(403, 'Forbidden'));
       const controller = new AdminUsersController(setUsers, setRowResults, setSearchError, client);
-      const fakeWindow = { location: { hash: '' } };
+      const fakeWindow = installFakeWindow({ location: { hash: '' } });
 
-      globalThis.window = fakeWindow;
+      await controller.handleGenerateLink(1);
 
-      try {
-        await controller.handleGenerateLink(1);
-
-        expect(fakeWindow.location.hash).toBe('/');
-        expect(setRowResults).not.toHaveBeenCalled();
-      } finally {
-        delete globalThis.window;
-      }
+      expect(fakeWindow.location.hash).toBe('/');
+      expect(setRowResults).not.toHaveBeenCalled();
     });
   });
 
@@ -127,18 +120,12 @@ describe('AdminUsersController', () => {
     it('redirects home without touching row results on a 403', async () => {
       client.sendRecoveryEmail.and.rejectWith(new ApiError(403, 'Forbidden'));
       const controller = new AdminUsersController(setUsers, setRowResults, setSearchError, client);
-      const fakeWindow = { location: { hash: '' } };
+      const fakeWindow = installFakeWindow({ location: { hash: '' } });
 
-      globalThis.window = fakeWindow;
+      await controller.handleSendEmail(1);
 
-      try {
-        await controller.handleSendEmail(1);
-
-        expect(fakeWindow.location.hash).toBe('/');
-        expect(setRowResults).not.toHaveBeenCalled();
-      } finally {
-        delete globalThis.window;
-      }
+      expect(fakeWindow.location.hash).toBe('/');
+      expect(setRowResults).not.toHaveBeenCalled();
     });
   });
 });

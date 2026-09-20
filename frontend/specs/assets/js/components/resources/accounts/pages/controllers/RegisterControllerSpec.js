@@ -1,5 +1,6 @@
 import RegisterController from '../../../../../../../../assets/js/components/resources/accounts/pages/controllers/RegisterController.js';
 import AuthEvents from '../../../../../../../../assets/js/client/AuthEvents.js';
+import { installFakeWindow, uninstallFakeWindow } from '../../../../../../../support/fakeWindow.js';
 
 describe('RegisterController', () => {
   let setFieldErrors;
@@ -15,6 +16,10 @@ describe('RegisterController', () => {
     setSubmitError = jasmine.createSpy('setSubmitError');
     client = jasmine.createSpyObj('client', ['register']);
     spyOn(AuthEvents, 'emit');
+  });
+
+  afterEach(() => {
+    uninstallFakeWindow();
   });
 
   describe('#validate', () => {
@@ -83,20 +88,14 @@ describe('RegisterController', () => {
         refreshToken: 'refresh-token',
       });
       const controller = new RegisterController(setFieldErrors, setSubmitError, client);
-      const fakeWindow = { location: { hash: '' } };
+      const fakeWindow = installFakeWindow({ location: { hash: '' } });
 
-      globalThis.window = fakeWindow;
+      await controller.handleSubmit(validFields);
 
-      try {
-        await controller.handleSubmit(validFields);
-
-        expect(setFieldErrors).toHaveBeenCalledWith({});
-        expect(client.register).toHaveBeenCalledWith(validFields);
-        expect(setSubmitError).toHaveBeenCalledWith(null);
-        expect(fakeWindow.location.hash).toBe('/');
-      } finally {
-        delete globalThis.window;
-      }
+      expect(setFieldErrors).toHaveBeenCalledWith({});
+      expect(client.register).toHaveBeenCalledWith(validFields);
+      expect(setSubmitError).toHaveBeenCalledWith(null);
+      expect(fakeWindow.location.hash).toBe('/');
     });
 
     it('emits the logged-in auth state on success', async () => {
@@ -107,17 +106,11 @@ describe('RegisterController', () => {
         refreshToken: 'refresh-token',
       });
       const controller = new RegisterController(setFieldErrors, setSubmitError, client);
-      const fakeWindow = { location: { hash: '' } };
+      installFakeWindow({ location: { hash: '' } });
 
-      globalThis.window = fakeWindow;
+      await controller.handleSubmit(validFields);
 
-      try {
-        await controller.handleSubmit(validFields);
-
-        expect(AuthEvents.emit).toHaveBeenCalledWith(true, true);
-      } finally {
-        delete globalThis.window;
-      }
+      expect(AuthEvents.emit).toHaveBeenCalledWith(true, true);
     });
 
     it('sets a submit error when the request fails', async () => {
