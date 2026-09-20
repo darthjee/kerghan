@@ -1,6 +1,10 @@
 import { INestApplication } from '@nestjs/common';
 import request from 'supertest';
-import { buildTestApp, createInMemoryRepo } from './authorization-request.controller.e2e-test-support.js';
+import {
+  buildTestApp,
+  createAuthorizationRequest,
+  createInMemoryRepo,
+} from './authorization-request.controller.e2e-test-support.js';
 import { AuthorizationRequest } from '../entities/authorization-request.entity.js';
 
 describe('AuthorizationRequestController (e2e)', () => {
@@ -15,15 +19,6 @@ describe('AuthorizationRequestController (e2e)', () => {
     await app.close();
   });
 
-  async function createAuthorizationRequest(username = 'darthjee'): Promise<{ uuid: string; pollToken: string }> {
-    const response = await request(app.getHttpServer())
-      .post('/auth/authorization-requests.json')
-      .send({ username })
-      .expect(201);
-
-    return response.body;
-  }
-
   function approve(uuid: string): void {
     const row = authorizationRequestRepo.rows.find((candidate) => candidate.uuid === uuid);
 
@@ -34,7 +29,7 @@ describe('AuthorizationRequestController (e2e)', () => {
 
   describe('full poll flow', () => {
     it('goes open -> approved (Set-Cookie + refreshToken) -> logged (no credentials)', async () => {
-      const { uuid, pollToken } = await createAuthorizationRequest();
+      const { uuid, pollToken } = await createAuthorizationRequest(app);
 
       const openResponse = await request(app.getHttpServer())
         .post(`/auth/authorization-requests/${uuid}/poll.json`)
@@ -69,7 +64,7 @@ describe('AuthorizationRequestController (e2e)', () => {
 
   describe('expiry path', () => {
     it('flips an overdue open request to expired', async () => {
-      const { uuid, pollToken } = await createAuthorizationRequest();
+      const { uuid, pollToken } = await createAuthorizationRequest(app);
       const row = authorizationRequestRepo.rows.find((candidate) => candidate.uuid === uuid);
       row!.expiresAt = new Date(Date.now() - 1000);
 
@@ -84,7 +79,7 @@ describe('AuthorizationRequestController (e2e)', () => {
 
   describe('wrong poll token', () => {
     it('returns 404, indistinguishable from an unknown uuid', async () => {
-      const { uuid } = await createAuthorizationRequest();
+      const { uuid } = await createAuthorizationRequest(app);
 
       await request(app.getHttpServer())
         .post(`/auth/authorization-requests/${uuid}/poll.json`)
@@ -102,7 +97,7 @@ describe('AuthorizationRequestController (e2e)', () => {
 
   describe('concurrent post-approval polls', () => {
     it('grants credentials to exactly one of two simultaneous polls', async () => {
-      const { uuid, pollToken } = await createAuthorizationRequest();
+      const { uuid, pollToken } = await createAuthorizationRequest(app);
       approve(uuid);
 
       const [first, second] = await Promise.all([
@@ -122,7 +117,7 @@ describe('AuthorizationRequestController (e2e)', () => {
 
   describe('X-Skip-Cache header', () => {
     it('is set on every poll response', async () => {
-      const { uuid, pollToken } = await createAuthorizationRequest();
+      const { uuid, pollToken } = await createAuthorizationRequest(app);
 
       const response = await request(app.getHttpServer())
         .post(`/auth/authorization-requests/${uuid}/poll.json`)

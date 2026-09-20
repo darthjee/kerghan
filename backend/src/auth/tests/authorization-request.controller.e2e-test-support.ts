@@ -80,3 +80,23 @@ export async function buildTestApp(configOverrides: Record<string, string> = {})
 
   return { app, userRepo, authorizationRequestRepo };
 }
+
+// Raises an authorization request for `username` against `app` and returns its `uuid`/`pollToken`.
+export async function createAuthorizationRequest(
+  app: INestApplication,
+  username = 'darthjee',
+): Promise<{ uuid: string; pollToken: string }> {
+  const response = await request(app.getHttpServer())
+    .post('/auth/authorization-requests.json')
+    .send({ username })
+    .expect(201);
+
+  return response.body;
+}
+
+// Logs `username` in against `app` and returns the `access_token` cookie (`name=value`) to replay
+// via `.set('Cookie', [cookie])`.
+export async function login(app: INestApplication, username: string, password: string): Promise<string> {
+  const response = await request(app.getHttpServer()).post('/auth/login.json').send({ username, password });
+  return response.headers['set-cookie'][0].split(';')[0];
+}

@@ -1,6 +1,6 @@
 import { INestApplication } from '@nestjs/common';
 import request from 'supertest';
-import { buildTestApp } from './authorization-request.controller.e2e-test-support.js';
+import { buildTestApp, createAuthorizationRequest, login } from './authorization-request.controller.e2e-test-support.js';
 
 describe('AuthorizationRequestController (e2e)', () => {
   let app: INestApplication;
@@ -13,31 +13,17 @@ describe('AuthorizationRequestController (e2e)', () => {
     await app.close();
   });
 
-  async function createAuthorizationRequest(username = 'darthjee'): Promise<{ uuid: string; pollToken: string }> {
-    const response = await request(app.getHttpServer())
-      .post('/auth/authorization-requests.json')
-      .send({ username })
-      .expect(201);
-
-    return response.body;
-  }
-
   describe('approver routes', () => {
     let ownerCookie: string;
     let attackerCookie: string;
 
-    async function login(username: string, password: string): Promise<string> {
-      const response = await request(app.getHttpServer()).post('/auth/login.json').send({ username, password });
-      return response.headers['set-cookie'][0].split(';')[0];
-    }
-
     beforeEach(async () => {
-      ownerCookie = await login('darthjee', 'my-password');
+      ownerCookie = await login(app, 'darthjee', 'my-password');
 
       await request(app.getHttpServer())
         .post('/auth/register.json')
         .send({ username: 'vader', email: 'vader@example.com', password: 'attacker-password' });
-      attackerCookie = await login('vader', 'attacker-password');
+      attackerCookie = await login(app, 'vader', 'attacker-password');
     });
 
     describe('mine', () => {
@@ -46,7 +32,7 @@ describe('AuthorizationRequestController (e2e)', () => {
       });
 
       it("returns only the caller's own open, non-expired requests, newest first", async () => {
-        const { uuid } = await createAuthorizationRequest('darthjee');
+        const { uuid } = await createAuthorizationRequest(app, 'darthjee');
 
         const response = await request(app.getHttpServer())
           .post('/auth/authorization-requests/mine.json')
@@ -68,7 +54,7 @@ describe('AuthorizationRequestController (e2e)', () => {
       });
 
       it("never returns a request raised against another user's username", async () => {
-        await createAuthorizationRequest('vader');
+        await createAuthorizationRequest(app, 'vader');
 
         const response = await request(app.getHttpServer())
           .post('/auth/authorization-requests/mine.json')
@@ -80,7 +66,7 @@ describe('AuthorizationRequestController (e2e)', () => {
       });
 
       it('never returns a request with userId: null (unresolved username)', async () => {
-        await createAuthorizationRequest('nobody');
+        await createAuthorizationRequest(app, 'nobody');
 
         const response = await request(app.getHttpServer())
           .post('/auth/authorization-requests/mine.json')
@@ -94,7 +80,7 @@ describe('AuthorizationRequestController (e2e)', () => {
 
     describe('authorize', () => {
       it('rejects an unauthenticated call with 401', async () => {
-        const { uuid } = await createAuthorizationRequest('darthjee');
+        const { uuid } = await createAuthorizationRequest(app, 'darthjee');
 
         await request(app.getHttpServer())
           .post(`/auth/authorization-requests/${uuid}/authorize.json`)
@@ -103,7 +89,7 @@ describe('AuthorizationRequestController (e2e)', () => {
       });
 
       it('rejects a wrong password with 400', async () => {
-        const { uuid } = await createAuthorizationRequest('darthjee');
+        const { uuid } = await createAuthorizationRequest(app, 'darthjee');
 
         await request(app.getHttpServer())
           .post(`/auth/authorization-requests/${uuid}/authorize.json`)
@@ -113,7 +99,7 @@ describe('AuthorizationRequestController (e2e)', () => {
       });
 
       it("rejects the attacker authorizing the owner's request with 400", async () => {
-        const { uuid } = await createAuthorizationRequest('darthjee');
+        const { uuid } = await createAuthorizationRequest(app, 'darthjee');
 
         await request(app.getHttpServer())
           .post(`/auth/authorization-requests/${uuid}/authorize.json`)
@@ -123,7 +109,7 @@ describe('AuthorizationRequestController (e2e)', () => {
       });
 
       it('authorizes on the correct password, and a subsequent poll grants credentials exactly once', async () => {
-        const { uuid, pollToken } = await createAuthorizationRequest('darthjee');
+        const { uuid, pollToken } = await createAuthorizationRequest(app, 'darthjee');
 
         const response = await request(app.getHttpServer())
           .post(`/auth/authorization-requests/${uuid}/authorize.json`)
@@ -155,7 +141,7 @@ describe('AuthorizationRequestController (e2e)', () => {
 
     describe('deny', () => {
       it('rejects an unauthenticated call with 401', async () => {
-        const { uuid } = await createAuthorizationRequest('darthjee');
+        const { uuid } = await createAuthorizationRequest(app, 'darthjee');
 
         await request(app.getHttpServer())
           .post(`/auth/authorization-requests/${uuid}/deny.json`)
@@ -164,7 +150,7 @@ describe('AuthorizationRequestController (e2e)', () => {
       });
 
       it("rejects the attacker denying the owner's request with 400", async () => {
-        const { uuid } = await createAuthorizationRequest('darthjee');
+        const { uuid } = await createAuthorizationRequest(app, 'darthjee');
 
         await request(app.getHttpServer())
           .post(`/auth/authorization-requests/${uuid}/deny.json`)
@@ -174,7 +160,7 @@ describe('AuthorizationRequestController (e2e)', () => {
       });
 
       it('denies on the owner call, and a subsequent poll returns { status: "denied" }', async () => {
-        const { uuid, pollToken } = await createAuthorizationRequest('darthjee');
+        const { uuid, pollToken } = await createAuthorizationRequest(app, 'darthjee');
 
         const response = await request(app.getHttpServer())
           .post(`/auth/authorization-requests/${uuid}/deny.json`)
@@ -205,7 +191,7 @@ describe('AuthorizationRequestController (e2e)', () => {
       });
 
       it('is set on the authorize response', async () => {
-        const { uuid } = await createAuthorizationRequest('darthjee');
+        const { uuid } = await createAuthorizationRequest(app, 'darthjee');
 
         const response = await request(app.getHttpServer())
           .post(`/auth/authorization-requests/${uuid}/authorize.json`)
@@ -217,7 +203,7 @@ describe('AuthorizationRequestController (e2e)', () => {
       });
 
       it('is set on the deny response', async () => {
-        const { uuid } = await createAuthorizationRequest('darthjee');
+        const { uuid } = await createAuthorizationRequest(app, 'darthjee');
 
         const response = await request(app.getHttpServer())
           .post(`/auth/authorization-requests/${uuid}/deny.json`)
