@@ -1,18 +1,17 @@
 import AuthEvents from '../../../../assets/js/client/AuthEvents.js';
+import { installFakeWindow, uninstallFakeWindow } from '../../../support/fakeWindow.js';
 
 describe('AuthEvents', () => {
-  let originalWindow;
 
   beforeEach(() => {
     // Node-based Jasmine specs run without a DOM, so `window` is undefined there; a plain
     // `EventTarget` provides the same `addEventListener`/`removeEventListener`/`dispatchEvent`
     // shape AuthEvents relies on.
-    originalWindow = globalThis.window;
-    globalThis.window = new EventTarget();
+    installFakeWindow(new EventTarget());
   });
 
   afterEach(() => {
-    globalThis.window = originalWindow;
+    uninstallFakeWindow();
   });
 
   describe('.emit', () => {
