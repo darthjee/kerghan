@@ -7,6 +7,7 @@ import { Test } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import cookieParser from 'cookie-parser';
 import request from 'supertest';
+import { AdminGuard } from '../../core/admin.guard.js';
 import { JwtGuard } from '../../core/jwt.guard.js';
 import { LoggingModule } from '../../core/logging.module.js';
 import { Public } from '../../core/public.decorator.js';
@@ -18,65 +19,9 @@ import { PasswordResetToken } from '../entities/password-reset-token.entity.js';
 import { RefreshToken } from '../entities/refresh-token.entity.js';
 import { Session } from '../entities/session.entity.js';
 import { User } from '../entities/user.entity.js';
+import { createInMemoryRepo, matchesCondition } from './support/in-memory-repo.js';
 
-// Matches a single condition value against a row's field, understanding
-// TypeORM's `IsNull()` find operator (used by `AuthService#revokeTokenFamily`)
-// in addition to plain equality — real TypeORM/MySQL handles it natively,
-// this in-memory stand-in needs to special-case it.
-export function matchesCondition(rowValue: unknown, conditionValue: unknown): boolean {
-  if (conditionValue && typeof conditionValue === 'object' && 'type' in conditionValue) {
-    const operator = conditionValue as { type: string };
-    return operator.type === 'isNull' ? rowValue === null || rowValue === undefined : false;
-  }
-
-  return rowValue === conditionValue;
-}
-
-// Standing in for a real database, mirroring the CI comment on
-// `backend_tests`'s "No DB service container yet" strategy: backend specs
-// inject mocked TypeORM repositories rather than hitting a live database.
-export function createInMemoryRepo<T extends { id?: number }>() {
-  const rows: T[] = [];
-  let nextId = 1;
-
-  return {
-    rows,
-    create: (attrs: Partial<T>): T => ({ ...attrs }) as T,
-    findOne: async ({ where }: { where: Partial<T> | Partial<T>[] }): Promise<T | null> => {
-      const conditions = Array.isArray(where) ? where : [where];
-      return (
-        rows.find((row) =>
-          conditions.some((condition) =>
-            Object.entries(condition).every(([key, value]) => matchesCondition((row as never)[key], value)),
-          ),
-        ) ?? null
-      );
-    },
-    findOneBy: async (where: Partial<T>): Promise<T | null> =>
-      rows.find((row) =>
-        Object.entries(where).every(([key, value]) => matchesCondition((row as never)[key], value)),
-      ) ?? null,
-    save: async (entity: T): Promise<T> => {
-      if (entity.id === undefined) {
-        entity.id = nextId++;
-        rows.push(entity);
-      }
-      return entity;
-    },
-    update: async (criteria: number | Partial<T>, partial: Partial<T>): Promise<void> => {
-      rows.forEach((row) => {
-        const matches =
-          typeof criteria === 'object'
-            ? Object.entries(criteria).every(([key, value]) => matchesCondition((row as never)[key], value))
-            : row.id === criteria;
-
-        if (matches) {
-          Object.assign(row, partial);
-        }
-      });
-    },
-  };
-}
+export { createInMemoryRepo, matchesCondition };
 
 // Throwaway controller used only to exercise the global `JwtGuard` — the
 // Auth module's own routes are all `@Public()` by design.
@@ -108,7 +53,17 @@ export class PublicTestController {
 // `AccountEditLockout` repository tokens with fresh `createInMemoryRepo()`
 // instances; and registers the `darthjee` test user via
 // `POST /auth/register.json`.
-export async function buildTestApp(): Promise<{
+//
+// Options (defaults preserve the behavior described above):
+// - `adminGuard: true` also registers the `APP_GUARD`/`AdminGuard` provider,
+//   after `JwtGuard` (order matters: `JwtGuard` must run first so
+//   `AdminGuard` sees the authenticated user).
+// - `registerDefaultUser: false` skips registering the `darthjee` user, for
+//   specs that register their own users.
+export async function buildTestApp({
+  adminGuard = false,
+  registerDefaultUser = true,
+}: { adminGuard?: boolean; registerDefaultUser?: boolean } = {}): Promise<{
   app: INestApplication;
   userRepo: ReturnType<typeof createInMemoryRepo<User>>;
   refreshTokenRepo: ReturnType<typeof createInMemoryRepo<RefreshToken>>;
@@ -132,6 +87,7 @@ export async function buildTestApp(): Promise<{
     controllers: [ProtectedTestController, PublicTestController],
     providers: [
       { provide: APP_GUARD, useClass: JwtGuard },
+      ...(adminGuard ? [{ provide: APP_GUARD, useClass: AdminGuard }] : []),
       { provide: APP_INTERCEPTOR, useClass: SkipCacheInterceptor },
     ],
   })
@@ -154,9 +110,11 @@ export async function buildTestApp(): Promise<{
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
   await app.init();
 
-  await request(app.getHttpServer())
-    .post('/auth/register.json')
-    .send({ username: 'darthjee', email: 'darthjee@example.com', password: 'my-password' });
+  if (registerDefaultUser) {
+    await request(app.getHttpServer())
+      .post('/auth/register.json')
+      .send({ username: 'darthjee', email: 'darthjee@example.com', password: 'my-password' });
+  }
 
   return { app, userRepo, refreshTokenRepo, passwordResetTokenRepo };
 }
