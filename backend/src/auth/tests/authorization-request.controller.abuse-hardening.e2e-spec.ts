@@ -1,6 +1,11 @@
 import { INestApplication } from '@nestjs/common';
 import request from 'supertest';
-import { buildTestApp, createInMemoryRepo } from './authorization-request.controller.e2e-test-support.js';
+import {
+  buildTestApp,
+  createAuthorizationRequest,
+  createInMemoryRepo,
+  login,
+} from './authorization-request.controller.e2e-test-support.js';
 import { AuthorizationRequest } from '../entities/authorization-request.entity.js';
 
 describe('AuthorizationRequestController (e2e)', () => {
@@ -14,15 +19,6 @@ describe('AuthorizationRequestController (e2e)', () => {
   afterEach(async () => {
     await app.close();
   });
-
-  async function createAuthorizationRequest(username = 'darthjee'): Promise<{ uuid: string; pollToken: string }> {
-    const response = await request(app.getHttpServer())
-      .post('/auth/authorization-requests.json')
-      .send({ username })
-      .expect(201);
-
-    return response.body;
-  }
 
   describe('rate limiting and abuse hardening', () => {
     describe('create — per-IP limit', () => {
@@ -149,19 +145,14 @@ describe('AuthorizationRequestController (e2e)', () => {
     describe('authorize — cool-off lockout', () => {
       let ownerCookie: string;
 
-      async function login(username: string, password: string): Promise<string> {
-        const response = await request(app.getHttpServer()).post('/auth/login.json').send({ username, password });
-        return response.headers['set-cookie'][0].split(';')[0];
-      }
-
       beforeEach(async () => {
-        ownerCookie = await login('darthjee', 'my-password');
+        ownerCookie = await login(app, 'darthjee', 'my-password');
       });
 
       it(
         'locks the row after the configured max wrong-password attempts, rejecting even the correct password with the same uniform message',
         async () => {
-          const { uuid } = await createAuthorizationRequest('darthjee');
+          const { uuid } = await createAuthorizationRequest(app, 'darthjee');
 
           for (let i = 0; i < 5; i += 1) {
             await request(app.getHttpServer())
@@ -195,11 +186,8 @@ describe('AuthorizationRequestController (e2e)', () => {
       });
 
       it('rejects an oversized password on authorize with 400', async () => {
-        const response = await request(app.getHttpServer())
-          .post('/auth/login.json')
-          .send({ username: 'darthjee', password: 'my-password' });
-        const ownerCookie = response.headers['set-cookie'][0].split(';')[0];
-        const { uuid } = await createAuthorizationRequest('darthjee');
+        const ownerCookie = await login(app, 'darthjee', 'my-password');
+        const { uuid } = await createAuthorizationRequest(app, 'darthjee');
 
         await request(app.getHttpServer())
           .post(`/auth/authorization-requests/${uuid}/authorize.json`)
