@@ -1,7 +1,7 @@
 import { INestApplication } from '@nestjs/common';
 import request from 'supertest';
-import { User } from '../entities/user.entity.js';
 import { buildTestApp, createInMemoryRepo } from './auth.controller.e2e-test-support.js';
+import { User } from '../entities/user.entity.js';
 
 describe('AdminController (e2e)', () => {
   let app: INestApplication;
