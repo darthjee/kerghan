@@ -5,22 +5,7 @@ import bcrypt from 'bcryptjs';
 import { PasswordResetToken } from '../entities/password-reset-token.entity.js';
 import { User } from '../entities/user.entity.js';
 import { PasswordResetService } from '../password-reset.service.js';
-
-type RepoMock<T extends object> = {
-  findOneBy: jest.Mock;
-  create: jest.Mock;
-  save: jest.Mock;
-  update: jest.Mock;
-} & Partial<T>;
-
-function repoMock<T extends object>(): RepoMock<T> {
-  return {
-    findOneBy: jest.fn(),
-    create: jest.fn((attrs) => attrs),
-    save: jest.fn(async (entity) => ({ id: 1, ...entity })),
-    update: jest.fn(),
-  } as RepoMock<T>;
-}
+import { repoMock, RepoMock } from './repo-mock.test-support.js';
 
 describe('PasswordResetService', () => {
   let userRepository: RepoMock<User>;

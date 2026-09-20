@@ -7,24 +7,7 @@ import { RefreshToken } from '../entities/refresh-token.entity.js';
 import { User } from '../entities/user.entity.js';
 import { PasswordResetService } from '../password-reset.service.js';
 import { TokenService } from '../token.service.js';
-
-type RepoMock<T extends object> = {
-  findOne: jest.Mock;
-  findOneBy: jest.Mock;
-  create: jest.Mock;
-  save: jest.Mock;
-  update: jest.Mock;
-} & Partial<T>;
-
-function repoMock<T extends object>(): RepoMock<T> {
-  return {
-    findOne: jest.fn(),
-    findOneBy: jest.fn(),
-    create: jest.fn((attrs) => attrs),
-    save: jest.fn(async (entity) => ({ id: 1, ...entity })),
-    update: jest.fn(),
-  } as RepoMock<T>;
-}
+import { repoMock, RepoMock } from './repo-mock.test-support.js';
 
 describe('AuthService', () => {
   let userRepository: RepoMock<User>;

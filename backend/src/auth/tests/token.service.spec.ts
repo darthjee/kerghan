@@ -4,22 +4,7 @@ import { RefreshToken } from '../entities/refresh-token.entity.js';
 import { Session } from '../entities/session.entity.js';
 import { User } from '../entities/user.entity.js';
 import { TokenService } from '../token.service.js';
-
-type RepoMock<T extends object> = {
-  findOneBy: jest.Mock;
-  create: jest.Mock;
-  save: jest.Mock;
-  update: jest.Mock;
-} & Partial<T>;
-
-function repoMock<T extends object>(): RepoMock<T> {
-  return {
-    findOneBy: jest.fn(),
-    create: jest.fn((attrs) => attrs),
-    save: jest.fn(async (entity) => ({ id: 1, ...entity })),
-    update: jest.fn(),
-  } as RepoMock<T>;
-}
+import { repoMock, RepoMock } from './repo-mock.test-support.js';
 
 const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
 
