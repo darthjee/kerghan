@@ -1,8 +1,8 @@
 import { AuthorizationRequestService } from '../authorization-request.service.js';
 import {
+  buildFakeAuthorizationRequest,
   createAuthorizationRequestServiceTestContext,
   RepoMock,
-  sha256,
 } from './authorization-request.service.test-support.js';
 import { AuthorizationRequest } from '../entities/authorization-request.entity.js';
 
@@ -15,21 +15,7 @@ describe('AuthorizationRequestService', () => {
   });
 
   describe('listOpenForUser', () => {
-    const openRow = {
-      id: 1,
-      uuid: 'uuid-open',
-      username: 'darthjee',
-      userId: 1,
-      status: 'open',
-      pollTokenHash: sha256('poll-token'),
-      requestIp: '203.0.113.1',
-      requestUserAgent: 'curl/8.0',
-      approvedByUserId: null,
-      createdAt: new Date(),
-      expiresAt: new Date(Date.now() + 60000),
-      resolvedAt: null,
-      loggedAt: null,
-    };
+    const openRow = buildFakeAuthorizationRequest({ id: 1, uuid: 'uuid-open' });
 
     it('queries only open, non-expired rows for the given userId, newest first', async () => {
       authorizationRequestRepository.find.mockResolvedValue([openRow]);

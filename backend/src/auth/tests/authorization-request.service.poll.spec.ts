@@ -1,10 +1,10 @@
 import { NotFoundException } from '@nestjs/common';
 import { AuthorizationRequestService } from '../authorization-request.service.js';
 import {
+  buildFakeAuthorizationRequest,
   createAuthorizationRequestServiceTestContext,
   queryBuilderMock,
   RepoMock,
-  sha256,
 } from './authorization-request.service.test-support.js';
 import { AuthorizationRequest } from '../entities/authorization-request.entity.js';
 import { User } from '../entities/user.entity.js';
@@ -22,19 +22,7 @@ describe('AuthorizationRequestService', () => {
   });
 
   describe('poll', () => {
-    const baseRow = {
-      id: 10,
-      uuid: 'uuid-1',
-      username: 'darthjee',
-      userId: 1,
-      pollTokenHash: sha256('poll-token'),
-      requestIp: '203.0.113.1',
-      requestUserAgent: 'curl/8.0',
-      approvedByUserId: null,
-      expiresAt: new Date(Date.now() + 60000),
-      resolvedAt: null,
-      loggedAt: null,
-    };
+    const baseRow = buildFakeAuthorizationRequest();
 
     describe('when the uuid is unknown', () => {
       beforeEach(() => {
