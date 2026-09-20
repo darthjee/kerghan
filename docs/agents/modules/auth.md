@@ -248,7 +248,12 @@ already-responded `/auth/recover.json` request.
 - `auth/tests/admin.service.spec.ts` — unit specs, mocked repositories: `searchUsers`
   with/without a query, `generateRecoveryLink`/`sendRecoveryEmail` user-found/not-found paths,
   and the mail `sent`/`skipped`/throwing outcomes for `sendRecoveryEmail`.
-- `auth/tests/admin.controller.e2e-spec.ts` — e2e specs, same in-memory-fake-repository pattern,
+- `auth/tests/support/in-memory-repo.ts` — the single shared in-memory fake TypeORM repository
+  (`createInMemoryRepo`/`matchesCondition`), re-exported by
+  `auth/tests/auth.controller.e2e-test-support.ts` and
+  `auth/tests/authorization-request.controller.e2e-test-support.ts`.
+- `auth/tests/admin.controller.e2e-spec.ts` — e2e specs, built via the shared `buildTestApp({
+  adminGuard: true, registerDefaultUser: false })` from `auth.controller.e2e-test-support.ts`,
   plus the global `JwtGuard`/`AdminGuard` pair registered as `APP_GUARD`s: unauthenticated (`401`)
   and authenticated-non-admin (`403`) rejection on all three routes, an admin caller's documented
   response shapes, `404` for an unknown user id, and `X-Skip-Cache: true` on every response.

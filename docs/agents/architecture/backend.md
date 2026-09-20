@@ -142,8 +142,12 @@ mocked/fake TypeORM repositories rather than hitting MySQL:
 - **e2e specs** (`*.e2e-spec.ts`): a real `INestApplication` built via `Test.createTestingModule`,
   with each entity's repository token overridden
   (`.overrideProvider(getRepositoryToken(Entity)).useValue(fakeRepo)`) by a small in-memory fake
-  (array-backed `findOne`/`findOneBy`/`create`/`save`/`update`), driven end-to-end via
-  `supertest`. This exercises real controller/service/DTO-validation/guard behavior without a
+  (array-backed `findOne`/`findOneBy`/`find`/`count`/`create`/`save`/`update`, plus a
+  `createQueryBuilder().update()` stub), driven end-to-end via `supertest`. The single shared
+  fake lives in `auth/tests/support/in-memory-repo.ts` (`createInMemoryRepo`/`matchesCondition`,
+  understanding the `isNull`/`moreThan`/`ilike` find operators and auto-filling `createdAt` on
+  insert); the auth e2e specs get it wired up via `auth/tests/auth.controller.e2e-test-support.ts`'s
+  `buildTestApp()`. This exercises real controller/service/DTO-validation/guard behavior without a
   real database.
 - **`LazyModuleLoader`-dependent specs**: need a real Nest application context
   (`NestFactory.createApplicationContext`), not a bare `Test.createTestingModule` — the loader's

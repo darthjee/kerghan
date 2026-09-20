@@ -1,90 +1,7 @@
-import { INestApplication, ValidationPipe } from '@nestjs/common';
-import { ConfigModule } from '@nestjs/config';
-import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
-import { EventEmitterModule } from '@nestjs/event-emitter';
-import { JwtModule } from '@nestjs/jwt';
-import { Test } from '@nestjs/testing';
-import { getRepositoryToken } from '@nestjs/typeorm';
-import cookieParser from 'cookie-parser';
+import { INestApplication } from '@nestjs/common';
 import request from 'supertest';
-import { AdminGuard } from '../../core/admin.guard.js';
-import { JwtGuard } from '../../core/jwt.guard.js';
-import { LoggingModule } from '../../core/logging.module.js';
-import { SkipCacheInterceptor } from '../../core/skip-cache.interceptor.js';
-import { AuthModule } from '../auth.module.js';
-import { AccountEditLockout } from '../entities/account-edit-lockout.entity.js';
-import { AuthorizationRequest } from '../entities/authorization-request.entity.js';
-import { PasswordResetToken } from '../entities/password-reset-token.entity.js';
-import { RefreshToken } from '../entities/refresh-token.entity.js';
-import { Session } from '../entities/session.entity.js';
 import { User } from '../entities/user.entity.js';
-
-// Standing in for a real database — mirrors `auth.controller.e2e-spec.ts`'s
-// in-memory fake-repository pattern (no DB service container in
-// `backend_tests` yet).
-function createInMemoryRepo<T extends { id?: number }>() {
-  const rows: T[] = [];
-  let nextId = 1;
-
-  return {
-    rows,
-    create: (attrs: Partial<T>): T => ({ ...attrs }) as T,
-    findOne: async ({ where }: { where: Partial<T> | Partial<T>[] }): Promise<T | null> => {
-      const conditions = Array.isArray(where) ? where : [where];
-      return (
-        rows.find((row) =>
-          conditions.some((condition) =>
-            Object.entries(condition).every(([key, value]) => (row as never)[key] === value),
-          ),
-        ) ?? null
-      );
-    },
-    find: async ({ where }: { where?: Partial<T> | Partial<T>[] } = {}): Promise<T[]> => {
-      if (!where) {
-        return [...rows];
-      }
-
-      const conditions = Array.isArray(where) ? where : [where];
-      return rows.filter((row) =>
-        conditions.some((condition) =>
-          Object.entries(condition).every(([key, value]) => {
-            const rowValue = (row as never)[key] as string;
-            const matcher = value as { type?: string; value?: string };
-            return matcher?.type === 'ilike'
-              ? rowValue.toLowerCase().includes(String(matcher.value).replace(/%/g, '').toLowerCase())
-              : rowValue === value;
-          }),
-        ),
-      );
-    },
-    findOneBy: async (where: Partial<T>): Promise<T | null> =>
-      rows.find((row) => Object.entries(where).every(([key, value]) => (row as never)[key] === value)) ??
-      null,
-    save: async (entity: T): Promise<T> => {
-      if (entity.id === undefined) {
-        entity.id = nextId++;
-        // Real TypeORM auto-populates `@CreateDateColumn`/`@UpdateDateColumn`
-        // (e.g. `User#createdAt`) on insert — this fake repo has to do the
-        // same so the admin search endpoint's `createdAt` field round-trips.
-        (entity as never as { createdAt?: Date }).createdAt ??= new Date();
-        rows.push(entity);
-      }
-      return entity;
-    },
-    update: async (criteria: number | Partial<T>, partial: Partial<T>): Promise<void> => {
-      rows.forEach((row) => {
-        const matches =
-          typeof criteria === 'object'
-            ? Object.entries(criteria).every(([key, value]) => (row as never)[key] === value)
-            : row.id === criteria;
-
-        if (matches) {
-          Object.assign(row, partial);
-        }
-      });
-    },
-  };
-}
+import { buildTestApp, createInMemoryRepo } from './auth.controller.e2e-test-support.js';
 
 describe('AdminController (e2e)', () => {
   let app: INestApplication;
@@ -103,45 +20,7 @@ describe('AdminController (e2e)', () => {
   }
 
   beforeEach(async () => {
-    userRepo = createInMemoryRepo<User>();
-    const refreshTokenRepo = createInMemoryRepo<RefreshToken>();
-    const sessionRepo = createInMemoryRepo<Session>();
-    const passwordResetTokenRepo = createInMemoryRepo<PasswordResetToken>();
-    const authorizationRequestRepo = createInMemoryRepo<AuthorizationRequest>();
-    const accountEditLockoutRepo = createInMemoryRepo<AccountEditLockout>();
-
-    const moduleRef = await Test.createTestingModule({
-      imports: [
-        ConfigModule.forRoot({ isGlobal: true }),
-        EventEmitterModule.forRoot(),
-        JwtModule.register({ global: true, secret: 'test-secret', signOptions: { expiresIn: '15m' } }),
-        LoggingModule,
-        AuthModule,
-      ],
-      providers: [
-        { provide: APP_GUARD, useClass: JwtGuard },
-        { provide: APP_GUARD, useClass: AdminGuard },
-        { provide: APP_INTERCEPTOR, useClass: SkipCacheInterceptor },
-      ],
-    })
-      .overrideProvider(getRepositoryToken(User))
-      .useValue(userRepo)
-      .overrideProvider(getRepositoryToken(RefreshToken))
-      .useValue(refreshTokenRepo)
-      .overrideProvider(getRepositoryToken(Session))
-      .useValue(sessionRepo)
-      .overrideProvider(getRepositoryToken(PasswordResetToken))
-      .useValue(passwordResetTokenRepo)
-      .overrideProvider(getRepositoryToken(AuthorizationRequest))
-      .useValue(authorizationRequestRepo)
-      .overrideProvider(getRepositoryToken(AccountEditLockout))
-      .useValue(accountEditLockoutRepo)
-      .compile();
-
-    app = moduleRef.createNestApplication();
-    app.use(cookieParser());
-    app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
-    await app.init();
+    ({ app, userRepo } = await buildTestApp({ adminGuard: true, registerDefaultUser: false }));
   });
 
   afterEach(async () => {
