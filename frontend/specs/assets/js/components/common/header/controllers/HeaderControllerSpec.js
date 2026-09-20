@@ -2,7 +2,7 @@ import HeaderController from '../../../../../../../assets/js/components/common/h
 import AuthSession from '../../../../../../../assets/js/client/AuthSession.js';
 import AuthEvents from '../../../../../../../assets/js/client/AuthEvents.js';
 import LoginModalEvents from '../../../../../../../assets/js/client/LoginModalEvents.js';
-import { installFakeWindow, uninstallFakeWindow } from '../../../../../support/fakeWindow.js';
+import { installFakeWindow, uninstallFakeWindow } from '../../../../../../support/fakeWindow.js';
 
 describe('HeaderController', () => {
   let client;
