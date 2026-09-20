@@ -27,12 +27,16 @@ frontend/assets/js/
       header/                 # Header.jsx + controller/helper/hook — Login/Logout nav
       loginModal/             # LoginModal.jsx — route-independent, opened via LoginModalEvents
       ModalRedirect.jsx       # #/login, #/register → open the modal in that mode
+      forms/                  # shared account-edit form pieces: helpers/ (JSX) and
+                              #   controllers/AccountEditFormController.js (base class for
+                              #   MyAccountController / AdminUserEditController)
     resources/
       home/pages/Home.jsx
       accounts/pages/          # AuthorizationRequests ("My account"), ResetPasswordLanding
       admin/pages/AdminUsers.jsx
   client/                      # AccountsClient, AdminClient, ApiClient, ApiError,
-                                #   AuthSession, AuthEvents, LoginModalEvents
+                                #   AuthSession, AuthEvents, LoginModalEvents,
+                                #   pickDefined.js (drops undefined keys from request bodies)
   utils/
     routing/                   # Router, Route, HashRouteResolver
     polling/AuthorizationRequestPoller.js
