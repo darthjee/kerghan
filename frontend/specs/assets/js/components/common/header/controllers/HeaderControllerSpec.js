@@ -2,12 +2,15 @@ import HeaderController from '../../../../../../../assets/js/components/common/h
 import AuthSession from '../../../../../../../assets/js/client/AuthSession.js';
 import AuthEvents from '../../../../../../../assets/js/client/AuthEvents.js';
 import LoginModalEvents from '../../../../../../../assets/js/client/LoginModalEvents.js';
+import { installFakeWindow, uninstallFakeWindow } from '../../../../../support/fakeWindow.js';
 
 describe('HeaderController', () => {
   let client;
+  let controller;
 
   beforeEach(() => {
     client = jasmine.createSpyObj('client', ['logout', 'status']);
+    controller = new HeaderController(client);
     spyOn(AuthEvents, 'emit');
   });
 
@@ -16,92 +19,61 @@ describe('HeaderController', () => {
   });
 
   describe('#handleLogout', () => {
+    let fakeWindow;
+
+    beforeEach(() => {
+      fakeWindow = installFakeWindow({ location: { hash: '' } });
+    });
+
+    afterEach(() => {
+      uninstallFakeWindow();
+    });
+
     it('logs out with the currently stored refresh token', async () => {
       AuthSession.set('refresh-token');
       client.logout.and.resolveTo();
-      const controller = new HeaderController(client);
-      const fakeWindow = { location: { hash: '' } };
 
-      globalThis.window = fakeWindow;
+      await controller.handleLogout();
 
-      try {
-        await controller.handleLogout();
-
-        expect(client.logout).toHaveBeenCalledWith('refresh-token');
-      } finally {
-        delete globalThis.window;
-      }
+      expect(client.logout).toHaveBeenCalledWith('refresh-token');
     });
 
     it('redirects home on success', async () => {
       client.logout.and.resolveTo();
-      const controller = new HeaderController(client);
-      const fakeWindow = { location: { hash: '' } };
 
-      globalThis.window = fakeWindow;
+      await controller.handleLogout();
 
-      try {
-        await controller.handleLogout();
-
-        expect(fakeWindow.location.hash).toBe('/');
-      } finally {
-        delete globalThis.window;
-      }
+      expect(fakeWindow.location.hash).toBe('/');
     });
 
     it('redirects home even when the logout request fails', async () => {
       client.logout.and.rejectWith(new Error('network error'));
-      const controller = new HeaderController(client);
-      const fakeWindow = { location: { hash: '' } };
 
-      globalThis.window = fakeWindow;
+      await controller.handleLogout();
 
-      try {
-        await controller.handleLogout();
-
-        expect(fakeWindow.location.hash).toBe('/');
-      } finally {
-        delete globalThis.window;
-      }
+      expect(fakeWindow.location.hash).toBe('/');
     });
 
     it('emits the logged-out auth state', async () => {
       client.logout.and.resolveTo();
-      const controller = new HeaderController(client);
-      const fakeWindow = { location: { hash: '' } };
 
-      globalThis.window = fakeWindow;
+      await controller.handleLogout();
 
-      try {
-        await controller.handleLogout();
-
-        expect(AuthEvents.emit).toHaveBeenCalledWith(false, false);
-      } finally {
-        delete globalThis.window;
-      }
+      expect(AuthEvents.emit).toHaveBeenCalledWith(false, false);
     });
 
     it('emits the logged-out auth state even when the logout request fails', async () => {
       client.logout.and.rejectWith(new Error('network error'));
-      const controller = new HeaderController(client);
-      const fakeWindow = { location: { hash: '' } };
 
-      globalThis.window = fakeWindow;
+      await controller.handleLogout();
 
-      try {
-        await controller.handleLogout();
-
-        expect(AuthEvents.emit).toHaveBeenCalledWith(false, false);
-      } finally {
-        delete globalThis.window;
-      }
+      expect(AuthEvents.emit).toHaveBeenCalledWith(false, false);
     });
   });
 
   describe('#openLoginModal', () => {
     it('opens the login modal in the given mode via LoginModalEvents', () => {
       spyOn(LoginModalEvents, 'open');
-      const controller = new HeaderController(client);
 
       controller.openLoginModal('register');
 
@@ -111,8 +83,6 @@ describe('HeaderController', () => {
 
   describe('#checkStatus', () => {
     it('emits false/false without calling the backend when there is no stored token', async () => {
-      const controller = new HeaderController(client);
-
       await controller.checkStatus();
 
       expect(client.status).not.toHaveBeenCalled();
@@ -122,7 +92,6 @@ describe('HeaderController', () => {
     it('emits true and the admin flag, leaving the stored token untouched, when it is still active', async () => {
       AuthSession.set('refresh-token');
       client.status.and.resolveTo({ loggedIn: true, isAdmin: true });
-      const controller = new HeaderController(client);
 
       await controller.checkStatus();
 
@@ -134,7 +103,6 @@ describe('HeaderController', () => {
     it('clears the stored token and emits false when it is no longer active', async () => {
       AuthSession.set('refresh-token');
       client.status.and.resolveTo({ loggedIn: false, isAdmin: false });
-      const controller = new HeaderController(client);
 
       await controller.checkStatus();
 
