@@ -1,0 +1,6 @@
+# Add AccountEditFormHelper
+Create `AccountEditFormHelper` with a static `render(state, handlers, options)` that produces the whole account-edit page body currently duplicated in `MyAccountHelper.render` / `AdminUserEditHelper.render`: `<div className="container mt-4">`, the `<h1>` heading, the `<form onSubmit noValidate>`, submit-error and success alerts (via `FormFieldsHelper`), the `PROFILE_FIELDS`, `<hr />`, the `<h2 className="h5">Change password</h2>`, the optional `leadingPasswordFields`, the `PASSWORD_FIELDS`, and the Save button. Move `PROFILE_FIELDS` / `PASSWORD_FIELDS` here. Each field is rendered with `handlers.onChange(name)` and `options.idPrefix`. Options: `heading`, `successMessage`, `idPrefix`, optional `leadingPasswordFields` (see the API in `frontend.md`). Add a spec covering heading, success message, id prefix, presence/absence of the leading fields (and that they come before the new-password fields), and error/success alerts.
+
+## Files to Change
+- `frontend/assets/js/components/common/forms/helpers/AccountEditFormHelper.jsx` — new shared account-edit form renderer.
+- `frontend/specs/assets/js/components/common/forms/helpers/AccountEditFormHelperSpec.js` — new spec mirroring the source path.
