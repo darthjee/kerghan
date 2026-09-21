@@ -85,24 +85,34 @@ describe('AdminController (e2e)', () => {
     });
 
     describe('POST /admin/users/search.json', () => {
-      it('returns every user when q is omitted', async () => {
-        const response = await request(ctx.app.getHttpServer())
-          .post('/admin/users/search.json')
-          .set('Cookie', [adminCookie])
-          .send({})
-          .expect(201);
+      describe('when q is omitted', () => {
+        let response: request.Response;
 
-        expect(response.body.users).toEqual(
-          expect.arrayContaining([
-            expect.objectContaining({
-              id: targetUserId,
-              username: 'darthjee',
-              email: 'darthjee@example.com',
-              isAdmin: false,
-              createdAt: expect.any(String),
-            }),
-          ]),
-        );
+        beforeEach(async () => {
+          response = await request(ctx.app.getHttpServer())
+            .post('/admin/users/search.json')
+            .set('Cookie', [adminCookie])
+            .send({})
+            .expect(201);
+        });
+
+        it('returns every user', () => {
+          expect(response.body.users).toEqual(
+            expect.arrayContaining([
+              expect.objectContaining({
+                id: targetUserId,
+                username: 'darthjee',
+                email: 'darthjee@example.com',
+                isAdmin: false,
+                createdAt: expect.any(String),
+              }),
+            ]),
+          );
+        });
+
+        it('sets the X-Skip-Cache header', () => {
+          expect(response.headers['x-skip-cache']).toBe('true');
+        });
       });
 
       it('filters by q against username/email', async () => {
@@ -115,37 +125,28 @@ describe('AdminController (e2e)', () => {
         expect(response.body.users).toHaveLength(1);
         expect(response.body.users[0]).toEqual(expect.objectContaining({ username: 'darthjee' }));
       });
-
-      it('sets the X-Skip-Cache header', async () => {
-        const response = await request(ctx.app.getHttpServer())
-          .post('/admin/users/search.json')
-          .set('Cookie', [adminCookie])
-          .send({})
-          .expect(201);
-
-        expect(response.headers['x-skip-cache']).toBe('true');
-      });
     });
 
     describe('POST /admin/users/:id/recovery-link.json', () => {
-      it('mints a fresh recovery link for an existing user', async () => {
-        const response = await request(ctx.app.getHttpServer())
-          .post(`/admin/users/${targetUserId}/recovery-link.json`)
-          .set('Cookie', [adminCookie])
-          .expect(201);
+      describe('for an existing user', () => {
+        let response: request.Response;
 
-        expect(response.body).toEqual({
-          resetUrl: expect.stringMatching(/\/#\/recover-password\?token=.+$/),
+        beforeEach(async () => {
+          response = await request(ctx.app.getHttpServer())
+            .post(`/admin/users/${targetUserId}/recovery-link.json`)
+            .set('Cookie', [adminCookie])
+            .expect(201);
         });
-      });
 
-      it('sets the X-Skip-Cache header', async () => {
-        const response = await request(ctx.app.getHttpServer())
-          .post(`/admin/users/${targetUserId}/recovery-link.json`)
-          .set('Cookie', [adminCookie])
-          .expect(201);
+        it('mints a fresh recovery link', () => {
+          expect(response.body).toEqual({
+            resetUrl: expect.stringMatching(/\/#\/recover-password\?token=.+$/),
+          });
+        });
 
-        expect(response.headers['x-skip-cache']).toBe('true');
+        it('sets the X-Skip-Cache header', () => {
+          expect(response.headers['x-skip-cache']).toBe('true');
+        });
       });
 
       it('responds 404 for an unknown user id', async () => {
@@ -157,22 +158,23 @@ describe('AdminController (e2e)', () => {
     });
 
     describe('POST /admin/users/:id/send-recovery-email.json', () => {
-      it('responds with a sent boolean for an existing user', async () => {
-        const response = await request(ctx.app.getHttpServer())
-          .post(`/admin/users/${targetUserId}/send-recovery-email.json`)
-          .set('Cookie', [adminCookie])
-          .expect(201);
+      describe('for an existing user', () => {
+        let response: request.Response;
 
-        expect(response.body).toEqual({ sent: expect.any(Boolean) });
-      });
+        beforeEach(async () => {
+          response = await request(ctx.app.getHttpServer())
+            .post(`/admin/users/${targetUserId}/send-recovery-email.json`)
+            .set('Cookie', [adminCookie])
+            .expect(201);
+        });
 
-      it('sets the X-Skip-Cache header', async () => {
-        const response = await request(ctx.app.getHttpServer())
-          .post(`/admin/users/${targetUserId}/send-recovery-email.json`)
-          .set('Cookie', [adminCookie])
-          .expect(201);
+        it('responds with a sent boolean', () => {
+          expect(response.body).toEqual({ sent: expect.any(Boolean) });
+        });
 
-        expect(response.headers['x-skip-cache']).toBe('true');
+        it('sets the X-Skip-Cache header', () => {
+          expect(response.headers['x-skip-cache']).toBe('true');
+        });
       });
 
       it('responds 404 for an unknown user id', async () => {
@@ -184,36 +186,36 @@ describe('AdminController (e2e)', () => {
     });
 
     describe('POST /admin/users/:id/edit.json', () => {
-      it('updates the username, email, and password for an existing user', async () => {
-        const response = await request(ctx.app.getHttpServer())
-          .post(`/admin/users/${targetUserId}/edit.json`)
-          .set('Cookie', [adminCookie])
-          .send({
-            username: 'darthjee-renamed',
-            email: 'darthjee-renamed@example.com',
-            newPassword: 'brand-new-password',
-          })
-          .expect(201);
+      describe('for an existing user', () => {
+        let response: request.Response;
 
-        expect(response.body).toEqual({
-          user: expect.objectContaining({
-            id: targetUserId,
-            username: 'darthjee-renamed',
-            email: 'darthjee-renamed@example.com',
-            isAdmin: false,
-            createdAt: expect.any(String),
-          }),
+        beforeEach(async () => {
+          response = await request(ctx.app.getHttpServer())
+            .post(`/admin/users/${targetUserId}/edit.json`)
+            .set('Cookie', [adminCookie])
+            .send({
+              username: 'darthjee-renamed',
+              email: 'darthjee-renamed@example.com',
+              newPassword: 'brand-new-password',
+            })
+            .expect(201);
         });
-      });
 
-      it('sets the X-Skip-Cache header', async () => {
-        const response = await request(ctx.app.getHttpServer())
-          .post(`/admin/users/${targetUserId}/edit.json`)
-          .set('Cookie', [adminCookie])
-          .send({ username: 'darthjee-renamed' })
-          .expect(201);
+        it('updates the username, email, and password', () => {
+          expect(response.body).toEqual({
+            user: expect.objectContaining({
+              id: targetUserId,
+              username: 'darthjee-renamed',
+              email: 'darthjee-renamed@example.com',
+              isAdmin: false,
+              createdAt: expect.any(String),
+            }),
+          });
+        });
 
-        expect(response.headers['x-skip-cache']).toBe('true');
+        it('sets the X-Skip-Cache header', () => {
+          expect(response.headers['x-skip-cache']).toBe('true');
+        });
       });
 
       it('responds 404 for an unknown user id', async () => {
