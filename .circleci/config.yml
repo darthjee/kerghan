@@ -89,42 +89,15 @@ workflows:
             - release-vite_kerghan-base
             - release-vite_kerghan-base-arm64
           filters: *tags_only
+      # Matrix: 4 base images x {amd64, arm64}. Generated job names are release-<image> and
+      # release-<image>-arm64 (referenced by `requires:` above).
       - release-image:
-          name: release-kerghan-base
-          image: kerghan-base
-          filters: { tags: { only: /.*/ } }
-      - release-image:
-          name: release-kerghan-base-arm64
-          image: kerghan-base
-          arch: arm64
-          filters: { tags: { only: /.*/ } }
-      - release-image:
-          name: release-circleci_kerghan-base
-          image: circleci_kerghan-base
-          filters: { tags: { only: /.*/ } }
-      - release-image:
-          name: release-circleci_kerghan-base-arm64
-          image: circleci_kerghan-base
-          arch: arm64
-          filters: { tags: { only: /.*/ } }
-      - release-image:
-          name: release-production_kerghan-base
-          image: production_kerghan-base
-          filters: { tags: { only: /.*/ } }
-      - release-image:
-          name: release-production_kerghan-base-arm64
-          image: production_kerghan-base
-          arch: arm64
-          filters: { tags: { only: /.*/ } }
-      - release-image:
-          name: release-vite_kerghan-base
-          image: vite_kerghan-base
-          filters: { tags: { only: /.*/ } }
-      - release-image:
-          name: release-vite_kerghan-base-arm64
-          image: vite_kerghan-base
-          arch: arm64
-          filters: { tags: { only: /.*/ } }
+          name: release-<< matrix.image >><< matrix.suffix >>
+          matrix:
+            parameters:
+              image: [kerghan-base, circleci_kerghan-base, production_kerghan-base, vite_kerghan-base]
+              suffix: ["", "-arm64"]
+          filters: *all_tags
 commands:
   # Keeps only the requested project folder (backend or frontend) at the checkout root and
   # installs its dependencies. Shared by yarn_project and upload_fe_files.
@@ -209,14 +182,17 @@ jobs:
           command: vendor/bin/phpunit --bootstrap /var/www/html/extension/tests/bootstrap.php /var/www/html/extension/tests
 
   # Multi-arch (amd64 + arm64) publish of Kerghan's 4 base images, mirroring Majora's
-  # release-image pattern. Runs on tag builds only — bin/image.sh's
-  # skip_if_not_tag/skip_if_unchanged decide whether to actually build/push, unless
-  # FORCE_IMAGE_BUILD bypasses those guards.
+  # release-image pattern. Instantiated once via a workflow `matrix` (image x suffix). Runs on
+  # tag builds only — bin/image.sh's skip_if_not_tag/skip_if_unchanged decide whether to actually
+  # build/push, unless FORCE_IMAGE_BUILD bypasses those guards.
+  #
+  # `suffix` is "" for amd64 or "-arm64" for arm64; the release step strips the leading "-" so
+  # bin/image.sh keeps receiving an empty arch (amd64) or "arm64".
   release-image:
     parameters:
       image:
         type: string
-      arch:
+      suffix:
         type: string
         default: ""
     machine: true
@@ -227,7 +203,9 @@ jobs:
           command: bin/image.sh qemu << parameters.image >>
       - run:
           name: Release
-          command: bin/image.sh push << parameters.image >> << parameters.arch >>
+          command: |
+            SUFFIX='<< parameters.suffix >>'
+            bin/image.sh push << parameters.image >> "${SUFFIX#-}"
 
   # Deploys the backend to Render: points the service's branch at the tag that triggered this
   # workflow, triggers a deploy, and blocks (watch_deployment, in scripts/deploy.sh) until it
