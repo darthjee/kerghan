@@ -1,4 +1,5 @@
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
+import useAccountEditForm from '../../../common/forms/hooks/useAccountEditForm.js';
 import Router from '../../../../utils/routing/Router.js';
 import AdminUserEditController from './controllers/AdminUserEditController.js';
 import AdminUserEditHelper from './helpers/AdminUserEditHelper.jsx';
@@ -35,30 +36,11 @@ export default function AdminUserEdit() {
     () => Router.extractParams('/admin/users/:id/edit', currentHash()).id,
     [],
   );
-  const [fields, setFields] = useState(INITIAL_FIELDS);
-  const [fieldErrors, setFieldErrors] = useState({});
-  const [submitError, setSubmitError] = useState(null);
-  const [success, setSuccess] = useState(false);
+  const { state, handlers } = useAccountEditForm({
+    initialFields: INITIAL_FIELDS,
+    createController: (...setters) => new AdminUserEditController(...setters),
+    submit: (controller, fields) => controller.handleSubmit(userId, fields),
+  });
 
-  const controller = useMemo(
-    () => new AdminUserEditController(setFields, setFieldErrors, setSubmitError, setSuccess),
-    [],
-  );
-
-  const handleChange = (field) => (event) => {
-    const { value } = event.target;
-    setFields((current) => ({ ...current, [field]: value }));
-  };
-
-  const handleSubmit = (event) => {
-    event.preventDefault();
-    return controller.handleSubmit(userId, fields);
-  };
-
-  return AdminUserEditHelper.render(
-    {
-      ...fields, fieldErrors, submitError, success,
-    },
-    { onSubmit: handleSubmit, onChange: handleChange },
-  );
+  return AdminUserEditHelper.render(state, handlers);
 }

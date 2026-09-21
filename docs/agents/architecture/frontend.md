@@ -27,9 +27,11 @@ frontend/assets/js/
       header/                 # Header.jsx + controller/helper/hook — Login/Logout nav
       loginModal/             # LoginModal.jsx — route-independent, opened via LoginModalEvents
       ModalRedirect.jsx       # #/login, #/register → open the modal in that mode
-      forms/                  # shared account-edit form pieces: helpers/ (JSX) and
+      forms/                  # shared account-edit form pieces: helpers/ (JSX),
                               #   controllers/AccountEditFormController.js (base class for
-                              #   MyAccountController / AdminUserEditController)
+                              #   MyAccountController / AdminUserEditController) and
+                              #   hooks/useAccountEditForm.js (shared state/handler wiring
+                              #   for MyAccount / AdminUserEdit)
     resources/
       home/pages/Home.jsx
       accounts/pages/          # AuthorizationRequests ("My account"), ResetPasswordLanding

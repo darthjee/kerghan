@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import useAccountEditForm from '../../../common/forms/hooks/useAccountEditForm.js';
 import MyAccountController from './controllers/MyAccountController.js';
 import MyAccountHelper from './helpers/MyAccountHelper.jsx';
 
@@ -22,30 +22,11 @@ const INITIAL_FIELDS = {
  * @returns {React.ReactElement} The rendered My Account page.
  */
 export default function MyAccount() {
-  const [fields, setFields] = useState(INITIAL_FIELDS);
-  const [fieldErrors, setFieldErrors] = useState({});
-  const [submitError, setSubmitError] = useState(null);
-  const [success, setSuccess] = useState(false);
+  const { state, handlers } = useAccountEditForm({
+    initialFields: INITIAL_FIELDS,
+    createController: (...setters) => new MyAccountController(...setters),
+    submit: (controller, fields) => controller.handleSubmit(fields),
+  });
 
-  const controller = useMemo(
-    () => new MyAccountController(setFields, setFieldErrors, setSubmitError, setSuccess),
-    [],
-  );
-
-  const handleChange = (field) => (event) => {
-    const { value } = event.target;
-    setFields((current) => ({ ...current, [field]: value }));
-  };
-
-  const handleSubmit = (event) => {
-    event.preventDefault();
-    return controller.handleSubmit(fields);
-  };
-
-  return MyAccountHelper.render(
-    {
-      ...fields, fieldErrors, submitError, success,
-    },
-    { onSubmit: handleSubmit, onChange: handleChange },
-  );
+  return MyAccountHelper.render(state, handlers);
 }
