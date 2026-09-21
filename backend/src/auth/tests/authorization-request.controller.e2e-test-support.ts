@@ -20,6 +20,72 @@ export async function buildTestApp(configOverrides: Record<string, string> = {})
   return { app, userRepo, authorizationRequestRepo };
 }
 
+type TestAppContext = Awaited<ReturnType<typeof buildTestApp>>;
+
+// Registers the `beforeEach`/`afterEach` scaffold shared by the e2e specs: builds a fresh app per test
+// and closes it afterwards. Must be called synchronously inside a `describe` body. The returned
+// context exposes getters because the instances are reassigned before each test.
+export function useTestApp(): TestAppContext {
+  let current: TestAppContext;
+
+  beforeEach(async () => {
+    current = await buildTestApp();
+  });
+
+  afterEach(async () => {
+    await current.app.close();
+  });
+
+  return {
+    get app() {
+      return current.app;
+    },
+    get userRepo() {
+      return current.userRepo;
+    },
+    get authorizationRequestRepo() {
+      return current.authorizationRequestRepo;
+    },
+  };
+}
+
+// Issues `POST /auth/authorization-requests/mine.json` as the holder of `cookie` and returns the response.
+export async function postMine(app: INestApplication, cookie: string): Promise<request.Response> {
+  return request(app.getHttpServer())
+    .post('/auth/authorization-requests/mine.json')
+    .set('Cookie', [cookie])
+    .send({})
+    .expect(201);
+}
+
+// Asserts that `body` has the uniform create-response shape (`uuid`, `pollToken`, `expiresAt`).
+export function expectUniformCreateResponse(body: unknown): void {
+  expect(body).toEqual({
+    uuid: expect.any(String),
+    pollToken: expect.any(String),
+    expiresAt: expect.any(String),
+  });
+}
+
+// Raises `count` (default 5) authorization requests against `app`, sending `username(i)` and, when
+// `ip` is given, `X-Forwarded-For: ip(i)`, so a limit can be exhausted before the request under test.
+export async function fillCreateLimit(
+  app: INestApplication,
+  options: { username: (index: number) => string; ip?: (index: number) => string; count?: number },
+): Promise<void> {
+  const { username, ip, count = 5 } = options;
+
+  for (let i = 0; i < count; i++) {
+    const call = request(app.getHttpServer()).post('/auth/authorization-requests.json');
+
+    if (ip) {
+      call.set('X-Forwarded-For', ip(i));
+    }
+
+    await call.send({ username: username(i) }).expect(201);
+  }
+}
+
 // Raises an authorization request for `username` against `app` and returns its `uuid`/`pollToken`.
 export async function createAuthorizationRequest(
   app: INestApplication,
