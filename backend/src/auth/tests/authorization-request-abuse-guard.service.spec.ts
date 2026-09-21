@@ -1,5 +1,6 @@
 import { ConfigService } from '@nestjs/config';
 import { AuthorizationRequestAbuseGuardService } from '../authorization-request-abuse-guard.service.js';
+import { expectBothCreateCountsComputed } from './authorization-request.service.test-support.js';
 import { AuthorizationRequest } from '../entities/authorization-request.entity.js';
 
 type RepoMock = {
@@ -57,12 +58,7 @@ describe('AuthorizationRequestAbuseGuardService', () => {
     it('always computes both counts, never short-circuiting on the first', async () => {
       await guard.isOverCreateLimit('203.0.113.1', 'darthjee');
 
-      expect(authorizationRequestRepository.count).toHaveBeenCalledWith(
-        expect.objectContaining({ where: expect.objectContaining({ requestIp: '203.0.113.1' }) }),
-      );
-      expect(authorizationRequestRepository.count).toHaveBeenCalledWith(
-        expect.objectContaining({ where: expect.objectContaining({ username: 'darthjee' }) }),
-      );
+      expectBothCreateCountsComputed(authorizationRequestRepository, '203.0.113.1', 'darthjee');
     });
 
     it('respects a configured KERGHAN_AUTHORIZATION_REQUEST_CREATE_LIMIT override', async () => {

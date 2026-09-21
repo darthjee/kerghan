@@ -1,4 +1,8 @@
-import { sha256, useAuthorizationRequestServiceContext } from './authorization-request.service.test-support.js';
+import {
+  expectBothCreateCountsComputed,
+  sha256,
+  useAuthorizationRequestServiceContext,
+} from './authorization-request.service.test-support.js';
 import { User } from '../entities/user.entity.js';
 
 describe('AuthorizationRequestService', () => {
@@ -104,12 +108,19 @@ describe('AuthorizationRequestService', () => {
         ctx.configService.get.mockImplementation((key: string) => overrides[key]);
       }
 
-      describe('when the per-IP count is at the configured limit', () => {
+      function mockCountAtLimit(field: 'requestIp' | 'username'): void {
+        mockConfig({ KERGHAN_AUTHORIZATION_REQUEST_CREATE_LIMIT: 5 });
+        ctx.authorizationRequestRepository.count.mockImplementation(async ({ where }: { where: Record<string, unknown> }) =>
+          (where[field] ? 5 : 0),
+        );
+      }
+
+      describe.each([
+        { description: 'per-IP', field: 'requestIp' as const },
+        { description: 'per-username', field: 'username' as const },
+      ])('when the $description count is at the configured limit', ({ field }) => {
         beforeEach(() => {
-          mockConfig({ KERGHAN_AUTHORIZATION_REQUEST_CREATE_LIMIT: 5 });
-          ctx.authorizationRequestRepository.count.mockImplementation(async ({ where }: { where: { requestIp?: string } }) =>
-            where.requestIp ? 5 : 0,
-          );
+          mockCountAtLimit(field);
         });
 
         it('does not persist a row', async () => {
@@ -118,6 +129,12 @@ describe('AuthorizationRequestService', () => {
           await ctx.service.create('nobody', '203.0.113.1', 'curl/8.0');
 
           expect(ctx.authorizationRequestRepository.save).not.toHaveBeenCalled();
+        });
+      });
+
+      describe('when the per-IP count is at the configured limit', () => {
+        beforeEach(() => {
+          mockCountAtLimit('requestIp');
         });
 
         it('does not emit authorization-request.created', async () => {
@@ -143,23 +160,6 @@ describe('AuthorizationRequestService', () => {
         });
       });
 
-      describe('when the per-username count is at the configured limit', () => {
-        beforeEach(() => {
-          mockConfig({ KERGHAN_AUTHORIZATION_REQUEST_CREATE_LIMIT: 5 });
-          ctx.authorizationRequestRepository.count.mockImplementation(async ({ where }: { where: { username?: string } }) =>
-            where.username ? 5 : 0,
-          );
-        });
-
-        it('does not persist a row', async () => {
-          ctx.userRepository.findOneBy.mockResolvedValue(null);
-
-          await ctx.service.create('nobody', '203.0.113.1', 'curl/8.0');
-
-          expect(ctx.authorizationRequestRepository.save).not.toHaveBeenCalled();
-        });
-      });
-
       describe('when neither count is at the limit', () => {
         beforeEach(() => {
           mockConfig({ KERGHAN_AUTHORIZATION_REQUEST_CREATE_LIMIT: 5 });
@@ -180,12 +180,7 @@ describe('AuthorizationRequestService', () => {
 
         await ctx.service.create('nobody', '203.0.113.1', 'curl/8.0');
 
-        expect(ctx.authorizationRequestRepository.count).toHaveBeenCalledWith(
-          expect.objectContaining({ where: expect.objectContaining({ requestIp: '203.0.113.1' }) }),
-        );
-        expect(ctx.authorizationRequestRepository.count).toHaveBeenCalledWith(
-          expect.objectContaining({ where: expect.objectContaining({ username: 'nobody' }) }),
-        );
+        expectBothCreateCountsComputed(ctx.authorizationRequestRepository, '203.0.113.1', 'nobody');
       });
     });
 
