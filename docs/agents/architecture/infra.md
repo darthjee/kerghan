@@ -105,13 +105,13 @@ workflow at all — nothing downstream depends on it being fresh.
 
 | Job | Image/Executor | Filter | Purpose |
 |-----|-----------------|--------|---------|
-| `backend_tests` | `darthjee/circleci_kerghan-base:0.1.0` | every push | Backend test suite + coverage; uploads a partial Codacy coverage report afterward (best-effort, non-blocking) |
-| `backend_checks` | `darthjee/circleci_kerghan-base:0.1.0` | every push | Backend ESLint |
-| `jasmine` | `darthjee/circleci_node:0.2.1` | every push | Frontend test suite + coverage; uploads a partial Codacy coverage report afterward (best-effort, non-blocking) |
-| `frontend-checks` | `darthjee/circleci_node:0.2.1` | every push | Frontend ESLint |
+| `backend_tests` | `darthjee/circleci_kerghan-base:0.1.0` | every push | `yarn_project` instance (`dir: backend`, `script: coverage`, `upload_coverage: true`): backend test suite + coverage; uploads a partial Codacy coverage report afterward (best-effort, non-blocking) |
+| `backend_checks` | `darthjee/circleci_kerghan-base:0.1.0` | every push | `yarn_project` instance (`dir: backend`, `script: lint`): backend ESLint |
+| `jasmine` | `darthjee/circleci_node:0.2.1` | every push | `yarn_project` instance (`dir: frontend`, `script: coverage`, `upload_coverage: true`): frontend test suite + coverage; uploads a partial Codacy coverage report afterward (best-effort, non-blocking) |
+| `frontend-checks` | `darthjee/circleci_node:0.2.1` | every push | `yarn_project` instance (`dir: frontend`, `script: lint`): frontend ESLint |
 | `proxy_extension_tests` | `darthjee/tent-test:0.10.4` | every push | PHPUnit tests for `proxy/extension/` |
 | `coverage-final` | `darthjee/circleci_kerghan-base:0.1.0` | every push | Finalizes the aggregated Codacy coverage report once `backend_tests`/`jasmine`'s partial uploads land (best-effort, non-blocking) |
-| `release-image` | machine (multi-arch: amd64 + arm64) | every push (no-op unless tag) | Publishes one of the 4 base images to Docker Hub via `bin/image.sh`; instantiated 8 times (one per image × arch) — see below |
+| `release-image` | machine (multi-arch: amd64 + arm64) | every push (no-op unless tag) | Publishes one of the 4 base images to Docker Hub via `bin/image.sh`; instantiated through a single workflow `matrix` (4 images × 2 archs = 8 jobs) — see below |
 | `build-and-release` | machine | tag only | Triggers the Render deploy of the backend (`scripts/deploy.sh`), blocks until it reports "live" |
 | `upload_proxy_files` | `darthjee/tent:0.10.4` | tag only | Uploads Tent proxy runtime to the SSH deploy host's staging dir |
 | `upload_fe_files` | `darthjee/vite_kerghan-base:0.1.0` | tag only | Builds the Vite frontend, uploads the static output to the staging dir |
@@ -121,8 +121,12 @@ workflow at all — nothing downstream depends on it being fresh.
 
 ### `release-image` instances
 
-`release-image` is a parameterized job (`image`, `arch`), instantiated once per base image ×
-architecture:
+`release-image` is a parameterized job (`image`, `suffix`), instantiated by one `matrix` entry in
+the `test` workflow (`image` × `suffix`, with `suffix` either `""` for amd64 or `"-arm64"`). The
+entry's `name:` is the template `release-<< matrix.image >><< matrix.suffix >>`, which yields the
+eight job names below (the names are referenced by `requires:` and must stay stable). The release
+step strips the leading `-` from `suffix` before calling `bin/image.sh push <image> [arch]`, so
+`bin/image.sh` still receives an empty arch (amd64) or `arm64`:
 
 | Instance name | `image` param | Publishes |
 |---------------|----------------|-----------|
@@ -160,16 +164,32 @@ of `bin/image.sh`; the only per-image content left in the Dockerfile is each tar
 
 ## CI setup pattern (backend/frontend jobs)
 
-`backend_tests`/`backend_checks` and `jasmine`/`frontend-checks` copy their respective
-subdirectory to the workspace root before running commands, since the CI base images expect
-files there:
+`backend_tests`, `backend_checks`, `jasmine` and `frontend-checks` are four workflow entries of one
+`yarn_project` job (parameters: `dir` — `backend` | `frontend`, `image`, `script`, `step_name`,
+`upload_coverage`), each setting `name:` to the job name shown above. The job runs `checkout`,
+the shared `setup_project` command, `npm run <script>`, and — when `upload_coverage` is true — the
+best-effort Codacy upload.
+
+`setup_project` (a top-level CircleCI `commands:` entry, also used by `upload_fe_files` with
+`dir: frontend`) copies the chosen subdirectory to the workspace root and drops the other one, since
+the CI base images expect files there, then runs `yarn install`:
 
 ```yaml
-# backend
-- run: rm frontend -rf; cp backend/* ./ -r; rm backend -rf
+# dir: backend
+rm frontend -rf; cp backend/* ./ -r; rm backend -rf
 
-# frontend
-- run: rm backend -rf; cp frontend/* ./ -r; rm frontend -rf
+# dir: frontend
+rm backend -rf; cp frontend/* ./ -r; rm frontend -rf
+```
+
+## Validating the CircleCI config locally
+
+The `circleci` compose service (pinned `circleci/circleci-cli` image, `.circleci/` mounted
+read-only) runs the CircleCI CLI without installing anything on the host:
+
+```bash
+docker-compose run --rm circleci config validate
+docker-compose run --rm circleci config process .circleci/config.yml   # expanded jobs/workflows
 ```
 
 ## Scripts
