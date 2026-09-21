@@ -1,6 +1,7 @@
 import AccountsClient from '../../../../../client/AccountsClient.js';
 import AuthEvents from '../../../../../client/AuthEvents.js';
 import { validateRegistration } from '../../../../../utils/validation/formValidators.js';
+import { redirectHome } from '../../../../../utils/routing/redirects.js';
 
 /**
  * Controller for the register page: validates the form client-side, then submits it to
@@ -46,7 +47,7 @@ export default class RegisterController {
     try {
       const result = await this.client.register(fields);
       AuthEvents.emit(true, result.user.isAdmin);
-      this.#redirectHome();
+      redirectHome();
     } catch (error) {
       this.setSubmitError(error.message);
     }
@@ -61,13 +62,5 @@ export default class RegisterController {
    */
   validate(fields) {
     return validateRegistration(fields);
-  }
-
-  #redirectHome() {
-    if (typeof window === 'undefined') {
-      return;
-    }
-
-    window.location.hash = '/';
   }
 }

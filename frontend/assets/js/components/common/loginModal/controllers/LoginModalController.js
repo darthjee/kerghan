@@ -3,6 +3,7 @@ import AuthEvents from '../../../../client/AuthEvents.js';
 import LoginModalEvents from '../../../../client/LoginModalEvents.js';
 import AuthorizationRequestPoller from '../../../../utils/polling/AuthorizationRequestPoller.js';
 import { validateRegistration, validateResetPassword } from '../../../../utils/validation/formValidators.js';
+import { redirectHome } from '../../../../utils/routing/redirects.js';
 
 /** Every field any mode can hold; switching modes resets to exactly this. */
 const INITIAL_FIELDS = {
@@ -268,20 +269,6 @@ export default class LoginModalController {
   #handleSuccess(result) {
     AuthEvents.emit(true, result.user.isAdmin);
     LoginModalEvents.close();
-    this.#redirectHome();
-  }
-
-  /**
-   * Navigate to the home route. SSR/spec-safe — a no-op when `window` is not defined, matching
-   * `LoginController#redirectHome`.
-   *
-   * @returns {void} Nothing.
-   */
-  #redirectHome() {
-    if (typeof window === 'undefined') {
-      return;
-    }
-
-    window.location.hash = '/';
+    redirectHome();
   }
 }

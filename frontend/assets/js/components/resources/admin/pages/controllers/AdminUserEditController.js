@@ -1,5 +1,6 @@
 import AdminClient from '../../../../../client/AdminClient.js';
 import AccountEditFormController from '../../../../common/forms/controllers/AccountEditFormController.js';
+import { redirectIfForbidden } from '../../../../../utils/routing/redirects.js';
 
 /**
  * Controller for the Admin User Edit page: lets an admin update a target user's username,
@@ -60,27 +61,10 @@ export default class AdminUserEditController extends AccountEditFormController {
    * @returns {void} Nothing.
    */
   handleSubmitError(error) {
-    if (this.#redirectIfForbidden(error)) {
+    if (redirectIfForbidden(error)) {
       return;
     }
 
     super.handleSubmitError(error);
-  }
-
-  #redirectIfForbidden(error) {
-    if (error.status !== 403) {
-      return false;
-    }
-
-    this.#redirectHome();
-    return true;
-  }
-
-  #redirectHome() {
-    if (typeof window === 'undefined') {
-      return;
-    }
-
-    window.location.hash = '/';
   }
 }
