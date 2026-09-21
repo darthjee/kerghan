@@ -45,6 +45,9 @@ export interface SendEmailResult {
   messageId?: string;
 }
 
+/** Outcome of the shared send prologue: proceed with `method`, or the already-skipped result. */
+type SendPlan = { method: string } | { skipped: SendEmailResult };
+
 /**
  * Always-on outbound-email facade. Holds no env access of its own — the
  * frozen {@link MailConfig}, the `EmailMethod` registry (keyed by method
@@ -97,15 +100,13 @@ export class MailService {
    *   rejected, or the method throws.
    */
   async sendEmail(params: SendEmailParams): Promise<SendEmailResult> {
-    const method = params.method ?? this.config.method;
+    const plan = this.#resolveSendPlan(params.method, { to: params.to, subject: params.subject });
 
-    this.#assertKnownMethod(method);
-
-    if (!this.config.enabled) {
-      return this.#skip(method, { to: params.to, subject: params.subject });
+    if ('skipped' in plan) {
+      return plan.skipped;
     }
 
-    return this.#send(params, method);
+    return this.#send(params, plan.method);
   }
 
   /**
@@ -127,12 +128,10 @@ export class MailService {
    *   rejected, or the method throws.
    */
   async sendEmailTemplate(params: SendEmailTemplateParams): Promise<SendEmailResult> {
-    const method = params.method ?? this.config.method;
+    const plan = this.#resolveSendPlan(params.method, { to: params.to, template: params.template });
 
-    this.#assertKnownMethod(method);
-
-    if (!this.config.enabled) {
-      return this.#skip(method, { to: params.to, template: params.template });
+    if ('skipped' in plan) {
+      return plan.skipped;
     }
 
     const { subject, text, html } = renderTemplate(
@@ -143,8 +142,21 @@ export class MailService {
 
     return this.#send(
       { to: params.to, subject, body: text, html, from: params.from, method: params.method },
-      method,
+      plan.method,
     );
+  }
+
+  // Shared prologue: resolve + validate the method, then short-circuit when disabled.
+  #resolveSendPlan(method: string | undefined, logAttrs: Record<string, string>): SendPlan {
+    const resolved = method ?? this.config.method;
+
+    this.#assertKnownMethod(resolved);
+
+    if (!this.config.enabled) {
+      return { skipped: this.#skip(resolved, logAttrs) };
+    }
+
+    return { method: resolved };
   }
 
   #skip(method: string, logAttrs: Record<string, string>): SendEmailResult {
