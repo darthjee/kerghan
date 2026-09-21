@@ -1,5 +1,0 @@
-# Table-drive AccountsClientSpec
-Replace the `.register`, `.login` and `.refresh` "posts to the endpoint" cases with one loop over a table of `{ name, call, method, endpoint, payload }` rows, and likewise the "persists the returned refresh token and resolves with the response" cases (rows differ by the call and by the refresh token in the resolved value, e.g. `'refresh-token'` vs `'new-refresh-token'`). Keep the `describe('.register' | '.login' | '.refresh')` structure so failures still name the method, and keep the existing `spyOn(ApiClient, 'postJson')` stubbing. Leave `.logout`, `.status`, `.recover`, `.resetPassword` and `.updateAccount` (including every "does not touch the stored refresh token" case) untouched. Follow the table-driven style already used in `AccountsClientAuthorizationRequestsSpec.js` (`for`/`forEach` loop around `it`, around line 62) for consistency.
-
-## Files to Change
-- `frontend/specs/assets/js/client/AccountsClientSpec.js` — convert the three register/login/refresh endpoint cases and the three persist-token cases into table-driven loops.
