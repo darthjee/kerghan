@@ -1,17 +1,12 @@
 import type { MigrationInterface, QueryRunner, TableColumnOptions } from 'typeorm';
 import { Table, TableIndex } from 'typeorm';
+import { createdAtColumn, idColumn } from './helpers.js';
 
 const TABLE_NAME = 'auth_authorization_requests';
 const STATUS_ENUM = ['open', 'approved', 'denied', 'logged', 'expired'];
 
 const COLUMNS: TableColumnOptions[] = [
-  {
-    name: 'id',
-    type: 'int',
-    isPrimary: true,
-    isGenerated: true,
-    generationStrategy: 'increment',
-  },
+  idColumn(),
   { name: 'uuid', type: 'varchar', length: '36', isUnique: true },
   { name: 'username', type: 'varchar' },
   { name: 'user_id', type: 'int', isNullable: true },
@@ -20,7 +15,7 @@ const COLUMNS: TableColumnOptions[] = [
   { name: 'request_ip', type: 'varchar', length: '45' },
   { name: 'request_user_agent', type: 'varchar', length: '512' },
   { name: 'approved_by_user_id', type: 'int', isNullable: true },
-  { name: 'created_at', type: 'datetime', default: 'CURRENT_TIMESTAMP' },
+  createdAtColumn(),
   { name: 'expires_at', type: 'datetime' },
   { name: 'resolved_at', type: 'datetime', isNullable: true },
   { name: 'logged_at', type: 'datetime', isNullable: true },

@@ -1,5 +1,6 @@
 import type { MigrationInterface, QueryRunner } from 'typeorm';
 import { Table, TableIndex } from 'typeorm';
+import { createdAtColumn, idColumn } from './helpers.js';
 
 const TABLE_NAME = 'auth_sessions';
 
@@ -14,15 +15,9 @@ export class AuthCreateSessions20260824120003 implements MigrationInterface {
       new Table({
         name: TABLE_NAME,
         columns: [
-          {
-            name: 'id',
-            type: 'int',
-            isPrimary: true,
-            isGenerated: true,
-            generationStrategy: 'increment',
-          },
+          idColumn(),
           { name: 'user_id', type: 'int' },
-          { name: 'created_at', type: 'datetime', default: 'CURRENT_TIMESTAMP' },
+          createdAtColumn(),
           { name: 'last_seen_at', type: 'datetime', default: 'CURRENT_TIMESTAMP' },
         ],
       }),
