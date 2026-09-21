@@ -7,95 +7,63 @@ describe('AccountsClient', () => {
     AuthSession.clear();
   });
 
-  describe('.register', () => {
-    it('posts registration fields to the register endpoint, mapping to snake_case', async () => {
-      spyOn(ApiClient, 'postJson').and.resolveTo({
-        user: { id: 1, username: 'foo', email: 'foo@example.com' },
-        refreshToken: 'refresh-token',
-      });
-
-      await AccountsClient.register({
+  const tokenPairRows = [
+    {
+      name: '.register',
+      call: () => AccountsClient.register({
         username: 'foo', email: 'foo@example.com', password: 'secret', passwordConfirmation: 'secret',
-      });
-
-      expect(ApiClient.postJson).toHaveBeenCalledWith('/auth/register.json', {
+      }),
+      endpoint: '/auth/register.json',
+      payload: {
         username: 'foo',
         email: 'foo@example.com',
         password: 'secret',
         password_confirmation: 'secret',
-      });
-    });
+      },
+      refreshToken: 'refresh-token',
+    },
+    {
+      name: '.login',
+      call: () => AccountsClient.login({ username: 'foo', password: 'secret' }),
+      endpoint: '/auth/login.json',
+      payload: { username: 'foo', password: 'secret' },
+      refreshToken: 'refresh-token',
+    },
+    {
+      name: '.refresh',
+      call: () => AccountsClient.refresh('old-refresh-token'),
+      endpoint: '/auth/refresh.json',
+      payload: { refreshToken: 'old-refresh-token' },
+      refreshToken: 'new-refresh-token',
+    },
+  ];
 
-    it('persists the returned refresh token and resolves with the response', async () => {
-      const result = {
-        user: { id: 1, username: 'foo', email: 'foo@example.com' },
-        refreshToken: 'refresh-token',
-      };
-      spyOn(ApiClient, 'postJson').and.resolveTo(result);
+  tokenPairRows.forEach(({
+    name, call, endpoint, payload, refreshToken,
+  }) => {
+    describe(name, () => {
+      let result;
 
-      const response = await AccountsClient.register({
-        username: 'foo', email: 'foo@example.com', password: 'secret', passwordConfirmation: 'secret',
-      });
-
-      expect(response).toEqual(result);
-      expect(AuthSession.get()).toBe('refresh-token');
-    });
-  });
-
-  describe('.login', () => {
-    it('posts credentials to the login endpoint', async () => {
-      spyOn(ApiClient, 'postJson').and.resolveTo({
-        user: { id: 1, username: 'foo', email: 'foo@example.com' },
-        refreshToken: 'refresh-token',
-      });
-
-      await AccountsClient.login({ username: 'foo', password: 'secret' });
-
-      expect(ApiClient.postJson).toHaveBeenCalledWith('/auth/login.json', {
-        username: 'foo',
-        password: 'secret',
-      });
-    });
-
-    it('persists the returned refresh token and resolves with the response', async () => {
-      const result = {
-        user: { id: 1, username: 'foo', email: 'foo@example.com' },
-        refreshToken: 'refresh-token',
-      };
-      spyOn(ApiClient, 'postJson').and.resolveTo(result);
-
-      const response = await AccountsClient.login({ username: 'foo', password: 'secret' });
-
-      expect(response).toEqual(result);
-      expect(AuthSession.get()).toBe('refresh-token');
-    });
-  });
-
-  describe('.refresh', () => {
-    it('posts the current refresh token to the refresh endpoint', async () => {
-      spyOn(ApiClient, 'postJson').and.resolveTo({
-        user: { id: 1, username: 'foo', email: 'foo@example.com' },
-        refreshToken: 'new-refresh-token',
+      beforeEach(() => {
+        result = {
+          user: { id: 1, username: 'foo', email: 'foo@example.com' },
+          refreshToken,
+        };
+        spyOn(ApiClient, 'postJson').and.resolveTo(result);
       });
 
-      await AccountsClient.refresh('old-refresh-token');
+      it(`posts the mapped payload to ${endpoint}`, async () => {
+        await call();
 
-      expect(ApiClient.postJson).toHaveBeenCalledWith('/auth/refresh.json', {
-        refreshToken: 'old-refresh-token',
+        expect(ApiClient.postJson).toHaveBeenCalledWith(endpoint, payload);
       });
-    });
 
-    it('persists the renewed refresh token and resolves with the response', async () => {
-      const result = {
-        user: { id: 1, username: 'foo', email: 'foo@example.com' },
-        refreshToken: 'new-refresh-token',
-      };
-      spyOn(ApiClient, 'postJson').and.resolveTo(result);
+      it('persists the returned refresh token and resolves with the response', async () => {
+        const response = await call();
 
-      const response = await AccountsClient.refresh('old-refresh-token');
-
-      expect(response).toEqual(result);
-      expect(AuthSession.get()).toBe('new-refresh-token');
+        expect(response).toEqual(result);
+        expect(AuthSession.get()).toBe(refreshToken);
+      });
     });
   });
 
