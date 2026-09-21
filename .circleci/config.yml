@@ -3,17 +3,43 @@ workflows:
   version: 2
   test:
     jobs:
-      - backend_tests:
+      # No DB service container yet: backend specs inject mocked TypeORM repositories rather than
+      # hitting a live database (see docs/agents/product.md). Add a cimg/mysql:8.0 service alongside
+      # the first spec that actually needs one.
+      - yarn_project:
+          name: backend_tests
+          dir: backend
+          image: darthjee/circleci_kerghan-base:0.1.0
+          script: coverage
+          step_name: Tests
+          upload_coverage: true
           requires: [release-circleci_kerghan-base, release-circleci_kerghan-base-arm64]
           filters: &all_tags
             tags:
               only: /.*/
-      - backend_checks:
+      - yarn_project:
+          name: backend_checks
+          dir: backend
+          image: darthjee/circleci_kerghan-base:0.1.0
+          script: lint
+          step_name: Check JS Lint
           requires: [release-circleci_kerghan-base, release-circleci_kerghan-base-arm64]
           filters: *all_tags
-      - jasmine:
+      - yarn_project:
+          name: jasmine
+          dir: frontend
+          image: darthjee/circleci_node:0.2.1
+          script: coverage
+          step_name: Tests
+          upload_coverage: true
           filters: *all_tags
-      - frontend-checks:
+      # No `check_i18n` step: Kerghan has no i18n layer (kerghan.md §16 — optional, skipped for now).
+      - yarn_project:
+          name: frontend-checks
+          dir: frontend
+          image: darthjee/circleci_node:0.2.1
+          script: lint
+          step_name: Check JS Lint
           filters: *all_tags
       - proxy_extension_tests:
           filters: *all_tags
@@ -99,79 +125,63 @@ workflows:
           image: vite_kerghan-base
           arch: arm64
           filters: { tags: { only: /.*/ } }
+commands:
+  # Keeps only the requested project folder (backend or frontend) at the checkout root and
+  # installs its dependencies. Shared by yarn_project and upload_fe_files.
+  setup_project:
+    parameters:
+      dir:
+        type: enum
+        enum: [backend, frontend]
+    steps:
+      - run:
+          name: Set folder
+          command: |
+            case "<< parameters.dir >>" in
+              backend) other=frontend ;;
+              *) other=backend ;;
+            esac
+            rm "$other" -rf; cp << parameters.dir >>/* ./ -r; rm << parameters.dir >> -rf
+      - run:
+          name: Yarn install
+          command: yarn install
 jobs:
   # Minimal bootstrap CI: backend, frontend and proxy-extension tests/lint. The release chain
   # (build/upload/deploy) lives further down in this same file, gated to semver tag pushes only.
   #
-  # No DB service container yet: backend specs inject mocked TypeORM repositories rather than
-  # hitting a live database (see docs/agents/product.md). Add a cimg/mysql:8.0 service alongside
-  # the first spec that actually needs one.
-  backend_tests:
+  # Backend/frontend tests and lint are all instances of this one job (see the workflow entries
+  # above): checkout, keep only `dir`, yarn install, run `npm run <script>`, and optionally upload
+  # the partial coverage report to Codacy (best-effort).
+  yarn_project:
+    parameters:
+      dir:
+        type: enum
+        enum: [backend, frontend]
+      image:
+        type: string
+      script:
+        type: string
+      step_name:
+        type: string
+        default: Tests
+      upload_coverage:
+        type: boolean
+        default: false
     docker:
-      - image: darthjee/circleci_kerghan-base:0.1.0
+      - image: << parameters.image >>
     steps:
       - checkout
+      - setup_project:
+          dir: << parameters.dir >>
       - run:
-          name: Set folder
-          command: rm frontend -rf; cp backend/* ./ -r; rm backend -rf
-      - run:
-          name: Yarn install
-          command: yarn install
-      - run:
-          name: Tests
-          command: npm run coverage
-      - run:
-          name: Upload coverage to Codacy
-          command: bash <(curl -Ls https://coverage.codacy.com/get.sh) report --partial -r coverage/lcov.info || true
-
-  backend_checks:
-    docker:
-      - image: darthjee/circleci_kerghan-base:0.1.0
-    steps:
-      - checkout
-      - run:
-          name: Set folder
-          command: rm frontend -rf; cp backend/* ./ -r; rm backend -rf
-      - run:
-          name: Yarn install
-          command: yarn install
-      - run:
-          name: Check JS Lint
-          command: npm run lint
-
-  # No `check_i18n` step: Kerghan has no i18n layer (kerghan.md §16 — optional, skipped for now).
-  jasmine:
-    docker:
-      - image: darthjee/circleci_node:0.2.1
-    steps:
-      - checkout
-      - run:
-          name: Set folder
-          command: rm backend -rf; cp frontend/* ./ -r; rm frontend -rf
-      - run:
-          name: Yarn install
-          command: yarn install
-      - run:
-          name: Tests
-          command: npm run coverage
-      - run:
-          name: Upload coverage to Codacy
-          command: bash <(curl -Ls https://coverage.codacy.com/get.sh) report --partial -r coverage/lcov.info || true
-
-  frontend-checks:
-    docker:
-      - image: darthjee/circleci_node:0.2.1
-    steps:
-      - checkout
-      - run:
-          name: Set folder
-          command: rm backend -rf; cp frontend/* ./ -r; rm frontend -rf
-      - run:
-          name: Yarn install
-          command: yarn install
-      - run:
-          name: Check JS Lint
-          command: npm run lint
+          name: << parameters.step_name >>
+          command: npm run << parameters.script >>
+      - when:
+          condition: << parameters.upload_coverage >>
+          steps:
+            - run:
+                name: Upload coverage to Codacy
+                command: bash <(curl -Ls https://coverage.codacy.com/get.sh) report --partial -r coverage/lcov.info || true
 
   # Finalizes the aggregated Codacy coverage report once both partial uploads
   # (backend_tests, jasmine) have completed. Reuses circleci_kerghan-base since the
@@ -295,12 +305,8 @@ jobs:
       - image: darthjee/vite_kerghan-base:0.1.0
     steps:
       - checkout
-      - run:
-          name: Set folder
-          command: rm backend -rf; cp frontend/* ./ -r; rm frontend -rf
-      - run:
-          name: Yarn install
-          command: yarn install
+      - setup_project:
+          dir: frontend
       - run:
           name: Build assets
           command: bin/deploy_frontend.sh build
