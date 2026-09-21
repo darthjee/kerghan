@@ -3,10 +3,11 @@ import { Public } from '../../core/public.decorator.js';
 import { PasswordResetToken } from '../entities/password-reset-token.entity.js';
 import { RefreshToken } from '../entities/refresh-token.entity.js';
 import { User } from '../entities/user.entity.js';
+import { loginAs, loginCookie, registerUser } from './support/auth-requests.js';
 import { buildAuthTestApp } from './support/build-auth-test-app.js';
 import { createInMemoryRepo, matchesCondition } from './support/in-memory-repo.js';
 
-export { createInMemoryRepo, matchesCondition };
+export { createInMemoryRepo, loginAs, loginCookie, matchesCondition, registerUser };
 
 // Throwaway controller used only to exercise the global `JwtGuard` — the
 // Auth module's own routes are all `@Public()` by design.
