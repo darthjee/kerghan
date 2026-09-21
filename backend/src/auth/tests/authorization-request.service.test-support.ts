@@ -141,3 +141,54 @@ export function createAuthorizationRequestServiceTestContext(): AuthorizationReq
 
   return { authorizationRequestRepository, userRepository, tokenService, eventEmitter, configService, service };
 }
+
+/**
+ * Registers a `beforeEach` that builds a fresh service test context for every
+ * test, and returns a context object whose members are live getters reading
+ * the current test's context. Must be called inside a `describe` (or at the
+ * top level of a spec file), never inside a test body.
+ *
+ * @returns a context object whose properties always reflect the current test.
+ */
+export function useAuthorizationRequestServiceContext(): AuthorizationRequestServiceTestContext {
+  let context: AuthorizationRequestServiceTestContext;
+
+  beforeEach(() => {
+    context = createAuthorizationRequestServiceTestContext();
+  });
+
+  return {
+    get authorizationRequestRepository() {
+      return context.authorizationRequestRepository;
+    },
+    get userRepository() {
+      return context.userRepository;
+    },
+    get tokenService() {
+      return context.tokenService;
+    },
+    get eventEmitter() {
+      return context.eventEmitter;
+    },
+    get configService() {
+      return context.configService;
+    },
+    get service() {
+      return context.service;
+    },
+  };
+}
+
+/**
+ * Asserts that `create` computed both the per-IP and the per-username open
+ * request counts (i.e. it never short-circuited after the first count).
+ *
+ * @param repo - the repository mock whose `count` was expected to be called.
+ * @param repo.count - the `count` mock of the repository.
+ * @param ip - the request IP the IP count should have been filtered by.
+ * @param username - the username the username count should have been filtered by.
+ */
+export function expectBothCreateCountsComputed(repo: { count: jest.Mock }, ip: string, username: string): void {
+  expect(repo.count).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ requestIp: ip }) }));
+  expect(repo.count).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ username }) }));
+}
