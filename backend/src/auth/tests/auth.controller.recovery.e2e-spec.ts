@@ -6,13 +6,23 @@ describe('AuthController (e2e)', () => {
   const ctx = useTestApp();
 
   describe('recover flow', () => {
-    it('responds 200 { sent: true } for an email that matches an account', async () => {
-      const response = await request(ctx.app.getHttpServer())
-        .post('/auth/recover.json')
-        .send({ email: 'darthjee@example.com' })
-        .expect(200);
+    describe('for an email that matches an account', () => {
+      let response: request.Response;
 
-      expect(response.body).toEqual({ sent: true });
+      beforeEach(async () => {
+        response = await request(ctx.app.getHttpServer())
+          .post('/auth/recover.json')
+          .send({ email: 'darthjee@example.com' })
+          .expect(200);
+      });
+
+      it('responds 200 { sent: true }', () => {
+        expect(response.body).toEqual({ sent: true });
+      });
+
+      it('sets the X-Skip-Cache header', () => {
+        expect(response.headers['x-skip-cache']).toBe('true');
+      });
     });
 
     it('responds 200 { sent: true } for an email that does not match any account', async () => {
@@ -22,15 +32,6 @@ describe('AuthController (e2e)', () => {
         .expect(200);
 
       expect(response.body).toEqual({ sent: true });
-    });
-
-    it('sets the X-Skip-Cache header', async () => {
-      const response = await request(ctx.app.getHttpServer())
-        .post('/auth/recover.json')
-        .send({ email: 'darthjee@example.com' })
-        .expect(200);
-
-      expect(response.headers['x-skip-cache']).toBe('true');
     });
 
     it('creates a password-reset token only when the email matches an account', async () => {
@@ -67,28 +68,29 @@ describe('AuthController (e2e)', () => {
       return tokenPromise;
     }
 
-    it('resets the password and responds 200 { reset: true }', async () => {
-      const token = await requestRecoveryToken('darthjee@example.com');
+    describe('with a valid token', () => {
+      let response: request.Response;
 
-      const response = await request(ctx.app.getHttpServer())
-        .post('/auth/reset-password.json')
-        .send({ token, password: 'brand-new-password' })
-        .expect(200);
+      beforeEach(async () => {
+        const token = await requestRecoveryToken('darthjee@example.com');
 
-      expect(response.body).toEqual({ reset: true });
+        response = await request(ctx.app.getHttpServer())
+          .post('/auth/reset-password.json')
+          .send({ token, password: 'brand-new-password' })
+          .expect(200);
+      });
 
-      await loginAs(ctx.app, 'darthjee', 'brand-new-password').expect(201);
-    });
+      it('responds 200 { reset: true }', () => {
+        expect(response.body).toEqual({ reset: true });
+      });
 
-    it('sets the X-Skip-Cache header', async () => {
-      const token = await requestRecoveryToken('darthjee@example.com');
+      it('lets the user log in with the new password', async () => {
+        await loginAs(ctx.app, 'darthjee', 'brand-new-password').expect(201);
+      });
 
-      const response = await request(ctx.app.getHttpServer())
-        .post('/auth/reset-password.json')
-        .send({ token, password: 'brand-new-password' })
-        .expect(200);
-
-      expect(response.headers['x-skip-cache']).toBe('true');
+      it('sets the X-Skip-Cache header', () => {
+        expect(response.headers['x-skip-cache']).toBe('true');
+      });
     });
 
     it('revokes the user\'s other refresh tokens on success', async () => {
