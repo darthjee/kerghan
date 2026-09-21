@@ -3,6 +3,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import AuthorizationRequests, { buildLoadEffect } from '../../../../../../../assets/js/components/resources/accounts/pages/AuthorizationRequests.jsx';
 import AuthorizationRequestsHelper from '../../../../../../../assets/js/components/resources/accounts/pages/helpers/AuthorizationRequestsHelper.jsx';
 import AuthorizationRequestsController from '../../../../../../../assets/js/components/resources/accounts/pages/controllers/AuthorizationRequestsController.js';
+import { renderCapturingHandlers } from '../../../../../../support/renderCapturingHandlers.js';
 
 describe('AuthorizationRequests', () => {
   it('passes the default state to the helper', () => {
@@ -37,14 +38,8 @@ describe('AuthorizationRequests', () => {
   it('delegates deny clicks to the controller for the given request uuid', async () => {
     spyOn(AuthorizationRequestsController.prototype, 'load').and.resolveTo();
     spyOn(AuthorizationRequestsController.prototype, 'deny').and.resolveTo();
-    let capturedHandlers;
-    spyOn(AuthorizationRequestsHelper, 'render').and.callFake((_state, handlers) => {
-      capturedHandlers = handlers;
-      return React.createElement('div');
-    });
-
-    renderToStaticMarkup(React.createElement(AuthorizationRequests));
-    await capturedHandlers.onDeny('req-uuid')();
+    const handlers = renderCapturingHandlers(AuthorizationRequests, AuthorizationRequestsHelper);
+    await handlers.onDeny('req-uuid')();
 
     expect(AuthorizationRequestsController.prototype.deny).toHaveBeenCalledWith('req-uuid');
   });
@@ -52,15 +47,9 @@ describe('AuthorizationRequests', () => {
   it('delegates confirm-authorize clicks to the controller, preventing default navigation', async () => {
     spyOn(AuthorizationRequestsController.prototype, 'load').and.resolveTo();
     spyOn(AuthorizationRequestsController.prototype, 'authorize').and.resolveTo();
-    let capturedHandlers;
-    spyOn(AuthorizationRequestsHelper, 'render').and.callFake((_state, handlers) => {
-      capturedHandlers = handlers;
-      return React.createElement('div');
-    });
-
-    renderToStaticMarkup(React.createElement(AuthorizationRequests));
+    const handlers = renderCapturingHandlers(AuthorizationRequests, AuthorizationRequestsHelper);
     const fakeEvent = { preventDefault: jasmine.createSpy('preventDefault') };
-    await capturedHandlers.onConfirmAuthorize('req-uuid')(fakeEvent);
+    await handlers.onConfirmAuthorize('req-uuid')(fakeEvent);
 
     expect(fakeEvent.preventDefault).toHaveBeenCalled();
     expect(AuthorizationRequestsController.prototype.authorize).toHaveBeenCalledWith('req-uuid', '');
@@ -70,15 +59,9 @@ describe('AuthorizationRequests', () => {
     spyOn(AuthorizationRequestsController.prototype, 'load').and.resolveTo();
     spyOn(AuthorizationRequestsController.prototype, 'authorize').and.resolveTo();
     spyOn(AuthorizationRequestsController.prototype, 'deny').and.resolveTo();
-    let capturedHandlers;
-    spyOn(AuthorizationRequestsHelper, 'render').and.callFake((_state, handlers) => {
-      capturedHandlers = handlers;
-      return React.createElement('div');
-    });
+    const handlers = renderCapturingHandlers(AuthorizationRequests, AuthorizationRequestsHelper);
 
-    renderToStaticMarkup(React.createElement(AuthorizationRequests));
-
-    expect(() => capturedHandlers.onToggleAuthorize('req-uuid')()).not.toThrow();
+    expect(() => handlers.onToggleAuthorize('req-uuid')()).not.toThrow();
     expect(AuthorizationRequestsController.prototype.authorize).not.toHaveBeenCalled();
     expect(AuthorizationRequestsController.prototype.deny).not.toHaveBeenCalled();
   });
@@ -87,15 +70,9 @@ describe('AuthorizationRequests', () => {
     spyOn(AuthorizationRequestsController.prototype, 'load').and.resolveTo();
     spyOn(AuthorizationRequestsController.prototype, 'authorize').and.resolveTo();
     spyOn(AuthorizationRequestsController.prototype, 'deny').and.resolveTo();
-    let capturedHandlers;
-    spyOn(AuthorizationRequestsHelper, 'render').and.callFake((_state, handlers) => {
-      capturedHandlers = handlers;
-      return React.createElement('div');
-    });
+    const handlers = renderCapturingHandlers(AuthorizationRequests, AuthorizationRequestsHelper);
 
-    renderToStaticMarkup(React.createElement(AuthorizationRequests));
-
-    expect(() => capturedHandlers.onPasswordChange('req-uuid')({ target: { value: 'secret' } }))
+    expect(() => handlers.onPasswordChange('req-uuid')({ target: { value: 'secret' } }))
       .not.toThrow();
     expect(AuthorizationRequestsController.prototype.authorize).not.toHaveBeenCalled();
     expect(AuthorizationRequestsController.prototype.deny).not.toHaveBeenCalled();
