@@ -5,6 +5,13 @@ describe('AuthController (e2e)', () => {
   const ctx = useTestApp();
 
   describe('PATCH /auth/account.json', () => {
+    function patchAccount(cookie: string, body: Record<string, string>): request.Test {
+      return request(ctx.app.getHttpServer())
+        .patch('/auth/account.json')
+        .set('Cookie', [cookie])
+        .send(body);
+    }
+
     it('rejects an unauthenticated request', async () => {
       await request(ctx.app.getHttpServer())
         .patch('/auth/account.json')
@@ -12,37 +19,31 @@ describe('AuthController (e2e)', () => {
         .expect(401);
     });
 
-    it('updates the username and responds with { username, email }', async () => {
-      const cookie = await loginCookie(ctx.app);
+    describe('with the right current password', () => {
+      let response: request.Response;
 
-      const response = await request(ctx.app.getHttpServer())
-        .patch('/auth/account.json')
-        .set('Cookie', [cookie])
-        .send({ currentPassword: 'my-password', username: 'new-username' })
-        .expect(200);
+      beforeEach(async () => {
+        const cookie = await loginCookie(ctx.app);
 
-      expect(response.body).toEqual({ username: 'new-username', email: 'darthjee@example.com' });
-    });
+        response = await patchAccount(cookie, {
+          currentPassword: 'my-password',
+          username: 'new-username',
+        }).expect(200);
+      });
 
-    it('sets the X-Skip-Cache header', async () => {
-      const cookie = await loginCookie(ctx.app);
+      it('updates the username and responds with { username, email }', () => {
+        expect(response.body).toEqual({ username: 'new-username', email: 'darthjee@example.com' });
+      });
 
-      const response = await request(ctx.app.getHttpServer())
-        .patch('/auth/account.json')
-        .set('Cookie', [cookie])
-        .send({ currentPassword: 'my-password', username: 'new-username' })
-        .expect(200);
-
-      expect(response.headers['x-skip-cache']).toBe('true');
+      it('sets the X-Skip-Cache header', () => {
+        expect(response.headers['x-skip-cache']).toBe('true');
+      });
     });
 
     it('rejects the wrong current password without changing the account', async () => {
       const cookie = await loginCookie(ctx.app);
 
-      await request(ctx.app.getHttpServer())
-        .patch('/auth/account.json')
-        .set('Cookie', [cookie])
-        .send({ currentPassword: 'wrong-password', username: 'new-username' })
+      await patchAccount(cookie, { currentPassword: 'wrong-password', username: 'new-username' })
         .expect(400);
 
       expect(ctx.userRepo.rows[0].username).toBe('darthjee');
@@ -52,11 +53,10 @@ describe('AuthController (e2e)', () => {
       const login = await loginAs(ctx.app);
       const accessTokenCookie = login.headers['set-cookie'][0].split(';')[0];
 
-      await request(ctx.app.getHttpServer())
-        .patch('/auth/account.json')
-        .set('Cookie', [accessTokenCookie])
-        .send({ currentPassword: 'my-password', newPassword: 'brand-new-password' })
-        .expect(200);
+      await patchAccount(accessTokenCookie, {
+        currentPassword: 'my-password',
+        newPassword: 'brand-new-password',
+      }).expect(200);
 
       await request(ctx.app.getHttpServer())
         .post('/auth/refresh.json')
@@ -70,17 +70,11 @@ describe('AuthController (e2e)', () => {
         const cookie = await loginCookie(ctx.app);
 
         for (let i = 0; i < 5; i += 1) {
-          await request(ctx.app.getHttpServer())
-            .patch('/auth/account.json')
-            .set('Cookie', [cookie])
-            .send({ currentPassword: 'wrong-password', username: 'new-username' })
+          await patchAccount(cookie, { currentPassword: 'wrong-password', username: 'new-username' })
             .expect(400);
         }
 
-        await request(ctx.app.getHttpServer())
-          .patch('/auth/account.json')
-          .set('Cookie', [cookie])
-          .send({ currentPassword: 'my-password', username: 'new-username' })
+        await patchAccount(cookie, { currentPassword: 'my-password', username: 'new-username' })
           .expect(423);
       },
       15000,
