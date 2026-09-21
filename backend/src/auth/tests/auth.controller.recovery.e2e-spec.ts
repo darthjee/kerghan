@@ -1,24 +1,13 @@
-import { INestApplication } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import request from 'supertest';
-import { buildTestApp, createInMemoryRepo } from './auth.controller.e2e-test-support.js';
-import { PasswordResetToken } from '../entities/password-reset-token.entity.js';
+import { loginAs, useTestApp } from './auth.controller.e2e-test-support.js';
 
 describe('AuthController (e2e)', () => {
-  let app: INestApplication;
-  let passwordResetTokenRepo: ReturnType<typeof createInMemoryRepo<PasswordResetToken>>;
-
-  beforeEach(async () => {
-    ({ app, passwordResetTokenRepo } = await buildTestApp());
-  });
-
-  afterEach(async () => {
-    await app.close();
-  });
+  const ctx = useTestApp();
 
   describe('recover flow', () => {
     it('responds 200 { sent: true } for an email that matches an account', async () => {
-      const response = await request(app.getHttpServer())
+      const response = await request(ctx.app.getHttpServer())
         .post('/auth/recover.json')
         .send({ email: 'darthjee@example.com' })
         .expect(200);
@@ -27,7 +16,7 @@ describe('AuthController (e2e)', () => {
     });
 
     it('responds 200 { sent: true } for an email that does not match any account', async () => {
-      const response = await request(app.getHttpServer())
+      const response = await request(ctx.app.getHttpServer())
         .post('/auth/recover.json')
         .send({ email: 'nobody@example.com' })
         .expect(200);
@@ -36,7 +25,7 @@ describe('AuthController (e2e)', () => {
     });
 
     it('sets the X-Skip-Cache header', async () => {
-      const response = await request(app.getHttpServer())
+      const response = await request(ctx.app.getHttpServer())
         .post('/auth/recover.json')
         .send({ email: 'darthjee@example.com' })
         .expect(200);
@@ -45,19 +34,19 @@ describe('AuthController (e2e)', () => {
     });
 
     it('creates a password-reset token only when the email matches an account', async () => {
-      await request(app.getHttpServer())
+      await request(ctx.app.getHttpServer())
         .post('/auth/recover.json')
         .send({ email: 'nobody@example.com' })
         .expect(200);
 
-      expect(passwordResetTokenRepo.rows).toHaveLength(0);
+      expect(ctx.passwordResetTokenRepo.rows).toHaveLength(0);
 
-      await request(app.getHttpServer())
+      await request(ctx.app.getHttpServer())
         .post('/auth/recover.json')
         .send({ email: 'darthjee@example.com' })
         .expect(200);
 
-      expect(passwordResetTokenRepo.rows).toHaveLength(1);
+      expect(ctx.passwordResetTokenRepo.rows).toHaveLength(1);
     });
   });
 
@@ -66,14 +55,14 @@ describe('AuthController (e2e)', () => {
     // the recovery-email listener that #39 will add — this issue's own
     // code never returns the plaintext token over HTTP.
     async function requestRecoveryToken(email: string): Promise<string> {
-      const eventEmitter = app.get(EventEmitter2);
+      const eventEmitter = ctx.app.get(EventEmitter2);
       const tokenPromise = new Promise<string>((resolve) => {
         eventEmitter.once('password-recovery.requested', (event: { token: string }) => {
           resolve(event.token);
         });
       });
 
-      await request(app.getHttpServer()).post('/auth/recover.json').send({ email });
+      await request(ctx.app.getHttpServer()).post('/auth/recover.json').send({ email });
 
       return tokenPromise;
     }
@@ -81,23 +70,20 @@ describe('AuthController (e2e)', () => {
     it('resets the password and responds 200 { reset: true }', async () => {
       const token = await requestRecoveryToken('darthjee@example.com');
 
-      const response = await request(app.getHttpServer())
+      const response = await request(ctx.app.getHttpServer())
         .post('/auth/reset-password.json')
         .send({ token, password: 'brand-new-password' })
         .expect(200);
 
       expect(response.body).toEqual({ reset: true });
 
-      await request(app.getHttpServer())
-        .post('/auth/login.json')
-        .send({ username: 'darthjee', password: 'brand-new-password' })
-        .expect(201);
+      await loginAs(ctx.app, 'darthjee', 'brand-new-password').expect(201);
     });
 
     it('sets the X-Skip-Cache header', async () => {
       const token = await requestRecoveryToken('darthjee@example.com');
 
-      const response = await request(app.getHttpServer())
+      const response = await request(ctx.app.getHttpServer())
         .post('/auth/reset-password.json')
         .send({ token, password: 'brand-new-password' })
         .expect(200);
@@ -106,24 +92,22 @@ describe('AuthController (e2e)', () => {
     });
 
     it('revokes the user\'s other refresh tokens on success', async () => {
-      const login = await request(app.getHttpServer())
-        .post('/auth/login.json')
-        .send({ username: 'darthjee', password: 'my-password' });
+      const login = await loginAs(ctx.app);
       const token = await requestRecoveryToken('darthjee@example.com');
 
-      await request(app.getHttpServer())
+      await request(ctx.app.getHttpServer())
         .post('/auth/reset-password.json')
         .send({ token, password: 'brand-new-password' })
         .expect(200);
 
-      await request(app.getHttpServer())
+      await request(ctx.app.getHttpServer())
         .post('/auth/refresh.json')
         .send({ refreshToken: login.body.refreshToken })
         .expect(401);
     });
 
     it('rejects an unknown token with a 400 whose body carries a message field, not 401', async () => {
-      const response = await request(app.getHttpServer())
+      const response = await request(ctx.app.getHttpServer())
         .post('/auth/reset-password.json')
         .send({ token: 'not-a-real-token', password: 'brand-new-password' })
         .expect(400);
@@ -136,12 +120,12 @@ describe('AuthController (e2e)', () => {
     it('rejects an already-used token', async () => {
       const token = await requestRecoveryToken('darthjee@example.com');
 
-      await request(app.getHttpServer())
+      await request(ctx.app.getHttpServer())
         .post('/auth/reset-password.json')
         .send({ token, password: 'brand-new-password' })
         .expect(200);
 
-      await request(app.getHttpServer())
+      await request(ctx.app.getHttpServer())
         .post('/auth/reset-password.json')
         .send({ token, password: 'yet-another-password' })
         .expect(400);
@@ -149,11 +133,11 @@ describe('AuthController (e2e)', () => {
 
     it('rejects an expired token', async () => {
       const token = await requestRecoveryToken('darthjee@example.com');
-      passwordResetTokenRepo.rows[passwordResetTokenRepo.rows.length - 1].expiresAt = new Date(
+      ctx.passwordResetTokenRepo.rows[ctx.passwordResetTokenRepo.rows.length - 1].expiresAt = new Date(
         Date.now() - 1000,
       );
 
-      await request(app.getHttpServer())
+      await request(ctx.app.getHttpServer())
         .post('/auth/reset-password.json')
         .send({ token, password: 'brand-new-password' })
         .expect(400);
@@ -162,12 +146,12 @@ describe('AuthController (e2e)', () => {
     it('rejects a too-short password with a 400, without touching the token', async () => {
       const token = await requestRecoveryToken('darthjee@example.com');
 
-      await request(app.getHttpServer())
+      await request(ctx.app.getHttpServer())
         .post('/auth/reset-password.json')
         .send({ token, password: 'short' })
         .expect(400);
 
-      await request(app.getHttpServer())
+      await request(ctx.app.getHttpServer())
         .post('/auth/reset-password.json')
         .send({ token, password: 'brand-new-password' })
         .expect(200);

@@ -2,6 +2,7 @@ import { INestApplication } from '@nestjs/common';
 import request from 'supertest';
 import { AuthorizationRequest } from '../entities/authorization-request.entity.js';
 import { User } from '../entities/user.entity.js';
+import { loginCookie } from './support/auth-requests.js';
 import { buildAuthTestApp } from './support/build-auth-test-app.js';
 import { createInMemoryRepo, matchesCondition } from './support/in-memory-repo.js';
 
@@ -102,6 +103,5 @@ export async function createAuthorizationRequest(
 // Logs `username` in against `app` and returns the `access_token` cookie (`name=value`) to replay
 // via `.set('Cookie', [cookie])`.
 export async function login(app: INestApplication, username: string, password: string): Promise<string> {
-  const response = await request(app.getHttpServer()).post('/auth/login.json').send({ username, password });
-  return response.headers['set-cookie'][0].split(';')[0];
+  return loginCookie(app, username, password);
 }

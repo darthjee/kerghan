@@ -3,10 +3,11 @@ import { Public } from '../../core/public.decorator.js';
 import { PasswordResetToken } from '../entities/password-reset-token.entity.js';
 import { RefreshToken } from '../entities/refresh-token.entity.js';
 import { User } from '../entities/user.entity.js';
+import { loginAs, loginCookie, registerUser } from './support/auth-requests.js';
 import { buildAuthTestApp } from './support/build-auth-test-app.js';
 import { createInMemoryRepo, matchesCondition } from './support/in-memory-repo.js';
 
-export { createInMemoryRepo, matchesCondition };
+export { createInMemoryRepo, loginAs, loginCookie, matchesCondition, registerUser };
 
 // Throwaway controller used only to exercise the global `JwtGuard` — the
 // Auth module's own routes are all `@Public()` by design.
@@ -52,4 +53,37 @@ export async function buildTestApp({
   });
 
   return { app, userRepo, refreshTokenRepo, passwordResetTokenRepo };
+}
+
+type TestAppContext = Awaited<ReturnType<typeof buildTestApp>>;
+
+// Registers the `beforeEach`/`afterEach` scaffold shared by the auth e2e specs: builds a fresh app per
+// test (forwarding `options` to `buildTestApp`) and closes it afterwards. Must be called synchronously
+// inside a `describe` body. The returned context exposes getters because the instances are reassigned
+// before each test.
+export function useTestApp(options: { adminGuard?: boolean; registerDefaultUser?: boolean } = {}): TestAppContext {
+  let current: TestAppContext;
+
+  beforeEach(async () => {
+    current = await buildTestApp(options);
+  });
+
+  afterEach(async () => {
+    await current.app.close();
+  });
+
+  return {
+    get app() {
+      return current.app;
+    },
+    get userRepo() {
+      return current.userRepo;
+    },
+    get refreshTokenRepo() {
+      return current.refreshTokenRepo;
+    },
+    get passwordResetTokenRepo() {
+      return current.passwordResetTokenRepo;
+    },
+  };
 }
