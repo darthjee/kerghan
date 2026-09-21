@@ -1,13 +1,10 @@
 import { INestApplication } from '@nestjs/common';
 import request from 'supertest';
 
-// Issues `POST /auth/login.json` against `app` and returns the full response (no `.expect`, so
-// failing-login specs can assert their own status). Defaults to the seeded `darthjee` user.
-export async function loginAs(
-  app: INestApplication,
-  username = 'darthjee',
-  password = 'my-password',
-): Promise<request.Response> {
+// Issues `POST /auth/login.json` against `app`. Returns the un-awaited supertest `Test`, so callers can
+// either `await` it for the full response or chain their own `.expect(status)` (failing-login specs
+// assert their own status). Defaults to the seeded `darthjee` user.
+export function loginAs(app: INestApplication, username = 'darthjee', password = 'my-password'): request.Test {
   return request(app.getHttpServer()).post('/auth/login.json').send({ username, password });
 }
 
@@ -22,10 +19,10 @@ export async function loginCookie(
   return response.headers['set-cookie'][0].split(';')[0];
 }
 
-// Issues `POST /auth/register.json` against `app` and returns the full response.
-export async function registerUser(
+// Issues `POST /auth/register.json` against `app`. Returns the un-awaited supertest `Test`, like `loginAs`.
+export function registerUser(
   app: INestApplication,
   { username, email, password = 'my-password' }: { username: string; email: string; password?: string },
-): Promise<request.Response> {
+): request.Test {
   return request(app.getHttpServer()).post('/auth/register.json').send({ username, email, password });
 }
