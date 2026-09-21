@@ -2,8 +2,7 @@ import AccountsClient from '../../../../client/AccountsClient.js';
 import AuthEvents from '../../../../client/AuthEvents.js';
 import LoginModalEvents from '../../../../client/LoginModalEvents.js';
 import AuthorizationRequestPoller from '../../../../utils/polling/AuthorizationRequestPoller.js';
-import RegisterController from '../../../resources/accounts/pages/controllers/RegisterController.js';
-import ResetPasswordController from '../../../resources/accounts/pages/controllers/ResetPasswordController.js';
+import { validateRegistration, validateResetPassword } from '../../../../utils/validation/formValidators.js';
 
 /** Every field any mode can hold; switching modes resets to exactly this. */
 const INITIAL_FIELDS = {
@@ -27,23 +26,13 @@ const DEVICE_REJECTION_PANELS = {
   notFound: 'device:notFound',
 };
 
-const noop = () => undefined;
-
-// `RegisterController.validate` is a pure method that never touches the instance's setters or
-// client, so a single shared instance is enough to reuse its rules without duplicating them.
-const registerValidator = new RegisterController(noop, noop);
-
-// `ResetPasswordController.validate` is a pure method that never touches the instance's setters
-// or client, so a single shared instance is enough to reuse its rules without duplicating them.
-const resetPasswordValidator = new ResetPasswordController();
-
 /**
  * Controller for the login modal: owns mode state and per-mode submission. Password mode
  * authenticates via {@link AccountsClient.login}; Register mode validates with
- * {@link RegisterController}'s rules then calls {@link AccountsClient.register} — both converge
+ * {@link validateRegistration}'s rules then calls {@link AccountsClient.register} — both converge
  * on the shared success handler that closes the modal and redirects home. Recover mode calls
  * {@link AccountsClient.recover} and always shows the neutral "check your email" panel;
- * Set-new-password mode validates with {@link ResetPasswordController}'s rules then calls
+ * Set-new-password mode validates with {@link validateResetPassword}'s rules then calls
  * {@link AccountsClient.resetPassword} and shows a success panel — neither closes the modal,
  * emits auth state, nor redirects. Authorize-with-logged-device mode opens a request via
  * {@link AccountsClient.createAuthorizationRequest} and polls it with an
@@ -156,7 +145,7 @@ export default class LoginModalController {
    * @returns {Promise<void>} Resolves once submission handling finishes.
    */
   async #submitRegister(fields) {
-    const errors = registerValidator.validate(fields);
+    const errors = validateRegistration(fields);
 
     this.setFieldErrors(errors);
 
@@ -204,7 +193,7 @@ export default class LoginModalController {
    * @returns {Promise<void>} Resolves once submission handling finishes.
    */
   async #submitResetPassword(fields, token) {
-    const errors = resetPasswordValidator.validate(fields);
+    const errors = validateResetPassword(fields);
 
     this.setFieldErrors(errors);
 

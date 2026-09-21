@@ -40,7 +40,7 @@
 
 | Subdirectory / File | Description |
 |---|---|
-| `assets/js/` | React source code — `App.jsx`/`main.jsx` entry, `components/` (login modal, header, resource pages), `client/` (HTTP layer), `utils/routing/` (hash router), `utils/polling/` (device-authorization poller) |
+| `assets/js/` | React source code — `App.jsx`/`main.jsx` entry, `components/` (login modal, header, resource pages), `client/` (HTTP layer), `utils/routing/` (hash router), `utils/polling/` (device-authorization poller), `utils/validation/` (shared form validators) |
 | `specs/` | Jasmine test files, mirrors `assets/js/`; `specs/support/jsx-loader.mjs` runs JSX under Node |
 | `index.html` | Vite HTML entry point |
 | `vite.config.js`, `eslint.config.mjs`, `package.json` | Tooling config |
