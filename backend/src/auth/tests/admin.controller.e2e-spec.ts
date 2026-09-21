@@ -1,47 +1,30 @@
-import { INestApplication } from '@nestjs/common';
 import request from 'supertest';
-import { buildTestApp, createInMemoryRepo } from './auth.controller.e2e-test-support.js';
-import { User } from '../entities/user.entity.js';
+import { loginCookie, registerUser, useTestApp } from './auth.controller.e2e-test-support.js';
 
 describe('AdminController (e2e)', () => {
-  let app: INestApplication;
-  let userRepo: ReturnType<typeof createInMemoryRepo<User>>;
+  const ctx = useTestApp({ adminGuard: true, registerDefaultUser: false });
 
   async function registerAndLogin(username: string, email: string): Promise<string> {
-    await request(app.getHttpServer())
-      .post('/auth/register.json')
-      .send({ username, email, password: 'my-password' });
+    await registerUser(ctx.app, { username, email });
 
-    const login = await request(app.getHttpServer())
-      .post('/auth/login.json')
-      .send({ username, password: 'my-password' });
-
-    return login.headers['set-cookie'][0].split(';')[0];
+    return loginCookie(ctx.app, username);
   }
-
-  beforeEach(async () => {
-    ({ app, userRepo } = await buildTestApp({ adminGuard: true, registerDefaultUser: false }));
-  });
-
-  afterEach(async () => {
-    await app.close();
-  });
 
   describe('when the caller is unauthenticated', () => {
     it('rejects users/search.json with 401', async () => {
-      await request(app.getHttpServer()).post('/admin/users/search.json').send({}).expect(401);
+      await request(ctx.app.getHttpServer()).post('/admin/users/search.json').send({}).expect(401);
     });
 
     it('rejects recovery-link.json with 401', async () => {
-      await request(app.getHttpServer()).post('/admin/users/1/recovery-link.json').expect(401);
+      await request(ctx.app.getHttpServer()).post('/admin/users/1/recovery-link.json').expect(401);
     });
 
     it('rejects send-recovery-email.json with 401', async () => {
-      await request(app.getHttpServer()).post('/admin/users/1/send-recovery-email.json').expect(401);
+      await request(ctx.app.getHttpServer()).post('/admin/users/1/send-recovery-email.json').expect(401);
     });
 
     it('rejects edit.json with 401', async () => {
-      await request(app.getHttpServer())
+      await request(ctx.app.getHttpServer())
         .post('/admin/users/1/edit.json')
         .send({ username: 'new-username' })
         .expect(401);
@@ -56,7 +39,7 @@ describe('AdminController (e2e)', () => {
     });
 
     it('rejects users/search.json with 403', async () => {
-      await request(app.getHttpServer())
+      await request(ctx.app.getHttpServer())
         .post('/admin/users/search.json')
         .set('Cookie', [cookie])
         .send({})
@@ -64,21 +47,21 @@ describe('AdminController (e2e)', () => {
     });
 
     it('rejects recovery-link.json with 403', async () => {
-      await request(app.getHttpServer())
+      await request(ctx.app.getHttpServer())
         .post('/admin/users/1/recovery-link.json')
         .set('Cookie', [cookie])
         .expect(403);
     });
 
     it('rejects send-recovery-email.json with 403', async () => {
-      await request(app.getHttpServer())
+      await request(ctx.app.getHttpServer())
         .post('/admin/users/1/send-recovery-email.json')
         .set('Cookie', [cookie])
         .expect(403);
     });
 
     it('rejects edit.json with 403', async () => {
-      await request(app.getHttpServer())
+      await request(ctx.app.getHttpServer())
         .post('/admin/users/1/edit.json')
         .set('Cookie', [cookie])
         .send({ username: 'new-username' })
@@ -91,26 +74,19 @@ describe('AdminController (e2e)', () => {
     let targetUserId: number;
 
     beforeEach(async () => {
-      await request(app.getHttpServer())
-        .post('/auth/register.json')
-        .send({ username: 'darthjee', email: 'darthjee@example.com', password: 'my-password' });
-      targetUserId = userRepo.rows[0].id as number;
+      await registerUser(ctx.app, { username: 'darthjee', email: 'darthjee@example.com' });
+      targetUserId = ctx.userRepo.rows[0].id as number;
 
-      await request(app.getHttpServer())
-        .post('/auth/register.json')
-        .send({ username: 'obi-wan', email: 'obi-wan@example.com', password: 'my-password' });
-      const adminRow = userRepo.rows.find((row) => row.username === 'obi-wan')!;
+      await registerUser(ctx.app, { username: 'obi-wan', email: 'obi-wan@example.com' });
+      const adminRow = ctx.userRepo.rows.find((row) => row.username === 'obi-wan')!;
       adminRow.isAdmin = true;
 
-      const login = await request(app.getHttpServer())
-        .post('/auth/login.json')
-        .send({ username: 'obi-wan', password: 'my-password' });
-      adminCookie = login.headers['set-cookie'][0].split(';')[0];
+      adminCookie = await loginCookie(ctx.app, 'obi-wan');
     });
 
     describe('POST /admin/users/search.json', () => {
       it('returns every user when q is omitted', async () => {
-        const response = await request(app.getHttpServer())
+        const response = await request(ctx.app.getHttpServer())
           .post('/admin/users/search.json')
           .set('Cookie', [adminCookie])
           .send({})
@@ -130,7 +106,7 @@ describe('AdminController (e2e)', () => {
       });
 
       it('filters by q against username/email', async () => {
-        const response = await request(app.getHttpServer())
+        const response = await request(ctx.app.getHttpServer())
           .post('/admin/users/search.json')
           .set('Cookie', [adminCookie])
           .send({ q: 'darth' })
@@ -141,7 +117,7 @@ describe('AdminController (e2e)', () => {
       });
 
       it('sets the X-Skip-Cache header', async () => {
-        const response = await request(app.getHttpServer())
+        const response = await request(ctx.app.getHttpServer())
           .post('/admin/users/search.json')
           .set('Cookie', [adminCookie])
           .send({})
@@ -153,7 +129,7 @@ describe('AdminController (e2e)', () => {
 
     describe('POST /admin/users/:id/recovery-link.json', () => {
       it('mints a fresh recovery link for an existing user', async () => {
-        const response = await request(app.getHttpServer())
+        const response = await request(ctx.app.getHttpServer())
           .post(`/admin/users/${targetUserId}/recovery-link.json`)
           .set('Cookie', [adminCookie])
           .expect(201);
@@ -164,7 +140,7 @@ describe('AdminController (e2e)', () => {
       });
 
       it('sets the X-Skip-Cache header', async () => {
-        const response = await request(app.getHttpServer())
+        const response = await request(ctx.app.getHttpServer())
           .post(`/admin/users/${targetUserId}/recovery-link.json`)
           .set('Cookie', [adminCookie])
           .expect(201);
@@ -173,7 +149,7 @@ describe('AdminController (e2e)', () => {
       });
 
       it('responds 404 for an unknown user id', async () => {
-        await request(app.getHttpServer())
+        await request(ctx.app.getHttpServer())
           .post('/admin/users/999999/recovery-link.json')
           .set('Cookie', [adminCookie])
           .expect(404);
@@ -182,7 +158,7 @@ describe('AdminController (e2e)', () => {
 
     describe('POST /admin/users/:id/send-recovery-email.json', () => {
       it('responds with a sent boolean for an existing user', async () => {
-        const response = await request(app.getHttpServer())
+        const response = await request(ctx.app.getHttpServer())
           .post(`/admin/users/${targetUserId}/send-recovery-email.json`)
           .set('Cookie', [adminCookie])
           .expect(201);
@@ -191,7 +167,7 @@ describe('AdminController (e2e)', () => {
       });
 
       it('sets the X-Skip-Cache header', async () => {
-        const response = await request(app.getHttpServer())
+        const response = await request(ctx.app.getHttpServer())
           .post(`/admin/users/${targetUserId}/send-recovery-email.json`)
           .set('Cookie', [adminCookie])
           .expect(201);
@@ -200,7 +176,7 @@ describe('AdminController (e2e)', () => {
       });
 
       it('responds 404 for an unknown user id', async () => {
-        await request(app.getHttpServer())
+        await request(ctx.app.getHttpServer())
           .post('/admin/users/999999/send-recovery-email.json')
           .set('Cookie', [adminCookie])
           .expect(404);
@@ -209,7 +185,7 @@ describe('AdminController (e2e)', () => {
 
     describe('POST /admin/users/:id/edit.json', () => {
       it('updates the username, email, and password for an existing user', async () => {
-        const response = await request(app.getHttpServer())
+        const response = await request(ctx.app.getHttpServer())
           .post(`/admin/users/${targetUserId}/edit.json`)
           .set('Cookie', [adminCookie])
           .send({
@@ -231,7 +207,7 @@ describe('AdminController (e2e)', () => {
       });
 
       it('sets the X-Skip-Cache header', async () => {
-        const response = await request(app.getHttpServer())
+        const response = await request(ctx.app.getHttpServer())
           .post(`/admin/users/${targetUserId}/edit.json`)
           .set('Cookie', [adminCookie])
           .send({ username: 'darthjee-renamed' })
@@ -241,7 +217,7 @@ describe('AdminController (e2e)', () => {
       });
 
       it('responds 404 for an unknown user id', async () => {
-        await request(app.getHttpServer())
+        await request(ctx.app.getHttpServer())
           .post('/admin/users/999999/edit.json')
           .set('Cookie', [adminCookie])
           .send({ username: 'new-username' })
@@ -249,7 +225,7 @@ describe('AdminController (e2e)', () => {
       });
 
       it('responds 400 without applying changes when no field is given', async () => {
-        await request(app.getHttpServer())
+        await request(ctx.app.getHttpServer())
           .post(`/admin/users/${targetUserId}/edit.json`)
           .set('Cookie', [adminCookie])
           .send({})
@@ -257,7 +233,7 @@ describe('AdminController (e2e)', () => {
       });
 
       it('responds 400 (not a raw 500) when newPassword is shorter than 8 characters', async () => {
-        await request(app.getHttpServer())
+        await request(ctx.app.getHttpServer())
           .post(`/admin/users/${targetUserId}/edit.json`)
           .set('Cookie', [adminCookie])
           .send({ newPassword: 'short' })
