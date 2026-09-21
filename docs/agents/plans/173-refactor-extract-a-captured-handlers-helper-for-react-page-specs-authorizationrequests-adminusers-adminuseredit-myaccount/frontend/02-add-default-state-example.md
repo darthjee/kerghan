@@ -1,0 +1,5 @@
+# Add shared default-state example
+Extract the "passes the default state to the helper" test shared by `MyAccountSpec.js` and `AdminUserEditSpec.js` (jscpd clone 18-32 ↔ 17-31) into a new `frontend/specs/support/accountEditPageExamples.js`, exporting `itBehavesLikeAnAccountEditPage({ Page, Helper, defaultState, label })` (naming consistent with `itBehavesLikeAnAccountEditFormHelper` / `…Controller`). It registers one `it('passes the default state to the helper', …)` that spies `Helper.render` to return `React.createElement('div', null, label)`, renders `Page`, and asserts the html contains `label` and `Helper.render` was called with `defaultState` and `jasmine.objectContaining({ onSubmit: jasmine.any(Function), onChange: jasmine.any(Function) })`. `defaultState` is supplied by each spec (`MyAccount` has `currentPassword`, `AdminUserEdit` does not). If the implementer finds a better fit in an existing support file, that is acceptable — keep the test name unchanged. Add JSDoc matching the neighbouring support files.
+
+## Files to Change
+- `frontend/specs/support/accountEditPageExamples.js` — new shared example group.
