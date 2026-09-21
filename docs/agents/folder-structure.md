@@ -12,12 +12,12 @@
 | `docs/agents/` | Agent-facing documentation, hub + per-topic pages (this directory) |
 | `bin/` | Language-agnostic CI shell scripts (`image.sh`, `deploy_frontend.sh`) |
 | `scripts/` | Release shell scripts (`bump_version.sh`, `deploy.sh`, `render.sh`, `wake_navi.sh`, `warm_navi_cache.sh`) |
-| `.circleci/` | CI pipeline config |
+| `.circleci/` | CI pipeline config (validate with `docker-compose run --rm circleci config validate`) |
 | `.claude/agents/` | Specialist AI agent definitions |
 | `.github/` | Commit/PR templates + `copilot-instructions.md` |
 | `navi/` | Navi cache-warmer config |
 | `Makefile` | Dev command interface |
-| `docker-compose.yml` | Full stack service definitions |
+| `docker-compose.yml` | Full stack service definitions (includes a `circleci` service running the CircleCI CLI to validate `.circleci/config.yml`) |
 | `version` | Base-image version registry |
 | `.env.dev.sample`, `.env`, `.env.prod` | Environment variable files |
 | `.codacy.yml`, `.gitguardian.yaml`, `.trivyignore` | Static analysis / secret-scanning / vulnerability-scan config |
