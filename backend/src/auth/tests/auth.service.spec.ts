@@ -17,6 +17,19 @@ describe('AuthService', () => {
   let passwordResetService: { recover: jest.Mock; resetPassword: jest.Mock };
   let service: AuthService;
 
+  const activeToken = { id: 10, userId: 1, revokedAt: null, expiresAt: new Date(Date.now() + 60_000) };
+
+  function stubExpiredRefreshToken(): void {
+    refreshTokenRepository.findOneBy.mockResolvedValue({
+      ...activeToken,
+      expiresAt: new Date(Date.now() - 1000),
+    });
+  }
+
+  function stubRevokedRefreshToken(): void {
+    refreshTokenRepository.findOneBy.mockResolvedValue({ ...activeToken, revokedAt: new Date() });
+  }
+
   beforeEach(() => {
     userRepository = repoMock<User>();
     refreshTokenRepository = repoMock<RefreshToken>();
@@ -212,7 +225,6 @@ describe('AuthService', () => {
   });
 
   describe('refresh', () => {
-    const activeToken = { id: 10, userId: 1, revokedAt: null, expiresAt: new Date(Date.now() + 60_000) };
     const user = {
       id: 1,
       username: 'darthjee',
@@ -256,7 +268,7 @@ describe('AuthService', () => {
 
     describe('when the refresh token was already revoked', () => {
       beforeEach(() => {
-        refreshTokenRepository.findOneBy.mockResolvedValue({ ...activeToken, revokedAt: new Date() });
+        stubRevokedRefreshToken();
       });
 
       it('rejects with UnauthorizedException, preventing replay', async () => {
@@ -277,10 +289,7 @@ describe('AuthService', () => {
 
     describe('when the refresh token has expired', () => {
       beforeEach(() => {
-        refreshTokenRepository.findOneBy.mockResolvedValue({
-          ...activeToken,
-          expiresAt: new Date(Date.now() - 1000),
-        });
+        stubExpiredRefreshToken();
       });
 
       it('rejects with UnauthorizedException', async () => {
@@ -353,7 +362,6 @@ describe('AuthService', () => {
   });
 
   describe('status', () => {
-    const activeToken = { id: 10, userId: 1, revokedAt: null, expiresAt: new Date(Date.now() + 60_000) };
     const user = { id: 1, username: 'darthjee', email: 'darthjee@example.com', isAdmin: false } as User;
 
     describe('when the refresh token is active', () => {
@@ -408,10 +416,7 @@ describe('AuthService', () => {
 
     describe('when the refresh token has expired', () => {
       beforeEach(() => {
-        refreshTokenRepository.findOneBy.mockResolvedValue({
-          ...activeToken,
-          expiresAt: new Date(Date.now() - 1000),
-        });
+        stubExpiredRefreshToken();
       });
 
       it('resolves with loggedIn: false and isAdmin: false', async () => {
@@ -421,7 +426,7 @@ describe('AuthService', () => {
 
     describe('when the refresh token was already revoked', () => {
       beforeEach(() => {
-        refreshTokenRepository.findOneBy.mockResolvedValue({ ...activeToken, revokedAt: new Date() });
+        stubRevokedRefreshToken();
       });
 
       it('resolves with loggedIn: false and isAdmin: false, without throwing', async () => {

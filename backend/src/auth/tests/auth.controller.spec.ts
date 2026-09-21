@@ -23,6 +23,10 @@ function authServiceMock(user: User): AuthServiceMock {
   };
 }
 
+function defaultConfigService(): { get: jest.Mock } {
+  return { get: jest.fn((_key: string, defaultValue: number) => defaultValue) };
+}
+
 function responseMock(): jest.Mocked<Pick<Response, 'cookie' | 'set' | 'clearCookie'>> {
   return {
     cookie: jest.fn(),
@@ -46,14 +50,24 @@ describe('AuthController', () => {
     res = responseMock();
   });
 
+  function buildController(
+    { configService = defaultConfigService(), accountService }: {
+      configService?: { get: jest.Mock };
+      accountService?: { updateAccount: jest.Mock };
+    } = {},
+  ): AuthController {
+    return new AuthController(
+      authService as unknown as AuthService,
+      configService as unknown as ConfigService,
+      accountService as unknown as AccountService,
+    );
+  }
+
   describe('access-token cookie maxAge', () => {
     describe('when KERGHAN_ACCESS_TOKEN_TTL_MS is unset', () => {
       it('defaults to 900000ms (15 minutes)', async () => {
-        const configService = { get: jest.fn((_key: string, defaultValue: number) => defaultValue) };
-        const controller = new AuthController(
-          authService as unknown as AuthService,
-          configService as unknown as ConfigService,
-        );
+        const configService = defaultConfigService();
+        const controller = buildController({ configService });
 
         await controller.login({ username: 'darthjee', password: 'my-password' }, res as unknown as Response);
 
@@ -69,10 +83,7 @@ describe('AuthController', () => {
     describe('when KERGHAN_ACCESS_TOKEN_TTL_MS is set', () => {
       it('uses the configured value', async () => {
         const configService = { get: jest.fn().mockReturnValue(3_600_000) };
-        const controller = new AuthController(
-          authService as unknown as AuthService,
-          configService as unknown as ConfigService,
-        );
+        const controller = buildController({ configService });
 
         await controller.login({ username: 'darthjee', password: 'my-password' }, res as unknown as Response);
 
@@ -87,11 +98,7 @@ describe('AuthController', () => {
 
   describe('DELETE /auth/logoff.json', () => {
     it('revokes the refresh token and clears the access-token cookie', async () => {
-      const configService = { get: jest.fn((_key: string, defaultValue: number) => defaultValue) };
-      const controller = new AuthController(
-        authService as unknown as AuthService,
-        configService as unknown as ConfigService,
-      );
+      const controller = buildController();
 
       await controller.logout({ refreshToken: 'a-refresh-token' }, res as unknown as Response);
 
@@ -102,15 +109,10 @@ describe('AuthController', () => {
 
   describe('PATCH /auth/account.json', () => {
     it('delegates to AccountService with the session user id and returns its result', async () => {
-      const configService = { get: jest.fn((_key: string, defaultValue: number) => defaultValue) };
       const accountService = {
         updateAccount: jest.fn().mockResolvedValue({ username: 'new-username', email: 'darthjee@example.com' }),
       };
-      const controller = new AuthController(
-        authService as unknown as AuthService,
-        configService as unknown as ConfigService,
-        accountService as unknown as AccountService,
-      );
+      const controller = buildController({ accountService });
       const dto = { currentPassword: 'my-password', username: 'new-username' };
       const req = { user: { sub: 1 } } as unknown as Request;
 
@@ -122,15 +124,6 @@ describe('AuthController', () => {
   });
 
   describe('POST /auth/status.json', () => {
-    function buildController(): AuthController {
-      const configService = { get: jest.fn((_key: string, defaultValue: number) => defaultValue) };
-
-      return new AuthController(
-        authService as unknown as AuthService,
-        configService as unknown as ConfigService,
-      );
-    }
-
     describe('when the service reports an active session', () => {
       it('responds with { loggedIn: true, isAdmin }', async () => {
         authService.status.mockResolvedValue({ loggedIn: true, isAdmin: false });
