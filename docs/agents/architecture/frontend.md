@@ -40,6 +40,7 @@ frontend/assets/js/
   utils/
     routing/                   # Router, Route, HashRouteResolver
     polling/AuthorizationRequestPoller.js
+    validation/                # fieldValidators, formValidators (shared client-side form rules)
 
 frontend/specs/                # mirrors assets/js/ above, one spec per source file
   support/jsx-loader.mjs
