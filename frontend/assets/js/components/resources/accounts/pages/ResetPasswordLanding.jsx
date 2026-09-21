@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import LoginModalEvents from '../../../../client/LoginModalEvents.js';
+import { redirectHome } from '../../../../utils/routing/redirects.js';
 
 /**
  * Extract the `token` query parameter from a hash-based route, SSR/spec-safe. A one-off parse
@@ -26,9 +27,7 @@ function getTokenFromHash(hash = typeof window === 'undefined' ? '' : window.loc
 export function redirectToResetModal() {
   LoginModalEvents.open('resetPassword', { token: getTokenFromHash() });
 
-  if (typeof window !== 'undefined') {
-    window.location.hash = '/';
-  }
+  redirectHome();
 }
 
 /**

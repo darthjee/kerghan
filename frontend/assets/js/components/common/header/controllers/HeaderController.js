@@ -2,6 +2,7 @@ import AccountsClient from '../../../../client/AccountsClient.js';
 import AuthSession from '../../../../client/AuthSession.js';
 import AuthEvents from '../../../../client/AuthEvents.js';
 import LoginModalEvents from '../../../../client/LoginModalEvents.js';
+import { redirectHome } from '../../../../utils/routing/redirects.js';
 
 /**
  * Controller for the Header's logout action and mount-time auth-status confirmation. Logout ends
@@ -33,7 +34,7 @@ export default class HeaderController {
       // regardless of whether the network request itself succeeded.
     } finally {
       AuthEvents.emit(false, false);
-      this.#redirectHome();
+      redirectHome();
     }
   }
 
@@ -72,13 +73,5 @@ export default class HeaderController {
     }
 
     AuthEvents.emit(loggedIn, isAdmin);
-  }
-
-  #redirectHome() {
-    if (typeof window === 'undefined') {
-      return;
-    }
-
-    window.location.hash = '/';
   }
 }

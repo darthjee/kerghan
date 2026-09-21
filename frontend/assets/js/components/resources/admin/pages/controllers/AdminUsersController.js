@@ -1,4 +1,5 @@
 import AdminClient from '../../../../../client/AdminClient.js';
+import { redirectIfForbidden } from '../../../../../utils/routing/redirects.js';
 
 /**
  * Controller for the Admin Users page: searches user accounts, and mints/sends recovery links
@@ -75,7 +76,7 @@ export default class AdminUsersController {
   }
 
   #handleTopLevelError(error) {
-    if (this.#redirectIfForbidden(error)) {
+    if (redirectIfForbidden(error)) {
       return;
     }
 
@@ -83,27 +84,10 @@ export default class AdminUsersController {
   }
 
   #handleRowError(userId, error) {
-    if (this.#redirectIfForbidden(error)) {
+    if (redirectIfForbidden(error)) {
       return;
     }
 
     this.#setRowResult(userId, { error: error.message });
-  }
-
-  #redirectIfForbidden(error) {
-    if (error.status !== 403) {
-      return false;
-    }
-
-    this.#redirectHome();
-    return true;
-  }
-
-  #redirectHome() {
-    if (typeof window === 'undefined') {
-      return;
-    }
-
-    window.location.hash = '/';
   }
 }
