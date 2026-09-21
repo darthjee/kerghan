@@ -43,9 +43,13 @@ All 4 base images — `kerghan-base`, `circleci_kerghan-base`, `production_kergh
 `vite_kerghan-base` — are published to Docker Hub, multi-arch (amd64 + arm64), via the
 `release-image` CircleCI job on tag builds (mirroring Majora's `release-image` pattern) and via
 the `push`/`push-base`/`push-circleci-base`/`push-production-base`/
-`push-fe-base` Makefile targets for manual pushes. `bin/image.sh`'s `skip_if_not_tag`/
-`skip_if_unchanged` guards keep unchanged images from rebuilding on every tag; `FORCE_IMAGE_BUILD`
-bypasses both guards when a forced rebuild/republish is needed.
+`push-fe-base` Makefile targets for manual pushes. All 4 are built from the single shared
+`dockerfiles/base/Dockerfile` (one `--target` per image, per-image build args in `bin/image.sh`'s
+`build_args`; the `darthjee/scripts`/`darthjee/node` version pins are `ARG` defaults in that
+Dockerfile). `bin/image.sh`'s `skip_if_not_tag`/`skip_if_unchanged` guards keep unchanged images
+from rebuilding on every tag — `skip_if_unchanged` diffs `dockerfiles/base/` and `bin/image.sh`, so
+a change to either rebuilds all four; `FORCE_IMAGE_BUILD` bypasses both guards when a forced
+rebuild/republish is needed.
 
 `backend_tests`/`backend_checks` now run from the published `darthjee/circleci_kerghan-base:0.1.0`
 image (pinned to the version in the root `version` file, not `:latest`), `requires:`-gated on
