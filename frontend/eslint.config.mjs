@@ -104,7 +104,7 @@ export default [
       'assets/js/components/resources/admin/pages/helpers/AdminUserEditHelper.jsx',
       'assets/js/components/resources/admin/pages/helpers/AdminUsersHelper.jsx',
       'assets/js/utils/routing/Route.js',
-      'specs/assets/js/client/ApiClientSpec.js',
+      'specs/support/fetchSequence.js',
     ],
     linterOptions: { reportUnusedDisableDirectives: 'off' },
   },
