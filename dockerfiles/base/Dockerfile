@@ -2,7 +2,7 @@
 #   kerghan-base, vite_kerghan-base, production_kerghan-base, circleci_kerghan-base
 #
 # Each image is selected with `docker build --target <image>` and the per-image
-# build args are supplied by bin/image.sh (see the `image_args` function there).
+# build args are supplied by bin/image.sh (see the `build_args` function there).
 #
 # The version pins below are the single place where the darthjee/scripts and
 # darthjee/node (or darthjee/circleci_node) versions are defined.
