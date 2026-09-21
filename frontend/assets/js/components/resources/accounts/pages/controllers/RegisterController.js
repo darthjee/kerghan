@@ -1,7 +1,6 @@
 import AccountsClient from '../../../../../client/AccountsClient.js';
 import AuthEvents from '../../../../../client/AuthEvents.js';
-
-const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+import { validateRegistration } from '../../../../../utils/validation/formValidators.js';
 
 /**
  * Controller for the register page: validates the form client-side, then submits it to
@@ -60,43 +59,8 @@ export default class RegisterController {
    *   passwordConfirmation: string}} fields - Current form field values.
    * @returns {object} A map of field name to error message, empty when the form is valid.
    */
-  validate({
-    username, email, password, passwordConfirmation,
-  }) {
-    return {
-      ...this.#validateUsername(username),
-      ...this.#validateEmail(email),
-      ...this.#validatePassword(password),
-      ...this.#validatePasswordConfirmation(password, passwordConfirmation),
-    };
-  }
-
-  #validateUsername(username) {
-    return username ? {} : { username: 'Username is required' };
-  }
-
-  #validateEmail(email) {
-    if (!email) {
-      return { email: 'Email is required' };
-    }
-
-    return EMAIL_PATTERN.test(email) ? {} : { email: 'Email is invalid' };
-  }
-
-  #validatePassword(password) {
-    return password ? {} : { password: 'Password is required' };
-  }
-
-  #validatePasswordConfirmation(password, passwordConfirmation) {
-    if (!passwordConfirmation) {
-      return { passwordConfirmation: 'Password confirmation is required' };
-    }
-
-    if (password && password !== passwordConfirmation) {
-      return { passwordConfirmation: 'Passwords do not match' };
-    }
-
-    return {};
+  validate(fields) {
+    return validateRegistration(fields);
   }
 
   #redirectHome() {

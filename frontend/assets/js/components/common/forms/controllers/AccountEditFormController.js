@@ -1,5 +1,8 @@
-const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const MIN_PASSWORD_LENGTH = 8;
+import {
+  validateEmail,
+  validatePasswordLength,
+  validatePasswordConfirmation,
+} from '../../../../utils/validation/fieldValidators.js';
 
 /**
  * Shared base class for the account-edit form controllers (My Account and Admin User Edit).
@@ -174,11 +177,7 @@ export default class AccountEditFormController {
   }
 
   #validateEmail(email) {
-    if (!email) {
-      return {};
-    }
-
-    return EMAIL_PATTERN.test(email) ? {} : { email: 'Email is invalid' };
+    return email ? validateEmail(email) : {};
   }
 
   #validateNewPassword(newPassword, newPasswordConfirmation) {
@@ -186,14 +185,16 @@ export default class AccountEditFormController {
       return {};
     }
 
-    if (newPassword.length < MIN_PASSWORD_LENGTH) {
-      return { newPassword: `Password must be at least ${MIN_PASSWORD_LENGTH} characters` };
+    const lengthErrors = validatePasswordLength(newPassword, 'newPassword');
+
+    if (Object.keys(lengthErrors).length > 0) {
+      return lengthErrors;
     }
 
-    if (newPassword !== newPasswordConfirmation) {
-      return { newPasswordConfirmation: 'Passwords do not match' };
-    }
-
-    return {};
+    return validatePasswordConfirmation(
+      newPassword,
+      newPasswordConfirmation,
+      'newPasswordConfirmation',
+    );
   }
 }
