@@ -3,6 +3,7 @@ import { ConfigModule } from '@nestjs/config';
 import { Test } from '@nestjs/testing';
 import { LoggerService } from '../logger.service.js';
 import { LoggingModule } from '../logging.module.js';
+import { clearConsoleSpies, createConsoleSpies, restoreConsoleSpies } from './console-spies.test-support.js';
 
 /**
  * Builds a `ConfigService` double that returns `level` for
@@ -29,19 +30,14 @@ function buildRequestContext(requestId?: string): { getRequestId: jest.Mock } {
 }
 
 describe('LoggerService', () => {
-  const consoleSpies = {
-    debug: jest.spyOn(console, 'debug').mockImplementation(() => undefined),
-    info: jest.spyOn(console, 'info').mockImplementation(() => undefined),
-    warn: jest.spyOn(console, 'warn').mockImplementation(() => undefined),
-    error: jest.spyOn(console, 'error').mockImplementation(() => undefined),
-  };
+  const consoleSpies = createConsoleSpies();
 
   afterEach(() => {
-    Object.values(consoleSpies).forEach((spy) => spy.mockClear());
+    clearConsoleSpies(consoleSpies);
   });
 
   afterAll(() => {
-    Object.values(consoleSpies).forEach((spy) => spy.mockRestore());
+    restoreConsoleSpies(consoleSpies);
   });
 
   describe('default level', () => {

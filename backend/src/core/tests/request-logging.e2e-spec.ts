@@ -18,6 +18,7 @@ import { LoggerService } from '../logger.service.js';
 import { LoggingModule } from '../logging.module.js';
 import { Public } from '../public.decorator.js';
 import { RequestContextMiddleware } from '../request-context.middleware.js';
+import { clearConsoleSpies, createConsoleSpies, restoreConsoleSpies } from './console-spies.test-support.js';
 
 const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -73,12 +74,7 @@ class TestAppModule implements NestModule {
 describe('request logging (e2e)', () => {
   let app: INestApplication;
 
-  const consoleSpies = {
-    debug: jest.spyOn(console, 'debug').mockImplementation(() => undefined),
-    info: jest.spyOn(console, 'info').mockImplementation(() => undefined),
-    warn: jest.spyOn(console, 'warn').mockImplementation(() => undefined),
-    error: jest.spyOn(console, 'error').mockImplementation(() => undefined),
-  };
+  const consoleSpies = createConsoleSpies();
 
   beforeAll(async () => {
     const moduleRef = await Test.createTestingModule({ imports: [TestAppModule] }).compile();
@@ -89,11 +85,11 @@ describe('request logging (e2e)', () => {
   });
 
   afterEach(() => {
-    Object.values(consoleSpies).forEach((spy) => spy.mockClear());
+    clearConsoleSpies(consoleSpies);
   });
 
   afterAll(async () => {
-    Object.values(consoleSpies).forEach((spy) => spy.mockRestore());
+    restoreConsoleSpies(consoleSpies);
     await app.close();
   });
 
