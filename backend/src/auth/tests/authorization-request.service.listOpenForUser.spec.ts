@@ -1,28 +1,20 @@
-import { AuthorizationRequestService } from '../authorization-request.service.js';
 import {
   buildFakeAuthorizationRequest,
-  createAuthorizationRequestServiceTestContext,
-  RepoMock,
+  useAuthorizationRequestServiceContext,
 } from './authorization-request.service.test-support.js';
-import { AuthorizationRequest } from '../entities/authorization-request.entity.js';
 
 describe('AuthorizationRequestService', () => {
-  let authorizationRequestRepository: RepoMock<AuthorizationRequest>;
-  let service: AuthorizationRequestService;
-
-  beforeEach(() => {
-    ({ authorizationRequestRepository, service } = createAuthorizationRequestServiceTestContext());
-  });
+  const ctx = useAuthorizationRequestServiceContext();
 
   describe('listOpenForUser', () => {
     const openRow = buildFakeAuthorizationRequest({ id: 1, uuid: 'uuid-open' });
 
     it('queries only open, non-expired rows for the given userId, newest first', async () => {
-      authorizationRequestRepository.find.mockResolvedValue([openRow]);
+      ctx.authorizationRequestRepository.find.mockResolvedValue([openRow]);
 
-      await service.listOpenForUser(1);
+      await ctx.service.listOpenForUser(1);
 
-      expect(authorizationRequestRepository.find).toHaveBeenCalledWith(
+      expect(ctx.authorizationRequestRepository.find).toHaveBeenCalledWith(
         expect.objectContaining({
           where: expect.objectContaining({ userId: 1, status: 'open' }),
           order: { createdAt: 'DESC' },
@@ -31,9 +23,9 @@ describe('AuthorizationRequestService', () => {
     });
 
     it('maps rows to the public shape only, leaking no id/pollTokenHash/username/approvedByUserId', async () => {
-      authorizationRequestRepository.find.mockResolvedValue([openRow]);
+      ctx.authorizationRequestRepository.find.mockResolvedValue([openRow]);
 
-      const result = await service.listOpenForUser(1);
+      const result = await ctx.service.listOpenForUser(1);
 
       expect(result).toEqual([
         {
@@ -47,9 +39,9 @@ describe('AuthorizationRequestService', () => {
     });
 
     it('returns an empty array when nothing matches (userId: null / other users / expired / non-open excluded by the WHERE clause)', async () => {
-      authorizationRequestRepository.find.mockResolvedValue([]);
+      ctx.authorizationRequestRepository.find.mockResolvedValue([]);
 
-      await expect(service.listOpenForUser(1)).resolves.toEqual([]);
+      await expect(ctx.service.listOpenForUser(1)).resolves.toEqual([]);
     });
   });
 });
