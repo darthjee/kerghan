@@ -15,8 +15,8 @@ jobs, and `release`) is gated to **semver tag pushes only**, via the shared `tag
 (`tags: { only: /\d+\.\d+\.\d+/ }`, `branches: { ignore: /.*/ }`). The `release-image` jobs
 (the 4 base-image publishes) have no branch filter at all — CircleCI schedules them on every
 push, but `bin/image.sh`'s `skip_if_not_tag` guard makes them a fast no-op unless the push is a
-tag, and `skip_if_unchanged` makes even tag builds a no-op when the relevant `dockerfiles/`
-directory hasn't changed since the last release.
+tag, and `skip_if_unchanged` makes even tag builds a no-op when neither `dockerfiles/base/` nor
+`bin/image.sh` has changed since the last release (see "Shared base Dockerfile" below).
 
 ```
 release-circleci_kerghan-base(-arm64) ─┬─ backend_tests ──┐
@@ -136,6 +136,27 @@ is built in CI but **not actually published to Docker Hub** — only the fronten
 (`vite_kerghan*`) images are. `bin/image.sh` still runs the `release-image` job for all of them
 so the ordering/`requires` machinery stays uniform; see `docs/agents/environment-variables.md`
 for which Docker Hub credentials are actually wired up.
+
+### Shared base Dockerfile
+
+All four `*-base` images are built by `bin/image.sh` from the single
+`dockerfiles/base/Dockerfile`, selecting the image with `docker build --target <image>`. The
+per-image differences (base image, user, home/app/source directories, yarn cache path, rsync pin,
+and the user running `yarn_builder.sh`) are build args set per image in the `build_args` function
+of `bin/image.sh`; the only per-image content left in the Dockerfile is each target's exec-form
+`CMD`. Consequences:
+
+- Since the arg sets live in `bin/image.sh`, `skip_if_unchanged` diffs both `dockerfiles/base/` and
+  `bin/image.sh`: a change to either rebuilds all four images on the next tag (`FORCE_IMAGE_BUILD`
+  still bypasses the guard).
+- The version pins live in one place, as `ARG` defaults at the top of `dockerfiles/base/Dockerfile`:
+  `SCRIPTS_IMAGE` (`darthjee/scripts`) and `NODE_IMAGE_VERSION` (used for both `darthjee/node` and
+  `darthjee/circleci_node`), so a bump is a one-line edit. The `darthjee/scripts` pin in the leaf
+  Dockerfiles is separate and not covered by this.
+- `BUILDER_USER` is `root` for `kerghan-base` and `vite_kerghan-base`: `yarn_builder.sh` has to be
+  able to write to the root-owned global yarn cache in the node images, otherwise it finds no new
+  packages and the pre-warmed cache ends up empty. `production_kerghan-base` and
+  `circleci_kerghan-base` keep running it as their own user.
 
 ## CI setup pattern (backend/frontend jobs)
 

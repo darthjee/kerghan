@@ -7,7 +7,7 @@
 | `backend/` | Node.js/NestJS app, TypeScript + TypeORM/MySQL (the Auth and Mail modules exist — the tracked-repo/label-rule data model is still open, see `docs/agents/product.md`) |
 | `frontend/` | React 19 + Vite app — dashboard/analytics UI; the login modal, device-authorization flow, hash routing, and `client/` HTTP layer already exist, the dashboard/analytics views themselves don't yet |
 | `proxy/` | PHP Tent proxy config (`dev_configuration/`, `prod_configuration/`, `extension/`) |
-| `dockerfiles/` | One directory per built image, `-base`/leaf pairs |
+| `dockerfiles/` | `base/` (one shared Dockerfile for all four `*-base` images) plus one directory per leaf image |
 | `docker_volumes/` | Bind-mount targets for local dev (gitignored contents) |
 | `docs/agents/` | Agent-facing documentation, hub + per-topic pages (this directory) |
 | `bin/` | Language-agnostic CI shell scripts (`image.sh`, `deploy_frontend.sh`) |
@@ -89,9 +89,13 @@
 
 ## `dockerfiles/` — Service Images
 
-One directory per service image (dev and production backend, dev and production Vite, CircleCI
-base), each with a `-base` variant shared by its dev/production counterpart where applicable.
-See `ls dockerfiles/` for the current list. The backend image family (`kerghan-base`,
+The four `*-base` images (`kerghan-base`, `vite_kerghan-base`, `production_kerghan-base`,
+`circleci_kerghan-base`) are all built from the single parameterised `dockerfiles/base/Dockerfile`:
+one named target per image (`docker build --target <image>`), with the per-image build args
+(base image, user, directories, rsync pin, ...) defined in the `build_args` function of
+`bin/image.sh`. The leaf images (`kerghan`, `production_kerghan`, `vite_kerghan`) keep their own
+directory under `dockerfiles/`, each `FROM` its published base image. See `ls dockerfiles/` for
+the current list. The backend image family (`kerghan-base`,
 `circleci_kerghan-base`, `production_kerghan-base`) is built but not published to Docker Hub —
 see `docs/agents/architecture/infra.md` for the CircleCI `release-image` jobs that publish each
 image family (and which ones actually push to Docker Hub).
