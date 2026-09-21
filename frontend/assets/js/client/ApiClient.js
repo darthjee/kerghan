@@ -154,7 +154,7 @@ export default class ApiClient {
    * End the client-side session: clear the stored refresh token and open the login modal in
    * Password mode via the shared {@link LoginModalEvents} bus — a pure client-side state
    * transition, with no API call of its own. SSR/spec-safe — a no-op when `window` is not
-   * defined, the same way `RegisterController#redirectHome` guards it.
+   * defined, the same way the shared `redirectHome` helper guards it.
    *
    * @returns {undefined} Always `undefined`, so callers can `return` it directly.
    */

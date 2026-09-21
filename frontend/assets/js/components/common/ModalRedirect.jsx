@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import LoginModalEvents from '../../client/LoginModalEvents.js';
+import { redirectHome } from '../../utils/routing/redirects.js';
 
 /**
  * Open the login modal in the given mode and rewrite the URL hash to `#/`. Extracted from the
@@ -12,9 +13,7 @@ import LoginModalEvents from '../../client/LoginModalEvents.js';
 export function redirectToModal(mode) {
   LoginModalEvents.open(mode);
 
-  if (typeof window !== 'undefined') {
-    window.location.hash = '/';
-  }
+  redirectHome();
 }
 
 /**
