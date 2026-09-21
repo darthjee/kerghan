@@ -3,43 +3,7 @@ import ApiError from '../../../../assets/js/client/ApiError.js';
 import AuthSession from '../../../../assets/js/client/AuthSession.js';
 import LoginModalEvents from '../../../../assets/js/client/LoginModalEvents.js';
 import { installFakeWindow, uninstallFakeWindow } from '../../../support/fakeWindow.js';
-
-/**
- * Build a fake `fetch` `Response`-like object whose `json`/`text` behave like a real one: an
- * empty body cannot be parsed as JSON (`json()` rejects, mirroring `SyntaxError: Unexpected
- * end of JSON input`), while a non-empty body is serialized/parsed for real.
- *
- * @param {{ok: boolean, status: number, json: object|undefined}} descriptor - Response shape;
- *   `json` is omitted (or `undefined`) to simulate a truly empty body, e.g. a `204`.
- * @returns {{ok: boolean, status: number, json: Function, text: Function}} The fake response.
- */
-function fakeResponse({ json, ...rest }) {
-  const body = json === undefined ? '' : JSON.stringify(json);
-
-  return {
-    ...rest,
-    text: () => Promise.resolve(body),
-    json: () => (body === '' ? Promise.reject(new SyntaxError('Unexpected end of JSON input')) : Promise.resolve(JSON.parse(body))),
-  };
-}
-
-/**
- * Build a `fetch` spy that resolves with the given responses in order, one per call.
- *
- * @param {Array<{ok: boolean, status: number, json: object}>} responses - Ordered responses.
- * @returns {jasmine.Spy} The `fetch` spy.
- */
-function fetchSequence(responses) {
-  let call = 0;
-
-  return jasmine.createSpy('fetch').and.callFake(() => {
-    // eslint-disable-next-line security/detect-object-injection -- call is a local numeric
-    // loop counter incremented by this test helper, never user/attacker-controlled.
-    const response = fakeResponse(responses[call]);
-    call += 1;
-    return Promise.resolve(response);
-  });
-}
+import { expectSessionExpired, fetchSequence, stubRefreshFlow } from '../../../support/fetchSequence.js';
 
 describe('ApiClient', () => {
   let originalFetch;
@@ -153,10 +117,7 @@ describe('ApiClient', () => {
 
   describe('401 handling', () => {
     it('refreshes the access token and retries the original request on success', async () => {
-      spyOn(AuthSession, 'get').and.returnValue('old-refresh-token');
-      spyOn(AuthSession, 'set');
-      spyOn(AuthSession, 'clear');
-      globalThis.fetch = fetchSequence([
+      stubRefreshFlow([
         { ok: false, status: 401, json: { error: 'unauthorized' } },
         { ok: true, status: 200, json: { user: { id: 1 }, refreshToken: 'new-refresh-token' } },
         { ok: true, status: 200, json: { id: 1, username: 'foo' } },
@@ -174,9 +135,7 @@ describe('ApiClient', () => {
     });
 
     it('treats a failed refresh as a session expiry: clears the session and opens the login modal', async () => {
-      spyOn(AuthSession, 'get').and.returnValue('old-refresh-token');
-      spyOn(AuthSession, 'clear');
-      globalThis.fetch = fetchSequence([
+      stubRefreshFlow([
         { ok: false, status: 401, json: { error: 'unauthorized' } },
         { ok: false, status: 401, json: { error: 'invalid refresh token' } },
       ]);
@@ -185,32 +144,23 @@ describe('ApiClient', () => {
 
       expect(data).toBeUndefined();
       expect(globalThis.fetch).toHaveBeenCalledTimes(2);
-      expect(AuthSession.clear).toHaveBeenCalled();
-      expect(LoginModalEvents.open).toHaveBeenCalledWith('password');
-      expect(globalThis.window.location.hash).toBe('');
+      expectSessionExpired();
     });
 
     it('treats a missing refresh token as a session expiry, without attempting a refresh call', async () => {
-      spyOn(AuthSession, 'get').and.returnValue(null);
-      spyOn(AuthSession, 'clear');
-      globalThis.fetch = fetchSequence([
+      stubRefreshFlow([
         { ok: false, status: 401, json: { error: 'unauthorized' } },
-      ]);
+      ], { refreshToken: null });
 
       const data = await ApiClient.postJson('/accounts/register.json', { username: 'foo' });
 
       expect(data).toBeUndefined();
       expect(globalThis.fetch).toHaveBeenCalledTimes(1);
-      expect(AuthSession.clear).toHaveBeenCalled();
-      expect(LoginModalEvents.open).toHaveBeenCalledWith('password');
-      expect(globalThis.window.location.hash).toBe('');
+      expectSessionExpired();
     });
 
     it('does not attempt a second refresh when the retried request also returns 401', async () => {
-      spyOn(AuthSession, 'get').and.returnValue('old-refresh-token');
-      spyOn(AuthSession, 'set');
-      spyOn(AuthSession, 'clear');
-      globalThis.fetch = fetchSequence([
+      stubRefreshFlow([
         { ok: false, status: 401, json: { error: 'unauthorized' } },
         { ok: true, status: 200, json: { user: { id: 1 }, refreshToken: 'new-refresh-token' } },
         { ok: false, status: 401, json: { error: 'unauthorized' } },
@@ -220,9 +170,7 @@ describe('ApiClient', () => {
 
       expect(data).toBeUndefined();
       expect(globalThis.fetch).toHaveBeenCalledTimes(3);
-      expect(AuthSession.clear).toHaveBeenCalled();
-      expect(LoginModalEvents.open).toHaveBeenCalledWith('password');
-      expect(globalThis.window.location.hash).toBe('');
+      expectSessionExpired();
     });
   });
 });
