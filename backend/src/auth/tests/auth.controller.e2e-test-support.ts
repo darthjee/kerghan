@@ -54,3 +54,36 @@ export async function buildTestApp({
 
   return { app, userRepo, refreshTokenRepo, passwordResetTokenRepo };
 }
+
+type TestAppContext = Awaited<ReturnType<typeof buildTestApp>>;
+
+// Registers the `beforeEach`/`afterEach` scaffold shared by the auth e2e specs: builds a fresh app per
+// test (forwarding `options` to `buildTestApp`) and closes it afterwards. Must be called synchronously
+// inside a `describe` body. The returned context exposes getters because the instances are reassigned
+// before each test.
+export function useTestApp(options: { adminGuard?: boolean; registerDefaultUser?: boolean } = {}): TestAppContext {
+  let current: TestAppContext;
+
+  beforeEach(async () => {
+    current = await buildTestApp(options);
+  });
+
+  afterEach(async () => {
+    await current.app.close();
+  });
+
+  return {
+    get app() {
+      return current.app;
+    },
+    get userRepo() {
+      return current.userRepo;
+    },
+    get refreshTokenRepo() {
+      return current.refreshTokenRepo;
+    },
+    get passwordResetTokenRepo() {
+      return current.passwordResetTokenRepo;
+    },
+  };
+}
