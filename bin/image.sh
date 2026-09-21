@@ -24,6 +24,7 @@ function build_args() {
       BUILD_ARGS=(
         --build-arg "BASE_IMAGE=darthjee/node"
         --build-arg "USER_NAME=$node_user"
+        --build-arg "BUILDER_USER=root"
         --build-arg "HOME_DIR=$node_home"
         --build-arg "APP_DIR=$node_home/app"
         --build-arg "SOURCE_DIR=backend"
@@ -35,6 +36,7 @@ function build_args() {
       BUILD_ARGS=(
         --build-arg "BASE_IMAGE=darthjee/node"
         --build-arg "USER_NAME=$node_user"
+        --build-arg "BUILDER_USER=root"
         --build-arg "HOME_DIR=$node_home"
         --build-arg "APP_DIR=$node_home/app"
         --build-arg "SOURCE_DIR=frontend"
@@ -46,6 +48,7 @@ function build_args() {
       BUILD_ARGS=(
         --build-arg "BASE_IMAGE=darthjee/node"
         --build-arg "USER_NAME=$node_user"
+        --build-arg "BUILDER_USER=$node_user"
         --build-arg "HOME_DIR=$node_home"
         --build-arg "APP_DIR=$node_home/app"
         --build-arg "SOURCE_DIR=backend"
@@ -57,6 +60,7 @@ function build_args() {
       BUILD_ARGS=(
         --build-arg "BASE_IMAGE=darthjee/circleci_node"
         --build-arg "USER_NAME=circleci"
+        --build-arg "BUILDER_USER=circleci"
         --build-arg "HOME_DIR=/home/circleci"
         --build-arg "APP_DIR=/home/circleci/project"
         --build-arg "SOURCE_DIR=backend"
