@@ -1,5 +1,6 @@
 import type { MigrationInterface, QueryRunner } from 'typeorm';
 import { Table, TableIndex } from 'typeorm';
+import { createdAtColumn, idColumn } from './helpers.js';
 
 const TABLE_NAME = 'auth_refresh_tokens';
 
@@ -14,16 +15,10 @@ export class AuthCreateRefreshTokens20260824120002 implements MigrationInterface
       new Table({
         name: TABLE_NAME,
         columns: [
-          {
-            name: 'id',
-            type: 'int',
-            isPrimary: true,
-            isGenerated: true,
-            generationStrategy: 'increment',
-          },
+          idColumn(),
           { name: 'token_hash', type: 'varchar', isUnique: true },
           { name: 'user_id', type: 'int' },
-          { name: 'issued_at', type: 'datetime', default: 'CURRENT_TIMESTAMP' },
+          createdAtColumn('issued_at'),
           { name: 'expires_at', type: 'datetime' },
           { name: 'revoked_at', type: 'datetime', isNullable: true },
         ],

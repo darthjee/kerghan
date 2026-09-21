@@ -26,7 +26,8 @@ export const dataSourceOptions: DataSourceOptions = {
   database: process.env.KERGHAN_MYSQL_NAME,
   poolSize: 5,
   entities: ['dist/**/*.entity.js'],
-  migrations: ['dist/database/migrations/*.js'],
+  // Only timestamp-prefixed files are migrations; `helpers.ts` (shared, non-migration exports) must not be loaded.
+  migrations: ['dist/database/migrations/[0-9]*.js'],
 };
 
 const AppDataSource = new DataSource(dataSourceOptions);

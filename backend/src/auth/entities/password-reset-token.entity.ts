@@ -1,10 +1,5 @@
-import {
-  Column,
-  CreateDateColumn,
-  Entity,
-  Index,
-  PrimaryGeneratedColumn,
-} from 'typeorm';
+import { Column, CreateDateColumn, Entity } from 'typeorm';
+import { HashedTokenBase } from './hashed-token.base.js';
 
 /**
  * A single-use, time-limited password recovery token, minted by
@@ -20,22 +15,9 @@ import {
  * replayed.
  */
 @Entity('auth_password_reset_tokens')
-export class PasswordResetToken {
-  @PrimaryGeneratedColumn()
-    id!: number;
-
-  @Index({ unique: true })
-  @Column({ name: 'token_hash' })
-    tokenHash!: string;
-
-  @Column({ name: 'user_id' })
-    userId!: number;
-
+export class PasswordResetToken extends HashedTokenBase {
   @CreateDateColumn({ name: 'created_at' })
     createdAt!: Date;
-
-  @Column({ name: 'expires_at' })
-    expiresAt!: Date;
 
   @Column({ name: 'used_at', type: 'datetime', nullable: true })
     usedAt!: Date | null;

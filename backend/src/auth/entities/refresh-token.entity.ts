@@ -1,10 +1,5 @@
-import {
-  Column,
-  CreateDateColumn,
-  Entity,
-  Index,
-  PrimaryGeneratedColumn,
-} from 'typeorm';
+import { Column, CreateDateColumn, Entity } from 'typeorm';
+import { HashedTokenBase } from './hashed-token.base.js';
 
 /**
  * A rotating refresh token issued on login/register/refresh. Owns table
@@ -19,22 +14,9 @@ import {
  * silently accepted.
  */
 @Entity('auth_refresh_tokens')
-export class RefreshToken {
-  @PrimaryGeneratedColumn()
-    id!: number;
-
-  @Index({ unique: true })
-  @Column({ name: 'token_hash' })
-    tokenHash!: string;
-
-  @Column({ name: 'user_id' })
-    userId!: number;
-
+export class RefreshToken extends HashedTokenBase {
   @CreateDateColumn({ name: 'issued_at' })
     issuedAt!: Date;
-
-  @Column({ name: 'expires_at' })
-    expiresAt!: Date;
 
   @Column({ name: 'revoked_at', type: 'datetime', nullable: true })
     revokedAt!: Date | null;

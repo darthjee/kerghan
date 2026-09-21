@@ -1,5 +1,6 @@
 import type { MigrationInterface, QueryRunner } from 'typeorm';
 import { Table, TableIndex } from 'typeorm';
+import { createdAtColumn, idColumn, updatedAtColumn } from './helpers.js';
 
 const TABLE_NAME = 'auth_account_edit_lockouts';
 
@@ -16,23 +17,12 @@ export class AuthCreateAccountEditLockouts20260914120010 implements MigrationInt
       new Table({
         name: TABLE_NAME,
         columns: [
-          {
-            name: 'id',
-            type: 'int',
-            isPrimary: true,
-            isGenerated: true,
-            generationStrategy: 'increment',
-          },
+          idColumn(),
           { name: 'user_id', type: 'int' },
           { name: 'failed_attempts', type: 'int', default: 0 },
           { name: 'locked_until', type: 'datetime', isNullable: true },
-          { name: 'created_at', type: 'datetime', default: 'CURRENT_TIMESTAMP' },
-          {
-            name: 'updated_at',
-            type: 'datetime',
-            default: 'CURRENT_TIMESTAMP',
-            onUpdate: 'CURRENT_TIMESTAMP',
-          },
+          createdAtColumn(),
+          updatedAtColumn(),
         ],
       }),
       true,
