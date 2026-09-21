@@ -131,6 +131,17 @@ services:
     ports:
       - 0.0.0.0:3100:3000
 
+  # CircleCI CLI, for validating/processing .circleci/config.yml without installing anything on
+  # the host, e.g.:
+  #   docker-compose run --rm circleci config validate
+  #   docker-compose run --rm circleci config process .circleci/config.yml
+  circleci:
+    image: circleci/circleci-cli:1.0.50849-alpine
+    working_dir: /repo
+    volumes:
+      - ./.circleci:/repo/.circleci:ro
+    entrypoint: circleci
+
   kerghan_phpmyadmin:
     image: phpmyadmin/phpmyadmin
     container_name: kerghan_phpmyadmin
