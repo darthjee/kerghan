@@ -1,25 +1,14 @@
 import { BadRequestException } from '@nestjs/common';
 import bcrypt from 'bcryptjs';
-import { AuthorizationRequestService } from '../authorization-request.service.js';
 import {
   buildFakeAuthorizationRequest,
-  createAuthorizationRequestServiceTestContext,
-  RepoMock,
+  useAuthorizationRequestServiceContext,
 } from './authorization-request.service.test-support.js';
 import { AuthorizationRequest } from '../entities/authorization-request.entity.js';
 import { User } from '../entities/user.entity.js';
 
 describe('AuthorizationRequestService', () => {
-  let authorizationRequestRepository: RepoMock<AuthorizationRequest>;
-  let userRepository: RepoMock<User>;
-  let eventEmitter: { emit: jest.Mock };
-  let configService: { get: jest.Mock };
-  let service: AuthorizationRequestService;
-
-  beforeEach(() => {
-    ({ authorizationRequestRepository, userRepository, eventEmitter, configService, service } =
-      createAuthorizationRequestServiceTestContext());
-  });
+  const ctx = useAuthorizationRequestServiceContext();
 
   describe('authorize', () => {
     const approverPasswordDigest = bcrypt.hashSync('approver-password', 10);
@@ -27,18 +16,18 @@ describe('AuthorizationRequestService', () => {
     const openRow = buildFakeAuthorizationRequest();
 
     beforeEach(() => {
-      userRepository.findOneBy.mockResolvedValue(approver);
+      ctx.userRepository.findOneBy.mockResolvedValue(approver);
     });
 
     describe('when the row is open, owned by the approver, not expired, and the password is correct', () => {
       beforeEach(() => {
-        authorizationRequestRepository.findOneBy.mockResolvedValue({ ...openRow });
+        ctx.authorizationRequestRepository.findOneBy.mockResolvedValue({ ...openRow });
       });
 
       it('marks the row approved with approvedByUserId and resolvedAt set, resetting the cool-off counters', async () => {
-        await service.authorize('uuid-1', 1, 'approver-password');
+        await ctx.service.authorize('uuid-1', 1, 'approver-password');
 
-        expect(authorizationRequestRepository.update).toHaveBeenCalledWith(10, {
+        expect(ctx.authorizationRequestRepository.update).toHaveBeenCalledWith(10, {
           status: 'approved',
           approvedByUserId: 1,
           resolvedAt: expect.any(Date),
@@ -48,93 +37,65 @@ describe('AuthorizationRequestService', () => {
       });
 
       it('emits authorization-request.approved', async () => {
-        await service.authorize('uuid-1', 1, 'approver-password');
+        await ctx.service.authorize('uuid-1', 1, 'approver-password');
 
-        expect(eventEmitter.emit).toHaveBeenCalledWith(
+        expect(ctx.eventEmitter.emit).toHaveBeenCalledWith(
           'authorization-request.approved',
           expect.objectContaining({ uuid: 'uuid-1', approvedByUserId: 1 }),
         );
       });
     });
 
-    describe('when the row is missing', () => {
-      beforeEach(() => {
-        authorizationRequestRepository.findOneBy.mockResolvedValue(null);
-      });
+    describe('when the request cannot be authorized', () => {
+      const rejectionCases: { description: string; uuid: string; password: string; row: () => AuthorizationRequest | null }[] = [
+        { description: 'the row is missing', uuid: 'unknown-uuid', password: 'approver-password', row: () => null },
+        {
+          description: 'the row belongs to another user',
+          uuid: 'uuid-1',
+          password: 'approver-password',
+          row: () => ({ ...openRow, userId: 2 }),
+        },
+        {
+          description: 'the row is not open',
+          uuid: 'uuid-1',
+          password: 'approver-password',
+          row: () => ({ ...openRow, status: 'denied' }),
+        },
+        {
+          description: 'the row is past its expiresAt',
+          uuid: 'uuid-1',
+          password: 'approver-password',
+          row: () => ({ ...openRow, expiresAt: new Date(Date.now() - 1000) }),
+        },
+        { description: 'the password is wrong', uuid: 'uuid-1', password: 'wrong-password', row: () => ({ ...openRow }) },
+      ];
 
-      it('rejects with the uniform BadRequestException', async () => {
-        await expect(service.authorize('unknown-uuid', 1, 'approver-password')).rejects.toThrow(
+      it.each(rejectionCases)('rejects with the uniform BadRequestException when $description', async ({ uuid, password, row }) => {
+        ctx.authorizationRequestRepository.findOneBy.mockResolvedValue(row());
+
+        await expect(ctx.service.authorize(uuid, 1, password)).rejects.toThrow(
           new BadRequestException('Unable to authorize this request'),
         );
       });
 
-      it('does not emit an event', async () => {
-        await expect(service.authorize('unknown-uuid', 1, 'approver-password')).rejects.toThrow();
+      it.each(rejectionCases.slice(0, 2))('does not emit an event when $description', async ({ uuid, password, row }) => {
+        ctx.authorizationRequestRepository.findOneBy.mockResolvedValue(row());
 
-        expect(eventEmitter.emit).not.toHaveBeenCalled();
-      });
-    });
+        await expect(ctx.service.authorize(uuid, 1, password)).rejects.toThrow();
 
-    describe('when the row belongs to another user', () => {
-      beforeEach(() => {
-        authorizationRequestRepository.findOneBy.mockResolvedValue({ ...openRow, userId: 2 });
-      });
-
-      it('rejects with the same uniform BadRequestException', async () => {
-        await expect(service.authorize('uuid-1', 1, 'approver-password')).rejects.toThrow(
-          new BadRequestException('Unable to authorize this request'),
-        );
-      });
-
-      it('does not emit an event', async () => {
-        await expect(service.authorize('uuid-1', 1, 'approver-password')).rejects.toThrow();
-
-        expect(eventEmitter.emit).not.toHaveBeenCalled();
-      });
-    });
-
-    describe('when the row is not open', () => {
-      beforeEach(() => {
-        authorizationRequestRepository.findOneBy.mockResolvedValue({ ...openRow, status: 'denied' });
-      });
-
-      it('rejects with the same uniform BadRequestException', async () => {
-        await expect(service.authorize('uuid-1', 1, 'approver-password')).rejects.toThrow(
-          new BadRequestException('Unable to authorize this request'),
-        );
-      });
-    });
-
-    describe('when the row is past its expiresAt', () => {
-      beforeEach(() => {
-        authorizationRequestRepository.findOneBy.mockResolvedValue({
-          ...openRow,
-          expiresAt: new Date(Date.now() - 1000),
-        });
-      });
-
-      it('rejects with the same uniform BadRequestException', async () => {
-        await expect(service.authorize('uuid-1', 1, 'approver-password')).rejects.toThrow(
-          new BadRequestException('Unable to authorize this request'),
-        );
+        expect(ctx.eventEmitter.emit).not.toHaveBeenCalled();
       });
     });
 
     describe('when the password is wrong', () => {
       beforeEach(() => {
-        authorizationRequestRepository.findOneBy.mockResolvedValue({ ...openRow });
-      });
-
-      it('rejects with the same uniform BadRequestException', async () => {
-        await expect(service.authorize('uuid-1', 1, 'wrong-password')).rejects.toThrow(
-          new BadRequestException('Unable to authorize this request'),
-        );
+        ctx.authorizationRequestRepository.findOneBy.mockResolvedValue({ ...openRow });
       });
 
       it('increments authorizeFailedAttempts without locking the row (below threshold)', async () => {
-        await expect(service.authorize('uuid-1', 1, 'wrong-password')).rejects.toThrow();
+        await expect(ctx.service.authorize('uuid-1', 1, 'wrong-password')).rejects.toThrow();
 
-        expect(authorizationRequestRepository.update).toHaveBeenCalledWith(10, {
+        expect(ctx.authorizationRequestRepository.update).toHaveBeenCalledWith(10, {
           authorizeFailedAttempts: 1,
           authorizeLockedUntil: null,
         });
@@ -143,14 +104,14 @@ describe('AuthorizationRequestService', () => {
 
     describe('cool-off lockout', () => {
       it('locks the row once authorizeFailedAttempts reaches the configured max-attempts threshold', async () => {
-        configService.get.mockImplementation((key: string) =>
+        ctx.configService.get.mockImplementation((key: string) =>
           key === 'KERGHAN_AUTHORIZATION_REQUEST_AUTHORIZE_MAX_ATTEMPTS' ? 2 : undefined,
         );
-        authorizationRequestRepository.findOneBy.mockResolvedValue({ ...openRow, authorizeFailedAttempts: 1 });
+        ctx.authorizationRequestRepository.findOneBy.mockResolvedValue({ ...openRow, authorizeFailedAttempts: 1 });
 
-        await expect(service.authorize('uuid-1', 1, 'wrong-password')).rejects.toThrow();
+        await expect(ctx.service.authorize('uuid-1', 1, 'wrong-password')).rejects.toThrow();
 
-        expect(authorizationRequestRepository.update).toHaveBeenCalledWith(10, {
+        expect(ctx.authorizationRequestRepository.update).toHaveBeenCalledWith(10, {
           authorizeFailedAttempts: 2,
           authorizeLockedUntil: expect.any(Date),
         });
@@ -158,7 +119,7 @@ describe('AuthorizationRequestService', () => {
 
       describe('when the row is already locked', () => {
         beforeEach(() => {
-          authorizationRequestRepository.findOneBy.mockResolvedValue({
+          ctx.authorizationRequestRepository.findOneBy.mockResolvedValue({
             ...openRow,
             authorizeFailedAttempts: 5,
             authorizeLockedUntil: new Date(Date.now() + 60000),
@@ -166,7 +127,7 @@ describe('AuthorizationRequestService', () => {
         });
 
         it('rejects with the same uniform BadRequestException as an ordinary wrong-password rejection', async () => {
-          await expect(service.authorize('uuid-1', 1, 'my-password')).rejects.toThrow(
+          await expect(ctx.service.authorize('uuid-1', 1, 'my-password')).rejects.toThrow(
             new BadRequestException('Unable to authorize this request'),
           );
         });
@@ -174,16 +135,16 @@ describe('AuthorizationRequestService', () => {
         it('still runs the password compare (equivalent cost to a normal attempt), even with the correct password', async () => {
           const compareSpy = jest.spyOn(bcrypt, 'compare');
 
-          await expect(service.authorize('uuid-1', 1, 'approver-password')).rejects.toThrow();
+          await expect(ctx.service.authorize('uuid-1', 1, 'approver-password')).rejects.toThrow();
 
           expect(compareSpy).toHaveBeenCalledWith('approver-password', approverPasswordDigest);
           compareSpy.mockRestore();
         });
 
         it('does not increment authorizeFailedAttempts further while already locked', async () => {
-          await expect(service.authorize('uuid-1', 1, 'wrong-password')).rejects.toThrow();
+          await expect(ctx.service.authorize('uuid-1', 1, 'wrong-password')).rejects.toThrow();
 
-          expect(authorizationRequestRepository.update).not.toHaveBeenCalled();
+          expect(ctx.authorizationRequestRepository.update).not.toHaveBeenCalled();
         });
       });
     });

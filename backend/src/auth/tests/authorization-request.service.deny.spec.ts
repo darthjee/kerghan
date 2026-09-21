@@ -1,42 +1,33 @@
 import { BadRequestException } from '@nestjs/common';
-import { AuthorizationRequestService } from '../authorization-request.service.js';
 import {
   buildFakeAuthorizationRequest,
-  createAuthorizationRequestServiceTestContext,
-  RepoMock,
+  useAuthorizationRequestServiceContext,
 } from './authorization-request.service.test-support.js';
-import { AuthorizationRequest } from '../entities/authorization-request.entity.js';
 
 describe('AuthorizationRequestService', () => {
-  let authorizationRequestRepository: RepoMock<AuthorizationRequest>;
-  let eventEmitter: { emit: jest.Mock };
-  let service: AuthorizationRequestService;
-
-  beforeEach(() => {
-    ({ authorizationRequestRepository, eventEmitter, service } = createAuthorizationRequestServiceTestContext());
-  });
+  const ctx = useAuthorizationRequestServiceContext();
 
   describe('deny', () => {
     const openRow = buildFakeAuthorizationRequest({ id: 20, uuid: 'uuid-2' });
 
     describe('when the row is open and owned by the approver', () => {
       beforeEach(() => {
-        authorizationRequestRepository.findOneBy.mockResolvedValue({ ...openRow });
+        ctx.authorizationRequestRepository.findOneBy.mockResolvedValue({ ...openRow });
       });
 
       it('marks the row denied with resolvedAt set', async () => {
-        await service.deny('uuid-2', 1);
+        await ctx.service.deny('uuid-2', 1);
 
-        expect(authorizationRequestRepository.update).toHaveBeenCalledWith(20, {
+        expect(ctx.authorizationRequestRepository.update).toHaveBeenCalledWith(20, {
           status: 'denied',
           resolvedAt: expect.any(Date),
         });
       });
 
       it('emits authorization-request.denied', async () => {
-        await service.deny('uuid-2', 1);
+        await ctx.service.deny('uuid-2', 1);
 
-        expect(eventEmitter.emit).toHaveBeenCalledWith(
+        expect(ctx.eventEmitter.emit).toHaveBeenCalledWith(
           'authorization-request.denied',
           expect.objectContaining({ uuid: 'uuid-2', deniedByUserId: 1 }),
         );
@@ -45,16 +36,16 @@ describe('AuthorizationRequestService', () => {
 
     describe('when the row is expired but still open', () => {
       beforeEach(() => {
-        authorizationRequestRepository.findOneBy.mockResolvedValue({
+        ctx.authorizationRequestRepository.findOneBy.mockResolvedValue({
           ...openRow,
           expiresAt: new Date(Date.now() - 1000),
         });
       });
 
       it('still denies successfully — no expiry check is performed', async () => {
-        await service.deny('uuid-2', 1);
+        await ctx.service.deny('uuid-2', 1);
 
-        expect(authorizationRequestRepository.update).toHaveBeenCalledWith(20, {
+        expect(ctx.authorizationRequestRepository.update).toHaveBeenCalledWith(20, {
           status: 'denied',
           resolvedAt: expect.any(Date),
         });
@@ -63,11 +54,11 @@ describe('AuthorizationRequestService', () => {
 
     describe('when the row belongs to another user', () => {
       beforeEach(() => {
-        authorizationRequestRepository.findOneBy.mockResolvedValue({ ...openRow, userId: 2 });
+        ctx.authorizationRequestRepository.findOneBy.mockResolvedValue({ ...openRow, userId: 2 });
       });
 
       it('rejects with the uniform BadRequestException', async () => {
-        await expect(service.deny('uuid-2', 1)).rejects.toThrow(
+        await expect(ctx.service.deny('uuid-2', 1)).rejects.toThrow(
           new BadRequestException('Unable to deny this request'),
         );
       });
@@ -75,11 +66,11 @@ describe('AuthorizationRequestService', () => {
 
     describe('when the row is not open', () => {
       beforeEach(() => {
-        authorizationRequestRepository.findOneBy.mockResolvedValue({ ...openRow, status: 'approved' });
+        ctx.authorizationRequestRepository.findOneBy.mockResolvedValue({ ...openRow, status: 'approved' });
       });
 
       it('rejects with the same uniform BadRequestException', async () => {
-        await expect(service.deny('uuid-2', 1)).rejects.toThrow(
+        await expect(ctx.service.deny('uuid-2', 1)).rejects.toThrow(
           new BadRequestException('Unable to deny this request'),
         );
       });
@@ -87,11 +78,11 @@ describe('AuthorizationRequestService', () => {
 
     describe('when the row is missing', () => {
       beforeEach(() => {
-        authorizationRequestRepository.findOneBy.mockResolvedValue(null);
+        ctx.authorizationRequestRepository.findOneBy.mockResolvedValue(null);
       });
 
       it('rejects with the same uniform BadRequestException', async () => {
-        await expect(service.deny('unknown-uuid', 1)).rejects.toThrow(
+        await expect(ctx.service.deny('unknown-uuid', 1)).rejects.toThrow(
           new BadRequestException('Unable to deny this request'),
         );
       });

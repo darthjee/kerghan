@@ -1,62 +1,50 @@
 import { NotFoundException } from '@nestjs/common';
-import { AuthorizationRequestService } from '../authorization-request.service.js';
 import {
   buildFakeAuthorizationRequest,
-  createAuthorizationRequestServiceTestContext,
   queryBuilderMock,
-  RepoMock,
+  useAuthorizationRequestServiceContext,
 } from './authorization-request.service.test-support.js';
-import { AuthorizationRequest } from '../entities/authorization-request.entity.js';
 import { User } from '../entities/user.entity.js';
 
 describe('AuthorizationRequestService', () => {
-  let authorizationRequestRepository: RepoMock<AuthorizationRequest>;
-  let userRepository: RepoMock<User>;
-  let tokenService: { issueTokens: jest.Mock };
-  let eventEmitter: { emit: jest.Mock };
-  let service: AuthorizationRequestService;
-
-  beforeEach(() => {
-    ({ authorizationRequestRepository, userRepository, tokenService, eventEmitter, service } =
-      createAuthorizationRequestServiceTestContext());
-  });
+  const ctx = useAuthorizationRequestServiceContext();
 
   describe('poll', () => {
     const baseRow = buildFakeAuthorizationRequest();
 
     describe('when the uuid is unknown', () => {
       beforeEach(() => {
-        authorizationRequestRepository.findOneBy.mockResolvedValue(null);
+        ctx.authorizationRequestRepository.findOneBy.mockResolvedValue(null);
       });
 
       it('rejects with NotFoundException', async () => {
-        await expect(service.poll('unknown-uuid', 'poll-token')).rejects.toThrow(NotFoundException);
+        await expect(ctx.service.poll('unknown-uuid', 'poll-token')).rejects.toThrow(NotFoundException);
       });
     });
 
     describe('when the poll token is wrong', () => {
       beforeEach(() => {
-        authorizationRequestRepository.findOneBy.mockResolvedValue(null);
+        ctx.authorizationRequestRepository.findOneBy.mockResolvedValue(null);
       });
 
       it('rejects with the same NotFoundException', async () => {
-        await expect(service.poll('uuid-1', 'wrong-token')).rejects.toThrow(NotFoundException);
+        await expect(ctx.service.poll('uuid-1', 'wrong-token')).rejects.toThrow(NotFoundException);
       });
     });
 
     describe('when the request is open and not expired', () => {
       beforeEach(() => {
-        authorizationRequestRepository.findOneBy.mockResolvedValue({ ...baseRow, status: 'open' });
+        ctx.authorizationRequestRepository.findOneBy.mockResolvedValue({ ...baseRow, status: 'open' });
       });
 
       it('returns { status: "open" }', async () => {
-        await expect(service.poll('uuid-1', 'poll-token')).resolves.toEqual({ status: 'open' });
+        await expect(ctx.service.poll('uuid-1', 'poll-token')).resolves.toEqual({ status: 'open' });
       });
     });
 
     describe('when the request is open and past its expiresAt', () => {
       beforeEach(() => {
-        authorizationRequestRepository.findOneBy.mockResolvedValue({
+        ctx.authorizationRequestRepository.findOneBy.mockResolvedValue({
           ...baseRow,
           status: 'open',
           expiresAt: new Date(Date.now() - 1000),
@@ -64,37 +52,37 @@ describe('AuthorizationRequestService', () => {
       });
 
       it('flips the row to expired with resolvedAt set', async () => {
-        await service.poll('uuid-1', 'poll-token');
+        await ctx.service.poll('uuid-1', 'poll-token');
 
-        expect(authorizationRequestRepository.update).toHaveBeenCalledWith(10, {
+        expect(ctx.authorizationRequestRepository.update).toHaveBeenCalledWith(10, {
           status: 'expired',
           resolvedAt: expect.any(Date),
         });
       });
 
       it('returns { status: "expired" }', async () => {
-        await expect(service.poll('uuid-1', 'poll-token')).resolves.toEqual({ status: 'expired' });
+        await expect(ctx.service.poll('uuid-1', 'poll-token')).resolves.toEqual({ status: 'expired' });
       });
     });
 
     describe('when the request was denied', () => {
       beforeEach(() => {
-        authorizationRequestRepository.findOneBy.mockResolvedValue({ ...baseRow, status: 'denied' });
+        ctx.authorizationRequestRepository.findOneBy.mockResolvedValue({ ...baseRow, status: 'denied' });
       });
 
       it('returns { status: "denied" } without touching the claim UPDATE', async () => {
-        await expect(service.poll('uuid-1', 'poll-token')).resolves.toEqual({ status: 'denied' });
-        expect(authorizationRequestRepository.createQueryBuilder).not.toHaveBeenCalled();
+        await expect(ctx.service.poll('uuid-1', 'poll-token')).resolves.toEqual({ status: 'denied' });
+        expect(ctx.authorizationRequestRepository.createQueryBuilder).not.toHaveBeenCalled();
       });
     });
 
     describe('when the request is already logged', () => {
       beforeEach(() => {
-        authorizationRequestRepository.findOneBy.mockResolvedValue({ ...baseRow, status: 'logged' });
+        ctx.authorizationRequestRepository.findOneBy.mockResolvedValue({ ...baseRow, status: 'logged' });
       });
 
       it('returns { status: "logged" } with no credentials', async () => {
-        await expect(service.poll('uuid-1', 'poll-token')).resolves.toEqual({ status: 'logged' });
+        await expect(ctx.service.poll('uuid-1', 'poll-token')).resolves.toEqual({ status: 'logged' });
       });
     });
 
@@ -102,8 +90,8 @@ describe('AuthorizationRequestService', () => {
       const user = { id: 1, username: 'darthjee', email: 'darthjee@example.com' } as User;
 
       beforeEach(() => {
-        authorizationRequestRepository.findOneBy.mockResolvedValue({ ...baseRow, status: 'approved' });
-        userRepository.findOneBy.mockResolvedValue(user);
+        ctx.authorizationRequestRepository.findOneBy.mockResolvedValue({ ...baseRow, status: 'approved' });
+        ctx.userRepository.findOneBy.mockResolvedValue(user);
       });
 
       describe('and this poll wins the atomic claim (affected: 1)', () => {
@@ -111,17 +99,17 @@ describe('AuthorizationRequestService', () => {
 
         beforeEach(() => {
           builder = queryBuilderMock({ affected: 1 });
-          authorizationRequestRepository.createQueryBuilder.mockReturnValue(builder);
+          ctx.authorizationRequestRepository.createQueryBuilder.mockReturnValue(builder);
         });
 
         it('mints a session for the row\'s user', async () => {
-          await service.poll('uuid-1', 'poll-token');
+          await ctx.service.poll('uuid-1', 'poll-token');
 
-          expect(tokenService.issueTokens).toHaveBeenCalledWith(user);
+          expect(ctx.tokenService.issueTokens).toHaveBeenCalledWith(user);
         });
 
         it('never writes resolvedAt as part of the claim UPDATE', async () => {
-          await service.poll('uuid-1', 'poll-token');
+          await ctx.service.poll('uuid-1', 'poll-token');
 
           expect(builder.set).toHaveBeenCalledWith(
             expect.not.objectContaining({ resolvedAt: expect.anything() }),
@@ -129,16 +117,16 @@ describe('AuthorizationRequestService', () => {
         });
 
         it('emits authorization-request.logged', async () => {
-          await service.poll('uuid-1', 'poll-token');
+          await ctx.service.poll('uuid-1', 'poll-token');
 
-          expect(eventEmitter.emit).toHaveBeenCalledWith(
+          expect(ctx.eventEmitter.emit).toHaveBeenCalledWith(
             'authorization-request.logged',
             expect.objectContaining({ uuid: 'uuid-1', userId: 1 }),
           );
         });
 
         it('returns { status: "approved" } with the freshly issued session', async () => {
-          const result = await service.poll('uuid-1', 'poll-token');
+          const result = await ctx.service.poll('uuid-1', 'poll-token');
 
           expect(result).toEqual({
             status: 'approved',
@@ -149,17 +137,17 @@ describe('AuthorizationRequestService', () => {
 
       describe('and this poll loses the atomic claim (affected: 0)', () => {
         beforeEach(() => {
-          authorizationRequestRepository.createQueryBuilder.mockReturnValue(queryBuilderMock({ affected: 0 }));
+          ctx.authorizationRequestRepository.createQueryBuilder.mockReturnValue(queryBuilderMock({ affected: 0 }));
         });
 
         it('does not mint a session', async () => {
-          await service.poll('uuid-1', 'poll-token');
+          await ctx.service.poll('uuid-1', 'poll-token');
 
-          expect(tokenService.issueTokens).not.toHaveBeenCalled();
+          expect(ctx.tokenService.issueTokens).not.toHaveBeenCalled();
         });
 
         it('returns { status: "logged" } with no credentials', async () => {
-          await expect(service.poll('uuid-1', 'poll-token')).resolves.toEqual({ status: 'logged' });
+          await expect(ctx.service.poll('uuid-1', 'poll-token')).resolves.toEqual({ status: 'logged' });
         });
       });
     });
