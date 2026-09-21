@@ -11,6 +11,40 @@ describe('RegisterController', () => {
     username: 'foo', email: 'foo@example.com', password: 'secret', passwordConfirmation: 'secret',
   };
 
+  const invalidCases = [
+    { description: 'flags a missing username', override: { username: '' }, field: 'username' },
+    { description: 'flags a missing email', override: { email: '' }, field: 'email' },
+    { description: 'flags a malformed email', override: { email: 'not-an-email' }, field: 'email' },
+    { description: 'flags a missing password', override: { password: '' }, field: 'password' },
+    {
+      description: 'flags a missing password confirmation',
+      override: { passwordConfirmation: '' },
+      field: 'passwordConfirmation',
+    },
+    {
+      description: 'flags a mismatched password confirmation',
+      override: { passwordConfirmation: 'other' },
+      field: 'passwordConfirmation',
+    },
+  ];
+
+  const buildController = () => new RegisterController(setFieldErrors, setSubmitError, client);
+
+  const submitSuccessfully = async ({ isAdmin }) => {
+    client.register.and.resolveTo({
+      user: {
+        id: 1, username: 'foo', email: 'foo@example.com', isAdmin,
+      },
+      refreshToken: 'refresh-token',
+    });
+    const controller = buildController();
+    const fakeWindow = installFakeWindow({ location: { hash: '' } });
+
+    await controller.handleSubmit(validFields);
+
+    return fakeWindow;
+  };
+
   beforeEach(() => {
     setFieldErrors = jasmine.createSpy('setFieldErrors');
     setSubmitError = jasmine.createSpy('setSubmitError');
@@ -24,55 +58,23 @@ describe('RegisterController', () => {
 
   describe('#validate', () => {
     it('returns no errors for a valid form', () => {
-      const controller = new RegisterController(setFieldErrors, setSubmitError, client);
+      const controller = buildController();
 
       expect(controller.validate(validFields)).toEqual({});
     });
 
-    it('flags a missing username', () => {
-      const controller = new RegisterController(setFieldErrors, setSubmitError, client);
+    invalidCases.forEach(({ description, override, field }) => {
+      it(description, () => {
+        const controller = buildController();
 
-      expect(controller.validate({ ...validFields, username: '' }).username).toBeDefined();
-    });
-
-    it('flags a missing email', () => {
-      const controller = new RegisterController(setFieldErrors, setSubmitError, client);
-
-      expect(controller.validate({ ...validFields, email: '' }).email).toBeDefined();
-    });
-
-    it('flags a malformed email', () => {
-      const controller = new RegisterController(setFieldErrors, setSubmitError, client);
-
-      expect(controller.validate({ ...validFields, email: 'not-an-email' }).email).toBeDefined();
-    });
-
-    it('flags a missing password', () => {
-      const controller = new RegisterController(setFieldErrors, setSubmitError, client);
-
-      expect(controller.validate({ ...validFields, password: '' }).password).toBeDefined();
-    });
-
-    it('flags a missing password confirmation', () => {
-      const controller = new RegisterController(setFieldErrors, setSubmitError, client);
-
-      expect(
-        controller.validate({ ...validFields, passwordConfirmation: '' }).passwordConfirmation,
-      ).toBeDefined();
-    });
-
-    it('flags a mismatched password confirmation', () => {
-      const controller = new RegisterController(setFieldErrors, setSubmitError, client);
-
-      expect(
-        controller.validate({ ...validFields, passwordConfirmation: 'other' }).passwordConfirmation,
-      ).toBeDefined();
+        expect(controller.validate({ ...validFields, ...override })[field]).toBeDefined();
+      });
     });
   });
 
   describe('#handleSubmit', () => {
     it('sets field errors and skips the API call when the form is invalid', async () => {
-      const controller = new RegisterController(setFieldErrors, setSubmitError, client);
+      const controller = buildController();
 
       await controller.handleSubmit({ ...validFields, username: '' });
 
@@ -81,16 +83,7 @@ describe('RegisterController', () => {
     });
 
     it('clears field errors and redirects home on success', async () => {
-      client.register.and.resolveTo({
-        user: {
-          id: 1, username: 'foo', email: 'foo@example.com', isAdmin: false,
-        },
-        refreshToken: 'refresh-token',
-      });
-      const controller = new RegisterController(setFieldErrors, setSubmitError, client);
-      const fakeWindow = installFakeWindow({ location: { hash: '' } });
-
-      await controller.handleSubmit(validFields);
+      const fakeWindow = await submitSuccessfully({ isAdmin: false });
 
       expect(setFieldErrors).toHaveBeenCalledWith({});
       expect(client.register).toHaveBeenCalledWith(validFields);
@@ -99,23 +92,14 @@ describe('RegisterController', () => {
     });
 
     it('emits the logged-in auth state on success', async () => {
-      client.register.and.resolveTo({
-        user: {
-          id: 1, username: 'foo', email: 'foo@example.com', isAdmin: true,
-        },
-        refreshToken: 'refresh-token',
-      });
-      const controller = new RegisterController(setFieldErrors, setSubmitError, client);
-      installFakeWindow({ location: { hash: '' } });
-
-      await controller.handleSubmit(validFields);
+      await submitSuccessfully({ isAdmin: true });
 
       expect(AuthEvents.emit).toHaveBeenCalledWith(true, true);
     });
 
     it('sets a submit error when the request fails', async () => {
       client.register.and.rejectWith(new Error('username is not available'));
-      const controller = new RegisterController(setFieldErrors, setSubmitError, client);
+      const controller = buildController();
 
       await controller.handleSubmit(validFields);
 

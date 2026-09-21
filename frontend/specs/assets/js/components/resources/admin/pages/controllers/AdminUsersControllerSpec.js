@@ -12,6 +12,25 @@ describe('AdminUsersController', () => {
     id: 1, username: 'foo', email: 'foo@example.com', isAdmin: false, createdAt: '2026-01-01',
   }];
 
+  const buildController = () => (
+    new AdminUsersController(setUsers, setRowResults, setSearchError, client)
+  );
+
+  const itRedirectsHomeOn403 = ({
+    title, method, args, clientMethod, assertUntouched,
+  }) => {
+    it(title, async () => {
+      client[clientMethod].and.rejectWith(new ApiError(403, 'Forbidden'));
+      const controller = buildController();
+      const fakeWindow = installFakeWindow({ location: { hash: '' } });
+
+      await controller[method](...args);
+
+      expect(fakeWindow.location.hash).toBe('/');
+      assertUntouched();
+    });
+  };
+
   beforeEach(() => {
     setUsers = jasmine.createSpy('setUsers');
     setRowResults = jasmine.createSpy('setRowResults');
@@ -26,7 +45,7 @@ describe('AdminUsersController', () => {
   describe('#handleSearch', () => {
     it('clears the search error and stores the returned users', async () => {
       client.searchUsers.and.resolveTo({ users });
-      const controller = new AdminUsersController(setUsers, setRowResults, setSearchError, client);
+      const controller = buildController();
 
       await controller.handleSearch('foo');
 
@@ -37,7 +56,7 @@ describe('AdminUsersController', () => {
 
     it('sets a search error when the request fails', async () => {
       client.searchUsers.and.rejectWith(new Error('network error'));
-      const controller = new AdminUsersController(setUsers, setRowResults, setSearchError, client);
+      const controller = buildController();
 
       await controller.handleSearch('foo');
 
@@ -45,22 +64,19 @@ describe('AdminUsersController', () => {
       expect(setUsers).not.toHaveBeenCalled();
     });
 
-    it('redirects home without setting a search error on a 403', async () => {
-      client.searchUsers.and.rejectWith(new ApiError(403, 'Forbidden'));
-      const controller = new AdminUsersController(setUsers, setRowResults, setSearchError, client);
-      const fakeWindow = installFakeWindow({ location: { hash: '' } });
-
-      await controller.handleSearch('foo');
-
-      expect(fakeWindow.location.hash).toBe('/');
-      expect(setSearchError).not.toHaveBeenCalledWith('Forbidden');
+    itRedirectsHomeOn403({
+      title: 'redirects home without setting a search error on a 403',
+      method: 'handleSearch',
+      args: ['foo'],
+      clientMethod: 'searchUsers',
+      assertUntouched: () => expect(setSearchError).not.toHaveBeenCalledWith('Forbidden'),
     });
   });
 
   describe('#handleGenerateLink', () => {
     it('stores the returned resetUrl against the user row', async () => {
       client.generateRecoveryLink.and.resolveTo({ resetUrl: 'https://example.com/reset?token=abc' });
-      const controller = new AdminUsersController(setUsers, setRowResults, setSearchError, client);
+      const controller = buildController();
 
       await controller.handleGenerateLink(1);
 
@@ -72,7 +88,7 @@ describe('AdminUsersController', () => {
 
     it('stores the error against the user row when the request fails', async () => {
       client.generateRecoveryLink.and.rejectWith(new Error('not found'));
-      const controller = new AdminUsersController(setUsers, setRowResults, setSearchError, client);
+      const controller = buildController();
 
       await controller.handleGenerateLink(1);
 
@@ -81,22 +97,19 @@ describe('AdminUsersController', () => {
       expect(updater({})).toEqual({ 1: { error: 'not found' } });
     });
 
-    it('redirects home without touching row results on a 403', async () => {
-      client.generateRecoveryLink.and.rejectWith(new ApiError(403, 'Forbidden'));
-      const controller = new AdminUsersController(setUsers, setRowResults, setSearchError, client);
-      const fakeWindow = installFakeWindow({ location: { hash: '' } });
-
-      await controller.handleGenerateLink(1);
-
-      expect(fakeWindow.location.hash).toBe('/');
-      expect(setRowResults).not.toHaveBeenCalled();
+    itRedirectsHomeOn403({
+      title: 'redirects home without touching row results on a 403',
+      method: 'handleGenerateLink',
+      args: [1],
+      clientMethod: 'generateRecoveryLink',
+      assertUntouched: () => expect(setRowResults).not.toHaveBeenCalled(),
     });
   });
 
   describe('#handleSendEmail', () => {
     it('stores the returned sent flag against the user row', async () => {
       client.sendRecoveryEmail.and.resolveTo({ sent: true });
-      const controller = new AdminUsersController(setUsers, setRowResults, setSearchError, client);
+      const controller = buildController();
 
       await controller.handleSendEmail(1);
 
@@ -108,7 +121,7 @@ describe('AdminUsersController', () => {
 
     it('stores the error against the user row when the request fails', async () => {
       client.sendRecoveryEmail.and.rejectWith(new Error('mail server unreachable'));
-      const controller = new AdminUsersController(setUsers, setRowResults, setSearchError, client);
+      const controller = buildController();
 
       await controller.handleSendEmail(1);
 
@@ -117,15 +130,12 @@ describe('AdminUsersController', () => {
       expect(updater({})).toEqual({ 1: { error: 'mail server unreachable' } });
     });
 
-    it('redirects home without touching row results on a 403', async () => {
-      client.sendRecoveryEmail.and.rejectWith(new ApiError(403, 'Forbidden'));
-      const controller = new AdminUsersController(setUsers, setRowResults, setSearchError, client);
-      const fakeWindow = installFakeWindow({ location: { hash: '' } });
-
-      await controller.handleSendEmail(1);
-
-      expect(fakeWindow.location.hash).toBe('/');
-      expect(setRowResults).not.toHaveBeenCalled();
+    itRedirectsHomeOn403({
+      title: 'redirects home without touching row results on a 403',
+      method: 'handleSendEmail',
+      args: [1],
+      clientMethod: 'sendRecoveryEmail',
+      assertUntouched: () => expect(setRowResults).not.toHaveBeenCalled(),
     });
   });
 });

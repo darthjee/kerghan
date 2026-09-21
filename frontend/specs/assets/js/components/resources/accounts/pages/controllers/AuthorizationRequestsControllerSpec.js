@@ -65,15 +65,18 @@ describe('AuthorizationRequestsController', () => {
     });
   });
 
-  describe('#authorize', () => {
+  const itBehavesLikeRowAction = ({
+    method, clientMethod, args, successResponse,
+    errorArgs, errorMessage, rowStateBefore, rowStateAfter,
+  }) => {
     it('clears the row error and reloads the list on success', async () => {
-      client.authorizeAuthorizationRequest.and.resolveTo({ authorized: true });
+      client[clientMethod].and.resolveTo(successResponse);
       client.listAuthorizationRequests.and.resolveTo({ requests });
       const controller = buildController();
 
-      await controller.authorize('req-uuid', 'secret');
+      await controller[method](...args);
 
-      expect(client.authorizeAuthorizationRequest).toHaveBeenCalledWith('req-uuid', 'secret');
+      expect(client[clientMethod]).toHaveBeenCalledWith(...args);
       const updater = setRowState.calls.first().args[0];
       expect(updater({})).toEqual({ 'req-uuid': { error: null } });
       expect(client.listAuthorizationRequests).toHaveBeenCalled();
@@ -81,63 +84,50 @@ describe('AuthorizationRequestsController', () => {
     });
 
     it('stores the error against the row and does not reload on a 400', async () => {
-      client.authorizeAuthorizationRequest.and.rejectWith(new ApiError(400, 'Invalid password'));
+      client[clientMethod].and.rejectWith(new ApiError(400, errorMessage));
       const controller = buildController();
 
-      await controller.authorize('req-uuid', 'wrong');
+      await controller[method](...errorArgs);
 
       const updater = setRowState.calls.mostRecent().args[0];
-      expect(updater({ 'req-uuid': { open: true, password: 'wrong' } })).toEqual({
-        'req-uuid': { open: true, password: 'wrong', error: 'Invalid password' },
-      });
+      expect(updater(rowStateBefore)).toEqual(rowStateAfter);
       expect(client.listAuthorizationRequests).not.toHaveBeenCalled();
     });
 
     it('does nothing when the session turned out to be expired', async () => {
-      client.authorizeAuthorizationRequest.and.resolveTo(undefined);
+      client[clientMethod].and.resolveTo(undefined);
       const controller = buildController();
 
-      await controller.authorize('req-uuid', 'secret');
+      await controller[method](...args);
 
       expect(setRowState).not.toHaveBeenCalled();
       expect(client.listAuthorizationRequests).not.toHaveBeenCalled();
+    });
+  };
+
+  describe('#authorize', () => {
+    itBehavesLikeRowAction({
+      method: 'authorize',
+      clientMethod: 'authorizeAuthorizationRequest',
+      args: ['req-uuid', 'secret'],
+      successResponse: { authorized: true },
+      errorArgs: ['req-uuid', 'wrong'],
+      errorMessage: 'Invalid password',
+      rowStateBefore: { 'req-uuid': { open: true, password: 'wrong' } },
+      rowStateAfter: { 'req-uuid': { open: true, password: 'wrong', error: 'Invalid password' } },
     });
   });
 
   describe('#deny', () => {
-    it('clears the row error and reloads the list on success', async () => {
-      client.denyAuthorizationRequest.and.resolveTo({ denied: true });
-      client.listAuthorizationRequests.and.resolveTo({ requests });
-      const controller = buildController();
-
-      await controller.deny('req-uuid');
-
-      expect(client.denyAuthorizationRequest).toHaveBeenCalledWith('req-uuid');
-      const updater = setRowState.calls.first().args[0];
-      expect(updater({})).toEqual({ 'req-uuid': { error: null } });
-      expect(client.listAuthorizationRequests).toHaveBeenCalled();
-      expect(setRequests).toHaveBeenCalledWith(requests);
-    });
-
-    it('stores the error against the row and does not reload on a 400', async () => {
-      client.denyAuthorizationRequest.and.rejectWith(new ApiError(400, 'Request already resolved'));
-      const controller = buildController();
-
-      await controller.deny('req-uuid');
-
-      const updater = setRowState.calls.mostRecent().args[0];
-      expect(updater({})).toEqual({ 'req-uuid': { error: 'Request already resolved' } });
-      expect(client.listAuthorizationRequests).not.toHaveBeenCalled();
-    });
-
-    it('does nothing when the session turned out to be expired', async () => {
-      client.denyAuthorizationRequest.and.resolveTo(undefined);
-      const controller = buildController();
-
-      await controller.deny('req-uuid');
-
-      expect(setRowState).not.toHaveBeenCalled();
-      expect(client.listAuthorizationRequests).not.toHaveBeenCalled();
+    itBehavesLikeRowAction({
+      method: 'deny',
+      clientMethod: 'denyAuthorizationRequest',
+      args: ['req-uuid'],
+      successResponse: { denied: true },
+      errorArgs: ['req-uuid'],
+      errorMessage: 'Request already resolved',
+      rowStateBefore: {},
+      rowStateAfter: { 'req-uuid': { error: 'Request already resolved' } },
     });
   });
 });
