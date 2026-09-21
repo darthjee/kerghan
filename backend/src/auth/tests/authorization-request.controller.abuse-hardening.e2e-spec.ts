@@ -4,103 +4,69 @@ import {
   buildTestApp,
   createAuthorizationRequest,
   createInMemoryRepo,
+  expectUniformCreateResponse,
+  fillCreateLimit,
   login,
+  useTestApp,
 } from './authorization-request.controller.e2e-test-support.js';
 import { AuthorizationRequest } from '../entities/authorization-request.entity.js';
 
 describe('AuthorizationRequestController (e2e)', () => {
-  let app: INestApplication;
-  let authorizationRequestRepo: ReturnType<typeof createInMemoryRepo<AuthorizationRequest>>;
-
-  beforeEach(async () => {
-    ({ app, authorizationRequestRepo } = await buildTestApp());
-  });
-
-  afterEach(async () => {
-    await app.close();
-  });
+  const ctx = useTestApp();
 
   describe('rate limiting and abuse hardening', () => {
     describe('create — per-IP limit', () => {
       it('rejects the 6th create from the same IP without persisting a row, identically for a known/unknown username', async () => {
-        for (let i = 0; i < 5; i += 1) {
-          await request(app.getHttpServer())
-            .post('/auth/authorization-requests.json')
-            .send({ username: `rate-ip-${i}` })
-            .expect(201);
-        }
+        await fillCreateLimit(ctx.app, { username: (i) => `rate-ip-${i}` });
 
-        const rowCountBeforeOverLimit = authorizationRequestRepo.rows.length;
+        const rowCountBeforeOverLimit = ctx.authorizationRequestRepo.rows.length;
 
-        const overLimitUnknown = await request(app.getHttpServer())
+        const overLimitUnknown = await request(ctx.app.getHttpServer())
           .post('/auth/authorization-requests.json')
           .send({ username: 'rate-ip-unknown' })
           .expect(201);
 
-        const overLimitKnown = await request(app.getHttpServer())
+        const overLimitKnown = await request(ctx.app.getHttpServer())
           .post('/auth/authorization-requests.json')
           .send({ username: 'darthjee' })
           .expect(201);
 
-        expect(overLimitUnknown.body).toEqual({
-          uuid: expect.any(String),
-          pollToken: expect.any(String),
-          expiresAt: expect.any(String),
-        });
-        expect(overLimitKnown.body).toEqual({
-          uuid: expect.any(String),
-          pollToken: expect.any(String),
-          expiresAt: expect.any(String),
-        });
-        expect(authorizationRequestRepo.rows.length).toBe(rowCountBeforeOverLimit);
+        expectUniformCreateResponse(overLimitUnknown.body);
+        expectUniformCreateResponse(overLimitKnown.body);
+        expect(ctx.authorizationRequestRepo.rows.length).toBe(rowCountBeforeOverLimit);
       });
     });
 
     describe('create — per-username limit', () => {
-      async function fillUsernameLimit(username: string): Promise<void> {
-        for (let i = 0; i < 5; i += 1) {
-          await request(app.getHttpServer())
-            .post('/auth/authorization-requests.json')
-            .set('X-Forwarded-For', `203.0.113.${i}`)
-            .send({ username })
-            .expect(201);
-        }
-      }
+      const fillUsernameLimit = (username: string): Promise<void> =>
+        fillCreateLimit(ctx.app, { username: () => username, ip: (i) => `203.0.113.${i}` });
 
       it('rejects the 6th create for the same unknown username from a fresh IP, without persisting a row', async () => {
         await fillUsernameLimit('rate-username-unknown');
-        const rowCountBeforeOverLimit = authorizationRequestRepo.rows.length;
+        const rowCountBeforeOverLimit = ctx.authorizationRequestRepo.rows.length;
 
-        const overLimit = await request(app.getHttpServer())
+        const overLimit = await request(ctx.app.getHttpServer())
           .post('/auth/authorization-requests.json')
           .set('X-Forwarded-For', '203.0.113.99')
           .send({ username: 'rate-username-unknown' })
           .expect(201);
 
-        expect(overLimit.body).toEqual({
-          uuid: expect.any(String),
-          pollToken: expect.any(String),
-          expiresAt: expect.any(String),
-        });
-        expect(authorizationRequestRepo.rows.length).toBe(rowCountBeforeOverLimit);
+        expectUniformCreateResponse(overLimit.body);
+        expect(ctx.authorizationRequestRepo.rows.length).toBe(rowCountBeforeOverLimit);
       });
 
       it('rejects the 6th create for the same known username from a fresh IP, identically to an unknown username', async () => {
         await fillUsernameLimit('darthjee');
-        const rowCountBeforeOverLimit = authorizationRequestRepo.rows.length;
+        const rowCountBeforeOverLimit = ctx.authorizationRequestRepo.rows.length;
 
-        const overLimit = await request(app.getHttpServer())
+        const overLimit = await request(ctx.app.getHttpServer())
           .post('/auth/authorization-requests.json')
           .set('X-Forwarded-For', '203.0.113.99')
           .send({ username: 'darthjee' })
           .expect(201);
 
-        expect(overLimit.body).toEqual({
-          uuid: expect.any(String),
-          pollToken: expect.any(String),
-          expiresAt: expect.any(String),
-        });
-        expect(authorizationRequestRepo.rows.length).toBe(rowCountBeforeOverLimit);
+        expectUniformCreateResponse(overLimit.body);
+        expect(ctx.authorizationRequestRepo.rows.length).toBe(rowCountBeforeOverLimit);
       });
     });
 
@@ -146,23 +112,23 @@ describe('AuthorizationRequestController (e2e)', () => {
       let ownerCookie: string;
 
       beforeEach(async () => {
-        ownerCookie = await login(app, 'darthjee', 'my-password');
+        ownerCookie = await login(ctx.app, 'darthjee', 'my-password');
       });
 
       it(
         'locks the row after the configured max wrong-password attempts, rejecting even the correct password with the same uniform message',
         async () => {
-          const { uuid } = await createAuthorizationRequest(app, 'darthjee');
+          const { uuid } = await createAuthorizationRequest(ctx.app, 'darthjee');
 
           for (let i = 0; i < 5; i += 1) {
-            await request(app.getHttpServer())
+            await request(ctx.app.getHttpServer())
               .post(`/auth/authorization-requests/${uuid}/authorize.json`)
               .set('Cookie', [ownerCookie])
               .send({ password: 'wrong-password' })
               .expect(400);
           }
 
-          const lockedResponse = await request(app.getHttpServer())
+          const lockedResponse = await request(ctx.app.getHttpServer())
             .post(`/auth/authorization-requests/${uuid}/authorize.json`)
             .set('Cookie', [ownerCookie])
             .send({ password: 'my-password' })
@@ -170,7 +136,7 @@ describe('AuthorizationRequestController (e2e)', () => {
 
           expect(lockedResponse.body.message).toBe('Unable to authorize this request');
 
-          const row = authorizationRequestRepo.rows.find((candidate) => candidate.uuid === uuid);
+          const row = ctx.authorizationRequestRepo.rows.find((candidate) => candidate.uuid === uuid);
           expect(row?.status).toBe('open');
         },
         15000,
@@ -179,17 +145,17 @@ describe('AuthorizationRequestController (e2e)', () => {
 
     describe('DTO length caps', () => {
       it('rejects an oversized username on create with 400', async () => {
-        await request(app.getHttpServer())
+        await request(ctx.app.getHttpServer())
           .post('/auth/authorization-requests.json')
           .send({ username: 'a'.repeat(256) })
           .expect(400);
       });
 
       it('rejects an oversized password on authorize with 400', async () => {
-        const ownerCookie = await login(app, 'darthjee', 'my-password');
-        const { uuid } = await createAuthorizationRequest(app, 'darthjee');
+        const ownerCookie = await login(ctx.app, 'darthjee', 'my-password');
+        const { uuid } = await createAuthorizationRequest(ctx.app, 'darthjee');
 
-        await request(app.getHttpServer())
+        await request(ctx.app.getHttpServer())
           .post(`/auth/authorization-requests/${uuid}/authorize.json`)
           .set('Cookie', [ownerCookie])
           .send({ password: 'a'.repeat(129) })
