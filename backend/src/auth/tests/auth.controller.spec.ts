@@ -1,5 +1,5 @@
 import { ConfigService } from '@nestjs/config';
-import type { Request, Response } from 'express';
+import type { Response } from 'express';
 import { AccountService } from '../account.service.js';
 import { AuthController } from '../auth.controller.js';
 import { AuthService } from '../auth.service.js';
@@ -114,9 +114,9 @@ describe('AuthController', () => {
       };
       const controller = buildController({ accountService });
       const dto = { currentPassword: 'my-password', username: 'new-username' };
-      const req = { user: { sub: 1 } } as unknown as Request;
+      const currentUser = { sub: 1, username: 'darthjee', isAdmin: false };
 
-      const result = await controller.updateAccount(dto, req);
+      const result = await controller.updateAccount(dto, currentUser);
 
       expect(accountService.updateAccount).toHaveBeenCalledWith(1, dto);
       expect(result).toEqual({ username: 'new-username', email: 'darthjee@example.com' });
