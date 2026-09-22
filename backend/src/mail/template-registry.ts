@@ -20,6 +20,31 @@ export interface RawTemplate {
 export type TemplateRegistry = Readonly<Record<string, RawTemplate>>;
 
 /**
+ * The known set of files read from a single template directory.
+ */
+type TemplateFileName = 'subject.txt' | 'body.txt' | 'body.html';
+
+/**
+ * The single, guarded place where a template file's path is resolved and its
+ * content is read. Every `existsSync`/`readFileSync` pair in this module
+ * routes through this function.
+ * @param {string} dir - Absolute path to the template directory.
+ * @param {TemplateFileName} file - The template file name to read.
+ * @returns {string | undefined} The file content, or `undefined` when the
+ *   file does not exist.
+ * @throws {Error} When the resolved path escapes `dir`.
+ */
+export function readTemplateFile(dir: string, file: TemplateFileName): string | undefined {
+  const path = join(dir, file);
+
+  if (!path.startsWith(join(dir, '.'))) {
+    throw new Error(`mail: resolved template path escapes '${dir}'`);
+  }
+
+  return existsSync(path) ? readFileSync(path, 'utf8') : undefined;
+}
+
+/**
  * Reads one template directory into a frozen {@link RawTemplate}.
  * @param {string} dir - Absolute path to the template directory.
  * @param {string} name - The template directory name, for error messages.
@@ -27,25 +52,25 @@ export type TemplateRegistry = Readonly<Record<string, RawTemplate>>;
  * @throws {Error} When `subject.txt` or `body.txt` is missing.
  */
 function readTemplateDir(dir: string, name: string): RawTemplate {
-  const subjectPath = join(dir, 'subject.txt');
-  const bodyPath = join(dir, 'body.txt');
-  const htmlPath = join(dir, 'body.html');
+  const subject = readTemplateFile(dir, 'subject.txt');
+  const text = readTemplateFile(dir, 'body.txt');
+  const html = readTemplateFile(dir, 'body.html');
 
-  if (!existsSync(subjectPath)) {
+  if (subject === undefined) {
     throw new Error(`mail: template '${name}' is missing subject.txt`);
   }
 
-  if (!existsSync(bodyPath)) {
+  if (text === undefined) {
     throw new Error(`mail: template '${name}' is missing body.txt`);
   }
 
   const template: RawTemplate = {
-    subject: readFileSync(subjectPath, 'utf8').replace(/\r?\n$/, ''),
-    text: readFileSync(bodyPath, 'utf8'),
+    subject: subject.replace(/\r?\n$/, ''),
+    text,
   };
 
-  if (existsSync(htmlPath)) {
-    template.html = readFileSync(htmlPath, 'utf8');
+  if (html !== undefined) {
+    template.html = html;
   }
 
   return Object.freeze(template);
