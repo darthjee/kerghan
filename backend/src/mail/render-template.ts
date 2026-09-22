@@ -1,4 +1,4 @@
-import type { TemplateRegistry } from './template-registry.js';
+import type { RawTemplate, TemplateRegistry } from './template-registry.js';
 
 /**
  * The interpolated output of {@link renderTemplate}: `subject` and `text`
@@ -13,13 +13,13 @@ export interface RenderedTemplate {
 
 const PLACEHOLDER = /\{\{\s*([A-Za-z0-9_]+)\s*\}\}/g;
 
-const HTML_ESCAPES: Record<string, string> = {
-  '&': '&amp;',
-  '<': '&lt;',
-  '>': '&gt;',
-  '"': '&quot;',
-  "'": '&#39;',
-};
+const HTML_ESCAPES = new Map<string, string>([
+  ['&', '&amp;'],
+  ['<', '&lt;'],
+  ['>', '&gt;'],
+  ['"', '&quot;'],
+  ["'", '&#39;'],
+]);
 const HTML_ESCAPE_PATTERN = /[&<>"']/g;
 
 /**
@@ -29,7 +29,9 @@ const HTML_ESCAPE_PATTERN = /[&<>"']/g;
  * @returns {string} The value with `& < > " '` replaced by entities.
  */
 function escapeHtml(value: string): string {
-  return value.replace(HTML_ESCAPE_PATTERN, (char) => HTML_ESCAPES[char]);
+  // `HTML_ESCAPE_PATTERN` only ever matches one of the five characters held
+  // in `HTML_ESCAPES`, so this lookup is guaranteed to hit.
+  return value.replace(HTML_ESCAPE_PATTERN, (char) => HTML_ESCAPES.get(char) as string);
 }
 
 /**
@@ -47,12 +49,19 @@ function interpolate(
   escape: boolean,
   templateName: string,
 ): string {
+  const variablesMap = new Map(Object.entries(variables));
+
   return text.replace(PLACEHOLDER, (_match, key: string) => {
-    if (!Object.prototype.hasOwnProperty.call(variables, key)) {
+    if (!variablesMap.has(key)) {
       throw new Error(`mail: template '${templateName}' is missing variable '${key}'`);
     }
 
-    return escape ? escapeHtml(variables[key]) : variables[key];
+    // `variablesMap.has(key)` above guarantees this lookup hits; TypeScript's
+    // control-flow analysis can't link a `Map.has` check to a later
+    // `Map.get` the way it can for `in`/plain-object narrowing.
+    const value = variablesMap.get(key) as string;
+
+    return escape ? escapeHtml(value) : value;
   });
 }
 
@@ -76,7 +85,8 @@ export function renderTemplate(
   templateName: string,
   variables: Record<string, string>,
 ): RenderedTemplate {
-  const raw = registry[templateName];
+  const registryMap = new Map<string, RawTemplate>(Object.entries(registry));
+  const raw = registryMap.get(templateName);
 
   if (!raw) {
     throw new Error(`mail: unknown template: ${templateName}`);
