@@ -49,12 +49,19 @@ function interpolate(
   escape: boolean,
   templateName: string,
 ): string {
+  const variablesMap = new Map(Object.entries(variables));
+
   return text.replace(PLACEHOLDER, (_match, key: string) => {
-    if (!Object.prototype.hasOwnProperty.call(variables, key)) {
+    if (!variablesMap.has(key)) {
       throw new Error(`mail: template '${templateName}' is missing variable '${key}'`);
     }
 
-    return escape ? escapeHtml(variables[key]) : variables[key];
+    // `variablesMap.has(key)` above guarantees this lookup hits; TypeScript's
+    // control-flow analysis can't link a `Map.has` check to a later
+    // `Map.get` the way it can for `in`/plain-object narrowing.
+    const value = variablesMap.get(key) as string;
+
+    return escape ? escapeHtml(value) : value;
   });
 }
 
