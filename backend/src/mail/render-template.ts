@@ -13,13 +13,13 @@ export interface RenderedTemplate {
 
 const PLACEHOLDER = /\{\{\s*([A-Za-z0-9_]+)\s*\}\}/g;
 
-const HTML_ESCAPES: Record<string, string> = {
-  '&': '&amp;',
-  '<': '&lt;',
-  '>': '&gt;',
-  '"': '&quot;',
-  "'": '&#39;',
-};
+const HTML_ESCAPES = new Map<string, string>([
+  ['&', '&amp;'],
+  ['<', '&lt;'],
+  ['>', '&gt;'],
+  ['"', '&quot;'],
+  ["'", '&#39;'],
+]);
 const HTML_ESCAPE_PATTERN = /[&<>"']/g;
 
 /**
@@ -29,7 +29,9 @@ const HTML_ESCAPE_PATTERN = /[&<>"']/g;
  * @returns {string} The value with `& < > " '` replaced by entities.
  */
 function escapeHtml(value: string): string {
-  return value.replace(HTML_ESCAPE_PATTERN, (char) => HTML_ESCAPES[char]);
+  // `HTML_ESCAPE_PATTERN` only ever matches one of the five characters held
+  // in `HTML_ESCAPES`, so this lookup is guaranteed to hit.
+  return value.replace(HTML_ESCAPE_PATTERN, (char) => HTML_ESCAPES.get(char) as string);
 }
 
 /**
