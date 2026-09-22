@@ -1,7 +1,9 @@
 import { join } from 'node:path';
-import { buildTemplateRegistry } from '../template-registry.js';
+import { buildTemplateRegistry, readTemplateFile } from '../template-registry.js';
 
 const fixture = (...segments: string[]): string => join(__dirname, 'fixtures', ...segments);
+
+type TemplateFileName = Parameters<typeof readTemplateFile>[1];
 
 describe('buildTemplateRegistry', () => {
   describe('with a directory of well-formed templates', () => {
@@ -57,5 +59,16 @@ describe('buildTemplateRegistry', () => {
 
   it('returns an empty registry when the directory does not exist', () => {
     expect(buildTemplateRegistry(fixture('does-not-exist'))).toEqual({});
+  });
+});
+
+describe('readTemplateFile', () => {
+  it('throws when the resolved file path would escape the given directory', () => {
+    const dir = fixture('templates-ok');
+    const escapingFile = '../../escape.txt' as unknown as TemplateFileName;
+
+    expect(() => readTemplateFile(dir, escapingFile)).toThrow(
+      `mail: resolved template path escapes '${dir}'`,
+    );
   });
 });
