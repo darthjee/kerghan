@@ -1,4 +1,4 @@
-import type { TemplateRegistry } from './template-registry.js';
+import type { RawTemplate, TemplateRegistry } from './template-registry.js';
 
 /**
  * The interpolated output of {@link renderTemplate}: `subject` and `text`
@@ -85,7 +85,8 @@ export function renderTemplate(
   templateName: string,
   variables: Record<string, string>,
 ): RenderedTemplate {
-  const raw = registry[templateName];
+  const registryMap = new Map<string, RawTemplate>(Object.entries(registry));
+  const raw = registryMap.get(templateName);
 
   if (!raw) {
     throw new Error(`mail: unknown template: ${templateName}`);
