@@ -1,9 +1,11 @@
-import { Body, Controller, Delete, HttpCode, HttpStatus, Patch, Post, Req, Res } from '@nestjs/common';
+import { Body, Controller, Delete, HttpCode, HttpStatus, Patch, Post, Res } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import type { Request, Response } from 'express';
+import type { Response } from 'express';
 import { AccountService } from './account.service.js';
 import { respondWithSession } from './auth-response.js';
 import { AuthService } from './auth.service.js';
+import type { AccessTokenPayload } from '../core/access-token-payload.js';
+import { CurrentUser } from '../core/current-user.decorator.js';
 import { Public } from '../core/public.decorator.js';
 import { SkipCache } from '../core/skip-cache.decorator.js';
 import { LoginDto } from './dto/login.dto.js';
@@ -49,12 +51,12 @@ export class AuthController {
    * `@Public()`). Updates the caller's own username, email, and/or password,
    * always confirmed by their current password (see `AccountService#updateAccount`).
    * @param {UpdateAccountDto} dto - The requested changes plus the current password.
-   * @param {Request} req - Used to read the caller's own user ID (`req.user!.sub`).
+   * @param {AccessTokenPayload} user - The caller's own authenticated user, supplying the user ID.
    * @returns {Promise<object>} `{ username, email }` on success.
    */
   @Patch('account.json')
-  async updateAccount(@Body() dto: UpdateAccountDto, @Req() req: Request): Promise<object> {
-    return this.accountService.updateAccount(req.user!.sub, dto);
+  async updateAccount(@Body() dto: UpdateAccountDto, @CurrentUser() user: AccessTokenPayload): Promise<object> {
+    return this.accountService.updateAccount(user.sub, dto);
   }
 
   /**

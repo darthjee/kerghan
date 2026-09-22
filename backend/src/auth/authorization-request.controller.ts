@@ -6,7 +6,9 @@ import { AuthorizationRequestService } from './authorization-request.service.js'
 import { AuthorizeAuthorizationRequestDto } from './dto/authorize-authorization-request.dto.js';
 import { CreateAuthorizationRequestDto } from './dto/create-authorization-request.dto.js';
 import { PollAuthorizationRequestDto } from './dto/poll-authorization-request.dto.js';
+import type { AccessTokenPayload } from '../core/access-token-payload.js';
 import { DEFAULT_TRUSTED_PROXY_HOPS, extractClientRequestInfo } from '../core/client-request.js';
+import { CurrentUser } from '../core/current-user.decorator.js';
 import { Public } from '../core/public.decorator.js';
 import { SkipCache } from '../core/skip-cache.decorator.js';
 
@@ -18,8 +20,8 @@ import { SkipCache } from '../core/skip-cache.decorator.js';
  * already-valid access token. `mine`/`authorize`/`deny` are the
  * approver-device routes — the first authenticated, non-admin routes in the
  * codebase — protected only by the default (non-`@Public()`) `JwtGuard`,
- * with no `@AdminOnly()`; the approver's id comes from `req.user!.sub`.
- * `@SkipCache()` is applied once at the controller level so Tent's proxy
+ * with no `@AdminOnly()`; the approver's id comes from the `@CurrentUser()`
+ * accessor. `@SkipCache()` is applied once at the controller level so Tent's proxy
  * never caches — and cross-serves — a per-device/per-caller response.
  */
 @Controller('auth')
@@ -88,12 +90,12 @@ export class AuthorizationRequestController {
    * `POST /auth/authorization-requests/mine.json`. Authenticated (default
    * `JwtGuard`, no `@Public()`). Lists the caller's own `open`, non-expired
    * authorization requests, newest first.
-   * @param {Request} req - Used to read the caller's own user ID (`req.user!.sub`).
+   * @param {AccessTokenPayload} user - The caller's own authenticated user, supplying the user ID.
    * @returns {Promise<object>} `{ requests: [{ uuid, requestIp, requestUserAgent, createdAt, expiresAt }] }`.
    */
   @Post('authorization-requests/mine.json')
-  async mine(@Req() req: Request): Promise<object> {
-    const requests = await this.authorizationRequestService.listOpenForUser(req.user!.sub);
+  async mine(@CurrentUser() user: AccessTokenPayload): Promise<object> {
+    const requests = await this.authorizationRequestService.listOpenForUser(user.sub);
 
     return { requests };
   }
@@ -108,16 +110,16 @@ export class AuthorizationRequestController {
    * triggered by a business rejection.
    * @param {string} uuid - The authorization request's UUID.
    * @param {AuthorizeAuthorizationRequestDto} dto - Carries the approver's current password.
-   * @param {Request} req - Used to read the caller's own user ID (`req.user!.sub`).
+   * @param {AccessTokenPayload} user - The caller's own authenticated user, supplying the user ID.
    * @returns {Promise<object>} `{ authorized: true }`.
    */
   @Post('authorization-requests/:uuid/authorize.json')
   async authorize(
     @Param('uuid') uuid: string,
     @Body() dto: AuthorizeAuthorizationRequestDto,
-    @Req() req: Request,
+    @CurrentUser() user: AccessTokenPayload,
   ): Promise<object> {
-    await this.authorizationRequestService.authorize(uuid, req.user!.sub, dto.password);
+    await this.authorizationRequestService.authorize(uuid, user.sub, dto.password);
 
     return { authorized: true };
   }
@@ -128,12 +130,12 @@ export class AuthorizationRequestController {
    * as `authorize`, but no password is required. Every business rejection
    * surfaces as the same `400 Bad Request` as `authorize`'s.
    * @param {string} uuid - The authorization request's UUID.
-   * @param {Request} req - Used to read the caller's own user ID (`req.user!.sub`).
+   * @param {AccessTokenPayload} user - The caller's own authenticated user, supplying the user ID.
    * @returns {Promise<object>} `{ denied: true }`.
    */
   @Post('authorization-requests/:uuid/deny.json')
-  async deny(@Param('uuid') uuid: string, @Req() req: Request): Promise<object> {
-    await this.authorizationRequestService.deny(uuid, req.user!.sub);
+  async deny(@Param('uuid') uuid: string, @CurrentUser() user: AccessTokenPayload): Promise<object> {
+    await this.authorizationRequestService.deny(uuid, user.sub);
 
     return { denied: true };
   }
