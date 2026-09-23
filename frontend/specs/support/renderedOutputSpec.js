@@ -38,12 +38,33 @@ describe('renderedOutput', () => {
     });
   });
 
+  describe('#containsElement', () => {
+    it('is true for text that is the full content of the named element', () => {
+      const output = renderedOutput(React.createElement(Component));
+
+      expect(output.containsElement('p', 'Hello')).toBeTrue();
+    });
+
+    it('is false for text absent from the rendered output', () => {
+      const output = renderedOutput(React.createElement(Component));
+
+      expect(output.containsElement('p', 'Goodbye')).toBeFalse();
+    });
+
+    it('is false for the same text under a different tag', () => {
+      const output = renderedOutput(React.createElement(Component));
+
+      expect(output.containsElement('span', 'Hello')).toBeFalse();
+    });
+  });
+
   it('renders the element once, however many queries are made', () => {
     const output = renderedOutput(React.createElement(Component));
 
     output.contains('Hello');
     output.contains('Goodbye');
     output.containsTag('p');
+    output.containsElement('p', 'Hello');
 
     expect(Component).toHaveBeenCalledTimes(1);
   });
