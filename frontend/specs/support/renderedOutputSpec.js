@@ -78,6 +78,32 @@ describe('renderedOutput', () => {
     });
   });
 
+  describe('#containsInOrder', () => {
+    let output;
+
+    beforeEach(() => {
+      output = renderedOutput(React.createElement(
+        'div',
+        null,
+        React.createElement('h1', null, 'Title'),
+        React.createElement('p', null, 'Body'),
+        React.createElement('span', null, 'Footer'),
+      ));
+    });
+
+    it('is true for texts in rendered order', () => {
+      expect(output.containsInOrder('Title', 'Body', 'Footer')).toBeTrue();
+    });
+
+    it('is false for the same texts out of order', () => {
+      expect(output.containsInOrder('Body', 'Title', 'Footer')).toBeFalse();
+    });
+
+    it('is false when one of the texts is absent', () => {
+      expect(output.containsInOrder('Title', 'Missing', 'Footer')).toBeFalse();
+    });
+  });
+
   it('renders the element once, however many queries are made', () => {
     const output = renderedOutput(React.createElement(Component));
 
@@ -86,6 +112,7 @@ describe('renderedOutput', () => {
     output.containsTag('p');
     output.containsElement('p', 'Hello');
     output.containsAttribute('class', 'greeting');
+    output.containsInOrder('class', 'Hello');
 
     expect(Component).toHaveBeenCalledTimes(1);
   });

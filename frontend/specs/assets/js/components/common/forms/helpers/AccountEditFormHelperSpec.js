@@ -1,61 +1,40 @@
-import { renderToStaticMarkup } from 'react-dom/server';
 import AccountEditFormHelper from '../../../../../../../assets/js/components/common/forms/helpers/AccountEditFormHelper.jsx';
+import { itBehavesLikeAnAccountEditFormHelper } from '../../../../../../support/accountEditFormHelperExamples.js';
+import { renderedOutput } from '../../../../../../support/renderedOutput.js';
 
 describe('AccountEditFormHelper', () => {
-  const buildHandlers = () => ({
-    onSubmit: jasmine.createSpy('onSubmit'),
-    onChange: jasmine.createSpy('onChange').and.returnValue(jasmine.createSpy('handler')),
-  });
-  const buildState = (overrides = {}) => ({
-    username: '',
-    email: '',
-    currentPassword: '',
-    newPassword: '',
-    newPasswordConfirmation: '',
-    fieldErrors: {},
-    submitError: null,
-    success: false,
-    ...overrides,
-  });
   const buildOptions = (overrides = {}) => ({
     heading: 'Some Heading',
     successMessage: 'Saved it.',
     idPrefix: 'some-prefix-',
     ...overrides,
   });
+  const Helper = {
+    render: (state, handlers) => AccountEditFormHelper.render(state, handlers, buildOptions()),
+  };
+  const { buildHandlers, buildState } = itBehavesLikeAnAccountEditFormHelper({
+    Helper,
+    heading: 'Some Heading',
+    successMessage: 'Saved it.',
+    submitError: 'Boom',
+    idPrefix: 'some-prefix-',
+    changeFields: ['username', 'email', 'newPassword', 'newPasswordConfirmation'],
+  });
   const leadingFields = [['currentPassword', 'password', 'Current password']];
   const render = (state = buildState(), handlers = buildHandlers(), options = buildOptions()) => (
-    renderToStaticMarkup(AccountEditFormHelper.render(state, handlers, options))
+    renderedOutput(AccountEditFormHelper.render(state, handlers, options))
   );
 
-  describe('.render', () => {
-    it('renders the container and the given heading', () => {
-      const html = render();
+  describe('.render (form-specific)', () => {
+    it('renders the change-password section', () => {
+      const page = render();
 
-      expect(html).toContain('<div class="container mt-4"><h1>Some Heading</h1>');
+      expect(page.containsTag('hr')).withContext('separator').toBeTrue();
+      expect(page.containsElement('h2', 'Change password'))
+        .withContext('change-password heading').toBeTrue();
     });
 
-    it('renders the profile fields with the given id prefix', () => {
-      const html = render();
-
-      expect(html).toContain('id="some-prefix-username"');
-      expect(html).toContain('id="some-prefix-email"');
-    });
-
-    it('renders the change-password section and the new-password fields', () => {
-      const html = render();
-
-      expect(html).toContain('<hr/>');
-      expect(html).toContain('<h2 class="h5">Change password</h2>');
-      expect(html).toContain('id="some-prefix-newPassword"');
-      expect(html).toContain('id="some-prefix-newPasswordConfirmation"');
-    });
-
-    it('renders the save button', () => {
-      expect(render()).toContain('<button type="submit" class="btn btn-primary">Save</button>');
-    });
-
-    it('wires each field to handlers.onChange(name)', () => {
+    it('wires exactly the profile and new-password fields to handlers.onChange(name)', () => {
       const handlers = buildHandlers();
 
       render(buildState(), handlers);
@@ -65,63 +44,29 @@ describe('AccountEditFormHelper', () => {
       ]);
     });
 
-    it('renders the current field values', () => {
-      const html = render(buildState({ username: 'foo', email: 'foo@example.com' }));
-
-      expect(html).toContain('value="foo"');
-      expect(html).toContain('value="foo@example.com"');
-    });
-
-    it('renders the submit-time error alert when present', () => {
-      const html = render(buildState({ submitError: 'Boom' }));
-
-      expect(html).toContain('<div class="alert alert-danger">Boom</div>');
-    });
-
-    it('renders no submit-error alert when there is none', () => {
-      expect(render()).not.toContain('alert-danger');
-    });
-
-    it('renders the given success message once the save succeeded', () => {
-      const html = render(buildState({ success: true }));
-
-      expect(html).toContain('<div class="alert alert-success">Saved it.</div>');
-    });
-
-    it('renders no success confirmation before a save', () => {
-      expect(render()).not.toContain('alert-success');
-    });
-
-    it('renders inline field errors', () => {
-      const html = render(buildState({ fieldErrors: { email: 'is invalid' } }));
-
-      expect(html).toContain('is-invalid');
-      expect(html).toContain('is invalid');
-    });
-
     describe('without leadingPasswordFields', () => {
       it('renders no current-password field', () => {
-        expect(render()).not.toContain('some-prefix-currentPassword');
+        expect(render().contains('some-prefix-currentPassword'))
+          .withContext('current-password field').toBeFalse();
       });
     });
 
     describe('with leadingPasswordFields', () => {
-      const html = () => render(
+      const renderWithLeading = () => render(
         buildState(), buildHandlers(), buildOptions({ leadingPasswordFields: leadingFields }),
       );
 
       it('renders the leading field with the id prefix', () => {
-        expect(html()).toContain('id="some-prefix-currentPassword"');
+        expect(renderWithLeading().containsAttribute('id', 'some-prefix-currentPassword'))
+          .withContext('current-password input id').toBeTrue();
       });
 
       it('renders the leading field after the heading and before the new-password fields', () => {
-        const markup = html();
-        const headingAt = markup.indexOf('Change password</h2>');
-        const leadingAt = markup.indexOf('some-prefix-currentPassword');
-        const newPasswordAt = markup.indexOf('some-prefix-newPassword"');
+        const page = renderWithLeading();
 
-        expect(headingAt).toBeLessThan(leadingAt);
-        expect(leadingAt).toBeLessThan(newPasswordAt);
+        expect(page.containsInOrder(
+          'Change password', 'some-prefix-currentPassword', 'some-prefix-newPassword',
+        )).withContext('field order').toBeTrue();
       });
     });
   });
