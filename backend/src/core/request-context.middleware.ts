@@ -42,7 +42,7 @@ export class RequestContextMiddleware implements NestMiddleware {
       res.on('finish', () => {
         this.logger.info('request', {
           method: req.method,
-          path: (req.originalUrl ?? req.url).split('?')[0],
+          path: req.originalUrl.split('?')[0],
           statusCode: res.statusCode,
           requestId,
         });

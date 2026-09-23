@@ -52,22 +52,6 @@ describe('RequestContextMiddleware', () => {
     });
   });
 
-  it('falls back to req.url when originalUrl is absent', () => {
-    const logger = buildLogger();
-    const middleware = new RequestContextMiddleware(new RequestContextService(), logger as never);
-    const res = buildResponse(404);
-
-    middleware.use({ method: 'POST', url: '/fallback.json' } as Request, res, jest.fn() as NextFunction);
-    res.emitFinish();
-
-    expect(logger.info).toHaveBeenCalledWith('request', {
-      method: 'POST',
-      path: '/fallback.json',
-      statusCode: 404,
-      requestId: expect.any(String),
-    });
-  });
-
   it('runs next() inside an active request context', () => {
     const requestContext = new RequestContextService();
     const middleware = new RequestContextMiddleware(requestContext, buildLogger() as never);
