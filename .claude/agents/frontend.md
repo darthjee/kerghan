@@ -132,7 +132,7 @@ export default XHelper;
 - Private rendering pieces are non-exported module-level functions.
 - Table lookups keyed by runtime values (modes, panels, field names) go through a `Map`
   (`TABLE.get(key)`), not bracket access on a plain object.
-- Older helpers/clients are still static classes and are being migrated (#214, #227–#230);
+- Older helpers/clients are still static classes and are being migrated (#227–#230);
   follow this shape for new code.
 
 ### Quick decision guide
