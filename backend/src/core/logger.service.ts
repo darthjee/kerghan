@@ -4,12 +4,28 @@ import { RequestContextService } from './request-context.service.js';
 
 type LogLevel = 'debug' | 'info' | 'warn' | 'error';
 
-const LEVEL_RANK: Record<LogLevel, number> = {
-  debug: 0,
-  info: 1,
-  warn: 2,
-  error: 3,
-};
+const LEVEL_RANK = new Map<LogLevel, number>([
+  ['debug', 0],
+  ['info', 1],
+  ['warn', 2],
+  ['error', 3],
+]);
+
+/**
+ * Console transport per level. Each entry resolves `console.<level>` at call
+ * time (rather than binding it once at module load) so test spies installed
+ * after import still intercept the call.
+ */
+const CONSOLE_WRITERS = new Map<LogLevel, (...args: unknown[]) => void>([
+  // eslint-disable-next-line no-console
+  ['debug', (...args) => console.debug(...args)],
+  // eslint-disable-next-line no-console
+  ['info', (...args) => console.info(...args)],
+  // eslint-disable-next-line no-console
+  ['warn', (...args) => console.warn(...args)],
+  // eslint-disable-next-line no-console
+  ['error', (...args) => console.error(...args)],
+]);
 
 /**
  * Core-layer, constructor-injectable logging service with level filtering and
@@ -129,15 +145,14 @@ export class LoggerService implements NestLoggerService {
     }
 
     const effective = this.resolveAttributes(attributes);
+    const writer = CONSOLE_WRITERS.get(level)!;
 
     if (effective === undefined) {
-      // eslint-disable-next-line no-console
-      console[level](message);
+      writer(message);
       return;
     }
 
-    // eslint-disable-next-line no-console
-    console[level](message, effective);
+    writer(message, effective);
   }
 
   /**
@@ -167,6 +182,8 @@ export class LoggerService implements NestLoggerService {
    * @returns {boolean} `true` when the level's rank is at or above the threshold's rank.
    */
   private shouldLog(level: LogLevel): boolean {
-    return LEVEL_RANK[level] >= LEVEL_RANK[this.threshold];
+    // An unrecognized threshold yields `undefined`, which compares as `false`
+    // (nothing is emitted) — the same outcome as the former bracket lookup.
+    return LEVEL_RANK.get(level)! >= LEVEL_RANK.get(this.threshold)!;
   }
 }
