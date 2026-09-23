@@ -7,9 +7,35 @@
 
 import { transformSync } from '@babel/core';
 import { readFileSync } from 'fs';
+import path from 'path';
 import { fileURLToPath } from 'url';
 
 const IMAGE_EXTENSIONS = ['.png', '.jpg', '.jpeg', '.gif', '.svg', '.webp'];
+
+/**
+ * Absolute path of the frontend project root, derived from this loader's own location.
+ *
+ * @type {string}
+ */
+export const FRONTEND_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
+
+/**
+ * Reads a module's source, refusing any file outside the frontend project root.
+ *
+ * @description Converts the `file:` URL to a normalized filesystem path and reads it only
+ *   when it lies strictly inside {@link FRONTEND_ROOT}. The separator is appended to the
+ *   prefix check so a sibling directory sharing the root's name prefix is rejected.
+ * @param {string} url - The `file:` URL of the module to read.
+ * @returns {{filePath: string, source: string}} The resolved path and the file's contents.
+ * @throws {Error} When the resolved path is outside the frontend root.
+ */
+export function readSource(url) {
+  const filePath = path.resolve(fileURLToPath(url));
+  if (!filePath.startsWith(FRONTEND_ROOT + path.sep)) {
+    throw new Error(`Refusing to read outside the frontend root: ${filePath}`);
+  }
+  return { filePath, source: readFileSync(filePath, 'utf-8') };
+}
 
 /**
  * Resolve hook for the Node.js module loader.
@@ -35,11 +61,11 @@ export async function resolve(specifier, context, nextResolve) {
 /**
  * Transforms a `.jsx` file into plain JavaScript via Babel.
  *
- * @param {string} filePath - The absolute filesystem path of the `.jsx` file.
+ * @param {string} url - The `file:` URL of the `.jsx` module.
  * @returns {{format: string, source: string, shortCircuit: boolean}} The transformed module.
  */
-function loadJsx(filePath) {
-  const source = readFileSync(filePath, 'utf-8');
+function loadJsx(url) {
+  const { filePath, source } = readSource(url);
   const transformed = transformSync(source, {
     filename: filePath,
     presets: [
@@ -86,8 +112,7 @@ function shimImportMetaEnv(filePath, source) {
  */
 export async function load(url, context, nextLoad) {
   if (url.endsWith('?raw')) {
-    const filePath = fileURLToPath(url.slice(0, -'?raw'.length));
-    const source = readFileSync(filePath, 'utf-8');
+    const { source } = readSource(url.slice(0, -'?raw'.length));
     return {
       format: 'module',
       source: `export default ${JSON.stringify(source)};`,
@@ -95,7 +120,7 @@ export async function load(url, context, nextLoad) {
     };
   }
   if (url.endsWith('.jsx')) {
-    return loadJsx(fileURLToPath(url));
+    return loadJsx(url);
   }
   if (url.endsWith('.css') || url.endsWith('.scss')) {
     // Frontend entrypoints import stylesheets, but Node-based specs only need the JS module graph.
@@ -116,8 +141,8 @@ export async function load(url, context, nextLoad) {
   }
   const [bareUrl] = url.split('?');
   if (bareUrl.endsWith('.js') && !bareUrl.includes('/node_modules/')) {
-    const filePath = fileURLToPath(bareUrl);
-    const shimmed = shimImportMetaEnv(filePath, readFileSync(filePath, 'utf-8'));
+    const { filePath, source } = readSource(bareUrl);
+    const shimmed = shimImportMetaEnv(filePath, source);
     if (shimmed) {
       return shimmed;
     }
