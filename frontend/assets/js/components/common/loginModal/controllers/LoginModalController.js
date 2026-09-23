@@ -20,12 +20,12 @@ const MODES = {
 };
 
 /** Maps an {@link AuthorizationRequestPoller} rejection status to its result-panel value. */
-const DEVICE_REJECTION_PANELS = {
-  denied: 'device:denied',
-  expired: 'device:expired',
-  logged: 'device:logged',
-  notFound: 'device:notFound',
-};
+const DEVICE_REJECTION_PANELS = new Map([
+  ['denied', 'device:denied'],
+  ['expired', 'device:expired'],
+  ['logged', 'device:logged'],
+  ['notFound', 'device:notFound'],
+]);
 
 /**
  * Controller for the login modal: owns mode state and per-mode submission. Password mode
@@ -108,14 +108,14 @@ export default class LoginModalController {
    * @returns {Promise<void>} Resolves once submission handling finishes.
    */
   handleSubmit(mode, fields, resetToken) {
-    const handlers = {
-      [MODES.register]: () => this.#submitRegister(fields),
-      [MODES.recover]: () => this.#submitRecover(fields),
-      [MODES.resetPassword]: () => this.#submitResetPassword(fields, resetToken),
-      [MODES.device]: () => this.#submitDevice(fields),
-    };
+    const handlers = new Map([
+      [MODES.register, () => this.#submitRegister(fields)],
+      [MODES.recover, () => this.#submitRecover(fields)],
+      [MODES.resetPassword, () => this.#submitResetPassword(fields, resetToken)],
+      [MODES.device, () => this.#submitDevice(fields)],
+    ]);
 
-    return (handlers[mode] ?? (() => this.#submitPassword(fields)))();
+    return (handlers.get(mode) ?? (() => this.#submitPassword(fields)))();
   }
 
   /**
@@ -253,7 +253,7 @@ export default class LoginModalController {
    * @returns {void} Nothing.
    */
   #handleDeviceRejection(status) {
-    this.setResultPanel(DEVICE_REJECTION_PANELS[status]);
+    this.setResultPanel(DEVICE_REJECTION_PANELS.get(status));
     this.stopPoller();
   }
 
