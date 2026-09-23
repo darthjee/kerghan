@@ -60,7 +60,7 @@ type SendPlan = { method: string } | { skipped: SendEmailResult };
 export class MailService {
   private readonly logger: LoggerService;
   private readonly config: MailConfig;
-  private readonly methods: Record<string, EmailMethod>;
+  private readonly methods: Map<string, EmailMethod>;
   private readonly templates: TemplateRegistry;
 
   /**
@@ -78,7 +78,7 @@ export class MailService {
       logger: LoggerService,
   ) {
     this.config = config;
-    this.methods = methods;
+    this.methods = new Map(Object.entries(methods));
     this.templates = templates;
     this.logger = logger;
   }
@@ -196,7 +196,9 @@ export class MailService {
   }
 
   async #deliver(params: SendEmailParams, from: string, method: string): Promise<SendEmailResult> {
-    const { messageId } = await this.methods[method].deliver({
+    const resolved = this.#assertKnownMethod(method);
+
+    const { messageId } = await resolved.deliver({
       from,
       to: params.to,
       subject: params.subject,
@@ -207,10 +209,15 @@ export class MailService {
     return { status: 'sent', method, messageId };
   }
 
-  #assertKnownMethod(method: string): void {
-    if (!this.methods[method]) {
+  // Resolves `method` against the registry, throwing when it is unknown.
+  #assertKnownMethod(method: string): EmailMethod {
+    const resolved = this.methods.get(method);
+
+    if (!resolved) {
       throw new Error(`mail: unknown method: ${method}`);
     }
+
+    return resolved;
   }
 
   #assertSendable(params: SendEmailParams, from: string): void {
