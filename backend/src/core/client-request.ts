@@ -58,5 +58,7 @@ function extractIp(
 
   const trustedIndex = Math.max(0, hops.length - trustedProxyHops);
 
-  return hops[trustedIndex];
+  // `trustedIndex` is always within `[0, hops.length)` here: it is clamped to
+  // `>= 0` and `hops` is non-empty.
+  return hops.at(trustedIndex)!;
 }
