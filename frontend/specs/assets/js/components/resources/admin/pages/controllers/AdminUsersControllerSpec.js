@@ -17,14 +17,14 @@ describe('AdminUsersController', () => {
   );
 
   const itRedirectsHomeOn403 = ({
-    title, method, args, clientMethod, assertUntouched,
+    title, stub, act, assertUntouched,
   }) => {
     it(title, async () => {
-      client[clientMethod].and.rejectWith(new ApiError(403, 'Forbidden'));
+      stub(client).and.rejectWith(new ApiError(403, 'Forbidden'));
       const controller = buildController();
       const fakeWindow = installFakeWindow({ location: { hash: '' } });
 
-      await controller[method](...args);
+      await act(controller);
 
       expect(fakeWindow.location.hash).toBe('/');
       assertUntouched();
@@ -66,9 +66,8 @@ describe('AdminUsersController', () => {
 
     itRedirectsHomeOn403({
       title: 'redirects home without setting a search error on a 403',
-      method: 'handleSearch',
-      args: ['foo'],
-      clientMethod: 'searchUsers',
+      stub: (c) => c.searchUsers,
+      act: (controller) => controller.handleSearch('foo'),
       assertUntouched: () => expect(setSearchError).not.toHaveBeenCalledWith('Forbidden'),
     });
   });
@@ -99,9 +98,8 @@ describe('AdminUsersController', () => {
 
     itRedirectsHomeOn403({
       title: 'redirects home without touching row results on a 403',
-      method: 'handleGenerateLink',
-      args: [1],
-      clientMethod: 'generateRecoveryLink',
+      stub: (c) => c.generateRecoveryLink,
+      act: (controller) => controller.handleGenerateLink(1),
       assertUntouched: () => expect(setRowResults).not.toHaveBeenCalled(),
     });
   });
@@ -132,9 +130,8 @@ describe('AdminUsersController', () => {
 
     itRedirectsHomeOn403({
       title: 'redirects home without touching row results on a 403',
-      method: 'handleSendEmail',
-      args: [1],
-      clientMethod: 'sendRecoveryEmail',
+      stub: (c) => c.sendRecoveryEmail,
+      act: (controller) => controller.handleSendEmail(1),
       assertUntouched: () => expect(setRowResults).not.toHaveBeenCalled(),
     });
   });
