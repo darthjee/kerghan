@@ -159,6 +159,46 @@ describe('AccountEditAbuseGuardService', () => {
 
       await expect(guard.registerFailure(1)).rejects.toThrow(error);
     });
+
+    it('re-throws a QueryFailedError whose driver error has a different code', async () => {
+      accountEditLockoutRepository.findOne.mockResolvedValueOnce(null);
+      const error = new QueryFailedError('INSERT INTO auth_account_edit_lockouts ...', [], {
+        code: 'ER_LOCK_DEADLOCK',
+      } as never);
+      accountEditLockoutRepository.save.mockRejectedValueOnce(error);
+
+      await expect(guard.registerFailure(1)).rejects.toThrow(error);
+      expect(accountEditLockoutRepository.update).not.toHaveBeenCalled();
+    });
+
+    it('re-throws a QueryFailedError whose driver error has no code', async () => {
+      accountEditLockoutRepository.findOne.mockResolvedValueOnce(null);
+      const error = new QueryFailedError('INSERT INTO auth_account_edit_lockouts ...', [], new Error('boom'));
+      accountEditLockoutRepository.save.mockRejectedValueOnce(error);
+
+      await expect(guard.registerFailure(1)).rejects.toThrow(error);
+      expect(accountEditLockoutRepository.update).not.toHaveBeenCalled();
+    });
+
+    it('re-throws a QueryFailedError with no driver error', async () => {
+      accountEditLockoutRepository.findOne.mockResolvedValueOnce(null);
+      // TypeORM's constructor calls `driverError.toString()`, so it cannot be built with an
+      // undefined driver error directly; strip it afterwards instead.
+      const error = new QueryFailedError('INSERT INTO auth_account_edit_lockouts ...', [], new Error('boom'));
+      Object.defineProperty(error, 'driverError', { value: undefined });
+      accountEditLockoutRepository.save.mockRejectedValueOnce(error);
+
+      await expect(guard.registerFailure(1)).rejects.toThrow(error);
+      expect(accountEditLockoutRepository.update).not.toHaveBeenCalled();
+    });
+
+    it('re-throws a non-Error rejection value as-is', async () => {
+      accountEditLockoutRepository.findOne.mockResolvedValueOnce(null);
+      accountEditLockoutRepository.save.mockRejectedValueOnce(null);
+
+      await expect(guard.registerFailure(1)).rejects.toBeNull();
+      expect(accountEditLockoutRepository.update).not.toHaveBeenCalled();
+    });
   });
 
   describe('reset', () => {

@@ -125,9 +125,18 @@ export class AccountEditAbuseGuardService {
   }
 
   #isDuplicateUserIdError(error: unknown): boolean {
-    const code = (error as { driverError?: { code?: string } })?.driverError?.code;
+    if (!(error instanceof QueryFailedError)) {
+      return false;
+    }
 
-    return error instanceof QueryFailedError && code === MYSQL_DUPLICATE_ENTRY_CODE;
+    const driverError: unknown = error.driverError;
+
+    return (
+      typeof driverError === 'object' &&
+      driverError !== null &&
+      'code' in driverError &&
+      driverError.code === MYSQL_DUPLICATE_ENTRY_CODE
+    );
   }
 
   #nextAttemptState(currentAttempts: number): { attempts: number; lockedUntil: Date | null } {
