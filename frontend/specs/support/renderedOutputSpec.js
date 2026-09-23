@@ -58,6 +58,26 @@ describe('renderedOutput', () => {
     });
   });
 
+  describe('#containsAttribute', () => {
+    it('is true for an attribute with the given value', () => {
+      const output = renderedOutput(React.createElement(Component));
+
+      expect(output.containsAttribute('class', 'greeting')).toBeTrue();
+    });
+
+    it('is false for the attribute with a different value', () => {
+      const output = renderedOutput(React.createElement(Component));
+
+      expect(output.containsAttribute('class', 'farewell')).toBeFalse();
+    });
+
+    it('is false for the same value under a different attribute', () => {
+      const output = renderedOutput(React.createElement(Component));
+
+      expect(output.containsAttribute('id', 'greeting')).toBeFalse();
+    });
+  });
+
   it('renders the element once, however many queries are made', () => {
     const output = renderedOutput(React.createElement(Component));
 
@@ -65,6 +85,7 @@ describe('renderedOutput', () => {
     output.contains('Goodbye');
     output.containsTag('p');
     output.containsElement('p', 'Hello');
+    output.containsAttribute('class', 'greeting');
 
     expect(Component).toHaveBeenCalledTimes(1);
   });
