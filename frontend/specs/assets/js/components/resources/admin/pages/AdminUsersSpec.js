@@ -1,17 +1,17 @@
 import React from 'react';
-import { renderToStaticMarkup } from 'react-dom/server';
 import AdminUsers from '../../../../../../../assets/js/components/resources/admin/pages/AdminUsers.jsx';
 import AdminUsersHelper from '../../../../../../../assets/js/components/resources/admin/pages/helpers/AdminUsersHelper.jsx';
 import AdminUsersController from '../../../../../../../assets/js/components/resources/admin/pages/controllers/AdminUsersController.js';
 import { renderCapturingHandlers } from '../../../../../../support/renderCapturingHandlers.js';
+import { renderedOutput } from '../../../../../../support/renderedOutput.js';
 
 describe('AdminUsers', () => {
   it('passes the default state to the helper', () => {
     spyOn(AdminUsersHelper, 'render').and.returnValue(React.createElement('div', null, 'admin-users'));
 
-    const html = renderToStaticMarkup(React.createElement(AdminUsers));
+    const page = renderedOutput(React.createElement(AdminUsers));
 
-    expect(html).toContain('admin-users');
+    expect(page.contains('admin-users')).toBeTrue();
     expect(AdminUsersHelper.render).toHaveBeenCalledWith(
       {
         query: '', users: [], rowResults: {}, searchError: null,
