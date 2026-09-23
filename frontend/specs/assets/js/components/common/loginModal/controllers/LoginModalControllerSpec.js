@@ -3,14 +3,7 @@ import AuthEvents from '../../../../../../../assets/js/client/AuthEvents.js';
 import LoginModalEvents from '../../../../../../../assets/js/client/LoginModalEvents.js';
 import AuthorizationRequestPoller from '../../../../../../../assets/js/utils/polling/AuthorizationRequestPoller.js';
 import { installFakeWindow, uninstallFakeWindow } from '../../../../../../support/fakeWindow.js';
-
-// Drain pending microtasks so a real poll tick started by `jasmine.clock().tick()` runs to
-// completion.
-async function flush() {
-  await Promise.resolve();
-  await Promise.resolve();
-  await Promise.resolve();
-}
+import { flushMicrotasks as flush } from '../../../../../../support/flushMicrotasks.js';
 
 describe('LoginModalController', () => {
   let setMode;
@@ -120,6 +113,15 @@ describe('LoginModalController', () => {
       expect(setSubmitError).toHaveBeenCalledWith('invalid credentials');
       expect(AuthEvents.emit).not.toHaveBeenCalled();
       expect(LoginModalEvents.close).not.toHaveBeenCalled();
+    });
+
+    it('falls back to the password submit for an unknown mode', async () => {
+      client.login.and.resolveTo({ user: { isAdmin: false } });
+      await build().handleSubmit('bogus', passwordFields);
+
+      expect(client.login).toHaveBeenCalledWith(passwordFields);
+      expect(AuthEvents.emit).toHaveBeenCalledOnceWith(true, false);
+      expect(LoginModalEvents.close).toHaveBeenCalledTimes(1);
     });
   });
 
