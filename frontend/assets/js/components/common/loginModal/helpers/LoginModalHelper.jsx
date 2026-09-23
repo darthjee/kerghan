@@ -1,24 +1,32 @@
 import Modal from 'react-bootstrap/cjs/Modal.js';
 import LoginModalFormsHelper from './LoginModalFormsHelper.jsx';
 
-const TITLES = {
-  password: 'Log in',
-  register: 'Create an account',
-  recover: 'Recover password',
-  resetPassword: 'Set a new password',
-  device: 'Authorize with logged device',
-};
+const TITLES = new Map([
+  ['password', 'Log in'],
+  ['register', 'Create an account'],
+  ['recover', 'Recover password'],
+  ['resetPassword', 'Set a new password'],
+  ['device', 'Authorize with logged device'],
+]);
+
+/**
+ * Resolve the modal title for the active mode.
+ *
+ * @param {string} mode - The active mode (`'password'`, `'register'`, `'recover'`,
+ *   `'resetPassword'`, or `'device'`).
+ * @returns {string} The title text.
+ */
+function title(mode) {
+  return TITLES.get(mode) ?? TITLES.get('password');
+}
 
 /**
  * Rendering helper for the login modal shell: a `react-bootstrap` `Modal` whose body is the
  * mode selector plus the active mode's sub-form (delegated to {@link LoginModalFormsHelper}).
- * Follows the same static-class-with-`#render*`-methods convention as `LoginHelper` /
- * `HeaderHelper`.
+ * Follows the object-module convention: a plain exported object whose public methods are
+ * the only entry points, with private render pieces kept as module-level functions.
  */
-// eslint-disable-next-line @typescript-eslint/no-extraneous-class -- static-methods-only
-// utility/client class is this codebase's deliberate convention, matching
-// components/common/loginModal/helpers/LoginModalFormsHelper.jsx.
-export default class LoginModalHelper {
+const LoginModalHelper = {
   /**
    * Render the login modal. Renders nothing visible while `state.open` is false.
    *
@@ -30,27 +38,18 @@ export default class LoginModalHelper {
    *   onPasswordConfirmationChange: Function}} handlers - Event handlers.
    * @returns {React.ReactElement} The rendered modal.
    */
-  static render(state, handlers) {
+  render(state, handlers) {
     return (
       <Modal show={state.open} onHide={handlers.onClose}>
         <Modal.Header closeButton>
-          <Modal.Title>{LoginModalHelper.#title(state.mode)}</Modal.Title>
+          <Modal.Title>{title(state.mode)}</Modal.Title>
         </Modal.Header>
         <Modal.Body>
           {LoginModalFormsHelper.render(state, handlers)}
         </Modal.Body>
       </Modal>
     );
-  }
+  },
+};
 
-  /**
-   * Resolve the modal title for the active mode.
-   *
-   * @param {string} mode - The active mode (`'password'`, `'register'`, `'recover'`,
-   *   `'resetPassword'`, or `'device'`).
-   * @returns {string} The title text.
-   */
-  static #title(mode) {
-    return TITLES[mode] ?? TITLES.password;
-  }
-}
+export default LoginModalHelper;
