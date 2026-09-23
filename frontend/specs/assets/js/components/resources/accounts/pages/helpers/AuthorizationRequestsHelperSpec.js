@@ -11,7 +11,7 @@ describe('AuthorizationRequestsHelper', () => {
   const buildState = (overrides = {}) => ({
     requests: [],
     loadError: null,
-    rowState: {},
+    rowState: new Map(),
     ...overrides,
   });
 
@@ -89,7 +89,7 @@ describe('AuthorizationRequestsHelper', () => {
       });
 
       it('renders an inline password field and Confirm button once toggled open', () => {
-        const rowState = { 'req-uuid': { open: true, password: '' } };
+        const rowState = new Map([['req-uuid', { open: true, password: '' }]]);
         const html = renderToStaticMarkup(
           AuthorizationRequestsHelper.render(buildState({ requests, rowState }), buildHandlers()),
         );
@@ -100,7 +100,7 @@ describe('AuthorizationRequestsHelper', () => {
       });
 
       it('wires the password-change and confirm-authorize handlers with the request uuid', () => {
-        const rowState = { 'req-uuid': { open: true, password: '' } };
+        const rowState = new Map([['req-uuid', { open: true, password: '' }]]);
         const handlers = buildHandlers();
         renderToStaticMarkup(
           AuthorizationRequestsHelper.render(buildState({ requests, rowState }), handlers),
@@ -111,7 +111,7 @@ describe('AuthorizationRequestsHelper', () => {
       });
 
       it('renders a row-level error message', () => {
-        const rowState = { 'req-uuid': { error: 'Invalid password' } };
+        const rowState = new Map([['req-uuid', { error: 'Invalid password' }]]);
         const html = renderToStaticMarkup(
           AuthorizationRequestsHelper.render(buildState({ requests, rowState }), buildHandlers()),
         );
