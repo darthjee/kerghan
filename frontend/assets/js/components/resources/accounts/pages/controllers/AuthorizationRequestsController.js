@@ -14,8 +14,8 @@ export default class AuthorizationRequestsController {
    * @param {Function} setRequests - React state setter for the current list of open
    *   authorization requests.
    * @param {Function} setLoadError - React state setter for the list-load error message.
-   * @param {Function} setRowState - React state setter for the per-request row UI state map
-   *   (keyed by request uuid), holding `{open, password, error}`.
+   * @param {Function} setRowState - React state setter for the per-request row UI state, a
+   *   `Map` keyed by request uuid whose values hold `{open, password, error}`.
    * @param {typeof AccountsClient} [client] - Accounts HTTP client override, for testability.
    */
   constructor(setRequests, setLoadError, setRowState, client = AccountsClient) {
@@ -89,25 +89,23 @@ export default class AuthorizationRequestsController {
         return;
       }
 
-      this.#patchRowState(uuid, { error: null });
+      this.patchRow(uuid, { error: null });
       await this.load();
     } catch (error) {
-      this.#patchRowState(uuid, { error: error.message });
+      this.patchRow(uuid, { error: error.message });
     }
   }
 
   /**
    * Merge a patch into a single request row's UI state, preserving its other fields (e.g.
-   * `open`/`password`).
+   * `open`/`password`). The row-state updater always returns a new `Map`, never mutating the
+   * current one, so React sees a new reference and re-renders.
    *
    * @param {string} uuid - The authorization request identifier, used to key the row state.
    * @param {object} patch - The fields to merge into that row's state.
    * @returns {void} Nothing.
    */
-  #patchRowState(uuid, patch) {
-    this.setRowState((current) => ({
-      ...current,
-      [uuid]: { ...current[uuid], ...patch },
-    }));
+  patchRow(uuid, patch) {
+    this.setRowState((current) => new Map(current).set(uuid, { ...current.get(uuid), ...patch }));
   }
 }

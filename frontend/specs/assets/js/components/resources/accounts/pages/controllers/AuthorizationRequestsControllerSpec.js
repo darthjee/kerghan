@@ -78,7 +78,7 @@ describe('AuthorizationRequestsController', () => {
 
       expect(client[clientMethod]).toHaveBeenCalledWith(...args);
       const updater = setRowState.calls.first().args[0];
-      expect(updater({})).toEqual({ 'req-uuid': { error: null } });
+      expect(updater(new Map())).toEqual(new Map([['req-uuid', { error: null }]]));
       expect(client.listAuthorizationRequests).toHaveBeenCalled();
       expect(setRequests).toHaveBeenCalledWith(requests);
     });
@@ -113,8 +113,10 @@ describe('AuthorizationRequestsController', () => {
       successResponse: { authorized: true },
       errorArgs: ['req-uuid', 'wrong'],
       errorMessage: 'Invalid password',
-      rowStateBefore: { 'req-uuid': { open: true, password: 'wrong' } },
-      rowStateAfter: { 'req-uuid': { open: true, password: 'wrong', error: 'Invalid password' } },
+      rowStateBefore: new Map([['req-uuid', { open: true, password: 'wrong' }]]),
+      rowStateAfter: new Map([
+        ['req-uuid', { open: true, password: 'wrong', error: 'Invalid password' }],
+      ]),
     });
   });
 
@@ -126,8 +128,43 @@ describe('AuthorizationRequestsController', () => {
       successResponse: { denied: true },
       errorArgs: ['req-uuid'],
       errorMessage: 'Request already resolved',
-      rowStateBefore: {},
-      rowStateAfter: { 'req-uuid': { error: 'Request already resolved' } },
+      rowStateBefore: new Map(),
+      rowStateAfter: new Map([['req-uuid', { error: 'Request already resolved' }]]),
+    });
+  });
+
+  describe('#patchRow', () => {
+    const applyPatch = (current, uuid, patch) => {
+      buildController().patchRow(uuid, patch);
+      const updater = setRowState.calls.mostRecent().args[0];
+
+      return updater(current);
+    };
+
+    it('merges the patch into an existing row, keeping its other fields', () => {
+      const current = new Map([['req-uuid', { open: true, password: 'secret', error: 'old' }]]);
+
+      expect(applyPatch(current, 'req-uuid', { error: null })).toEqual(
+        new Map([['req-uuid', { open: true, password: 'secret', error: null }]]),
+      );
+    });
+
+    it('creates the row when it does not exist yet', () => {
+      const current = new Map([['other-uuid', { open: true }]]);
+
+      expect(applyPatch(current, 'req-uuid', { open: true })).toEqual(new Map([
+        ['other-uuid', { open: true }],
+        ['req-uuid', { open: true }],
+      ]));
+    });
+
+    it('returns a new Map without mutating the current one', () => {
+      const current = new Map([['req-uuid', { open: false }]]);
+
+      const result = applyPatch(current, 'req-uuid', { open: true });
+
+      expect(result).not.toBe(current);
+      expect(current).toEqual(new Map([['req-uuid', { open: false }]]));
     });
   });
 });
