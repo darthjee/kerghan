@@ -47,7 +47,7 @@ const registerStructureExamples = (renderPage, { heading, idPrefix }) => {
   it('wires the form submission to the submit handler', () => {
     const page = renderPage(buildState(), buildHandlers());
 
-    expect(page.contains('<form')).withContext('form tag').toBeTrue();
+    expect(page.containsTag('form')).withContext('form tag').toBeTrue();
     expect(page.contains('>Save<')).withContext('Save button').toBeTrue();
   });
 

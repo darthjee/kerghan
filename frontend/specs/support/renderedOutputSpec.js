@@ -14,7 +14,7 @@ describe('renderedOutput', () => {
     it('is true for text present in the rendered output', () => {
       const output = renderedOutput(React.createElement(Component));
 
-      expect(output.contains('<p class="greeting">Hello</p>')).toBeTrue();
+      expect(output.contains('class="greeting">Hello')).toBeTrue();
     });
 
     it('is false for text absent from the rendered output', () => {
@@ -24,11 +24,26 @@ describe('renderedOutput', () => {
     });
   });
 
+  describe('#containsTag', () => {
+    it('is true for a tag present in the rendered output', () => {
+      const output = renderedOutput(React.createElement(Component));
+
+      expect(output.containsTag('p')).toBeTrue();
+    });
+
+    it('is false for a tag absent from the rendered output', () => {
+      const output = renderedOutput(React.createElement(Component));
+
+      expect(output.containsTag('form')).toBeFalse();
+    });
+  });
+
   it('renders the element once, however many queries are made', () => {
     const output = renderedOutput(React.createElement(Component));
 
     output.contains('Hello');
     output.contains('Goodbye');
+    output.containsTag('p');
 
     expect(Component).toHaveBeenCalledTimes(1);
   });
