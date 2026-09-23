@@ -6,9 +6,8 @@ import NavDropdown from 'react-bootstrap/cjs/NavDropdown.js';
 /**
  * Rendering helper for the Header element.
  */
-// eslint-disable-next-line @typescript-eslint/no-extraneous-class -- static-methods-only
-// utility/client class is this codebase's deliberate convention, matching
-// components/helpers/AppHelper.jsx.
+// eslint-disable-next-line @typescript-eslint/no-extraneous-class -- legacy static-methods-only
+// helper, pending migration to the object-module helper shape.
 export default class HeaderHelper {
   /**
    * Render the application navigation bar.
