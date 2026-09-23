@@ -2,7 +2,7 @@ import MyAccountHelper from '../../../../../../../../assets/js/components/resour
 import { itBehavesLikeAnAccountEditFormHelper } from '../../../../../../../support/accountEditFormHelperExamples.js';
 
 describe('MyAccountHelper', () => {
-  const { buildHandlers, buildState, renderHtml } = itBehavesLikeAnAccountEditFormHelper({
+  const { buildHandlers, buildState, renderPage } = itBehavesLikeAnAccountEditFormHelper({
     Helper: MyAccountHelper,
     heading: 'My Account',
     successMessage: 'Account updated.',
@@ -15,15 +15,16 @@ describe('MyAccountHelper', () => {
 
   describe('.render (current password)', () => {
     it('renders the current-password field', () => {
-      const html = renderHtml(buildState(), buildHandlers());
+      const page = renderPage(buildState(), buildHandlers());
 
-      expect(html).toContain('Current password');
-      expect(html).toContain('id="my-account-currentPassword"');
+      expect(page.contains('Current password')).withContext('current-password label').toBeTrue();
+      expect(page.contains('id="my-account-currentPassword"'))
+        .withContext('current-password input id').toBeTrue();
     });
 
     it('wires the current-password change handler', () => {
       const handlers = buildHandlers();
-      renderHtml(buildState(), handlers);
+      renderPage(buildState(), handlers);
 
       expect(handlers.onChange).toHaveBeenCalledWith('currentPassword');
     });

@@ -1,4 +1,4 @@
-import { renderToStaticMarkup } from 'react-dom/server';
+import { renderedOutput } from './renderedOutput.js';
 
 const ID_FIELDS = ['username', 'email', 'newPassword', 'newPasswordConfirmation'];
 
@@ -33,27 +33,29 @@ const buildState = (overrides = {}) => ({
 /**
  * Registers the cases about the page heading, the form and the input ids.
  *
- * @param {Function} renderHtml - `(state, handlers)` returning the rendered static markup.
+ * @param {Function} renderPage - `(state, handlers)` returning the `renderedOutput` of the render.
  * @param {object} options - The options given to the example group.
  * @returns {void}
  */
-const registerStructureExamples = (renderHtml, { heading, idPrefix }) => {
+const registerStructureExamples = (renderPage, { heading, idPrefix }) => {
   it('renders the page heading', () => {
-    expect(renderHtml(buildState(), buildHandlers())).toContain(heading);
+    const page = renderPage(buildState(), buildHandlers());
+
+    expect(page.contains(heading)).withContext('page heading').toBeTrue();
   });
 
   it('wires the form submission to the submit handler', () => {
-    const html = renderHtml(buildState(), buildHandlers());
+    const page = renderPage(buildState(), buildHandlers());
 
-    expect(html).toContain('<form');
-    expect(html).toContain('>Save<');
+    expect(page.containsTag('form')).withContext('form tag').toBeTrue();
+    expect(page.contains('>Save<')).withContext('Save button').toBeTrue();
   });
 
   ID_FIELDS.forEach((name) => {
     it(`gives the ${name} input the id prefixed with ${idPrefix}`, () => {
-      const html = renderHtml(buildState(), buildHandlers());
+      const page = renderPage(buildState(), buildHandlers());
 
-      expect(html).toContain(`id="${idPrefix}${name}"`);
+      expect(page.contains(`id="${idPrefix}${name}"`)).withContext(`${name} input id`).toBeTrue();
     });
   });
 };
@@ -61,69 +63,75 @@ const registerStructureExamples = (renderHtml, { heading, idPrefix }) => {
 /**
  * Registers the cases about the submit-time error alert and the success confirmation.
  *
- * @param {Function} renderHtml - `(state, handlers)` returning the rendered static markup.
+ * @param {Function} renderPage - `(state, handlers)` returning the `renderedOutput` of the render.
  * @param {object} options - The options given to the example group.
  * @returns {void}
  */
-const registerAlertExamples = (renderHtml, { successMessage, submitError }) => {
+const registerAlertExamples = (renderPage, { successMessage, submitError }) => {
   it('renders the submit-time error alert when present', () => {
-    const html = renderHtml(buildState({ submitError }), buildHandlers());
+    const page = renderPage(buildState({ submitError }), buildHandlers());
 
-    expect(html).toContain(submitError);
-    expect(html).toContain('alert-danger');
+    expect(page.contains(submitError)).withContext('submit error text').toBeTrue();
+    expect(page.contains('alert-danger')).withContext('danger alert').toBeTrue();
   });
 
   it('renders no submit-error alert when there is none', () => {
-    expect(renderHtml(buildState(), buildHandlers())).not.toContain('alert-danger');
+    const page = renderPage(buildState(), buildHandlers());
+
+    expect(page.contains('alert-danger')).withContext('danger alert').toBeFalse();
   });
 
   it('renders a success confirmation once the save succeeded', () => {
-    const html = renderHtml(buildState({ success: true }), buildHandlers());
+    const page = renderPage(buildState({ success: true }), buildHandlers());
 
-    expect(html).toContain('alert-success');
-    expect(html).toContain(successMessage);
+    expect(page.contains('alert-success')).withContext('success alert').toBeTrue();
+    expect(page.contains(successMessage)).withContext('success message').toBeTrue();
   });
 
   it('renders no success confirmation before a save', () => {
-    expect(renderHtml(buildState(), buildHandlers())).not.toContain('alert-success');
+    const page = renderPage(buildState(), buildHandlers());
+
+    expect(page.contains('alert-success')).withContext('success alert').toBeFalse();
   });
 };
 
 /**
  * Registers the cases about field values, inline errors and change handlers.
  *
- * @param {Function} renderHtml - `(state, handlers)` returning the rendered static markup.
+ * @param {Function} renderPage - `(state, handlers)` returning the `renderedOutput` of the render.
  * @param {object} options - The options given to the example group.
  * @returns {void}
  */
-const registerFieldExamples = (renderHtml, { changeFields }) => {
+const registerFieldExamples = (renderPage, { changeFields }) => {
   it('renders the current field values', () => {
-    const html = renderHtml(
+    const page = renderPage(
       buildState({ username: 'foo', email: 'foo@example.com' }),
       buildHandlers(),
     );
 
-    expect(html).toContain('value="foo"');
-    expect(html).toContain('value="foo@example.com"');
+    expect(page.contains('value="foo"')).withContext('username value').toBeTrue();
+    expect(page.contains('value="foo@example.com"')).withContext('email value').toBeTrue();
   });
 
   it('renders an inline error for an invalid field', () => {
-    const html = renderHtml(
+    const page = renderPage(
       buildState({ fieldErrors: { email: 'Email is invalid' } }),
       buildHandlers(),
     );
 
-    expect(html).toContain('Email is invalid');
-    expect(html).toContain('is-invalid');
+    expect(page.contains('Email is invalid')).withContext('inline error text').toBeTrue();
+    expect(page.contains('is-invalid')).withContext('invalid field class').toBeTrue();
   });
 
   it('renders no inline error for a field with no recorded error', () => {
-    expect(renderHtml(buildState(), buildHandlers())).not.toContain('is-invalid');
+    const page = renderPage(buildState(), buildHandlers());
+
+    expect(page.contains('is-invalid')).withContext('invalid field class').toBeFalse();
   });
 
   it('wires each field\'s change handler with its own field name', () => {
     const handlers = buildHandlers();
-    renderHtml(buildState(), handlers);
+    renderPage(buildState(), handlers);
 
     changeFields.forEach((name) => {
       expect(handlers.onChange).toHaveBeenCalledWith(name);
@@ -144,19 +152,19 @@ const registerFieldExamples = (renderHtml, { changeFields }) => {
  * @param {string} options.submitError - Text used for the submit-error alert case.
  * @param {string} options.idPrefix - The prefix of the input ids (e.g. `my-account-`).
  * @param {string[]} options.changeFields - The field names the change handler is wired with.
- * @returns {{buildHandlers: Function, buildState: Function, renderHtml: Function}} The
- *   `buildHandlers()` and `buildState(overrides)` builders, plus `renderHtml(state, handlers)`
- *   returning the static markup of `Helper.render(state, handlers)`.
+ * @returns {{buildHandlers: Function, buildState: Function, renderPage: Function}} The
+ *   `buildHandlers()` and `buildState(overrides)` builders, plus `renderPage(state, handlers)`
+ *   returning the `renderedOutput` of `Helper.render(state, handlers)`.
  */
 export const itBehavesLikeAnAccountEditFormHelper = (options) => {
   const { Helper } = options;
-  const renderHtml = (state, handlers) => renderToStaticMarkup(Helper.render(state, handlers));
+  const renderPage = (state, handlers) => renderedOutput(Helper.render(state, handlers));
 
   describe('.render', () => {
-    registerStructureExamples(renderHtml, options);
-    registerAlertExamples(renderHtml, options);
-    registerFieldExamples(renderHtml, options);
+    registerStructureExamples(renderPage, options);
+    registerAlertExamples(renderPage, options);
+    registerFieldExamples(renderPage, options);
   });
 
-  return { buildHandlers, buildState, renderHtml };
+  return { buildHandlers, buildState, renderPage };
 };

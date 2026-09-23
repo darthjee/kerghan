@@ -2,7 +2,7 @@ import AdminUserEditHelper from '../../../../../../../../assets/js/components/re
 import { itBehavesLikeAnAccountEditFormHelper } from '../../../../../../../support/accountEditFormHelperExamples.js';
 
 describe('AdminUserEditHelper', () => {
-  const { buildHandlers, buildState, renderHtml } = itBehavesLikeAnAccountEditFormHelper({
+  const { buildHandlers, buildState, renderPage } = itBehavesLikeAnAccountEditFormHelper({
     Helper: AdminUserEditHelper,
     heading: 'Edit User',
     successMessage: 'User updated.',
@@ -13,9 +13,9 @@ describe('AdminUserEditHelper', () => {
 
   describe('.render (current password)', () => {
     it('renders no current-password field, unlike MyAccount', () => {
-      const html = renderHtml(buildState(), buildHandlers());
+      const page = renderPage(buildState(), buildHandlers());
 
-      expect(html).not.toContain('Current password');
+      expect(page.contains('Current password')).withContext('current-password label').toBeFalse();
     });
   });
 });
