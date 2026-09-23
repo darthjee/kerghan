@@ -2,7 +2,7 @@
  * Route model to match hash paths and extract dynamic params.
  */
 export default class Route {
-  #regex;
+  #segments;
 
   #page;
 
@@ -13,33 +13,70 @@ export default class Route {
    * @param {string} page - Page identifier returned when this route matches.
    */
   constructor(path, page) {
-    const pattern = path
-      .split('/')
-      .map((segment) => {
-        if (segment.startsWith(':')) {
-          return `(?<${segment.slice(1)}>[^/]+)`;
-        }
-
-        return Route.#escapeRegex(segment);
-      })
-      .join('/');
-
-    // eslint-disable-next-line security-node/non-literal-reg-expr -- `pattern` is built
-    // exclusively from statically-escaped literal segments (`Route.#escapeRegex`) and a bounded
-    // `(?<name>[^/]+)` capture group for `:param` segments — never from external/untrusted
-    // input — so no catastrophic backtracking is possible regardless of the input path.
-    this.#regex = new RegExp(`^${pattern}/?$`);
+    this.#segments = Route.#split(path);
     this.#page = page;
   }
 
   /**
-   * Escape regex special chars from static route segments.
+   * Split a path into segments, dropping one trailing empty segment.
    *
-   * @param {string} value - Static route segment.
-   * @returns {string} Escaped segment.
+   * @description The trailing empty segment is only dropped when there is more than one
+   * segment, so the root path `'/'` becomes `['']` and a trailing slash is optional.
+   * @param {string} path - Path or route pattern to split.
+   * @returns {string[]} Path segments.
    */
-  static #escapeRegex(value) {
-    return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  static #split(path) {
+    const segments = path.split('/');
+
+    if (segments.length > 1 && segments.at(-1) === '') {
+      segments.pop();
+    }
+
+    return segments;
+  }
+
+  /**
+   * Compare one pattern segment against one path segment.
+   *
+   * @param {string} expected - Pattern segment (static or `:name`).
+   * @param {string} actual - Path segment.
+   * @returns {Array|null} `null` on mismatch, `[]` for a matching static segment, or a
+   * one-element list holding the `[name, value]` pair for a param segment.
+   */
+  static #matchSegment(expected, actual) {
+    if (!expected.startsWith(':')) {
+      return expected === actual ? [] : null;
+    }
+
+    return actual === '' ? null : [[expected.slice(1), actual]];
+  }
+
+  /**
+   * Match a path against this route's segments.
+   *
+   * @param {string} path - Path to match.
+   * @returns {object|null} Route params map, or `null` when the path does not match.
+   */
+  #match(path) {
+    const segments = Route.#split(path);
+
+    if (segments.length !== this.#segments.length) {
+      return null;
+    }
+
+    const entries = [];
+
+    for (const [index, expected] of this.#segments.entries()) {
+      const matched = Route.#matchSegment(expected, segments.at(index));
+
+      if (matched === null) {
+        return null;
+      }
+
+      entries.push(...matched);
+    }
+
+    return Object.fromEntries(entries);
   }
 
   /**
@@ -49,7 +86,7 @@ export default class Route {
    * @returns {boolean} True when the path matches.
    */
   matches(path) {
-    return this.#regex.test(path);
+    return this.#match(path) !== null;
   }
 
   /**
@@ -59,8 +96,7 @@ export default class Route {
    * @returns {object} Route params map, empty when the path does not match.
    */
   params(path) {
-    const match = path.match(this.#regex);
-    return match?.groups ?? {};
+    return this.#match(path) ?? {};
   }
 
   /**
