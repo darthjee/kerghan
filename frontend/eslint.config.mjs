@@ -96,8 +96,6 @@ export default [
       'assets/js/components/common/forms/helpers/AccountEditFormHelper.jsx',
       'assets/js/components/common/forms/helpers/FormFieldsHelper.jsx',
       'assets/js/components/common/header/helpers/HeaderHelper.jsx',
-      'assets/js/components/common/loginModal/helpers/LoginModalFormsHelper.jsx',
-      'assets/js/components/common/loginModal/helpers/LoginModalHelper.jsx',
       'assets/js/components/helpers/AppHelper.jsx',
       'assets/js/components/resources/accounts/pages/helpers/AuthorizationRequestsHelper.jsx',
       'assets/js/components/resources/accounts/pages/helpers/MyAccountHelper.jsx',

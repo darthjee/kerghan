@@ -109,9 +109,31 @@ Whenever JSX contains a conditional, decide where to put it using these rules:
    render or return `null` based on its props.
 3. **The piece is reused across multiple helpers or components.**
 
-### Extract to a private `#renderX` static method in the helper when
+### Extract to a private module-level `renderX` function in the helper module when
 
 - The conditional is an **optional block inside** a larger render, specific to that one helper.
+
+### Helper module shape
+
+Helpers are plain exported objects, not static-only classes:
+
+```js
+function renderX(state) { /* private, not exported */ }
+
+const XHelper = {
+  render(state, handlers) { /* … */ },
+};
+
+export default XHelper;
+```
+
+- Keep the exported object writable (no `Object.freeze`) so specs can `spyOn(XHelper, 'render')`,
+  and call sibling helpers through their exported object so those spies intercept.
+- Private rendering pieces are non-exported module-level functions.
+- Table lookups keyed by runtime values (modes, panels, field names) go through a `Map`
+  (`TABLE.get(key)`), not bracket access on a plain object.
+- Older helpers/clients are still static classes and are being migrated (#214, #227–#230);
+  follow this shape for new code.
 
 ### Quick decision guide
 
@@ -119,7 +141,7 @@ Whenever JSX contains a conditional, decide where to put it using these rules:
 Is the JSX a standalone concept with its own identity?        → new component
 Does it render conditionally at the root (may return null)?   → new component
 Is it reused in more than one place?                          → new component
-Is it a conditional block inside an existing helper render?   → private #renderX method
+Is it a conditional block inside an existing helper render?   → private module-level renderX function
 ```
 
 ## Development cycle
