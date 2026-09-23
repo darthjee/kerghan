@@ -3,7 +3,7 @@ import AuthorizationRequestsController from './controllers/AuthorizationRequests
 import AuthorizationRequestsHelper from './helpers/AuthorizationRequestsHelper.jsx';
 
 const INITIAL_REQUESTS = [];
-const INITIAL_ROW_STATE = {};
+const INITIAL_ROW_STATE = new Map();
 
 /**
  * Build the mount-time load effect: triggers `controller.load()` once, unconditionally — no
@@ -41,21 +41,19 @@ export default function AuthorizationRequests() {
 
   useEffect(() => buildLoadEffect(controller)(), [controller]);
 
-  const patchRow = (uuid, patch) => setRowState((current) => ({
-    ...current,
-    [uuid]: { ...current[uuid], ...patch },
-  }));
-
-  const handleToggleAuthorize = (uuid) => () => patchRow(
+  const handleToggleAuthorize = (uuid) => () => controller.patchRow(
     uuid,
-    { open: !(rowState[uuid]?.open ?? false) },
+    { open: !(rowState.get(uuid)?.open ?? false) },
   );
 
-  const handlePasswordChange = (uuid) => (event) => patchRow(uuid, { password: event.target.value });
+  const handlePasswordChange = (uuid) => (event) => controller.patchRow(
+    uuid,
+    { password: event.target.value },
+  );
 
   const handleConfirmAuthorize = (uuid) => (event) => {
     event.preventDefault();
-    return controller.authorize(uuid, rowState[uuid]?.password ?? '');
+    return controller.authorize(uuid, rowState.get(uuid)?.password ?? '');
   };
 
   const handleDeny = (uuid) => () => controller.deny(uuid);

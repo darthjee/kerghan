@@ -14,7 +14,7 @@ describe('AuthorizationRequests', () => {
 
     expect(html).toContain('authorization-requests');
     expect(AuthorizationRequestsHelper.render).toHaveBeenCalledWith(
-      { requests: [], loadError: null, rowState: {} },
+      { requests: [], loadError: null, rowState: new Map() },
       jasmine.objectContaining({
         onToggleAuthorize: jasmine.any(Function),
         onPasswordChange: jasmine.any(Function),
@@ -55,25 +55,32 @@ describe('AuthorizationRequests', () => {
     expect(AuthorizationRequestsController.prototype.authorize).toHaveBeenCalledWith('req-uuid', '');
   });
 
-  it('toggles a row open locally, without reaching the controller', () => {
+  it('delegates row toggles to the controller\'s patchRow, flipping the row open', () => {
     spyOn(AuthorizationRequestsController.prototype, 'load').and.resolveTo();
     spyOn(AuthorizationRequestsController.prototype, 'authorize').and.resolveTo();
     spyOn(AuthorizationRequestsController.prototype, 'deny').and.resolveTo();
+    spyOn(AuthorizationRequestsController.prototype, 'patchRow');
     const handlers = renderCapturingHandlers(AuthorizationRequests, AuthorizationRequestsHelper);
 
-    expect(() => handlers.onToggleAuthorize('req-uuid')()).not.toThrow();
+    handlers.onToggleAuthorize('req-uuid')();
+
+    expect(AuthorizationRequestsController.prototype.patchRow)
+      .toHaveBeenCalledWith('req-uuid', { open: true });
     expect(AuthorizationRequestsController.prototype.authorize).not.toHaveBeenCalled();
     expect(AuthorizationRequestsController.prototype.deny).not.toHaveBeenCalled();
   });
 
-  it('updates a row\'s password locally, without reaching the controller', () => {
+  it('delegates password changes to the controller\'s patchRow', () => {
     spyOn(AuthorizationRequestsController.prototype, 'load').and.resolveTo();
     spyOn(AuthorizationRequestsController.prototype, 'authorize').and.resolveTo();
     spyOn(AuthorizationRequestsController.prototype, 'deny').and.resolveTo();
+    spyOn(AuthorizationRequestsController.prototype, 'patchRow');
     const handlers = renderCapturingHandlers(AuthorizationRequests, AuthorizationRequestsHelper);
 
-    expect(() => handlers.onPasswordChange('req-uuid')({ target: { value: 'secret' } }))
-      .not.toThrow();
+    handlers.onPasswordChange('req-uuid')({ target: { value: 'secret' } });
+
+    expect(AuthorizationRequestsController.prototype.patchRow)
+      .toHaveBeenCalledWith('req-uuid', { password: 'secret' });
     expect(AuthorizationRequestsController.prototype.authorize).not.toHaveBeenCalled();
     expect(AuthorizationRequestsController.prototype.deny).not.toHaveBeenCalled();
   });
