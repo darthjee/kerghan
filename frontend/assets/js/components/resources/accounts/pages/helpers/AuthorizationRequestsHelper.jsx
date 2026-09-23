@@ -11,7 +11,7 @@ export default class AuthorizationRequestsHelper {
    * Render the Authorization Requests page: a list of the caller's own open authorization
    * requests, each with Deny/Authorize actions.
    *
-   * @param {{requests: Array<object>, loadError: (string|null), rowState: object}} state - Page
+   * @param {{requests: Array<object>, loadError: (string|null), rowState: Map}} state - Page
    *   state.
    * @param {{onToggleAuthorize: Function, onPasswordChange: Function,
    *   onConfirmAuthorize: Function, onDeny: Function}} handlers - Event handlers.
@@ -44,7 +44,7 @@ export default class AuthorizationRequestsHelper {
   /**
    * Render the open-requests table, or an empty-state message when there are none.
    *
-   * @param {{requests: Array<object>, rowState: object}} state - Page state.
+   * @param {{requests: Array<object>, rowState: Map}} state - Page state.
    * @param {{onToggleAuthorize: Function, onPasswordChange: Function,
    *   onConfirmAuthorize: Function, onDeny: Function}} handlers - Event handlers.
    * @returns {React.ReactElement} The rendered table or empty-state message.
@@ -79,13 +79,13 @@ export default class AuthorizationRequestsHelper {
    *
    * @param {{uuid: string, requestIp: string, requestUserAgent: string,
    *   createdAt: string}} request - The row's authorization request.
-   * @param {object} rowState - The per-request row UI state map, keyed by request uuid.
+   * @param {Map} rowState - The per-request row UI state map, keyed by request uuid.
    * @param {{onToggleAuthorize: Function, onPasswordChange: Function,
    *   onConfirmAuthorize: Function, onDeny: Function}} handlers - Event handlers.
    * @returns {React.ReactElement} The rendered row.
    */
   static #renderRow(request, rowState, handlers) {
-    const row = rowState[request.uuid] ?? {};
+    const row = rowState.get(request.uuid) ?? {};
 
     return (
       <tr key={request.uuid}>
