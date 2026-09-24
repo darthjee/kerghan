@@ -18,7 +18,7 @@ describe('MyAccountHelper', () => {
       const page = renderPage(buildState(), buildHandlers());
 
       expect(page.contains('Current password')).withContext('current-password label').toBeTrue();
-      expect(page.contains('id="my-account-currentPassword"'))
+      expect(page.containsAttribute('id', 'my-account-currentPassword'))
         .withContext('current-password input id').toBeTrue();
     });
 
