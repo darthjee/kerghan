@@ -18,7 +18,7 @@ Same cases, same assertions, same results. No production code changes; spec-only
 ## Solution
 - **Markup specs:** convert both files to the shared `renderedOutput` HTML-assertion helper introduced in #216 (and extended with `containsAttribute` in #219), following the same conversions done in #218 / #219 / #220.
 - **Controller spec:** in `itBehavesLikeRowAction`, replace the `method` / `clientMethod` string params with functions, following the `stub` / `act` pattern established in `AdminUsersControllerSpec` (#219):
-  - `stub: (client) => client.authorize` (used both for `.and.resolveTo` / `.and.rejectWith` and for the `toHaveBeenCalledWith(...args)` assertion)
+  - `stub: (client) => client.authorizeAuthorizationRequest` / `client.denyAuthorizationRequest` (used both for `.and.resolveTo` / `.and.rejectWith` and for the `toHaveBeenCalledWith(...args)` assertion)
   - `act: (controller, ...args) => controller.authorize(...args)`. It takes args because the success and 400 cases call it with different argument lists (`args` vs `errorArgs`).
   - Keep the success / 400 / expired-session cases intact for both `#authorize` and `#deny`.
 
