@@ -4,11 +4,88 @@ import Container from 'react-bootstrap/cjs/Container.js';
 import NavDropdown from 'react-bootstrap/cjs/NavDropdown.js';
 
 /**
+ * Render a single link that opens the login modal in a given mode instead of navigating.
+ *
+ * @param {string} mode - Mode to open the modal in (`'password'`, `'register'`, or
+ *   `'recover'`).
+ * @param {string} label - Link text.
+ * @param {Function} onOpenLogin - Called with `mode` when the link is clicked.
+ * @returns {React.ReactElement} The rendered link.
+ */
+function renderLoginLink(mode, label, onOpenLogin) {
+  const handleClick = (event) => {
+    event.preventDefault();
+    onOpenLogin(mode);
+  };
+
+  return <Nav.Link href="#" onClick={handleClick}>{label}</Nav.Link>;
+}
+
+/**
+ * Render the Admin Users nav link, only shown to a logged-in admin.
+ *
+ * @param {boolean} isAdmin - Whether the current session belongs to an admin user.
+ * @returns {React.ReactElement|null} The Admin Users link, or `null` for a non-admin.
+ */
+function renderAdminLink(isAdmin) {
+  if (!isAdmin) {
+    return null;
+  }
+
+  return <Nav.Link href="#/admin/users">Admin Users</Nav.Link>;
+}
+
+/**
+ * Render the "My account" dropdown, unconditionally shown once logged in — unlike
+ * {@link renderAdminLink}, it takes no `isAdmin`-style gate. Holds one item per
+ * account page; anticipates further account pages nesting under it later.
+ *
+ * @returns {React.ReactElement} The rendered "My account" dropdown.
+ */
+function renderMyAccountDropdown() {
+  return (
+    <NavDropdown title="My account" id="my-account-dropdown" renderMenuOnMount>
+      <NavDropdown.Item href="#/account/authorization-requests">Authorizations</NavDropdown.Item>
+      <NavDropdown.Item href="#/account/my-account">Account</NavDropdown.Item>
+    </NavDropdown>
+  );
+}
+
+/**
+ * Render the Login/Register/Recover links when logged out, or the Logout action (plus, for an
+ * admin, the Admin Users link, and the "My account" dropdown) when logged in.
+ *
+ * @param {boolean} isLoggedIn - Whether a session is currently active.
+ * @param {boolean} isAdmin - Whether the current session belongs to an admin user.
+ * @param {Function} onLogout - Click handler for the Logout link, used when logged in.
+ * @param {Function} onOpenLogin - Called with a mode string (`'password'` / `'register'` /
+ *   `'recover'`) to open the login modal, used by the Login/Register/Recover links.
+ * @returns {React.ReactElement} The rendered auth nav links.
+ */
+function renderAuthLinks(isLoggedIn, isAdmin, onLogout, onOpenLogin) {
+  if (isLoggedIn) {
+    return (
+      <>
+        {renderAdminLink(isAdmin)}
+        {renderMyAccountDropdown()}
+        <Nav.Link href="#" onClick={onLogout}>Logout</Nav.Link>
+      </>
+    );
+  }
+
+  return (
+    <>
+      {renderLoginLink('password', 'Login', onOpenLogin)}
+      {renderLoginLink('register', 'Register', onOpenLogin)}
+      {renderLoginLink('recover', 'Recover', onOpenLogin)}
+    </>
+  );
+}
+
+/**
  * Rendering helper for the Header element.
  */
-// eslint-disable-next-line @typescript-eslint/no-extraneous-class -- legacy static-methods-only
-// helper, pending migration to the object-module helper shape.
-export default class HeaderHelper {
+const HeaderHelper = {
   /**
    * Render the application navigation bar.
    *
@@ -20,7 +97,7 @@ export default class HeaderHelper {
    *   logged out.
    * @returns {React.ReactElement} The rendered navigation bar.
    */
-  static render(isLoggedIn, isAdmin, onLogout, onOpenLogin) {
+  render(isLoggedIn, isAdmin, onLogout, onOpenLogin) {
     return (
       <Navbar bg="light" expand="md">
         <Container fluid>
@@ -28,90 +105,13 @@ export default class HeaderHelper {
           <Navbar.Toggle aria-controls="header-navbar" />
           <Navbar.Collapse id="header-navbar">
             <Nav className="me-auto">
-              {HeaderHelper.#renderAuthLinks(isLoggedIn, isAdmin, onLogout, onOpenLogin)}
+              {renderAuthLinks(isLoggedIn, isAdmin, onLogout, onOpenLogin)}
             </Nav>
           </Navbar.Collapse>
         </Container>
       </Navbar>
     );
-  }
+  },
+};
 
-  /**
-   * Render the Login/Register/Recover links when logged out, or the Logout action (plus, for an
-   * admin, the Admin Users link, and the "My account" dropdown) when logged in.
-   *
-   * @param {boolean} isLoggedIn - Whether a session is currently active.
-   * @param {boolean} isAdmin - Whether the current session belongs to an admin user.
-   * @param {Function} onLogout - Click handler for the Logout link, used when logged in.
-   * @param {Function} onOpenLogin - Called with a mode string (`'password'` / `'register'` /
-   *   `'recover'`) to open the login modal, used by the Login/Register/Recover links.
-   * @returns {React.ReactElement} The rendered auth nav links.
-   */
-  static #renderAuthLinks(isLoggedIn, isAdmin, onLogout, onOpenLogin) {
-    if (isLoggedIn) {
-      return (
-        <>
-          {HeaderHelper.#renderAdminLink(isAdmin)}
-          {HeaderHelper.#renderMyAccountDropdown()}
-          <Nav.Link href="#" onClick={onLogout}>Logout</Nav.Link>
-        </>
-      );
-    }
-
-    return (
-      <>
-        {HeaderHelper.#renderLoginLink('password', 'Login', onOpenLogin)}
-        {HeaderHelper.#renderLoginLink('register', 'Register', onOpenLogin)}
-        {HeaderHelper.#renderLoginLink('recover', 'Recover', onOpenLogin)}
-      </>
-    );
-  }
-
-  /**
-   * Render a single link that opens the login modal in a given mode instead of navigating.
-   *
-   * @param {string} mode - Mode to open the modal in (`'password'`, `'register'`, or
-   *   `'recover'`).
-   * @param {string} label - Link text.
-   * @param {Function} onOpenLogin - Called with `mode` when the link is clicked.
-   * @returns {React.ReactElement} The rendered link.
-   */
-  static #renderLoginLink(mode, label, onOpenLogin) {
-    const handleClick = (event) => {
-      event.preventDefault();
-      onOpenLogin(mode);
-    };
-
-    return <Nav.Link href="#" onClick={handleClick}>{label}</Nav.Link>;
-  }
-
-  /**
-   * Render the Admin Users nav link, only shown to a logged-in admin.
-   *
-   * @param {boolean} isAdmin - Whether the current session belongs to an admin user.
-   * @returns {React.ReactElement|null} The Admin Users link, or `null` for a non-admin.
-   */
-  static #renderAdminLink(isAdmin) {
-    if (!isAdmin) {
-      return null;
-    }
-
-    return <Nav.Link href="#/admin/users">Admin Users</Nav.Link>;
-  }
-
-  /**
-   * Render the "My account" dropdown, unconditionally shown once logged in — unlike
-   * {@link HeaderHelper.#renderAdminLink}, it takes no `isAdmin`-style gate. Holds one item per
-   * account page; anticipates further account pages nesting under it later.
-   *
-   * @returns {React.ReactElement} The rendered "My account" dropdown.
-   */
-  static #renderMyAccountDropdown() {
-    return (
-      <NavDropdown title="My account" id="my-account-dropdown" renderMenuOnMount>
-        <NavDropdown.Item href="#/account/authorization-requests">Authorizations</NavDropdown.Item>
-        <NavDropdown.Item href="#/account/my-account">Account</NavDropdown.Item>
-      </NavDropdown>
-    );
-  }
-}
+export default HeaderHelper;

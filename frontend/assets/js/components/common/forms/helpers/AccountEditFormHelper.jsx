@@ -16,10 +16,7 @@ const PASSWORD_FIELDS = [
  * the change-password section and the save action. Page-specific copy, input-id prefix and any
  * extra leading password fields are supplied through `options`.
  */
-// eslint-disable-next-line @typescript-eslint/no-extraneous-class -- static-methods-only
-// utility/client class is this codebase's deliberate convention, matching
-// components/common/loginModal/helpers/LoginModalHelper.jsx.
-export default class AccountEditFormHelper {
+const AccountEditFormHelper = {
   /**
    * Render an account-edit page.
    *
@@ -36,7 +33,7 @@ export default class AccountEditFormHelper {
    *   before the new-password fields.
    * @returns {React.ReactElement} The rendered account-edit page.
    */
-  static render(state, handlers, options) {
+  render(state, handlers, options) {
     const { heading, successMessage, idPrefix, leadingPasswordFields = [] } = options;
     const renderField = ([name, type, label]) => FormFieldsHelper.renderField(
       name, type, label, state, handlers.onChange(name), idPrefix,
@@ -57,5 +54,7 @@ export default class AccountEditFormHelper {
         </form>
       </div>
     );
-  }
-}
+  },
+};
+
+export default AccountEditFormHelper;
