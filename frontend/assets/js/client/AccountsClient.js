@@ -8,9 +8,7 @@ import pickDefined from './pickDefined.js';
  * and `logout` clears it regardless of whether the request itself succeeds — the client-side
  * session should still end.
  */
-// eslint-disable-next-line @typescript-eslint/no-extraneous-class -- static-methods-only
-// utility/client class is this codebase's deliberate convention, matching client/ApiClient.js.
-export default class AccountsClient {
+const AccountsClient = {
   /**
    * Register a new account.
    *
@@ -19,7 +17,7 @@ export default class AccountsClient {
    * @returns {Promise<{user: object, refreshToken: string}>} The created account and its
    *   refresh token.
    */
-  static async register({
+  async register({
     username, email, password, passwordConfirmation,
   }) {
     const result = await ApiClient.postJson('/auth/register.json', {
@@ -32,7 +30,7 @@ export default class AccountsClient {
     AuthSession.set(result.refreshToken);
 
     return result;
-  }
+  },
 
   /**
    * Log in with a username and password.
@@ -41,13 +39,13 @@ export default class AccountsClient {
    * @returns {Promise<{user: object, refreshToken: string}>} The logged-in user and its
    *   refresh token.
    */
-  static async login({ username, password }) {
+  async login({ username, password }) {
     const result = await ApiClient.postJson('/auth/login.json', { username, password });
 
     AuthSession.set(result.refreshToken);
 
     return result;
-  }
+  },
 
   /**
    * Rotate a refresh token for a fresh access token.
@@ -56,13 +54,13 @@ export default class AccountsClient {
    * @returns {Promise<{user: object, refreshToken: string}>} The user and the renewed
    *   refresh token.
    */
-  static async refresh(refreshToken) {
+  async refresh(refreshToken) {
     const result = await ApiClient.postJson('/auth/refresh.json', { refreshToken });
 
     AuthSession.set(result.refreshToken);
 
     return result;
-  }
+  },
 
   /**
    * Log out, invalidating the given refresh token server-side. The stored refresh token is
@@ -71,13 +69,13 @@ export default class AccountsClient {
    * @param {string} refreshToken - The refresh token to invalidate.
    * @returns {Promise<void>} Resolves once logout handling finishes.
    */
-  static async logout(refreshToken) {
+  async logout(refreshToken) {
     try {
       await ApiClient.deleteJson('/auth/logoff.json', { refreshToken });
     } finally {
       AuthSession.clear();
     }
-  }
+  },
 
   /**
    * Check whether a refresh token is still active, without consuming or rotating it. Unlike
@@ -90,9 +88,9 @@ export default class AccountsClient {
    *   and whether that session belongs to an admin user (always `false` when `loggedIn` is
    *   `false`).
    */
-  static async status(refreshToken) {
+  async status(refreshToken) {
     return ApiClient.postJson('/auth/status.json', { refreshToken });
-  }
+  },
 
   /**
    * Request a password recovery email. Unlike {@link AccountsClient.login}/
@@ -103,9 +101,9 @@ export default class AccountsClient {
    * @returns {Promise<{sent: boolean}>} Always resolves; the backend never reveals whether the
    *   email matched an account.
    */
-  static async recover(email) {
+  async recover(email) {
     return ApiClient.postJson('/auth/recover.json', { email });
-  }
+  },
 
   /**
    * Complete a password recovery flow using the token from the recovery link. Unlike
@@ -117,13 +115,13 @@ export default class AccountsClient {
    * @returns {Promise<{reset: boolean}>} Resolves on a successful reset; rejects with an
    *   `ApiError` on any rejection reason (unknown, used, or expired token).
    */
-  static async resetPassword({ token, password, passwordConfirmation }) {
+  async resetPassword({ token, password, passwordConfirmation }) {
     return ApiClient.postJson('/auth/reset-password.json', {
       token,
       password,
       password_confirmation: passwordConfirmation,
     });
-  }
+  },
 
   /**
    * Open an authorization request so an already-logged-in device can approve this login.
@@ -135,9 +133,9 @@ export default class AccountsClient {
    * @returns {Promise<{uuid: string, pollToken: string, expiresAt: string}>} The request
    *   identifier, the token used to poll it, and its ISO-8601 expiry timestamp.
    */
-  static async createAuthorizationRequest(username) {
+  async createAuthorizationRequest(username) {
     return ApiClient.postJson('/auth/authorization-requests.json', { username });
-  }
+  },
 
   /**
    * Poll an authorization request for its current status. When the status is `approved` the
@@ -153,7 +151,7 @@ export default class AccountsClient {
    * @returns {Promise<{status: string, user?: object, refreshToken?: string}>} The current
    *   status, plus credentials on the winning `approved` poll.
    */
-  static async pollAuthorizationRequest(uuid, pollToken) {
+  async pollAuthorizationRequest(uuid, pollToken) {
     const result = await ApiClient.postJson(
       `/auth/authorization-requests/${uuid}/poll.json`,
       { pollToken },
@@ -164,7 +162,7 @@ export default class AccountsClient {
     }
 
     return result;
-  }
+  },
 
   /**
    * List the caller's own open authorization requests, for the approving device to review.
@@ -175,9 +173,9 @@ export default class AccountsClient {
    *   requestUserAgent: string, createdAt: string, expiresAt: string}>}>} The caller's open
    *   authorization requests.
    */
-  static async listAuthorizationRequests() {
+  async listAuthorizationRequests() {
     return ApiClient.postJson('/auth/authorization-requests/mine.json', {});
-  }
+  },
 
   /**
    * Approve an authorization request as the account owner, confirming with the account
@@ -190,12 +188,12 @@ export default class AccountsClient {
    * @param {string} password - The account owner's password, confirming the approval.
    * @returns {Promise<{authorized: boolean}>} Resolves once the request is authorized.
    */
-  static async authorizeAuthorizationRequest(uuid, password) {
+  async authorizeAuthorizationRequest(uuid, password) {
     return ApiClient.postJson(
       `/auth/authorization-requests/${uuid}/authorize.json`,
       { password },
     );
-  }
+  },
 
   /**
    * Deny an authorization request as the account owner. Unlike
@@ -206,9 +204,9 @@ export default class AccountsClient {
    * @param {string} uuid - The authorization request identifier.
    * @returns {Promise<{denied: boolean}>} Resolves once the request is denied.
    */
-  static async denyAuthorizationRequest(uuid) {
+  async denyAuthorizationRequest(uuid) {
     return ApiClient.postJson(`/auth/authorization-requests/${uuid}/deny.json`, {});
-  }
+  },
 
   /**
    * Update the caller's own account, confirming with the current password. Unlike
@@ -224,12 +222,14 @@ export default class AccountsClient {
    * @returns {Promise<{username: string, email: string}>} The account's updated username and
    *   email.
    */
-  static async updateAccount({
+  async updateAccount({
     currentPassword, username, email, newPassword,
   }) {
     return ApiClient.patchJson('/auth/account.json', {
       currentPassword,
       ...pickDefined({ username, email, newPassword }),
     });
-  }
-}
+  },
+};
+
+export default AccountsClient;

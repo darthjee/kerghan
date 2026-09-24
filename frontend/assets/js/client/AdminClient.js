@@ -8,10 +8,7 @@ import pickDefined from './pickDefined.js';
  * UI / redirect away". Unlike {@link module:client/AccountsClient}, none of these touch
  * `AuthSession` — none of them affect the caller's own session.
  */
-// eslint-disable-next-line @typescript-eslint/no-extraneous-class -- static-methods-only
-// utility/client class is this codebase's deliberate convention, matching
-// client/AccountsClient.js.
-export default class AdminClient {
+const AdminClient = {
   /**
    * Search user accounts by username/email.
    *
@@ -20,9 +17,9 @@ export default class AdminClient {
    * @returns {Promise<{users: Array<{id: number, username: string, email: string,
    *   isAdmin: boolean, createdAt: string}>}>} The matching accounts.
    */
-  static async searchUsers(q) {
+  async searchUsers(q) {
     return ApiClient.postJson('/admin/users/search.json', { q });
-  }
+  },
 
   /**
    * Mint a fresh password-recovery link for a user, without invalidating their other
@@ -31,9 +28,9 @@ export default class AdminClient {
    * @param {number} userId - The target user's numeric id.
    * @returns {Promise<{resetUrl: string}>} The freshly minted recovery link.
    */
-  static async generateRecoveryLink(userId) {
+  async generateRecoveryLink(userId) {
     return ApiClient.postJson(`/admin/users/${userId}/recovery-link.json`, {});
-  }
+  },
 
   /**
    * Mint a fresh password-recovery token for a user and force-send the recovery email
@@ -42,9 +39,9 @@ export default class AdminClient {
    * @param {number} userId - The target user's numeric id.
    * @returns {Promise<{sent: boolean}>} Whether the email was sent successfully.
    */
-  static async sendRecoveryEmail(userId) {
+  async sendRecoveryEmail(userId) {
     return ApiClient.postJson(`/admin/users/${userId}/send-recovery-email.json`, {});
-  }
+  },
 
   /**
    * Update a target user's username, email, and/or password, with no current-password check
@@ -59,10 +56,12 @@ export default class AdminClient {
    * @returns {Promise<{user: {id: number, username: string, email: string, isAdmin: boolean,
    *   createdAt: string}}>} The updated account.
    */
-  static async editUser(userId, { username, email, newPassword }) {
+  async editUser(userId, { username, email, newPassword }) {
     return ApiClient.postJson(
       `/admin/users/${userId}/edit.json`,
       pickDefined({ username, email, newPassword }),
     );
-  }
-}
+  },
+};
+
+export default AdminClient;
