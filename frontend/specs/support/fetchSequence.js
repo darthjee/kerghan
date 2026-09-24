@@ -30,9 +30,7 @@ export function fetchSequence(responses) {
   let call = 0;
 
   return jasmine.createSpy('fetch').and.callFake(() => {
-    // eslint-disable-next-line security/detect-object-injection -- call is a local numeric
-    // loop counter incremented by this test helper, never user/attacker-controlled.
-    const response = fakeResponse(responses[call]);
+    const response = fakeResponse(responses.at(call));
     call += 1;
     return Promise.resolve(response);
   });

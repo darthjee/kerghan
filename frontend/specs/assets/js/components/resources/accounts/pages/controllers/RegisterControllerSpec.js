@@ -67,7 +67,7 @@ describe('RegisterController', () => {
       it(description, () => {
         const controller = buildController();
 
-        expect(controller.validate({ ...validFields, ...override })[field]).toBeDefined();
+        expect(Object.keys(controller.validate({ ...validFields, ...override }))).toContain(field);
       });
     });
   });

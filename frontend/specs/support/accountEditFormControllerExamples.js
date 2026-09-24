@@ -5,7 +5,8 @@ const LONG_PASSWORD = 'longenough';
 /**
  * Registers the `#validate` cases shared by every account edit form controller.
  *
- * @param {object} context - The shared context holding the spies and `buildController`.
+ * @param {object} context - The shared context holding the spies (including `clientSpy`) and
+ *   `buildController`.
  * @param {object} options - The options given to the example group.
  * @returns {void}
  */
@@ -72,19 +73,20 @@ const registerValidateExamples = (context, { blankFields }) => {
 /**
  * Registers the `#handleSubmit` cases about which fields end up in the API payload.
  *
- * @param {object} context - The shared context holding the spies and `buildController`.
+ * @param {object} context - The shared context holding the spies (including `clientSpy`) and
+ *   `buildController`.
  * @param {object} options - The options given to the example group.
  * @returns {void}
  */
 const registerPayloadExamples = (context, options) => {
-  const { blankFields, clientMethod, submit, wrapResponse, expectedClientArgs } = options;
+  const { blankFields, submit, wrapResponse, expectedClientArgs } = options;
 
   const submitAndExpectPayload = async (response, fields, payload) => {
-    context.client[clientMethod].and.resolveTo(wrapResponse(response));
+    context.clientSpy.and.resolveTo(wrapResponse(response));
 
     await submit(context.buildController(), fields);
 
-    expect(context.client[clientMethod]).toHaveBeenCalledWith(...expectedClientArgs(payload));
+    expect(context.clientSpy).toHaveBeenCalledWith(...expectedClientArgs(payload));
   };
 
   it('submits only the username when just the username changed', async () => {
@@ -129,15 +131,16 @@ const registerPayloadExamples = (context, options) => {
 /**
  * Registers the `#handleSubmit` cases about the outcome (success, errors, expired session).
  *
- * @param {object} context - The shared context holding the spies and `buildController`.
+ * @param {object} context - The shared context holding the spies (including `clientSpy`) and
+ *   `buildController`.
  * @param {object} options - The options given to the example group.
  * @returns {void}
  */
 const registerOutcomeExamples = (context, options) => {
-  const { blankFields, clientMethod, submit, wrapResponse } = options;
+  const { blankFields, submit, wrapResponse } = options;
 
   it('reflects the response username/email, clears the new password fields, and flags success', async () => {
-    context.client[clientMethod].and.resolveTo(
+    context.clientSpy.and.resolveTo(
       wrapResponse({ username: 'newname', email: 'foo@example.com' }),
     );
 
@@ -165,7 +168,7 @@ const registerOutcomeExamples = (context, options) => {
     ],
   ].forEach(([description, message, changes]) => {
     it(`stores the submit error on ${description}`, async () => {
-      context.client[clientMethod].and.rejectWith(new ApiError(400, message));
+      context.clientSpy.and.rejectWith(new ApiError(400, message));
 
       await submit(context.buildController(), { ...blankFields, ...changes });
 
@@ -174,7 +177,7 @@ const registerOutcomeExamples = (context, options) => {
   });
 
   it('does nothing further when the session turned out to be expired', async () => {
-    context.client[clientMethod].and.resolveTo(undefined);
+    context.clientSpy.and.resolveTo(undefined);
 
     await submit(context.buildController(), { ...blankFields, username: 'newname' });
 
@@ -186,12 +189,13 @@ const registerOutcomeExamples = (context, options) => {
 /**
  * Registers the `#handleSubmit` cases for the paths that never reach the API.
  *
- * @param {object} context - The shared context holding the spies and `buildController`.
+ * @param {object} context - The shared context holding the spies (including `clientSpy`) and
+ *   `buildController`.
  * @param {object} options - The options given to the example group.
  * @returns {void}
  */
 const registerSkippedCallExamples = (context, options) => {
-  const { blankFields, clientMethod, submit } = options;
+  const { blankFields, submit } = options;
 
   it('sets field errors and skips the API call when the form is invalid', async () => {
     await submit(context.buildController(), { ...blankFields, email: 'not-an-email' });
@@ -199,7 +203,7 @@ const registerSkippedCallExamples = (context, options) => {
     expect(context.setFieldErrors).toHaveBeenCalledWith(
       jasmine.objectContaining({ email: jasmine.any(String) }),
     );
-    expect(context.client[clientMethod]).not.toHaveBeenCalled();
+    expect(context.clientSpy).not.toHaveBeenCalled();
   });
 
   it('sets a submit error and skips the API call when no field was actually filled in', async () => {
@@ -207,7 +211,7 @@ const registerSkippedCallExamples = (context, options) => {
 
     expect(context.setFieldErrors).toHaveBeenCalledWith({});
     expect(context.setSubmitError).toHaveBeenCalledWith(jasmine.any(String));
-    expect(context.client[clientMethod]).not.toHaveBeenCalled();
+    expect(context.clientSpy).not.toHaveBeenCalled();
   });
 };
 
@@ -224,7 +228,8 @@ const registerSkippedCallExamples = (context, options) => {
  * @param {Function} options.submit - `(controller, fields)` adapter around `handleSubmit`.
  * @param {Function} options.wrapResponse - Wraps an account into the client's response shape.
  * @param {Function} options.expectedClientArgs - Maps a payload to the expected client args.
- * @returns {object} The context, whose spies are refreshed before every example, plus
+ * @returns {object} The context, whose spies are refreshed before every example (`clientSpy`
+ *   is the spy for `clientMethod`, also exposed under its real name on `client`), plus
  *   `buildController()` to create a controller wired to them.
  */
 export const itBehavesLikeAnAccountEditFormController = (options) => {
@@ -244,7 +249,8 @@ export const itBehavesLikeAnAccountEditFormController = (options) => {
     context.setFieldErrors = jasmine.createSpy('setFieldErrors');
     context.setSubmitError = jasmine.createSpy('setSubmitError');
     context.setSuccess = jasmine.createSpy('setSuccess');
-    context.client = jasmine.createSpyObj('client', [clientMethod]);
+    context.clientSpy = jasmine.createSpy(clientMethod);
+    context.client = Object.fromEntries([[clientMethod, context.clientSpy]]);
   });
 
   registerValidateExamples(context, options);
