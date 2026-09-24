@@ -104,18 +104,19 @@ class SetClientIpMiddlewareTest extends TestCase
      * instance, since this middleware is not configurable. This is also the
      * one remaining exercise of the default provider, which reads the real
      * `$_SERVER['REMOTE_ADDR']`.
+     *
+     * @SuppressWarnings(PHPMD.Superglobals) This test deliberately exercises
+     *     the real `$_SERVER` default supplied by build().
+     * @SuppressWarnings(PHPMD.StaticAccess) SetClientIpMiddleware::build() is
+     *     the static factory contract mandated by the Tent middleware
+     *     framework; this test exists specifically to exercise it.
      */
     public function testBuildReturnsUsableInstance(): void
     {
-        $originalRemoteAddr = $_SERVER['REMOTE_ADDR'] ?? null;
+        $originalServer = $_SERVER;
         $_SERVER['REMOTE_ADDR'] = '198.51.100.42';
 
         try {
-            // @SuppressWarnings(PHPMD.StaticAccess) SetClientIpMiddleware::build()
-            // is the static factory contract mandated by the Tent middleware
-            // framework (see the class's own "Usage in configuration"
-            // docblock); this test exists specifically to exercise that
-            // static contract.
             $middleware = SetClientIpMiddleware::build([]);
             $request = $this->makeRequest([]);
 
@@ -123,11 +124,7 @@ class SetClientIpMiddlewareTest extends TestCase
 
             $this->assertSame(['X-Forwarded-For' => '198.51.100.42'], $result->headers());
         } finally {
-            if ($originalRemoteAddr === null) {
-                unset($_SERVER['REMOTE_ADDR']);
-            } else {
-                $_SERVER['REMOTE_ADDR'] = $originalRemoteAddr;
-            }
+            $_SERVER = $originalServer;
         }
     }
 }
