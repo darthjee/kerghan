@@ -15,6 +15,6 @@ export const DUMMY_DIGEST = '$2a$10$CwTycUXWue0Thq9StjUM0uJ8Q1eLXfPJvXQF4RUOgtnJ
  * @param {string} [digest] - The stored bcrypt digest to compare against, when the row was found.
  * @returns {Promise<boolean>} Whether `password` matches `digest` (or `DUMMY_DIGEST` when absent).
  */
-export async function compareOrDummy(password: string, digest?: string): Promise<boolean> {
+export function compareOrDummy(password: string, digest?: string): Promise<boolean> {
   return bcrypt.compare(password, digest ?? DUMMY_DIGEST);
 }
