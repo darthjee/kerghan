@@ -21,6 +21,9 @@
 - **PR Description Files:** If a description cannot be provided directly in the PR, generate a
   file with the PR description (e.g., `docs/agents/issues/<pr_number>_description.md`), but do
   not commit this file.
+- **`AGENTS.md` Last updated date:** Every PR that changes `AGENTS.md` must also bump its
+  `_Last updated: YYYY-MM-DD_` line to the date of the change. A stale date misleads agents about
+  how current the instructions are.
 
 ## Definition of Done for PRs
 

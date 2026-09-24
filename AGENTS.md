@@ -1,23 +1,25 @@
 # Project Instructions
 
+_Last updated: 2026-09-24_
+
 Kerghan is a GitHub issue monitoring/dashboard app. Users log into a lightweight Kerghan account
 (username/password, a JWT `access_token` cookie, and a rotating refresh token — not GitHub OAuth;
 a per-user GitHub token for private repos is planned as a future addition), either directly or by
 approving the login from an already-logged-in device via the device-authorization flow, and
 choose which of their repos/orgs to monitor; that selection is what the backend persists. Issue
 data itself is fetched live, on demand, by the frontend calling GitHub's public API directly —
-each user's own browser IP absorbs GitHub's unauthenticated rate limit instead of the backend's
-shared one. Nothing about issues is persisted to MySQL by default; opt-in persistence (for
-history/trends) is a future addition, not the current behavior. The driving use case is
-label-based attention triage — surfacing which of a user's many tracked repos "need my
-attention". See [Flow](docs/agents/flow.md) for the full request/data flow and
+each user's own browser IP (Internet Protocol) address absorbs GitHub's unauthenticated rate
+limit instead of the backend's shared one. Nothing about issues is persisted to MySQL by
+default; opt-in persistence (for history/trends) is a future addition, not the current
+behavior. The driving use case is label-based attention triage — surfacing which of a user's
+many tracked repos "need my attention". See [Flow](docs/agents/flow.md) for the full request/data flow and
 [Product Definitions](docs/agents/product.md) for what's decided vs. still open.
 
 ## Stack
 
 ### Backend
 
-- Node.js, ES Modules, TypeScript (strict), NestJS
+- Node.js, ECMAScript (ES) Modules, TypeScript (strict), NestJS
 - TypeORM (Object-Relational Mapping — ORM — library, with CLI migrations)
 - MySQL 8
 - Yarn (package manager)
@@ -25,7 +27,10 @@ attention". See [Flow](docs/agents/flow.md) for the full request/data flow and
 - ESLint (linting, flat config, `typescript-eslint`)
 
 Only the Auth module exists so far — the tracked-repo/label-rule data model is still an open
-product decision (see `docs/agents/product.md`). See `docs/agents/architecture/backend.md` for the module classification (Core/Always-on/Lazy) and inter-module communication guidelines a future module is generally expected to follow, absent an explicit decision to deviate.
+product decision (see [Product Definitions](docs/agents/product.md)). See
+[Backend Architecture](docs/agents/architecture/backend.md) for the module classification
+(Core/Always-on/Lazy) and inter-module communication guidelines. A new module must follow them
+unless its issue or plan explicitly documents why it deviates.
 
 ### Frontend
 
@@ -36,9 +41,9 @@ product decision (see `docs/agents/product.md`). See `docs/agents/architecture/b
 - Yarn (package manager)
 
 Real auth UI exists (a route-independent login/register/device-authorization modal, hash-based
-routing, and a `client/` HTTP layer — see `docs/agents/architecture/frontend.md`); the
-dashboard/analytics views (issue volume, age, label breakdowns, "needs attention" lists) are
-still to come.
+routing, and a `client/` HTTP layer — see
+[Frontend Architecture](docs/agents/architecture/frontend.md)); the dashboard/analytics views
+(issue volume, age, label breakdowns, "needs attention" lists) are still to come.
 
 ### Infrastructure
 
@@ -64,12 +69,12 @@ make setup
 
 Backend runs on port `3030`, frontend dev server on `3010`, full stack proxy on `3000`.
 
-**Always run project commands through `docker-compose`.** (unless the user explicitly asks
-otherwise in the conversation).
-Never install packages or invoke tooling (`yarn`, `npm`, `php`, etc.) directly on the host
-machine (unless the user explicitly asks otherwise in the conversation). The host may not even
-have the required runtime installed, and dependencies must stay reproducible inside the
-project's containers. Examples:
+**Always run project commands through `docker-compose`.** Never install packages or invoke
+tooling (`yarn`, `npm`, `php`, etc.) directly on the host machine. The only exception is when the
+user explicitly allows running a specific command on the host — either in their message in the
+current conversation, or through a standing user instruction (for example a user memory entry or
+a `CLAUDE.md` override). The host may not even have the required runtime installed, and
+dependencies must stay reproducible inside the project's containers. Examples:
 
 ```bash
 docker-compose run --rm kerghan_fe yarn lint
@@ -78,11 +83,13 @@ docker-compose run --rm kerghan_tests yarn test
 
 ## Conventions
 
-- All documentation and code comments must always be written in **English**, with no exceptions.
+- All documentation and code comments must be written in **English**, with no exceptions — even
+  when the user writes in another language.
 - Backend code lives in `backend/`, frontend in `frontend/`.
 - Backend source lives under `backend/src/`, one folder per module (e.g. `backend/src/auth/`),
   following the standard module structure (`<name>.module.ts`, `.controller.ts`, `.service.ts`,
-  `dto/`, `entities/`, `events/`, `tests/`) — see `docs/agents/architecture/backend.md`.
+  `dto/`, `entities/`, `events/`, `tests/`) — see
+  [Backend Architecture](docs/agents/architecture/backend.md).
   TypeORM migrations live under `backend/src/database/migrations/`.
 - Frontend JS/JSX lives under `frontend/assets/js/`, specs under `frontend/specs/`.
 - Max 300 lines per file, max complexity 10 (both backend and frontend, ESLint-enforced).
