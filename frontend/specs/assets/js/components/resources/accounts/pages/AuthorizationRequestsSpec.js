@@ -1,18 +1,18 @@
 import React from 'react';
-import { renderToStaticMarkup } from 'react-dom/server';
 import AuthorizationRequests, { buildLoadEffect } from '../../../../../../../assets/js/components/resources/accounts/pages/AuthorizationRequests.jsx';
 import AuthorizationRequestsHelper from '../../../../../../../assets/js/components/resources/accounts/pages/helpers/AuthorizationRequestsHelper.jsx';
 import AuthorizationRequestsController from '../../../../../../../assets/js/components/resources/accounts/pages/controllers/AuthorizationRequestsController.js';
 import { renderCapturingHandlers } from '../../../../../../support/renderCapturingHandlers.js';
+import { renderedOutput } from '../../../../../../support/renderedOutput.js';
 
 describe('AuthorizationRequests', () => {
   it('passes the default state to the helper', () => {
     spyOn(AuthorizationRequestsController.prototype, 'load').and.resolveTo();
     spyOn(AuthorizationRequestsHelper, 'render').and.returnValue(React.createElement('div', null, 'authorization-requests'));
 
-    const html = renderToStaticMarkup(React.createElement(AuthorizationRequests));
+    const page = renderedOutput(React.createElement(AuthorizationRequests));
 
-    expect(html).toContain('authorization-requests');
+    expect(page.contains('authorization-requests')).toBeTrue();
     expect(AuthorizationRequestsHelper.render).toHaveBeenCalledWith(
       { requests: [], loadError: null, rowState: new Map() },
       jasmine.objectContaining({
