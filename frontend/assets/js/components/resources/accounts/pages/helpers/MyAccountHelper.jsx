@@ -7,10 +7,7 @@ const LEADING_PASSWORD_FIELDS = [
 /**
  * Rendering helper for the "My account" page.
  */
-// eslint-disable-next-line @typescript-eslint/no-extraneous-class -- static-methods-only
-// utility/client class is this codebase's deliberate convention, matching
-// components/resources/accounts/pages/helpers/AuthorizationRequestsHelper.jsx.
-export default class MyAccountHelper {
+const MyAccountHelper = {
   /**
    * Render the My Account page: editable username/email fields, the required current-password
    * confirmation, a change-password section, a save action, and inline error/success display.
@@ -22,12 +19,14 @@ export default class MyAccountHelper {
    * @param {{onSubmit: Function, onChange: Function}} handlers - Event handlers.
    * @returns {React.ReactElement} The rendered My Account page.
    */
-  static render(state, handlers) {
+  render(state, handlers) {
     return AccountEditFormHelper.render(state, handlers, {
       heading: 'My Account',
       successMessage: 'Account updated.',
       idPrefix: 'my-account-',
       leadingPasswordFields: LEADING_PASSWORD_FIELDS,
     });
-  }
-}
+  },
+};
+
+export default MyAccountHelper;

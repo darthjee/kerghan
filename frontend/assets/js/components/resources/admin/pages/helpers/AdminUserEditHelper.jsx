@@ -3,10 +3,7 @@ import AccountEditFormHelper from '../../../../common/forms/helpers/AccountEditF
 /**
  * Rendering helper for the Admin User Edit page.
  */
-// eslint-disable-next-line @typescript-eslint/no-extraneous-class -- static-methods-only
-// utility/client class is this codebase's deliberate convention, matching
-// components/resources/admin/pages/helpers/AdminUsersHelper.jsx.
-export default class AdminUserEditHelper {
+const AdminUserEditHelper = {
   /**
    * Render the Admin User Edit page: editable username/email fields, a change-password
    * section, a save action, and inline error/success display. Unlike `MyAccountHelper`, there is
@@ -19,11 +16,13 @@ export default class AdminUserEditHelper {
    * @param {{onSubmit: Function, onChange: Function}} handlers - Event handlers.
    * @returns {React.ReactElement} The rendered Admin User Edit page.
    */
-  static render(state, handlers) {
+  render(state, handlers) {
     return AccountEditFormHelper.render(state, handlers, {
       heading: 'Edit User',
       successMessage: 'User updated.',
       idPrefix: 'admin-user-edit-',
     });
-  }
-}
+  },
+};
+
+export default AdminUserEditHelper;
