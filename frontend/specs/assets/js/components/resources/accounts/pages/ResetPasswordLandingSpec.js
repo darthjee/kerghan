@@ -1,8 +1,8 @@
 import React from 'react';
-import { renderToStaticMarkup } from 'react-dom/server';
 import ResetPasswordLanding, { redirectToResetModal } from '../../../../../../../assets/js/components/resources/accounts/pages/ResetPasswordLanding.jsx';
 import LoginModalEvents from '../../../../../../../assets/js/client/LoginModalEvents.js';
 import { installFakeWindow, uninstallFakeWindow } from '../../../../../../support/fakeWindow.js';
+import { renderedOutput } from '../../../../../../support/renderedOutput.js';
 
 describe('ResetPasswordLanding', () => {
 
@@ -39,11 +39,9 @@ describe('ResetPasswordLanding', () => {
 
   describe('component', () => {
     it('renders nothing', () => {
-      const markup = renderToStaticMarkup(
-        React.createElement('div', null, React.createElement(ResetPasswordLanding)),
-      );
+      const page = renderedOutput(React.createElement(ResetPasswordLanding));
 
-      expect(markup).toBe('<div></div>');
+      expect(page.isEmpty()).withContext('rendered output').toBeTrue();
     });
   });
 });
