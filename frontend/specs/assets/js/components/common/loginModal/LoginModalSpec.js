@@ -1,9 +1,9 @@
 import React from 'react';
-import { renderToStaticMarkup } from 'react-dom/server';
 import LoginModal from '../../../../../../assets/js/components/common/loginModal/LoginModal.jsx';
 import LoginModalHelper from '../../../../../../assets/js/components/common/loginModal/helpers/LoginModalHelper.jsx';
 import LoginModalController from '../../../../../../assets/js/components/common/loginModal/controllers/LoginModalController.js';
 import LoginModalEvents from '../../../../../../assets/js/client/LoginModalEvents.js';
+import { renderedOutput } from '../../../../../support/renderedOutput.js';
 
 describe('LoginModal', () => {
   let lastState;
@@ -16,13 +16,13 @@ describe('LoginModal', () => {
       return React.createElement('div', null, 'login-modal');
     });
 
-    return renderToStaticMarkup(React.createElement(LoginModal));
+    return renderedOutput(React.createElement(LoginModal));
   };
 
   it('passes the default state to the helper', () => {
-    const html = render();
+    const page = render();
 
-    expect(html).toContain('login-modal');
+    expect(page.contains('login-modal')).withContext('helper output').toBeTrue();
     expect(lastState).toEqual({
       username: '',
       email: '',

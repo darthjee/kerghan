@@ -1,17 +1,17 @@
 import React from 'react';
-import { renderToStaticMarkup } from 'react-dom/server';
 import App from '../../../assets/js/App.jsx';
+import { renderedOutput } from '../../support/renderedOutput.js';
 
 describe('App', () => {
   it('renders the header', () => {
-    const markup = renderToStaticMarkup(React.createElement(App));
+    const page = renderedOutput(React.createElement(App));
 
-    expect(markup).toContain('Kerghan');
+    expect(page.contains('Kerghan')).withContext('header').toBeTrue();
   });
 
   it('renders the home page by default', () => {
-    const markup = renderToStaticMarkup(React.createElement(App));
+    const page = renderedOutput(React.createElement(App));
 
-    expect(markup).not.toContain('<h1>Register</h1>');
+    expect(page.containsElement('h1', 'Register')).withContext('register heading').toBeFalse();
   });
 });

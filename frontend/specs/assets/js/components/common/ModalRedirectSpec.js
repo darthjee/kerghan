@@ -1,8 +1,8 @@
 import React from 'react';
-import { renderToStaticMarkup } from 'react-dom/server';
 import ModalRedirect, { redirectToModal } from '../../../../../assets/js/components/common/ModalRedirect.jsx';
 import LoginModalEvents from '../../../../../assets/js/client/LoginModalEvents.js';
 import { installFakeWindow, uninstallFakeWindow } from '../../../../support/fakeWindow.js';
+import { renderedOutput } from '../../../../support/renderedOutput.js';
 
 describe('ModalRedirect', () => {
 
@@ -31,11 +31,9 @@ describe('ModalRedirect', () => {
 
   describe('component', () => {
     it('renders nothing', () => {
-      const markup = renderToStaticMarkup(
-        React.createElement('div', null, React.createElement(ModalRedirect, { mode: 'password' })),
-      );
+      const page = renderedOutput(React.createElement(ModalRedirect, { mode: 'password' }));
 
-      expect(markup).toBe('<div></div>');
+      expect(page.isEmpty()).withContext('rendered output').toBeTrue();
     });
   });
 });

@@ -104,6 +104,21 @@ describe('renderedOutput', () => {
     });
   });
 
+  describe('#isEmpty', () => {
+    it('is true for an element that renders nothing', () => {
+      const Empty = () => null;
+      const output = renderedOutput(React.createElement(Empty));
+
+      expect(output.isEmpty()).toBeTrue();
+    });
+
+    it('is false for an element that renders markup', () => {
+      const output = renderedOutput(React.createElement(Component));
+
+      expect(output.isEmpty()).toBeFalse();
+    });
+  });
+
   it('renders the element once, however many queries are made', () => {
     const output = renderedOutput(React.createElement(Component));
 
