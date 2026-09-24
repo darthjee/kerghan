@@ -47,31 +47,35 @@ class SetClientIpMiddleware extends Middleware
     private $remoteAddrProvider;
 
     /**
-     * @param callable(): string|null $remoteAddrProvider Provides the
-     *                           current request's remote address. Defaults
-     *                           to reading PHP's own `$_SERVER['REMOTE_ADDR']`.
+     * @param callable(): string $remoteAddrProvider Provides the current
+     *                           request's remote address. build() supplies
+     *                           one that reads PHP's own
+     *                           `$_SERVER['REMOTE_ADDR']`.
      */
-    public function __construct(?callable $remoteAddrProvider = null)
+    public function __construct(callable $remoteAddrProvider)
     {
-        $this->remoteAddrProvider = $remoteAddrProvider ?? static function (): string {
-            // @SuppressWarnings(PHPMD.Superglobals)
-            return (string) ($_SERVER['REMOTE_ADDR'] ?? '');
-        };
+        $this->remoteAddrProvider = $remoteAddrProvider;
     }
 
     /**
      * Builds a SetClientIpMiddleware instance.
      *
-     * This middleware takes no configurable attributes.
+     * This middleware takes no configurable attributes. The returned
+     * instance lazily reads PHP's own `$_SERVER['REMOTE_ADDR']` each time a
+     * request is processed.
+     *
+     * @SuppressWarnings(PHPMD.Superglobals) This is Tent's factory entry
+     *     point, which must read the real connecting peer's address.
+     * @SuppressWarnings(PHPMD.UnusedFormalParameter) $attributes is required
+     *     by the base Middleware::build() contract.
      *
      * @param array $attributes Unused; present to satisfy the base
      *                           Middleware::build() contract.
      * @return SetClientIpMiddleware The constructed middleware instance.
      */
-    // @SuppressWarnings(PHPMD.UnusedFormalParameter)
     public static function build(array $attributes): SetClientIpMiddleware
     {
-        return new self();
+        return new self(static fn(): string => (string) ($_SERVER['REMOTE_ADDR'] ?? ''));
     }
 
     /**
