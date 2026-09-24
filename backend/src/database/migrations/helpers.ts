@@ -42,7 +42,7 @@ export function idColumn(): TableColumnOptions {
  * @param {string} [name] - the column name; defaults to `created_at` (e.g. `issued_at` for refresh tokens).
  * @returns {TableColumnOptions} the datetime column options for a `createTable` call.
  */
-export function createdAtColumn(name: string = 'created_at'): TableColumnOptions {
+export function createdAtColumn(name = 'created_at'): TableColumnOptions {
   return { name, type: 'datetime', default: 'CURRENT_TIMESTAMP' };
 }
 
