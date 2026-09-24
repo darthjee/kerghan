@@ -2,9 +2,9 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import nodemailer, { type Transporter } from 'nodemailer';
+import nodemailer from 'nodemailer';
 import { buildMailConfig, type MailConfig } from './mail.config.js';
-import { NativeEmailMethod, type EmailMethod } from './mail.method.js';
+import { NativeEmailMethod, type EmailMethod, type MailTransporter } from './mail.method.js';
 import { MailService } from './mail.service.js';
 import { MAIL_CONFIG, MAIL_METHODS, MAIL_TEMPLATES, MAIL_TRANSPORT } from './mail.tokens.js';
 import { buildTemplateRegistry, type TemplateRegistry } from './template-registry.js';
@@ -22,9 +22,9 @@ const TEMPLATES_DIR = join(dirname(fileURLToPath(import.meta.url)), 'templates')
  * password.
  * @param {MailConfig} config - The frozen config from `buildMailConfig`.
  * @param {LoggerService} logger - The injected Core logger.
- * @returns {Transporter | null} The transporter, or `null` when disabled.
+ * @returns {MailTransporter | null} The transporter, or `null` when disabled.
  */
-function createMailTransport(config: MailConfig, logger: LoggerService): Transporter | null {
+function createMailTransport(config: MailConfig, logger: LoggerService): MailTransporter | null {
   if (!config.enabled || !config.transport) {
     logger.info('outbound email disabled', { context: 'MailModule' });
     return null;
@@ -43,14 +43,14 @@ function createMailTransport(config: MailConfig, logger: LoggerService): Transpo
  * onto the transporter (`null` when disabled) but is never invoked in that
  * case, since `MailService.sendEmail` short-circuits before resolving a
  * method.
- * @param {Transporter | null} transport - The boot-time transporter, or
+ * @param {MailTransporter | null} transport - The boot-time transporter, or
  *   `null` when outbound email is disabled.
  * @returns {Record<string, EmailMethod>} The registry, currently holding
  *   only the `native` method.
  */
-function createMailMethods(transport: Transporter | null): Record<string, EmailMethod> {
+function createMailMethods(transport: MailTransporter | null): Record<string, EmailMethod> {
   return {
-    native: new NativeEmailMethod(transport as Transporter),
+    native: new NativeEmailMethod(transport as MailTransporter),
   };
 }
 
@@ -71,13 +71,13 @@ function createMailMethods(transport: Transporter | null): Record<string, EmailM
     {
       provide: MAIL_TRANSPORT,
       inject: [MAIL_CONFIG, LoggerService],
-      useFactory: (config: MailConfig, logger: LoggerService): Transporter | null =>
+      useFactory: (config: MailConfig, logger: LoggerService): MailTransporter | null =>
         createMailTransport(config, logger),
     },
     {
       provide: MAIL_METHODS,
       inject: [MAIL_TRANSPORT],
-      useFactory: (transport: Transporter | null): Record<string, EmailMethod> =>
+      useFactory: (transport: MailTransporter | null): Record<string, EmailMethod> =>
         createMailMethods(transport),
     },
     {

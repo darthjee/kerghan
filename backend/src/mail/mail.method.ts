@@ -1,4 +1,11 @@
 import type { Transporter } from 'nodemailer';
+import type SMTPTransport from 'nodemailer/lib/smtp-transport/index.js';
+
+/**
+ * The concrete nodemailer transporter `nodemailer.createTransport` returns
+ * for SMTP options. Spelled out so the generic never defaults to `any`.
+ */
+export type MailTransporter = Transporter<SMTPTransport.SentMessageInfo, SMTPTransport.Options>;
 
 /**
  * Message fields an {@link EmailMethod} delivers. Mirrors the subset of
@@ -44,14 +51,14 @@ export interface EmailMethod {
  * handling that used to live inline in `MailService`.
  */
 export class NativeEmailMethod implements EmailMethod {
-  private readonly transporter: Transporter;
+  private readonly transporter: MailTransporter;
 
   /**
-   * @param {Transporter} transporter - The boot-time nodemailer transporter.
+   * @param {MailTransporter} transporter - The boot-time nodemailer transporter.
    *   Only ever constructed with a non-null transporter — disabled email is
    *   short-circuited by `MailService.sendEmail` before any method runs.
    */
-  constructor(transporter: Transporter) {
+  constructor(transporter: MailTransporter) {
     this.transporter = transporter;
   }
 
