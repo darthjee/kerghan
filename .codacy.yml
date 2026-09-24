@@ -70,3 +70,11 @@ engines:
       # `@typescript-eslint/no-extraneous-class` flags LoggingModule's empty class body, but an
       # empty class is how a decorated NestJS `@Module` is declared. See issue #225.
       - 'backend/src/core/logging.module.ts'
+  lizard:
+    exclude_paths:
+      # Yarn lockfiles are generated, not hand-maintained, so Lizard's file-size check
+      # (`Lizard_file-nloc-medium`) on them is noise. Excluded for Lizard only — never via the
+      # top-level `exclude_paths` — so Trivy keeps scanning them for vulnerable dependencies.
+      # A glob is safe here (unlike the file-by-file ESLint exclusions) because every
+      # `yarn.lock` is generated. See issue #226.
+      - '**/yarn.lock'
