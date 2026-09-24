@@ -12,8 +12,9 @@ each user's own browser IP (Internet Protocol) address absorbs GitHub's unauthen
 limit instead of the backend's shared one. Nothing about issues is persisted to MySQL by
 default; opt-in persistence (for history/trends) is a future addition, not the current
 behavior. The driving use case is label-based attention triage — surfacing which of a user's
-many tracked repos "need my attention". See [Flow](docs/agents/flow.md) for the full request/data flow and
-[Product Definitions](docs/agents/product.md) for what's decided vs. still open.
+many tracked repos "need my attention". See [Flow](docs/agents/flow.md) for the full
+request/data flow and [Product Definitions](docs/agents/product.md) for what's decided vs. still
+open.
 
 ## Stack
 
