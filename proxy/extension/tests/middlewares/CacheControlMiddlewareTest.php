@@ -82,13 +82,14 @@ class CacheControlMiddlewareTest extends TestCase
 
     /**
      * build() reads 'maxAgeSeconds' from the given attributes.
+     *
+     * @SuppressWarnings(PHPMD.StaticAccess) CacheControlMiddleware::build()
+     *     is the static factory contract mandated by the Tent middleware
+     *     framework (see the class's own "Usage in configuration" docblock);
+     *     this test exists specifically to exercise that static contract.
      */
     public function testBuildUsesMaxAgeSecondsAttribute(): void
     {
-        // @SuppressWarnings(PHPMD.StaticAccess) CacheControlMiddleware::build()
-        // is the static factory contract mandated by the Tent middleware
-        // framework (see the class's own "Usage in configuration" docblock);
-        // this test exists specifically to exercise that static contract.
         $middleware = CacheControlMiddleware::build(['maxAgeSeconds' => 604800]);
         $response = $this->makeResponse([]);
 
@@ -99,13 +100,14 @@ class CacheControlMiddlewareTest extends TestCase
 
     /**
      * build() also accepts the snake_case 'max_age_seconds' attribute.
+     *
+     * @SuppressWarnings(PHPMD.StaticAccess) CacheControlMiddleware::build()
+     *     is the static factory contract mandated by the Tent middleware
+     *     framework (see the class's own "Usage in configuration" docblock);
+     *     this test exists specifically to exercise that static contract.
      */
     public function testBuildUsesSnakeCaseMaxAgeSecondsAttribute(): void
     {
-        // @SuppressWarnings(PHPMD.StaticAccess) CacheControlMiddleware::build()
-        // is the static factory contract mandated by the Tent middleware
-        // framework (see the class's own "Usage in configuration" docblock);
-        // this test exists specifically to exercise that static contract.
         $middleware = CacheControlMiddleware::build(['max_age_seconds' => 86400]);
         $response = $this->makeResponse([]);
 
@@ -116,13 +118,14 @@ class CacheControlMiddlewareTest extends TestCase
 
     /**
      * build() defaults to a max-age of 0 when no attribute is provided.
+     *
+     * @SuppressWarnings(PHPMD.StaticAccess) CacheControlMiddleware::build()
+     *     is the static factory contract mandated by the Tent middleware
+     *     framework (see the class's own "Usage in configuration" docblock);
+     *     this test exists specifically to exercise that static contract.
      */
     public function testBuildDefaultsToZeroMaxAge(): void
     {
-        // @SuppressWarnings(PHPMD.StaticAccess) CacheControlMiddleware::build()
-        // is the static factory contract mandated by the Tent middleware
-        // framework (see the class's own "Usage in configuration" docblock);
-        // this test exists specifically to exercise that static contract.
         $middleware = CacheControlMiddleware::build([]);
         $response = $this->makeResponse([]);
 
