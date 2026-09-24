@@ -153,6 +153,7 @@ The winning `POST /auth/authorization-requests/:uuid/poll.json` response sets th
 same way login/register/refresh do — both paths go through the shared `respondWithSession`
 helper (`auth/auth-response.ts`), so the two response bodies/cookies cannot drift apart. It is
 set with:
+
 - `httpOnly: true` — not accessible via JavaScript
 - `secure: true` — only sent over HTTPS
 - `sameSite: 'strict'` — not sent on cross-site requests

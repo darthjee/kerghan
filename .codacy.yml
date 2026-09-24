@@ -75,3 +75,12 @@ engines:
       # A glob is safe here (unlike the file-by-file ESLint exclusions) because every
       # `yarn.lock` is generated. See issue #226.
       - '**/yarn.lock'
+  markdownlint:
+    exclude_paths:
+      # The commit message templates are arcanum-managed (installed by `init-claude`, consumed
+      # by the arcanum commit scripts). Their `<type>`, `<scope>`, `<agent>`... placeholders
+      # are template syntax, not inline HTML, so MD033 is a false positive. Escaping them would
+      # drift from the upstream copies — arcanum's own `.markdownlintignore` excludes the same
+      # two files. Excluded for markdownlint only, file by file. See issue #239.
+      - '.github/commit_message_template.md'
+      - '.github/commit_message_template-2.0.md'
