@@ -25,20 +25,18 @@ function storage() {
 
 /**
  * Thin wrapper around the single `localStorage` key holding the current refresh token. No
- * React/DOM dependency beyond `localStorage` itself — a plain class with static methods,
- * matching {@link module:client/ApiClient}'s style.
+ * React/DOM dependency beyond `localStorage` itself — a plain object module, matching
+ * {@link module:client/ApiClient}'s style.
  */
-// eslint-disable-next-line @typescript-eslint/no-extraneous-class -- static-methods-only
-// utility/client class is this codebase's deliberate convention, matching client/ApiClient.js.
-export default class AuthSession {
+const AuthSession = {
   /**
    * Read the currently stored refresh token.
    *
    * @returns {string|null} The stored refresh token, or `null` when none is stored.
    */
-  static get() {
+  get() {
     return storage().getItem(STORAGE_KEY);
-  }
+  },
 
   /**
    * Persist a refresh token.
@@ -46,25 +44,27 @@ export default class AuthSession {
    * @param {string} token - The refresh token to store.
    * @returns {void} Nothing.
    */
-  static set(token) {
+  set(token) {
     storage().setItem(STORAGE_KEY, token);
-  }
+  },
 
   /**
    * Clear the stored refresh token.
    *
    * @returns {void} Nothing.
    */
-  static clear() {
+  clear() {
     storage().removeItem(STORAGE_KEY);
-  }
+  },
 
   /**
    * Check whether a refresh token is currently stored.
    *
    * @returns {boolean} True when a refresh token is stored.
    */
-  static isLoggedIn() {
+  isLoggedIn() {
     return AuthSession.get() !== null;
-  }
-}
+  },
+};
+
+export default AuthSession;
