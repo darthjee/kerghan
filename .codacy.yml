@@ -9,12 +9,9 @@ engines:
     exclude_paths:
       # PMD's ecmascript module misparses private class methods/fields (`static async
       # #method() {}`) as a redundant nested block ("Unnecessary block."), flagging the method
-      # body itself — a parser limitation with this newer JS syntax, not a real code smell. All
-      # three files below use private methods extensively; see PR #33 / issue #30 for the
-      # findings this was added to resolve (ApiClient.js:54,117,130,
-      # AccountsClient.js:72, HeaderController.js:27).
-      - 'frontend/assets/js/client/ApiClient.js'
-      - 'frontend/assets/js/client/AccountsClient.js'
+      # body itself — a parser limitation with this newer JS syntax, not a real code smell. The
+      # file below uses private methods extensively; see PR #33 / issue #30 for the finding
+      # this was added to resolve (HeaderController.js:27).
       - 'frontend/assets/js/components/common/header/controllers/HeaderController.js'
   # The same ESLint exclusions are repeated under each of Codacy's ESLint tool keys (`eslint`,
   # `eslint-8`, `eslint-9`), since which one analyses this repo isn't pinned down; keep the
