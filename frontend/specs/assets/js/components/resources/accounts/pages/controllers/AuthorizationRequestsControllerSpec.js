@@ -66,17 +66,17 @@ describe('AuthorizationRequestsController', () => {
   });
 
   const itBehavesLikeRowAction = ({
-    method, clientMethod, args, successResponse,
+    stub, act, args, successResponse,
     errorArgs, errorMessage, rowStateBefore, rowStateAfter,
   }) => {
     it('clears the row error and reloads the list on success', async () => {
-      client[clientMethod].and.resolveTo(successResponse);
+      stub(client).and.resolveTo(successResponse);
       client.listAuthorizationRequests.and.resolveTo({ requests });
       const controller = buildController();
 
-      await controller[method](...args);
+      await act(controller, ...args);
 
-      expect(client[clientMethod]).toHaveBeenCalledWith(...args);
+      expect(stub(client)).toHaveBeenCalledWith(...args);
       const updater = setRowState.calls.first().args[0];
       expect(updater(new Map())).toEqual(new Map([['req-uuid', { error: null }]]));
       expect(client.listAuthorizationRequests).toHaveBeenCalled();
@@ -84,10 +84,10 @@ describe('AuthorizationRequestsController', () => {
     });
 
     it('stores the error against the row and does not reload on a 400', async () => {
-      client[clientMethod].and.rejectWith(new ApiError(400, errorMessage));
+      stub(client).and.rejectWith(new ApiError(400, errorMessage));
       const controller = buildController();
 
-      await controller[method](...errorArgs);
+      await act(controller, ...errorArgs);
 
       const updater = setRowState.calls.mostRecent().args[0];
       expect(updater(rowStateBefore)).toEqual(rowStateAfter);
@@ -95,10 +95,10 @@ describe('AuthorizationRequestsController', () => {
     });
 
     it('does nothing when the session turned out to be expired', async () => {
-      client[clientMethod].and.resolveTo(undefined);
+      stub(client).and.resolveTo(undefined);
       const controller = buildController();
 
-      await controller[method](...args);
+      await act(controller, ...args);
 
       expect(setRowState).not.toHaveBeenCalled();
       expect(client.listAuthorizationRequests).not.toHaveBeenCalled();
@@ -107,8 +107,8 @@ describe('AuthorizationRequestsController', () => {
 
   describe('#authorize', () => {
     itBehavesLikeRowAction({
-      method: 'authorize',
-      clientMethod: 'authorizeAuthorizationRequest',
+      stub: (c) => c.authorizeAuthorizationRequest,
+      act: (controller, ...args) => controller.authorize(...args),
       args: ['req-uuid', 'secret'],
       successResponse: { authorized: true },
       errorArgs: ['req-uuid', 'wrong'],
@@ -122,8 +122,8 @@ describe('AuthorizationRequestsController', () => {
 
   describe('#deny', () => {
     itBehavesLikeRowAction({
-      method: 'deny',
-      clientMethod: 'denyAuthorizationRequest',
+      stub: (c) => c.denyAuthorizationRequest,
+      act: (controller, ...args) => controller.deny(...args),
       args: ['req-uuid'],
       successResponse: { denied: true },
       errorArgs: ['req-uuid'],
