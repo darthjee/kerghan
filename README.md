@@ -1,4 +1,5 @@
 # kerghan
+
 A tool for monitoring github issues
 
 [![Build Status](https://circleci.com/gh/darthjee/kerghan.svg?style=shield)](https://circleci.com/gh/darthjee/kerghan)
@@ -32,7 +33,8 @@ tracked-repo/label-rule data model.
 
 ## Technology Stack
 
-**Backend**
+### Backend
+
 - **Node.js / NestJS** — Application framework
 - **TypeORM** — ORM + migrations
 - **MySQL 8** — Relational database
@@ -40,14 +42,16 @@ tracked-repo/label-rule data model.
 - **Jest + `@swc/jest` + `supertest` + `@nestjs/testing`** — Test suite
 - **ESLint** — Linting
 
-**Frontend**
+### Frontend
+
 - **React 19** — UI framework
 - **Vite** — Build tool and dev server
 - **Jasmine + c8** — Tests and coverage
 - **ESLint** — Linting
 - **Yarn** — Package manager
 
-**Infrastructure**
+### Infrastructure
+
 - **Docker & Docker Compose** — Containerisation and orchestration
 - **[darthjee/tent](https://github.com/darthjee/tent)** — Reverse proxy (port 3000)
 - **[darthjee/navi](https://github.com/darthjee/navi)** — Cache warmer
@@ -95,9 +99,10 @@ make dev-up
 ```
 
 The application will be available at:
-- **Full stack (proxy):** http://localhost:3000
-- **Backend API:** http://localhost:3030
-- **Frontend dev server:** http://localhost:3010
+
+- **Full stack (proxy):** <http://localhost:3000>
+- **Backend API:** <http://localhost:3030>
+- **Frontend dev server:** <http://localhost:3010>
 
 ### Development Shells
 
