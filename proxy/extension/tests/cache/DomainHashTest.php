@@ -29,14 +29,15 @@ class DomainHashTest extends TestCase
      * The returned hash is exactly `'domain_' . hash('sha256', $domain)` —
      * the documented, reproducible format callers (and cache invalidation
      * tooling) can rely on.
+     *
+     * @SuppressWarnings(PHPMD.StaticAccess) DomainHash::hash() is a pure,
+     *     stateless static helper (no I/O, no collaborators to substitute —
+     *     see the class's own docblock).
      */
     public function testHashMatchesExpectedFormat(): void
     {
         $request = $this->makeRequest('kerghan-a.example.com', 'id=1');
 
-        // @SuppressWarnings(PHPMD.StaticAccess) DomainHash::hash() is a pure,
-        // stateless static helper (no I/O, no collaborators to substitute —
-        // see the class's own docblock).
         $result = DomainHash::hash($request);
 
         $this->assertSame('domain_' . hash('sha256', 'kerghan-a.example.com'), $result);
