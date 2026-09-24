@@ -16,3 +16,57 @@ engines:
       - 'frontend/assets/js/client/ApiClient.js'
       - 'frontend/assets/js/client/AccountsClient.js'
       - 'frontend/assets/js/components/common/header/controllers/HeaderController.js'
+  # The same ESLint exclusions are repeated under each of Codacy's ESLint tool keys (`eslint`,
+  # `eslint-8`, `eslint-9`), since which one analyses this repo isn't pinned down; keep the
+  # three lists identical.
+  eslint:
+    exclude_paths:
+      # Codacy's base `no-unused-vars` misreads TypeScript constructor parameter properties
+      # (`constructor(readonly userId: number) {}`) as unused parameters — the parameter
+      # property *is* the declaration. The repo's own ESLint (backend/eslint.config.mjs) turns
+      # the base rule off for TS and uses `@typescript-eslint/no-unused-vars`, which reports
+      # nothing here. Listed file by file (no glob) so the sibling
+      # password-recovery-requested.listener.ts stays analysed. See issue #225.
+      - 'backend/src/auth/events/authorization-request-approved.event.ts'
+      - 'backend/src/auth/events/authorization-request-created.event.ts'
+      - 'backend/src/auth/events/authorization-request-denied.event.ts'
+      - 'backend/src/auth/events/authorization-request-logged.event.ts'
+      - 'backend/src/auth/events/password-recovery-requested.event.ts'
+      - 'backend/src/auth/events/user-registered.event.ts'
+      # `@typescript-eslint/no-extraneous-class` flags LoggingModule's empty class body, but an
+      # empty class is how a decorated NestJS `@Module` is declared. See issue #225.
+      - 'backend/src/core/logging.module.ts'
+  eslint-8:
+    exclude_paths:
+      # Codacy's base `no-unused-vars` misreads TypeScript constructor parameter properties
+      # (`constructor(readonly userId: number) {}`) as unused parameters — the parameter
+      # property *is* the declaration. The repo's own ESLint (backend/eslint.config.mjs) turns
+      # the base rule off for TS and uses `@typescript-eslint/no-unused-vars`, which reports
+      # nothing here. Listed file by file (no glob) so the sibling
+      # password-recovery-requested.listener.ts stays analysed. See issue #225.
+      - 'backend/src/auth/events/authorization-request-approved.event.ts'
+      - 'backend/src/auth/events/authorization-request-created.event.ts'
+      - 'backend/src/auth/events/authorization-request-denied.event.ts'
+      - 'backend/src/auth/events/authorization-request-logged.event.ts'
+      - 'backend/src/auth/events/password-recovery-requested.event.ts'
+      - 'backend/src/auth/events/user-registered.event.ts'
+      # `@typescript-eslint/no-extraneous-class` flags LoggingModule's empty class body, but an
+      # empty class is how a decorated NestJS `@Module` is declared. See issue #225.
+      - 'backend/src/core/logging.module.ts'
+  eslint-9:
+    exclude_paths:
+      # Codacy's base `no-unused-vars` misreads TypeScript constructor parameter properties
+      # (`constructor(readonly userId: number) {}`) as unused parameters — the parameter
+      # property *is* the declaration. The repo's own ESLint (backend/eslint.config.mjs) turns
+      # the base rule off for TS and uses `@typescript-eslint/no-unused-vars`, which reports
+      # nothing here. Listed file by file (no glob) so the sibling
+      # password-recovery-requested.listener.ts stays analysed. See issue #225.
+      - 'backend/src/auth/events/authorization-request-approved.event.ts'
+      - 'backend/src/auth/events/authorization-request-created.event.ts'
+      - 'backend/src/auth/events/authorization-request-denied.event.ts'
+      - 'backend/src/auth/events/authorization-request-logged.event.ts'
+      - 'backend/src/auth/events/password-recovery-requested.event.ts'
+      - 'backend/src/auth/events/user-registered.event.ts'
+      # `@typescript-eslint/no-extraneous-class` flags LoggingModule's empty class body, but an
+      # empty class is how a decorated NestJS `@Module` is declared. See issue #225.
+      - 'backend/src/core/logging.module.ts'
