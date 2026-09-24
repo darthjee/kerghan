@@ -7,6 +7,7 @@ frontend — served together through the Tent proxy, the same shape Majora uses.
 documents the architecture split by concern to keep agent contexts small.
 
 This page is the hub. See the area pages for details:
+
 - [Proxy](./architecture/proxy.md)
 - [Frontend](./architecture/frontend.md)
 - [Backend](./architecture/backend.md) — NestJS + TypeORM + MySQL stack, layout, build, and
