@@ -1,4 +1,5 @@
 <?php
+
 /**
  * Backend routing rules.
  * Forwards all .json requests to the Node/Express backend.

@@ -1,4 +1,5 @@
 <?php
+
 /**
  * Frontend routing rules.
  * In development mode, proxies requests to the Vite dev server.

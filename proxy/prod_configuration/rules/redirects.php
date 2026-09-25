@@ -1,4 +1,5 @@
 <?php
+
 /**
  * Redirect routing rules.
  * Catch-all redirect for bare GET paths (GET /path -> 302 /#/path).
