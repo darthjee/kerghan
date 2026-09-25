@@ -13,6 +13,9 @@ app.
 - `proxy/prod_configuration/` — PHP routing rules for production (uploaded during release)
 - `proxy/extension/lib/` — custom PHP middleware/handler/support classes
 - `proxy/extension/tests/` — PHPUnit tests for the extension
+- `phpcs.xml` (repository root) — the PSR-12 PHPCS ruleset for `proxy/`, also read by Codacy
+- The `proxy_lint` docker-compose service — owned by this agent, but infra still makes the actual
+  edits in `docker-compose.yml`
 
 Do NOT touch `backend/` (backend), `frontend/` (frontend code), `docker-compose.yml`,
 `dockerfiles/`, `.circleci/`, or `scripts/` — those belong to `backend`, `frontend`, or `infra`.
@@ -23,6 +26,9 @@ Do NOT touch `backend/` (backend), `frontend/` (frontend code), `docker-compose.
 ```bash
 # Run PHP tests
 docker-compose run proxy_tests
+
+# Check PSR-12 coding style (ruleset: root phpcs.xml)
+docker-compose run --rm proxy_lint
 
 # Lint a single PHP file (one-off)
 docker run --rm -v "$PWD":/repo darthjee/tent:0.10.1 sh -c 'php -l /repo/proxy/path/to/file.php'
@@ -103,13 +109,17 @@ PHPUnit invocation: `vendor/bin/phpunit --bootstrap
 
 ## Local development checks
 
-Run all proxy checks:
+Proxy PHP follows **PSR-12**, enforced by the root `phpcs.xml` (read by both Codacy and the
+local-only `proxy_lint` service). Run all proxy checks:
 
 ```bash
 # Lint all PHP files
 docker run --rm -v "$PWD":/repo darthjee/tent:0.10.1 sh -c '
   find /repo/proxy -name "*.php" -print0 | xargs -0 -n1 php -l
 '
+
+# Check PSR-12 coding style
+docker-compose run --rm proxy_lint
 
 # Run PHPUnit tests
 docker-compose run proxy_tests

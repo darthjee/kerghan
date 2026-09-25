@@ -49,6 +49,12 @@ it's coupled to concepts Kerghan doesn't have (an admin/staff role, file uploads
 Don't reintroduce that coupling without a product decision backing it — see `proxy.md` in
 `.claude/agents/` for the full rule.
 
+## Coding style
+
+Proxy PHP follows **PSR-12**. The root `phpcs.xml` enforces it for `proxy/extension/lib`,
+`proxy/extension/tests`, `proxy/dev_configuration` and `proxy/prod_configuration`. Codacy reads
+the same ruleset, and you can check locally with `docker-compose run --rm proxy_lint`.
+
 ## Cache bypass (`X-Skip-Cache`)
 
 The backend rule sets `'skip_cache_header' => 'X-Skip-Cache'`. Any backend response carrying
