@@ -52,7 +52,7 @@ folder to its CircleCI job(s) and the equivalent local commands.
 |------------------|-----------|-----------------|
 | `backend/` | `backend_tests`, `backend_checks` | `docker-compose run kerghan_tests yarn coverage` and `docker-compose run kerghan_tests yarn lint` |
 | `frontend/` | `jasmine`, `frontend-checks` | `docker-compose run kerghan_fe yarn coverage` and `docker-compose run kerghan_fe yarn lint` |
-| `proxy/` | `proxy_extension_tests` | `docker-compose run proxy_tests` |
+| `proxy/` | `proxy_extension_tests` | `docker-compose run proxy_tests` and `docker-compose run --rm proxy_lint` (PSR-12 check, local only — no CI job) |
 | `.circleci/`, `scripts/`, `bin/`, `dockerfiles/`, `docker-compose.yml`, `proxy/prod_configuration/` | `upload_proxy_files`, `upload_fe_files`, `build-and-release`, `release`, `warm-up-cache` | The jobs themselves run only in CI / on tagged releases. For `.circleci/config.yml`, validate the config locally with `docker-compose run --rm circleci config validate` (use `... circleci config process .circleci/config.yml` to inspect the expanded jobs); for the rest, verify by reading the job definitions in `.circleci/config.yml`. |
 
 If a new top-level folder is added in the future, its corresponding test and check jobs must be
