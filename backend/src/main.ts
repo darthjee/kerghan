@@ -6,13 +6,18 @@ import cookieParser from 'cookie-parser';
 import { AppModule } from './app.module.js';
 import { buildCorsOptions } from './core/cors-config.js';
 import { LoggerService } from './core/logger.service.js';
+import { buildSecretKeys } from './core/secret-keys.js';
 
 /**
  * Boots the Nest application, wiring cookie parsing (needed for the
  * httpOnly access-token cookie added by the Auth module), global request
  * DTO validation (`class-validator`, used by the Auth module's DTOs), and
- * reading runtime configuration (`PORT`, `KERGHAN_SECRET_KEY`) through
- * `@nestjs/config` rather than reading `process.env` directly. CORS is
+ * reading runtime configuration (`PORT`, `KERGHAN_SECRET_KEY`,
+ * `KERGHAN_PREVIOUS_SECRET_KEYS`) through `@nestjs/config` rather than
+ * reading `process.env` directly. `cookie-parser` receives the full key list
+ * (`[current, ...previous]`, blank keys dropped so an unset secret still
+ * means "no secret"): it signs with the first and unsigns by trying each,
+ * so a key rotation never breaks signed cookies. CORS is
  * enabled only when `buildCorsOptions` resolves an allowlist (from
  * `KERGHAN_ALLOWED_ORIGINS`, falling back to `FRONTEND_BASE_URL`'s origin);
  * an invalid allowlist throws, failing boot via `bootstrap().catch`.
@@ -23,7 +28,7 @@ async function bootstrap(): Promise<void> {
   const configService = app.get(ConfigService);
   const logger = app.get(LoggerService);
 
-  app.use(cookieParser(configService.get<string>('KERGHAN_SECRET_KEY')));
+  app.use(cookieParser(buildSecretKeys(configService).all.filter((key) => key !== '')));
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
 
   const corsOptions = buildCorsOptions(configService);
