@@ -4,6 +4,7 @@ import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
 import cookieParser from 'cookie-parser';
 import { AppModule } from './app.module.js';
+import { buildCorsOptions } from './core/cors-config.js';
 import { LoggerService } from './core/logger.service.js';
 
 /**
@@ -11,7 +12,10 @@ import { LoggerService } from './core/logger.service.js';
  * httpOnly access-token cookie added by the Auth module), global request
  * DTO validation (`class-validator`, used by the Auth module's DTOs), and
  * reading runtime configuration (`PORT`, `KERGHAN_SECRET_KEY`) through
- * `@nestjs/config` rather than reading `process.env` directly.
+ * `@nestjs/config` rather than reading `process.env` directly. CORS is
+ * enabled only when `buildCorsOptions` resolves an allowlist (from
+ * `KERGHAN_ALLOWED_ORIGINS`, falling back to `FRONTEND_BASE_URL`'s origin);
+ * an invalid allowlist throws, failing boot via `bootstrap().catch`.
  * @returns {Promise<void>} Resolves once the HTTP server is listening.
  */
 async function bootstrap(): Promise<void> {
@@ -21,6 +25,13 @@ async function bootstrap(): Promise<void> {
 
   app.use(cookieParser(configService.get<string>('KERGHAN_SECRET_KEY')));
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
+
+  const corsOptions = buildCorsOptions(configService);
+
+  if (corsOptions) {
+    app.enableCors(corsOptions);
+    logger.info('cors enabled', { origins: corsOptions.origin === true ? 'reflect-any' : corsOptions.origin });
+  }
 
   const port = configService.get<number>('PORT', 8080);
   await app.listen(port);

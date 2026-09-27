@@ -34,7 +34,9 @@ is the canonical place for the `product-owner`, `data-access`, and `security` ag
   scaffolding, just narrowly-scoped tooling gated behind `@AdminOnly()`.
 - **Env vars for the framework**: simple env-driven config, read once at boot (no hidden env
   reads inside classes) — `KERGHAN_SECRET_KEY` (session/cookie signing, backing the login
-  described in [Flow](flow.md)), `KERGHAN_ALLOWED_ORIGINS` (CORS allowlist), `NODE_ENV`/`DEBUG`.
+  described in [Flow](flow.md)), `KERGHAN_ALLOWED_ORIGINS` (CORS allowlist, falling back to `FRONTEND_BASE_URL`'s origin —
+  format and production wildcard rule in [Environment Variables](environment-variables.md)),
+  `NODE_ENV`/`DEBUG`.
 
 ## Deferred (future, not current scope)
 
