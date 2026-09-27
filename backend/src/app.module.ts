@@ -11,6 +11,7 @@ import { JwtGuard } from './core/jwt.guard.js';
 import { LazyModuleLoaderService } from './core/lazy-module-loader.service.js';
 import { LoggingModule } from './core/logging.module.js';
 import { RequestContextMiddleware } from './core/request-context.middleware.js';
+import { buildSecretKeys } from './core/secret-keys.js';
 import { SkipCacheInterceptor } from './core/skip-cache.interceptor.js';
 import { HealthController } from './health/health.controller.js';
 import { MailModule } from './mail/mail.module.js';
@@ -43,7 +44,9 @@ export function buildJwtSignOptions(configService: ConfigService): { expiresIn: 
  * connection, and the core JWT guard/cache-token service (per the issue's
  * "Core" module classification — always resident, at boot, independent of
  * any feature module); feature modules (Auth, and later lazy modules) are
- * imported here as they are introduced.
+ * imported here as they are introduced. `JwtModule` signs with the current
+ * secret key only (`buildSecretKeys(...).current`); retired keys are
+ * accepted solely by `JwtGuard` when verifying.
  *
  * Implements `NestModule` to wire the global `RequestContextMiddleware`
  * (request-correlation context + per-request access log) ahead of the
@@ -78,7 +81,7 @@ export function buildJwtSignOptions(configService: ConfigService): { expiresIn: 
       imports: [ConfigModule],
       inject: [ConfigService],
       useFactory: (configService: ConfigService) => ({
-        secret: configService.get<string>('KERGHAN_SECRET_KEY'),
+        secret: buildSecretKeys(configService).current,
         signOptions: buildJwtSignOptions(configService),
       }),
     }),

@@ -1,6 +1,7 @@
 import { createHmac } from 'node:crypto';
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { buildSecretKeys } from './secret-keys.js';
 
 /**
  * Generates an HMAC-based cache token used to key Tent's proxy cache
@@ -9,6 +10,11 @@ import { ConfigService } from '@nestjs/config';
  * another (see docs/agents/cache-warmer.md). Injected wherever a response
  * needs to expose the cache token — never reads the signing secret itself
  * outside DI.
+ *
+ * Always derived from the current `KERGHAN_SECRET_KEY` only, never from
+ * `KERGHAN_PREVIOUS_SECRET_KEYS`: the token is a deterministic cache key,
+ * not a verified signature. Rotating the key therefore changes every user's
+ * cache token, which only causes cache misses.
  */
 @Injectable()
 export class CacheTokenService {
@@ -27,7 +33,7 @@ export class CacheTokenService {
    * @returns {string} A hex-encoded HMAC-SHA256 digest.
    */
   generate(userId: string | number): string {
-    const secret = this.configService.get<string>('KERGHAN_SECRET_KEY', '');
+    const secret = buildSecretKeys(this.configService).current;
     return createHmac('sha256', secret).update(String(userId)).digest('hex');
   }
 }
