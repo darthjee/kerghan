@@ -52,19 +52,35 @@ row above). Set them explicitly only if a deployment needs different tuning.
 
 ### Rotating `KERGHAN_SECRET_KEY`
 
-The secret can be rotated with zero downtime:
+Keys must not contain commas, and must not have leading or trailing whitespace. Entries in
+`KERGHAN_PREVIOUS_SECRET_KEYS` are trimmed, so a padded key would no longer match the value
+that signed the old tokens.
+
+**Routine rotation (zero downtime).** Use this only when the old key is *not* suspected to be
+compromised:
 
 1. Generate a new long random key.
 2. Deploy with `KERGHAN_SECRET_KEY=<new>` and `KERGHAN_PREVIOUS_SECRET_KEYS=<old>`. New access
    tokens are signed with `<new>`; tokens already issued with `<old>` keep verifying.
-3. Wait at least `KERGHAN_ACCESS_TOKEN_TTL_MS` (default 15 minutes) so every access token signed
-   with `<old>` has expired.
+3. Wait at least `KERGHAN_ACCESS_TOKEN_TTL_MS` (default 15 minutes), counted from the moment
+   *every* backend instance runs the new config (instances still on the old config keep signing
+   with `<old>`), so every access token signed with `<old>` has expired.
 4. Deploy again with `<old>` removed from `KERGHAN_PREVIOUS_SECRET_KEYS`.
 
-Side effects:
+If Kerghan runs several backend instances behind a rolling deploy, old instances would reject tokens signed with `<new>` during the rollout. Use three
+phases instead: (a) `KERGHAN_SECRET_KEY=<old>`, `KERGHAN_PREVIOUS_SECRET_KEYS=<new>`; (b)
+`KERGHAN_SECRET_KEY=<new>`, `KERGHAN_PREVIOUS_SECRET_KEYS=<old>`; (c) remove `<old>`.
 
-- The cache token is always derived from the current key only, so it changes at step 2. That
-  only causes cache misses.
+**Compromised key.** Do not list the leaked key in `KERGHAN_PREVIOUS_SECRET_KEYS`, because
+anyone holding it could keep forging access tokens until it is removed. Deploy the new
+`KERGHAN_SECRET_KEY` with the old key dropped entirely. Every outstanding access token is
+rejected at once. Clients recover through the refresh flow, because refresh tokens do not
+depend on the key.
+
+Side effects (both variants):
+
+- The cache token is always derived from the current key only, so it changes on the first
+  deploy. That only causes cache misses.
 - Refresh tokens are random values stored as SHA-256 hashes and do not depend on the key, so
   they are unaffected.
 
