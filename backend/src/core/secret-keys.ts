@@ -29,7 +29,7 @@ export interface SecretKeys {
  * @returns {SecretKeys} The current key, the previous keys and both combined.
  */
 export function buildSecretKeys(configService: ConfigService): SecretKeys {
-  const current = configService.get<string>(SECRET_KEY_VAR, '');
+  const current = configService.get<string>(SECRET_KEY_VAR) ?? '';
   const previous = parsePreviousKeys(configService.get<string>(PREVIOUS_SECRET_KEYS_VAR) ?? '', current);
 
   return { current, previous, all: [current, ...previous] };
