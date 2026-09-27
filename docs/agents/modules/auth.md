@@ -87,7 +87,10 @@ rather than an edit to the seed migration's `INSERT`, since the seed migration r
 ## JWT/refresh-token flow
 
 - **Access token**: JWT (`@nestjs/jwt`), signed with `KERGHAN_SECRET_KEY` (via `ConfigService`,
-  never read directly). Expiry is configurable via `KERGHAN_ACCESS_TOKEN_TTL_MS` (milliseconds;
+  never read directly). `JwtGuard` verifies against the current key first, then each retired
+  key in `KERGHAN_PREVIOUS_SECRET_KEYS` (resolved by `core/secret-keys.ts`), so the key can be
+  rotated without logging users out — see the rotation runbook in
+  `docs/agents/environment-variables.md`. Expiry is configurable via `KERGHAN_ACCESS_TOKEN_TTL_MS` (milliseconds;
   defaults to `900000`, 15 minutes, when unset) — see `docs/agents/environment-variables.md`. Set
   as an `httpOnly` + `Secure` + `SameSite=Strict` cookie (`access_token`), whose `maxAge` is
   driven by the same env var — never returned in the response body. The payload also carries an

@@ -13,7 +13,8 @@ running `kerghan_prod_app` locally to sanity-check the production image).
 
 | Variable | Status | Purpose | Source |
 |---|---|---|---|
-| `KERGHAN_SECRET_KEY` | **Consumed** | Signs JWT access tokens, derives the HMAC cache token, and signs `cookie-parser`'s cookies. Must be a long random value in production — the dev sample ships an intentionally insecure placeholder. | `backend/src/app.module.ts`, `backend/src/core/cache-token.service.ts`, `backend/src/main.ts` |
+| `KERGHAN_SECRET_KEY` | **Consumed** | The current secret key. Signs every new JWT access token, derives the HMAC cache token (`CacheTokenService` has no callers yet), and is the first secret handed to `cookie-parser` (no cookie is signed today, so this is dormant). Must be a long random value in production — the dev sample ships an intentionally insecure placeholder. See "Rotating `KERGHAN_SECRET_KEY`" below. | `backend/src/core/secret-keys.ts`, `backend/src/app.module.ts`, `backend/src/core/cache-token.service.ts`, `backend/src/main.ts` |
+| `KERGHAN_PREVIOUS_SECRET_KEYS` | **Consumed**, optional | Comma-separated list of retired secret keys, still accepted when verifying JWT access tokens (tried after the current key, in order) and passed to `cookie-parser` after the current key. Never used to sign anything. Entries are trimmed; blanks, duplicates and any entry equal to `KERGHAN_SECRET_KEY` are dropped. Defaults to empty. | `backend/src/core/secret-keys.ts`, `backend/src/core/jwt.guard.ts`, `backend/src/main.ts` |
 | `KERGHAN_ACCESS_TOKEN_TTL_MS` | **Consumed**, optional | Access-token lifetime, in milliseconds. Drives both the signed JWT's `signOptions.expiresIn` (`app.module.ts`, converted to seconds for `jsonwebtoken`) and the `access_token` cookie's `maxAge` (`auth.controller.ts`, used as-is), so the two always agree. Defaults to `900000` (15 minutes) when unset. | `backend/src/app.module.ts`, `backend/src/auth/auth.controller.ts` |
 | `KERGHAN_AUTHORIZATION_REQUEST_TTL_MS` | **Consumed**, optional | How long a device-authorization request (`POST /auth/authorization-requests.json`) stays pollable before lazily flipping to `expired`, in milliseconds. Defaults to `3600000` (1 hour) when unset. | `backend/src/auth/authorization-request.service.ts` |
 | `KERGHAN_AUTHORIZATION_REQUEST_CREATE_LIMIT` | **Consumed**, optional | Per-IP/per-username request count allowed within the sliding window before `create` is throttled. Defaults to `5`. | `backend/src/auth/authorization-request-abuse-guard.service.ts` |
@@ -48,6 +49,24 @@ running `kerghan_prod_app` locally to sanity-check the production image).
 `KERGHAN_AUTHORIZATION_REQUEST_*` variables above (TTL plus the five rate-limit/cap/cool-off keys)
 are set in `.env.dev.sample` — local dev runs entirely on their code-level defaults (see each
 row above). Set them explicitly only if a deployment needs different tuning.
+
+### Rotating `KERGHAN_SECRET_KEY`
+
+The secret can be rotated with zero downtime:
+
+1. Generate a new long random key.
+2. Deploy with `KERGHAN_SECRET_KEY=<new>` and `KERGHAN_PREVIOUS_SECRET_KEYS=<old>`. New access
+   tokens are signed with `<new>`; tokens already issued with `<old>` keep verifying.
+3. Wait at least `KERGHAN_ACCESS_TOKEN_TTL_MS` (default 15 minutes) so every access token signed
+   with `<old>` has expired.
+4. Deploy again with `<old>` removed from `KERGHAN_PREVIOUS_SECRET_KEYS`.
+
+Side effects:
+
+- The cache token is always derived from the current key only, so it changes at step 2. That
+  only causes cache misses.
+- Refresh tokens are random values stored as SHA-256 hashes and do not depend on the key, so
+  they are unaffected.
 
 **GitHub credentials — deliberately none.** Kerghan reads only public GitHub REST API data,
 unauthenticated (see `docs/agents/product.md`). There is no PAT/OAuth/App var to set for this,
