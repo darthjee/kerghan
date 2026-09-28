@@ -29,12 +29,12 @@ function hostFor(response: FakeResponse): ArgumentsHost {
 }
 
 describe('HttpExceptionFilter', () => {
-  let logger: { error: jest.Mock };
+  let logger: { error: jest.Mock; debug: jest.Mock };
   let filter: HttpExceptionFilter;
   let response: FakeResponse;
 
   beforeEach(() => {
-    logger = { error: jest.fn() };
+    logger = { error: jest.fn(), debug: jest.fn() };
     filter = new HttpExceptionFilter(logger as unknown as LoggerService);
     response = fakeResponse();
   });
@@ -155,6 +155,63 @@ describe('HttpExceptionFilter', () => {
         name: 'string',
         stack: undefined,
       });
+    });
+  });
+
+  describe('with an http-errors-style client error (e.g. from body-parser)', () => {
+    function parserError(message: string, fields: Record<string, unknown>): Error {
+      return Object.assign(new Error(message), { expose: true, type: 'entity.too.large' }, fields);
+    }
+
+    it('keeps a statusCode-keyed 4xx status with a generic message and no error log', () => {
+      const body = catchAndGetBody(parserError('request entity too large: limit 102400', { statusCode: 413 }));
+
+      expect(response.status).toHaveBeenCalledWith(413);
+      expect(body).toEqual({
+        error: { code: 'HTTP_413', message: 'Payload Too Large' },
+        statusCode: 413,
+        timestamp: expect.stringMatching(ISO_TIMESTAMP),
+      });
+      expect(JSON.stringify(body)).not.toContain('limit');
+      expect(logger.error).not.toHaveBeenCalled();
+      expect(logger.debug).toHaveBeenCalledWith('client error', { status: 413, name: 'Error' });
+    });
+
+    it('keeps a status-keyed 4xx status with its category code', () => {
+      const body = catchAndGetBody(parserError('request aborted', { status: 400 }));
+
+      expect(response.status).toHaveBeenCalledWith(400);
+      expect(body.error).toEqual({ code: ErrorCodes.BAD_REQUEST, message: 'Bad Request' });
+      expect(logger.error).not.toHaveBeenCalled();
+    });
+
+    it('prefers statusCode over status', () => {
+      const body = catchAndGetBody(parserError('unsupported charset', { statusCode: 415, status: 400 }));
+
+      expect(response.status).toHaveBeenCalledWith(415);
+      expect(body.error).toEqual({ code: 'HTTP_415', message: 'Unsupported Media Type' });
+    });
+
+    it('falls back to HTTP <status> for a 4xx with no standard reason phrase', () => {
+      const body = catchAndGetBody({ statusCode: 499 });
+
+      expect(response.status).toHaveBeenCalledWith(499);
+      expect(body.error).toEqual({ code: 'HTTP_499', message: 'HTTP 499' });
+      expect(logger.debug).toHaveBeenCalledWith('client error', { status: 499, name: 'object' });
+    });
+
+    it.each([
+      ['a 5xx statusCode', { statusCode: 503 }],
+      ['a non-numeric status', { status: '413' }],
+      ['a sub-400 status', { statusCode: 302 }],
+      ['null', null],
+    ])('treats %s as an unexpected 500', (_label, exception) => {
+      const body = catchAndGetBody(exception);
+
+      expect(response.status).toHaveBeenCalledWith(500);
+      expect(body.error).toEqual({ code: ErrorCodes.INTERNAL_ERROR, message: 'Internal server error' });
+      expect(logger.error).toHaveBeenCalled();
+      expect(logger.debug).not.toHaveBeenCalled();
     });
   });
 });

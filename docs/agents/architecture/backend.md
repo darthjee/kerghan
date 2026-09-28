@@ -193,7 +193,17 @@ throw new ConflictException({ code: ErrorCodes.USERNAME_TAKEN, message: 'usernam
 Current specific codes: `USERNAME_TAKEN` and `EMAIL_TAKEN` (`409`, from registration, account
 edit and admin user edit). Pick the status by meaning — a uniqueness conflict is `409`, not `400`.
 
-**Unexpected errors.** Anything that is not an `HttpException` answers `500` with
+**Client errors from Express middleware.** Express body-parser failures other than malformed
+JSON (which Nest itself turns into a `BadRequestException`) are http-errors-style plain errors
+carrying a numeric `statusCode`/`status` — e.g. `413` for a body over the parser limit (100kb by
+default), `415` for an unsupported charset/encoding, `400` for an aborted request. Any
+non-`HttpException` error with a numeric 4xx `statusCode` (preferred) or `status` keeps that
+status and its category code (`HTTP_413`, `HTTP_415`, `BAD_REQUEST`, ...), with the fixed
+standard reason phrase from `node:http`'s `STATUS_CODES` as `error.message` (e.g.
+`Payload Too Large`) — never the raw parser text. They are logged at `debug` only (`client
+error`, status and error name, no stack) so anonymous clients cannot flood the error log.
+
+**Unexpected errors.** Anything else that is not an `HttpException` answers `500` with
 `{ code: 'INTERNAL_ERROR', message: 'Internal server error' }`; the real message and stack are
 logged through `LoggerService#error('unhandled exception', ...)` and never sent to the client.
 
