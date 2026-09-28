@@ -95,7 +95,8 @@ attack.
 ### Rules for future changes
 
 - **No state change over `GET`** (or `HEAD`/`OPTIONS`). Those methods skip `OriginGuard`. Today
-  the only `GET` route is `/health.json`.
+  the only `GET` routes are the public `/health.json` and `/ready.json` probes; `/ready.json`
+  exposes only per-check `up`/`down` states, never error details.
 - **Don't relax the cookie**: `access_token` stays `httpOnly` + `Secure` + `SameSite=Strict`.
 - **Don't bypass `OriginGuard`**: new mutating routes get it automatically as a global guard.
   Don't add an opt-out, and don't register another guard ahead of it that short-circuits.

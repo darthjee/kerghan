@@ -16,6 +16,7 @@ import { OriginGuard } from './core/origin.guard.js';
 import { RequestContextMiddleware } from './core/request-context.middleware.js';
 import { buildSecretKeys } from './core/secret-keys.js';
 import { HealthController } from './health/health.controller.js';
+import { HealthService } from './health/health.service.js';
 import { MailModule } from './mail/mail.module.js';
 
 // Default access-token lifetime (15 minutes, in milliseconds) used when
@@ -102,6 +103,7 @@ export function buildJwtSignOptions(configService: ConfigService): { expiresIn: 
   controllers: [HealthController],
   providers: [
     CacheTokenService,
+    HealthService,
     LazyModuleLoaderService,
     {
       provide: APP_GUARD,
