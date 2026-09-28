@@ -1,6 +1,5 @@
-import { Controller, Get, INestApplication, Post } from '@nestjs/common';
+import { CallHandler, Controller, ExecutionContext, Get, INestApplication, Post } from '@nestjs/common';
 import { APP_INTERCEPTOR, Reflector } from '@nestjs/core';
-import type { CallHandler, ExecutionContext } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { of } from 'rxjs';
 import request from 'supertest';
