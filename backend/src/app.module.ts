@@ -6,6 +6,7 @@ import { JwtModule } from '@nestjs/jwt';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AuthModule } from './auth/auth.module.js';
 import { AdminGuard } from './core/admin.guard.js';
+import { CachePolicyInterceptor } from './core/cache-policy.interceptor.js';
 import { CacheTokenService } from './core/cache-token.service.js';
 import { HttpExceptionFilter } from './core/http-exception.filter.js';
 import { JwtGuard } from './core/jwt.guard.js';
@@ -14,7 +15,6 @@ import { LoggingModule } from './core/logging.module.js';
 import { OriginGuard } from './core/origin.guard.js';
 import { RequestContextMiddleware } from './core/request-context.middleware.js';
 import { buildSecretKeys } from './core/secret-keys.js';
-import { SkipCacheInterceptor } from './core/skip-cache.interceptor.js';
 import { HealthController } from './health/health.controller.js';
 import { MailModule } from './mail/mail.module.js';
 
@@ -117,7 +117,7 @@ export function buildJwtSignOptions(configService: ConfigService): { expiresIn: 
     },
     {
       provide: APP_INTERCEPTOR,
-      useClass: SkipCacheInterceptor,
+      useClass: CachePolicyInterceptor,
     },
     {
       provide: APP_FILTER,
