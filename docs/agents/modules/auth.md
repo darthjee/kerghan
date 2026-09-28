@@ -57,6 +57,17 @@ the first login/register/refresh and served verbatim (credentials/session token 
 different caller. See `docs/agents/architecture/proxy.md`'s "Cache bypass (`X-Skip-Cache`)"
 section for the general convention.
 
+## CSRF protection
+
+Every mutating route above (`POST`/`PATCH`/`DELETE`), `@Public()` or not, is covered by the
+global `OriginGuard` (`core/origin.guard.ts`), which runs before `JwtGuard` and rejects
+cross-site requests with `403` based on `Sec-Fetch-Site`/`Origin`. Together with the
+`SameSite=Strict` `access_token` cookie, this also blocks login CSRF on the unauthenticated
+routes (`login.json`, `register.json`, `recover.json`, `reset-password.json`, the
+device-authorization `create`/`poll`). See
+[`docs/agents/architecture/security.md`](../architecture/security.md#csrf) for the full decision
+table, the accepted residual risks and the rules future changes must keep.
+
 ## Entities (`auth_` table prefix)
 
 - `auth_users` (`entities/user.entity.ts`) — `id`, `username` (unique), `email` (unique),

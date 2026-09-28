@@ -25,8 +25,9 @@ backend/src/
 ├── main.ts                    # boots the app: cookie-parser, global ValidationPipe, PORT
 ├── app.module.ts              # root module: ConfigModule, TypeOrmModule, JwtModule (global),
 │                               #   EventEmitterModule, AuthModule, core providers, global
-│                               #   JwtGuard + AdminGuard
+│                               #   OriginGuard + JwtGuard + AdminGuard
 ├── core/                      # Core layer — always resident, independent of any feature module
+│   ├── origin.guard.ts        #   global CanActivate rejecting cross-site mutating requests (CSRF)
 │   ├── jwt.guard.ts           #   global CanActivate verifying the access-token cookie
 │   ├── public.decorator.ts    #   @Public() escape hatch from the JWT guard
 │   ├── admin.guard.ts         #   global CanActivate enforcing @AdminOnly() routes
@@ -107,6 +108,15 @@ TypeORM CLI (`yarn migration:run`/`migration:revert`), outside Nest's DI contain
 `AppModule` builds its own, DI-friendly `TypeOrmModule.forRootAsync` options through
 `ConfigService` instead of importing this file, so the two stay independently testable/usable.
 
+## Origin Guard (CSRF)
+
+`core/origin.guard.ts` is the **first** global `APP_GUARD` in `AppModule`, registered ahead of
+`JwtGuard`, so a forged cross-site request to an authenticated route gets `403` rather than
+`401`. It checks only `POST`/`PUT`/`PATCH`/`DELETE`, deciding from the `Sec-Fetch-Site` and
+`Origin` headers, and trusts exactly the origins resolved by `buildCorsOptions`
+(`core/cors-config.ts`). Requests with neither header (non-browser clients, supertest e2e
+specs) pass. See [`security.md`](./security.md#csrf) for the decision table and rationale.
+
 ## JWT Guard
 
 `core/jwt.guard.ts` is registered as a global `APP_GUARD` in `AppModule`, so every route requires
@@ -118,7 +128,7 @@ that, only modules that import `JwtModule` directly (not just `AuthModule`) can 
 
 ## Admin Guard
 
-`core/admin.guard.ts` is a second global `APP_GUARD`, registered in `AppModule` right after
+`core/admin.guard.ts` is another global `APP_GUARD`, registered in `AppModule` right after
 `JwtGuard` (`APP_GUARD`s run in registration order, and `AdminGuard` depends on `request.user`
 already being populated by `JwtGuard`). It is a no-op unless the route (or controller) is
 annotated `@AdminOnly()` (`core/admin-only.decorator.ts`), in which case it requires
