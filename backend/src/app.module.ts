@@ -1,12 +1,13 @@
 import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
-import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
+import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { EventEmitterModule } from '@nestjs/event-emitter';
 import { JwtModule } from '@nestjs/jwt';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AuthModule } from './auth/auth.module.js';
 import { AdminGuard } from './core/admin.guard.js';
 import { CacheTokenService } from './core/cache-token.service.js';
+import { HttpExceptionFilter } from './core/http-exception.filter.js';
 import { JwtGuard } from './core/jwt.guard.js';
 import { LazyModuleLoaderService } from './core/lazy-module-loader.service.js';
 import { LoggingModule } from './core/logging.module.js';
@@ -59,6 +60,12 @@ export function buildJwtSignOptions(configService: ConfigService): { expiresIn: 
  * `APP_GUARD` chain — Nest runs middleware before guards, so the correlation
  * context is established and the access-log line still fires for
  * guard-rejected 401/403 responses.
+ *
+ * The global `HttpExceptionFilter` (registered via `APP_FILTER`, so it
+ * receives `LoggerService` through DI) reshapes every error — including
+ * `ValidationPipe` failures, guard rejections and unexpected exceptions —
+ * into the standard `{ error: { code, message, details? }, statusCode,
+ * timestamp }` body.
  */
 @Module({
   imports: [
@@ -111,6 +118,10 @@ export function buildJwtSignOptions(configService: ConfigService): { expiresIn: 
     {
       provide: APP_INTERCEPTOR,
       useClass: SkipCacheInterceptor,
+    },
+    {
+      provide: APP_FILTER,
+      useClass: HttpExceptionFilter,
     },
   ],
 })
