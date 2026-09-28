@@ -52,7 +52,8 @@ Edge cases, decided in the implementation (`isCrossSiteRequestAllowed` in the sa
 
 The frontend and the API share one origin through Tent (`*.json` goes to the backend), so the
 app's own requests are always `same-origin`. Tent's `default_proxy` handler forwards every
-incoming request header unchanged (`getallheaders()` straight into its curl executor), so
+incoming request header unchanged (`getallheaders()` straight into its curl executor, verified in
+the `darthjee/tent:0.10.4` image's `ProxyRequestHandler`; recheck on a Tent upgrade), so
 `Origin`, `Sec-Fetch-Site` and `Host` reach the backend intact. **Any future proxy rule or
 middleware on `*.json` must keep forwarding those three headers.** If one strips or rewrites
 them, `OriginGuard` either fails closed (`403` on legitimate requests) or open.
