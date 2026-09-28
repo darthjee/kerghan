@@ -9,6 +9,7 @@ import {
   login,
   useTestApp,
 } from './authorization-request.controller.e2e-test-support.js';
+import { ErrorCodes } from '../../core/error-codes.js';
 import { AuthorizationRequest } from '../entities/authorization-request.entity.js';
 
 describe('AuthorizationRequestController (e2e)', () => {
@@ -134,7 +135,10 @@ describe('AuthorizationRequestController (e2e)', () => {
             .send({ password: 'my-password' })
             .expect(400);
 
-          expect(lockedResponse.body.message).toBe('Unable to authorize this request');
+          expect(lockedResponse.body.error).toEqual({
+            code: ErrorCodes.BAD_REQUEST,
+            message: 'Unable to authorize this request',
+          });
 
           const row = ctx.authorizationRequestRepo.rows.find((candidate) => candidate.uuid === uuid);
           expect(row?.status).toBe('open');

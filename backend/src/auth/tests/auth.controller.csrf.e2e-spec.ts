@@ -2,6 +2,8 @@ import { INestApplication } from '@nestjs/common';
 import request from 'supertest';
 import { loginCookie, useTestApp } from './auth.controller.e2e-test-support.js';
 import { buildAuthTestApp } from './support/build-auth-test-app.js';
+import { expectErrorBody } from './support/error-body.js';
+import { ErrorCodes } from '../../core/error-codes.js';
 
 const EVIL_ORIGIN = 'https://evil.example';
 const TRUSTED_ORIGIN = 'https://app.example.com';
@@ -31,8 +33,9 @@ describe('AuthController CSRF protection (e2e)', () => {
 
     describe('POST /auth/login.json', () => {
       it('rejects a cross-site request with 403 and sets no cookie (login CSRF)', async () => {
-        const response = await login(ctx.app, CROSS_SITE).expect(403);
+        const response = await login(ctx.app, CROSS_SITE);
 
+        expectErrorBody(response, { status: 403, code: ErrorCodes.FORBIDDEN, message: 'Cross-site request rejected' });
         expect(response.headers['set-cookie']).toBeUndefined();
       });
 

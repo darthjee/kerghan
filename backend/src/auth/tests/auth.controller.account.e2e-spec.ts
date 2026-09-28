@@ -1,5 +1,7 @@
 import request from 'supertest';
-import { loginAs, loginCookie, useTestApp } from './auth.controller.e2e-test-support.js';
+import { loginAs, loginCookie, registerUser, useTestApp } from './auth.controller.e2e-test-support.js';
+import { expectErrorBody, expectValidationErrorBody } from './support/error-body.js';
+import { ErrorCodes } from '../../core/error-codes.js';
 
 describe('AuthController (e2e)', () => {
   const ctx = useTestApp();
@@ -43,10 +45,51 @@ describe('AuthController (e2e)', () => {
     it('rejects the wrong current password without changing the account', async () => {
       const cookie = await loginCookie(ctx.app);
 
-      await patchAccount(cookie, { currentPassword: 'wrong-password', username: 'new-username' })
-        .expect(400);
+      const response = await patchAccount(cookie, { currentPassword: 'wrong-password', username: 'new-username' });
 
+      expectErrorBody(response, { status: 400, code: ErrorCodes.BAD_REQUEST, message: 'Invalid current password' });
       expect(ctx.userRepo.rows[0].username).toBe('darthjee');
+    });
+
+    it('answers a missing current password with 400 VALIDATION_FAILED', async () => {
+      const cookie = await loginCookie(ctx.app);
+
+      const response = await patchAccount(cookie, { username: 'new-username' });
+
+      expectValidationErrorBody(response);
+      expect(response.body.error.details).toContain('currentPassword should not be empty');
+    });
+
+    describe('when the new username/email belongs to another user', () => {
+      beforeEach(async () => {
+        await registerUser(ctx.app, { username: 'obi-wan', email: 'obi-wan@example.com' });
+      });
+
+      it('answers a taken username with 409 USERNAME_TAKEN', async () => {
+        const cookie = await loginCookie(ctx.app);
+
+        const response = await patchAccount(cookie, { currentPassword: 'my-password', username: 'obi-wan' });
+
+        expectErrorBody(response, {
+          status: 409,
+          code: ErrorCodes.USERNAME_TAKEN,
+          message: 'Username already in use',
+        });
+        expect(ctx.userRepo.rows[0].username).toBe('darthjee');
+      });
+
+      it('answers a taken email with 409 EMAIL_TAKEN', async () => {
+        const cookie = await loginCookie(ctx.app);
+
+        const response = await patchAccount(cookie, { currentPassword: 'my-password', email: 'obi-wan@example.com' });
+
+        expectErrorBody(response, {
+          status: 409,
+          code: ErrorCodes.EMAIL_TAKEN,
+          message: 'Email already in use',
+        });
+        expect(ctx.userRepo.rows[0].email).toBe('darthjee@example.com');
+      });
     });
 
     it('does not revoke the caller\'s other refresh tokens on a successful password change', async () => {
@@ -74,8 +117,13 @@ describe('AuthController (e2e)', () => {
             .expect(400);
         }
 
-        await patchAccount(cookie, { currentPassword: 'my-password', username: 'new-username' })
-          .expect(423);
+        const response = await patchAccount(cookie, { currentPassword: 'my-password', username: 'new-username' });
+
+        expectErrorBody(response, {
+          status: 423,
+          code: ErrorCodes.LOCKED,
+          message: 'Account temporarily locked due to too many failed attempts',
+        });
       },
       15000,
     );

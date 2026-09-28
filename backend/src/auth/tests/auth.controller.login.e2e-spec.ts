@@ -1,4 +1,6 @@
 import { loginAs, useTestApp } from './auth.controller.e2e-test-support.js';
+import { expectErrorBody } from './support/error-body.js';
+import { ErrorCodes } from '../../core/error-codes.js';
 
 describe('AuthController (e2e)', () => {
   const ctx = useTestApp();
@@ -18,8 +20,24 @@ describe('AuthController (e2e)', () => {
       });
     });
 
-    it('rejects an invalid password', async () => {
-      await loginAs(ctx.app, 'darthjee', 'wrong-password').expect(401);
+    it('rejects an invalid password with 401 UNAUTHORIZED', async () => {
+      const response = await loginAs(ctx.app, 'darthjee', 'wrong-password');
+
+      expectErrorBody(response, {
+        status: 401,
+        code: ErrorCodes.UNAUTHORIZED,
+        message: 'Invalid username or password',
+      });
+    });
+
+    it('rejects an unknown username with the same 401 body as a wrong password', async () => {
+      const response = await loginAs(ctx.app, 'nobody', 'wrong-password');
+
+      expectErrorBody(response, {
+        status: 401,
+        code: ErrorCodes.UNAUTHORIZED,
+        message: 'Invalid username or password',
+      });
     });
 
     it('sets the access token as an httpOnly, secure, SameSite=Strict cookie', async () => {

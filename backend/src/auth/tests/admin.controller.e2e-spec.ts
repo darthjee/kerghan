@@ -1,5 +1,7 @@
 import request from 'supertest';
 import { loginCookie, registerUser, useTestApp } from './auth.controller.e2e-test-support.js';
+import { expectErrorBody } from './support/error-body.js';
+import { ErrorCodes } from '../../core/error-codes.js';
 
 describe('AdminController (e2e)', () => {
   const ctx = useTestApp({ adminGuard: true, registerDefaultUser: false });
@@ -38,12 +40,13 @@ describe('AdminController (e2e)', () => {
       cookie = await registerAndLogin('darthjee', 'darthjee@example.com');
     });
 
-    it('rejects users/search.json with 403', async () => {
-      await request(ctx.app.getHttpServer())
+    it('rejects users/search.json with 403 FORBIDDEN', async () => {
+      const response = await request(ctx.app.getHttpServer())
         .post('/admin/users/search.json')
         .set('Cookie', [cookie])
-        .send({})
-        .expect(403);
+        .send({});
+
+      expectErrorBody(response, { status: 403, code: ErrorCodes.FORBIDDEN, message: 'Admin access required' });
     });
 
     it('rejects recovery-link.json with 403', async () => {
