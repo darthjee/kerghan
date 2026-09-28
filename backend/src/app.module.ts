@@ -10,6 +10,7 @@ import { CacheTokenService } from './core/cache-token.service.js';
 import { JwtGuard } from './core/jwt.guard.js';
 import { LazyModuleLoaderService } from './core/lazy-module-loader.service.js';
 import { LoggingModule } from './core/logging.module.js';
+import { OriginGuard } from './core/origin.guard.js';
 import { RequestContextMiddleware } from './core/request-context.middleware.js';
 import { buildSecretKeys } from './core/secret-keys.js';
 import { SkipCacheInterceptor } from './core/skip-cache.interceptor.js';
@@ -47,6 +48,11 @@ export function buildJwtSignOptions(configService: ConfigService): { expiresIn: 
  * imported here as they are introduced. `JwtModule` signs with the current
  * secret key only (`buildSecretKeys(...).current`); retired keys are
  * accepted solely by `JwtGuard` when verifying.
+ *
+ * Global guards run in registration order: `OriginGuard` (CSRF protection
+ * for state-changing requests) comes first, so a forged cross-site request
+ * is rejected with `403` before `JwtGuard` could answer `401`; then
+ * `JwtGuard`, then `AdminGuard` (which needs the authenticated user).
  *
  * Implements `NestModule` to wire the global `RequestContextMiddleware`
  * (request-correlation context + per-request access log) ahead of the
@@ -90,6 +96,10 @@ export function buildJwtSignOptions(configService: ConfigService): { expiresIn: 
   providers: [
     CacheTokenService,
     LazyModuleLoaderService,
+    {
+      provide: APP_GUARD,
+      useClass: OriginGuard,
+    },
     {
       provide: APP_GUARD,
       useClass: JwtGuard,
