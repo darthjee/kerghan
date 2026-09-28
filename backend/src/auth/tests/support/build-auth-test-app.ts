@@ -9,11 +9,11 @@ import cookieParser from 'cookie-parser';
 import request from 'supertest';
 import { createInMemoryRepo } from './in-memory-repo.js';
 import { AdminGuard } from '../../../core/admin.guard.js';
+import { CachePolicyInterceptor } from '../../../core/cache-policy.interceptor.js';
 import { HttpExceptionFilter } from '../../../core/http-exception.filter.js';
 import { JwtGuard } from '../../../core/jwt.guard.js';
 import { LoggingModule } from '../../../core/logging.module.js';
 import { OriginGuard } from '../../../core/origin.guard.js';
-import { SkipCacheInterceptor } from '../../../core/skip-cache.interceptor.js';
 import { AuthModule } from '../../auth.module.js';
 import { AccountEditLockout } from '../../entities/account-edit-lockout.entity.js';
 import { AuthorizationRequest } from '../../entities/authorization-request.entity.js';
@@ -44,8 +44,8 @@ export interface BuildAuthTestAppResult {
 // `LoggingModule`, `AuthModule`, the `APP_GUARD`/`OriginGuard` provider (first,
 // as in `AppModule`, so CSRF rejections answer `403` before authentication),
 // the `APP_GUARD`/`JwtGuard` provider, and the
-// `APP_INTERCEPTOR`/`SkipCacheInterceptor` provider (so `@SkipCache()`-annotated
-// routes still get `X-Skip-Cache` set, the same as under the real `AppModule`),
+// `APP_INTERCEPTOR`/`CachePolicyInterceptor` provider (so `@CachePolicy()`-annotated
+// routes still get `X-Skip-Cache`/`Cache-Control` set, as under the real `AppModule`),
 // and the `APP_FILTER`/`HttpExceptionFilter` provider (so error responses use
 // the standard error body, as under the real `AppModule`);
 // overrides the `User`, `RefreshToken`, `Session`, `PasswordResetToken`,
@@ -91,7 +91,7 @@ export async function buildAuthTestApp({
       { provide: APP_GUARD, useClass: OriginGuard },
       { provide: APP_GUARD, useClass: JwtGuard },
       ...(adminGuard ? [{ provide: APP_GUARD, useClass: AdminGuard }] : []),
-      { provide: APP_INTERCEPTOR, useClass: SkipCacheInterceptor },
+      { provide: APP_INTERCEPTOR, useClass: CachePolicyInterceptor },
       { provide: APP_FILTER, useClass: HttpExceptionFilter },
     ],
   })

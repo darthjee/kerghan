@@ -12,13 +12,16 @@ This is the important difference from Majora: Navi only warms **public, identica
 responses. Kerghan is multi-tenant — almost every dashboard endpoint will return data scoped to
 the requesting user's own tracked repos/label rules, not a shared public response. Default
 assumption for any new endpoint: **it does not belong in Navi's warm-up config.** Only add one
-if it's genuinely public and unauthenticated (e.g. a possible future public status page).
+if it's genuinely public and unauthenticated (e.g. a possible future public status page), i.e.
+a GET route declared `@CachePolicy(CacheClass.Public)`. `user-scoped` and `never` routes are
+never warmed. See [API Caching](architecture/caching.md) for the cache classes.
 
 ## Per-user cache (upcoming)
 
 Today, the rule for any user-scoped endpoint (e.g. the repo-selection read path described in
-[Flow](flow.md#per-user-cache-upcoming)) is: set the `X-Skip-Cache` header so it bypasses Tent's
-shared HTTP cache entirely (see `.claude/agents/cache.md`'s X-Skip-Cache review). That's a
+[Flow](flow.md#per-user-cache-upcoming)) is: declare it `@CachePolicy(CacheClass.UserScoped)`, which sets the `X-Skip-Cache` header so
+it bypasses Tent's shared HTTP cache entirely (see [API Caching](architecture/caching.md) and
+`.claude/agents/cache.md`'s cache-class review). That's a
 correctness requirement, not a performance story — user-scoped responses currently get no
 caching at all.
 

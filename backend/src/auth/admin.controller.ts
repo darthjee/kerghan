@@ -4,20 +4,21 @@ import { AdminUpdateUserDto } from './dto/admin-update-user.dto.js';
 import { SearchUsersDto } from './dto/search-users.dto.js';
 import { User } from './entities/user.entity.js';
 import { AdminOnly } from '../core/admin-only.decorator.js';
-import { SkipCache } from '../core/skip-cache.decorator.js';
+import { CacheClass } from '../core/cache-class.js';
+import { CachePolicy } from '../core/cache-policy.decorator.js';
 
 /**
  * Admin-only routes for #41's user-lookup/password-recovery tool — thin,
  * delegating all business logic to `AdminService`. Every route requires the
  * default `JwtGuard` behavior (no `@Public()`) plus `@AdminOnly()`, applied
- * once at the controller level since every route here needs it. `@SkipCache()`
+ * once at the controller level since every route here needs it. `@CachePolicy(CacheClass.Never)`
  * is likewise applied once at the controller level since every route's
  * response carries per-request secrets/PII that must never be cross-served
  * between callers by Tent's `default_proxy` caching rule.
  */
 @Controller('admin')
 @AdminOnly()
-@SkipCache()
+@CachePolicy(CacheClass.Never)
 export class AdminController {
   private readonly adminService: AdminService;
 

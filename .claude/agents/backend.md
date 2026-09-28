@@ -125,6 +125,9 @@ etc. are constructed once (via `ConfigService`) and injected. See
 - **File naming**: `kebab-case.ts` matching the exported class's purpose (e.g.
   `auth.service.ts`, `refresh-token.entity.ts`); specs are `<name>.spec.ts`/`<name>.e2e-spec.ts`
   under the module's `tests/` folder
+- **Cache class**: every new controller or route must declare `@CachePolicy(CacheClass.X)`
+  (`public`, `user-scoped`, or `never`) — a coverage spec fails otherwise. Never set
+  `X-Skip-Cache` or `Cache-Control` by hand. See `docs/agents/architecture/caching.md`.
 
 ### JSDoc (required for public code)
 

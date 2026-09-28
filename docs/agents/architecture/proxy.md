@@ -12,7 +12,7 @@ this page only covers how Kerghan configures it.
 `configure.php` requires rule files in order — order matters, later rules act as catch-alls:
 
 1. `rules/frontend.php` — dev: proxies to Vite (HMR); prod: serves static `dist/` output
-2. `rules/backend.php` — routes every `*.json`-suffixed URL to the Express backend, with cache
+2. `rules/backend.php` — routes every `*.json`-suffixed URL to the NestJS backend, with cache
    middlewares (`SetClientIpMiddleware`, `CacheCleanupMiddleware`, `CacheStalenessMiddleware`)
 3. `rules/redirects.php` — catch-all: `GET /path → /#/path` (302) — **must stay last**
 
@@ -57,8 +57,20 @@ the same ruleset, and you can check locally with `docker-compose run --rm proxy_
 
 ## Cache bypass (`X-Skip-Cache`)
 
-The backend rule sets `'skip_cache_header' => 'X-Skip-Cache'`. Any backend response carrying
-this header bypasses the Tent cache entirely. Given Kerghan is multi-tenant, expect most
-endpoints to need it — only omit it for genuinely public, identical-for-everyone responses.
+The backend rule is an **opt-out** cache: Tent shared-caches every 2xx `*.json` response,
+keyed by path and query string only (not by HTTP method or caller), unless the response carries
+the header named by `'skip_cache_header' => 'X-Skip-Cache'`. The backend decides this per route
+through its cache classes (`public`, `user-scoped`, `never`), declared with `@CachePolicy()`;
+`user-scoped`, `never`, and any non-GET/HEAD response send `X-Skip-Cache`.
+
+The same rule also carries the freshness and invalidation middlewares:
+
+- `CacheStalenessMiddleware` (`maxAgeSeconds => 10`) serves entries older than 10s while
+  refreshing them in the background. The backend's `PUBLIC_MAX_AGE_SECONDS` mirrors this value.
+- `CacheCleanupMiddleware` (`clear => ['collection','entity']`) clears the matching collection
+  and entity cache entries on any POST/PATCH/PUT/DELETE.
+
+The full strategy — classes, header table, freshness, invalidation, and Navi — lives in
+[API Caching](./caching.md). Don't restate it here.
 
 See `.claude/agents/proxy.md` for the full rule-structure reference and local dev commands.

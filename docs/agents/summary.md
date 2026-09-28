@@ -43,6 +43,14 @@ full file before loading it. For a bare link-only table of contents instead, see
   secrets — with each one marked as actually consumed by code or still reserved. Update it
   whenever a "reserved" var gets wired up or a new one is added.
 
+## API caching
+
+- **[API Caching](architecture/caching.md)** — Single source of truth for API caching: Tent
+  shared-caches every 2xx `*.json` response unless it carries `X-Skip-Cache`; every route
+  declares a `public`/`user-scoped`/`never` class with `@CachePolicy()` (enforced by a spec),
+  which drives `X-Skip-Cache` and `Cache-Control`; 10s stale-while-revalidate; writes clear the
+  collection/entity entries; only `public` GET endpoints may be warmed by Navi.
+
 ## External tooling
 
 - **[External Tooling](external.md)** — Hub linking the full usage guides for the non-Kerghan

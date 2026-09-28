@@ -52,7 +52,7 @@ covers how Kerghan configures it.
 Both dev and prod configurations follow the same order (defined in `configure.php`):
 
 1. `rules/frontend.php` — serves the React SPA (Vite in dev, static files in prod)
-2. `rules/backend.php` — routes `*.json` requests to the Express backend
+2. `rules/backend.php` — routes `*.json` requests to the NestJS backend
 3. `rules/redirects.php` — catch-all: `GET /path → /#/path` (302) — **always last**
 
 There is no `rules/admin.php` — Kerghan has no admin UI (see `docs/agents/product.md`). Do not
@@ -75,9 +75,11 @@ Each rule file calls `Configuration::buildRule([...])` with:
 ### Cache bypass (`X-Skip-Cache`)
 
 The backend rule sets `'skip_cache_header' => 'X-Skip-Cache'`. Any response that carries this
-header bypasses the Tent cache entirely. Given Kerghan is multi-tenant, most endpoints will be
-user-scoped and need this header — only skip it for genuinely public, identical-for-everyone
-responses.
+header bypasses the Tent cache entirely. Caching is opt-out: every other 2xx `*.json` response
+is shared-cached, keyed by path and query string only (not method or caller). The backend sets
+the header per route through its `@CachePolicy()` cache classes. Keep
+`CacheStalenessMiddleware`'s `maxAgeSeconds` in sync with the backend's
+`PUBLIC_MAX_AGE_SECONDS`. The full strategy is in `docs/agents/architecture/caching.md`.
 
 ### Dev vs. production
 

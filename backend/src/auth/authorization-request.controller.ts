@@ -7,10 +7,11 @@ import { AuthorizeAuthorizationRequestDto } from './dto/authorize-authorization-
 import { CreateAuthorizationRequestDto } from './dto/create-authorization-request.dto.js';
 import { PollAuthorizationRequestDto } from './dto/poll-authorization-request.dto.js';
 import type { AccessTokenPayload } from '../core/access-token-payload.js';
+import { CacheClass } from '../core/cache-class.js';
+import { CachePolicy } from '../core/cache-policy.decorator.js';
 import { DEFAULT_TRUSTED_PROXY_HOPS, extractClientRequestInfo } from '../core/client-request.js';
 import { CurrentUser } from '../core/current-user.decorator.js';
 import { Public } from '../core/public.decorator.js';
-import { SkipCache } from '../core/skip-cache.decorator.js';
 
 /**
  * Both halves of the login-by-authorization flow — thin, delegating all
@@ -21,11 +22,11 @@ import { SkipCache } from '../core/skip-cache.decorator.js';
  * approver-device routes — the first authenticated, non-admin routes in the
  * codebase — protected only by the default (non-`@Public()`) `JwtGuard`,
  * with no `@AdminOnly()`; the approver's id comes from the `@CurrentUser()`
- * accessor. `@SkipCache()` is applied once at the controller level so Tent's proxy
- * never caches — and cross-serves — a per-device/per-caller response.
+ * accessor. `@CachePolicy(CacheClass.Never)` is applied once at the controller level so
+ * Tent's proxy never caches — and cross-serves — a per-device/per-caller response.
  */
 @Controller('auth')
-@SkipCache()
+@CachePolicy(CacheClass.Never)
 export class AuthorizationRequestController {
   private readonly authorizationRequestService: AuthorizationRequestService;
   private readonly configService: ConfigService;
