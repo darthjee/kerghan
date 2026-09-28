@@ -8,7 +8,7 @@ export enum CacheClass {
   Public = 'public',
   /** Per-caller data; never shared-cached (until Tent has a per-user cache). */
   UserScoped = 'user-scoped',
-  /** Auth, tokens, admin, and operational (health) responses. */
+  /** Auth, tokens, admin, and operational (health/readiness) responses. */
   Never = 'never',
 }
 

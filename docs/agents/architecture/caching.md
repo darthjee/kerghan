@@ -27,14 +27,15 @@ level; a route-level class overrides the controller's.
 |---|---|---|---|
 | `public` | `CacheClass.Public` | Data identical for every caller, readable by anyone | Reference data readable by anyone (none exist yet) |
 | `user-scoped` | `CacheClass.UserScoped` | Data that depends on who the caller is | A user's own repo selection, once it exists |
-| `never` | `CacheClass.Never` | Auth, tokens, admin, and operational endpoints | Every `AuthController`, `AdminController` and `AuthorizationRequestController` route; `GET /health.json` |
+| `never` | `CacheClass.Never` | Auth, tokens, admin, and operational endpoints | Every `AuthController`, `AdminController` and `AuthorizationRequestController` route; `GET /health.json`, `GET /ready.json` |
 
 How to pick one:
 
 - If the response differs by caller in any way (session, user id, role), it is **not** `public`.
 - Auth, token, and admin endpoints are always `never`.
-- Operational endpoints (`health.json`) are always `never`: they must always reach the backend,
-  or a cached health check could report ok while the backend is down.
+- Operational endpoints (`health.json`, `ready.json`) are always `never`: they must always reach
+  the backend, or a cached health/readiness check could report ok while the backend (or its
+  database) is down.
 - `user-scoped` stays uncached until Tent supports a per-user cache (see [Future](#future)).
 - When in doubt, choose `never`.
 
