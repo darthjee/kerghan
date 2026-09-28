@@ -25,7 +25,7 @@ backend/src/
 ├── main.ts                    # boots the app: cookie-parser, global ValidationPipe, PORT
 ├── app.module.ts              # root module: ConfigModule, TypeOrmModule, JwtModule (global),
 │                               #   EventEmitterModule, AuthModule, core providers, global
-│                               #   OriginGuard + JwtGuard + AdminGuard
+│                               #   OriginGuard + JwtGuard + AdminGuard, HttpExceptionFilter
 ├── core/                      # Core layer — always resident, independent of any feature module
 │   ├── origin.guard.ts        #   global CanActivate rejecting cross-site mutating requests (CSRF)
 │   ├── jwt.guard.ts           #   global CanActivate verifying the access-token cookie
@@ -33,6 +33,9 @@ backend/src/
 │   ├── admin.guard.ts         #   global CanActivate enforcing @AdminOnly() routes
 │   ├── admin-only.decorator.ts #  @AdminOnly() marker read by AdminGuard
 │   ├── access-token-payload.ts #  shape signed by AuthService / verified by JwtGuard
+│   ├── http-exception.filter.ts #  global APP_FILTER writing the standard error body
+│   ├── error-codes.ts         #   category/specific error codes + status → code mapping
+│   ├── locked.exception.ts    #   423 Locked HttpException
 │   ├── cache-token.service.ts #   HMAC cache-token generation for Tent cache keying
 │   ├── lazy-module-loader.service.ts  # thin wrapper around Nest's LazyModuleLoader
 │   └── tests/
@@ -135,6 +138,71 @@ annotated `@AdminOnly()` (`core/admin-only.decorator.ts`), in which case it requ
 `request.user.isAdmin === true`, throwing `403 Forbidden` otherwise — it never re-verifies the
 JWT itself. See `docs/agents/modules/auth.md`'s "Admin authorization" section for the
 `isAdmin` claim/provisioning details.
+
+## Error responses
+
+Every non-2xx JSON response has the same body, written by the global catch-all filter
+`core/http-exception.filter.ts` (`HttpExceptionFilter`). It is registered in `AppModule` as an
+`APP_FILTER` provider (not `app.useGlobalFilters` in `main.ts`) so it receives `LoggerService`
+through DI and e2e test apps register it the same way (`build-auth-test-app.ts`). It covers
+`ValidationPipe` failures, guard rejections, service exceptions and unexpected errors alike.
+
+```json
+{
+  "error": {
+    "code": "USERNAME_TAKEN",
+    "message": "username is not available",
+    "details": ["..."]
+  },
+  "statusCode": 409,
+  "timestamp": "2026-09-28T12:00:00.000Z"
+}
+```
+
+| Field | Notes |
+|---|---|
+| `error.code` | Always present. Category code by default; specific code when set at the throw site. |
+| `error.message` | Always present, human-readable. For validation failures: the messages joined with `"; "`. |
+| `error.details` | Only for `ValidationPipe` failures — the full list of validation messages. |
+| `statusCode` | Same as the HTTP status. |
+| `timestamp` | ISO-8601 (`new Date().toISOString()`). |
+
+**Category codes** (`categoryCodeFor` in `core/error-codes.ts`), used when the throw site gives
+no specific code:
+
+| Status | Code |
+|---|---|
+| 400 (`ValidationPipe`, array `message`) | `VALIDATION_FAILED` |
+| 400 (other) | `BAD_REQUEST` |
+| 401 | `UNAUTHORIZED` |
+| 403 | `FORBIDDEN` |
+| 404 | `NOT_FOUND` |
+| 409 | `CONFLICT` |
+| 423 | `LOCKED` (`core/locked.exception.ts`'s `LockedException`) |
+| 429 | `TOO_MANY_REQUESTS` |
+| 500 / non-HTTP errors | `INTERNAL_ERROR` |
+| any other status | `HTTP_<status>` |
+
+**Specific codes** are attached at the throw site by passing an object response, with the
+constant taken from `ErrorCodes` in `core/error-codes.ts` (never a repeated string literal):
+
+```ts
+throw new ConflictException({ code: ErrorCodes.USERNAME_TAKEN, message: 'username is not available' });
+```
+
+Current specific codes: `USERNAME_TAKEN` and `EMAIL_TAKEN` (`409`, from registration, account
+edit and admin user edit). Pick the status by meaning — a uniqueness conflict is `409`, not `400`.
+
+**Unexpected errors.** Anything that is not an `HttpException` answers `500` with
+`{ code: 'INTERNAL_ERROR', message: 'Internal server error' }`; the real message and stack are
+logged through `LoggerService#error('unhandled exception', ...)` and never sent to the client.
+
+**Enumeration safety.** Errors that are deliberately uniform (e.g. `Invalid username or
+password`, `Invalid or expired refresh token`, `Invalid or expired token`, the
+authorization-request `Unable to authorize/deny this request` failures, and the `404` for an
+unknown vs. wrong-token authorization request) must keep one status, one message and the
+category code only. Never attach a specific code that would let a caller tell the underlying
+cases apart.
 
 ## Dependency injection only
 
