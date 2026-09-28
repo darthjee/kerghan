@@ -5,9 +5,10 @@ import { AccountService } from './account.service.js';
 import { respondWithSession } from './auth-response.js';
 import { AuthService } from './auth.service.js';
 import type { AccessTokenPayload } from '../core/access-token-payload.js';
+import { CacheClass } from '../core/cache-class.js';
+import { CachePolicy } from '../core/cache-policy.decorator.js';
 import { CurrentUser } from '../core/current-user.decorator.js';
 import { Public } from '../core/public.decorator.js';
-import { SkipCache } from '../core/skip-cache.decorator.js';
 import { LoginDto } from './dto/login.dto.js';
 import { RecoverDto } from './dto/recover.dto.js';
 import { RefreshTokenDto } from './dto/refresh-token.dto.js';
@@ -23,12 +24,14 @@ const ACCESS_TOKEN_COOKIE = 'access_token';
  * `@Public()`: the first four exist precisely to establish or renew
  * credentials, and `status` exists to let an already-logged-out client
  * check its session without one — so all of them must stay reachable
- * without an already-valid access token. `@SkipCache()` is applied once at
- * the controller level so Tent's proxy never caches — and cross-serves — a
- * login/session response between users.
+ * without an already-valid access token. `@CachePolicy(CacheClass.Never)` is
+ * applied once at the controller level so Tent's proxy never caches — and
+ * cross-serves — a login/session response between users, and browsers never
+ * store it either. No route overrides it: every route here is a write that
+ * issues, renews, or revokes credentials.
  */
 @Controller('auth')
-@SkipCache()
+@CachePolicy(CacheClass.Never)
 export class AuthController {
   private readonly authService: AuthService;
   private readonly configService: ConfigService;

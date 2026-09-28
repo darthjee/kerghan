@@ -4,11 +4,12 @@ import { loginAs, registerUser, useTestApp } from './auth.controller.e2e-test-su
 describe('AuthController (e2e)', () => {
   const ctx = useTestApp();
 
-  describe('X-Skip-Cache header', () => {
+  describe('cache headers (CacheClass.Never)', () => {
     it('is set on the login response, so Tent never caches it across users', async () => {
       const response = await loginAs(ctx.app).expect(201);
 
       expect(response.headers['x-skip-cache']).toBe('true');
+      expect(response.headers['cache-control']).toBe('no-store');
     });
 
     it('is set on the register response', async () => {
@@ -19,6 +20,7 @@ describe('AuthController (e2e)', () => {
       }).expect(201);
 
       expect(response.headers['x-skip-cache']).toBe('true');
+      expect(response.headers['cache-control']).toBe('no-store');
     });
 
     it('is set on the refresh response', async () => {
@@ -30,6 +32,7 @@ describe('AuthController (e2e)', () => {
         .expect(201);
 
       expect(response.headers['x-skip-cache']).toBe('true');
+      expect(response.headers['cache-control']).toBe('no-store');
     });
 
     it('is set on the logout response', async () => {
@@ -41,6 +44,7 @@ describe('AuthController (e2e)', () => {
         .expect(204);
 
       expect(response.headers['x-skip-cache']).toBe('true');
+      expect(response.headers['cache-control']).toBe('no-store');
     });
   });
 });
