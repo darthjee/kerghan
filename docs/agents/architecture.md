@@ -16,6 +16,9 @@ This page is the hub. See the area pages for details:
 - [Modular Pattern](./architecture/modular-pattern.md) — the cross-cutting rules (module
   classification, lazy loading, inter-module communication, database strategy) every backend
   module, present or future, must follow.
+- [API Caching](./architecture/caching.md) — the opt-out Tent cache for `*.json`, the
+  `public`/`user-scoped`/`never` cache classes declared with `@CachePolicy()`, the
+  `Cache-Control` policy, freshness/invalidation semantics, and what Navi may warm.
 - [Security](./architecture/security.md) — cross-cutting security posture, starting with CSRF
   (the `SameSite=Strict` cookie, the CORS allowlist and the global `OriginGuard`).
 - [Infra](./architecture/infra.md) — the CircleCI release pipeline's job graph (test/lint jobs,

@@ -136,16 +136,16 @@ Same ownership/status rejection shape as `authorize`, but no password is require
 
 ## Shared behavior
 
-All nine routes above (the four classic ones plus the five device-authorization ones) set
-`X-Skip-Cache: true` on the response. Tent's
+All nine routes above (the four classic ones plus the five device-authorization ones) are
+declared `@CachePolicy(CacheClass.Never)` at controller level, so they send
+`X-Skip-Cache: true` and `Cache-Control: no-store` on the response. Tent's
 `default_proxy` rule caches any 2xx `*.json` response keyed only by query
 string, regardless of HTTP method — since these POST routes carry no
 query string, an uncapped response could otherwise be cached after the
 first login/register/refresh/authorization-request call and served verbatim (credentials
 included) to a different caller.
 
-See `docs/agents/architecture/proxy.md`'s "Cache bypass (`X-Skip-Cache`)"
-section for the general convention.
+See [API Caching](../../architecture/caching.md) for the general strategy.
 
 ## Access token cookie
 

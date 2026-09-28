@@ -31,8 +31,9 @@ row's user when `loggedIn` is `true`, and is always `false` when `loggedIn` is `
 
 Every route below requires the default `JwtGuard` behavior (no `@Public()`) plus `@AdminOnly()`
 (applied once at the controller level) — see "Admin authorization" below for what that enforces.
-All three also set `X-Skip-Cache: true`, for the same cross-caller-caching reason as the routes
-above.
+All three are `@CachePolicy(CacheClass.Never)` (controller level), so they send
+`X-Skip-Cache: true` and `Cache-Control: no-store`, for the same cross-caller-caching reason as
+the routes above.
 
 | Route | Body | Response |
 |---|---|---|
@@ -50,12 +51,12 @@ calls `MailService.sendEmailTemplate(...)` directly and synchronously (not the f
 `sent: true`/`false` result instead of a always-`true` response — `sent: false` covers both a
 disabled mail transport and a thrown send error, never a `500`.
 
-All four routes also set `X-Skip-Cache: true` on the response. Tent's `default_proxy` rule
+All four routes are `@CachePolicy(CacheClass.Never)` (controller level), so they send
+`X-Skip-Cache: true` and `Cache-Control: no-store` on the response. Tent's `default_proxy` rule
 caches any 2xx `*.json` response keyed only by query string, regardless of HTTP method — since
 these POST routes carry no query string, an uncapped response could otherwise be cached after
 the first login/register/refresh and served verbatim (credentials/session token included) to a
-different caller. See `docs/agents/architecture/proxy.md`'s "Cache bypass (`X-Skip-Cache`)"
-section for the general convention.
+different caller. See [API Caching](../architecture/caching.md) for the general strategy.
 
 ## CSRF protection
 

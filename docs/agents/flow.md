@@ -62,7 +62,8 @@ These are known future directions, not part of the current design:
 ## Per-user cache (upcoming)
 
 The repo-selection read path (step 4) is user-scoped, so per the current architecture it must
-bypass Tent's shared HTTP cache (`X-Skip-Cache` — see
+bypass Tent's shared HTTP cache: it is declared `@CachePolicy(CacheClass.UserScoped)`, which
+sends `X-Skip-Cache` (see [API Caching](architecture/caching.md) and
 [Cache Warmer](cache-warmer.md#per-user-cache-upcoming)). A per-user cache layer is in active
 development on Tent itself and is expected to take over this read path once available — update
 this section and `cache-warmer.md` together once that lands.

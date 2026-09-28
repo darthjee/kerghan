@@ -86,7 +86,8 @@ attack.
   `CacheCleanupMiddleware` before the request reaches the backend, so a forged mutating request
   can still clear the proxy cache folders it targets (`collection`, `entity`) even though
   `OriginGuard` then rejects it with `403`. The effect is only cache churn: no data changes and
-  nothing leaks, and nearly all Kerghan responses already bypass the cache (`X-Skip-Cache`).
+  nothing leaks, and nearly all Kerghan responses already bypass the cache (`X-Skip-Cache`, from their
+  `user-scoped`/`never` cache class — see [API Caching](./caching.md)).
   This is accepted for now; revisit it if the cache starts carrying expensive shared data.
 - **Form-encoded bodies**: Nest's default `urlencoded` parser stays enabled. With `OriginGuard`
   in place, a cross-site form never reaches a handler, so this is harmless.
