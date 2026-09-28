@@ -1,5 +1,7 @@
 import request from 'supertest';
 import { createAuthorizationRequest, useTestApp } from './authorization-request.controller.e2e-test-support.js';
+import { expectErrorBody } from './support/error-body.js';
+import { ErrorCodes } from '../../core/error-codes.js';
 
 describe('AuthorizationRequestController (e2e)', () => {
   const ctx = useTestApp();
@@ -66,17 +68,27 @@ describe('AuthorizationRequestController (e2e)', () => {
     it('returns 404, indistinguishable from an unknown uuid', async () => {
       const { uuid } = await createAuthorizationRequest(ctx.app);
 
-      await request(ctx.app.getHttpServer())
+      const response = await request(ctx.app.getHttpServer())
         .post(`/auth/authorization-requests/${uuid}/poll.json`)
-        .send({ pollToken: 'wrong-token' })
-        .expect(404);
+        .send({ pollToken: 'wrong-token' });
+
+      expectErrorBody(response, {
+        status: 404,
+        code: ErrorCodes.NOT_FOUND,
+        message: 'Authorization request not found',
+      });
     });
 
-    it('returns 404 for an unknown uuid', async () => {
-      await request(ctx.app.getHttpServer())
+    it('returns 404 NOT_FOUND for an unknown uuid', async () => {
+      const response = await request(ctx.app.getHttpServer())
         .post('/auth/authorization-requests/not-a-real-uuid/poll.json')
-        .send({ pollToken: 'whatever' })
-        .expect(404);
+        .send({ pollToken: 'whatever' });
+
+      expectErrorBody(response, {
+        status: 404,
+        code: ErrorCodes.NOT_FOUND,
+        message: 'Authorization request not found',
+      });
     });
   });
 

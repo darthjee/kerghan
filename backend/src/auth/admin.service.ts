@@ -121,8 +121,8 @@ export class AdminService {
    * @param {number} userId - The id of the user to update.
    * @param {AdminUpdateUserDto} dto - The requested changes.
    * @returns {Promise<User>} The user's resulting row.
-   * @throws {BadRequestException} When no field is being changed, or the
-   *   new username/email is already taken.
+   * @throws {BadRequestException} When no field is being changed.
+   * @throws {ConflictException} When the new username/email is already taken.
    * @throws {NotFoundException} When no user matches `userId`.
    */
   async editUser(userId: number, dto: AdminUpdateUserDto): Promise<User> {

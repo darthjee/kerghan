@@ -1,4 +1,4 @@
-import { BadRequestException, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
 import { ILike } from 'typeorm';
 import { MailService } from '../../mail/mail.service.js';
 import { AdminService } from '../admin.service.js';
@@ -230,14 +230,14 @@ describe('AdminService', () => {
       beforeEach(() => {
         userRepository.findOneBy.mockResolvedValue(user);
         authService.assertAvailableForUpdate.mockRejectedValue(
-          new BadRequestException('Username already in use'),
+          new ConflictException('Username already in use'),
         );
       });
 
-      it('rejects with BadRequestException without applying any changes', async () => {
+      it('rejects with ConflictException without applying any changes', async () => {
         await expect(
           service.editUser(1, { username: 'taken-username' }),
-        ).rejects.toThrow(new BadRequestException('Username already in use'));
+        ).rejects.toThrow(new ConflictException('Username already in use'));
 
         expect(userUpdateService.applyUserUpdate).not.toHaveBeenCalled();
       });
@@ -247,14 +247,14 @@ describe('AdminService', () => {
       beforeEach(() => {
         userRepository.findOneBy.mockResolvedValue(user);
         authService.assertAvailableForUpdate.mockRejectedValue(
-          new BadRequestException('Email already in use'),
+          new ConflictException('Email already in use'),
         );
       });
 
-      it('rejects with BadRequestException without applying any changes', async () => {
+      it('rejects with ConflictException without applying any changes', async () => {
         await expect(
           service.editUser(1, { email: 'taken@example.com' }),
-        ).rejects.toThrow(new BadRequestException('Email already in use'));
+        ).rejects.toThrow(new ConflictException('Email already in use'));
 
         expect(userUpdateService.applyUserUpdate).not.toHaveBeenCalled();
       });

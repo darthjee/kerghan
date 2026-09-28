@@ -7,12 +7,13 @@ import {
   NestModule,
 } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
-import { APP_GUARD } from '@nestjs/core';
+import { APP_FILTER, APP_GUARD } from '@nestjs/core';
 import { JwtModule } from '@nestjs/jwt';
 import { Test } from '@nestjs/testing';
 import cookieParser from 'cookie-parser';
 import request from 'supertest';
 import { AdminGuard } from '../admin.guard.js';
+import { HttpExceptionFilter } from '../http-exception.filter.js';
 import { JwtGuard } from '../jwt.guard.js';
 import { LoggerService } from '../logger.service.js';
 import { LoggingModule } from '../logging.module.js';
@@ -63,6 +64,7 @@ class ProbeController {
   providers: [
     { provide: APP_GUARD, useClass: JwtGuard },
     { provide: APP_GUARD, useClass: AdminGuard },
+    { provide: APP_FILTER, useClass: HttpExceptionFilter },
   ],
 })
 class TestAppModule implements NestModule {

@@ -1,6 +1,8 @@
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import request from 'supertest';
 import { loginAs, useTestApp } from './auth.controller.e2e-test-support.js';
+import { expectErrorBody } from './support/error-body.js';
+import { ErrorCodes } from '../../core/error-codes.js';
 
 describe('AuthController (e2e)', () => {
   const ctx = useTestApp();
@@ -108,15 +110,12 @@ describe('AuthController (e2e)', () => {
         .expect(401);
     });
 
-    it('rejects an unknown token with a 400 whose body carries a message field, not 401', async () => {
+    it('rejects an unknown token with a 400 BAD_REQUEST error body, not 401', async () => {
       const response = await request(ctx.app.getHttpServer())
         .post('/auth/reset-password.json')
-        .send({ token: 'not-a-real-token', password: 'brand-new-password' })
-        .expect(400);
+        .send({ token: 'not-a-real-token', password: 'brand-new-password' });
 
-      expect(response.body).toEqual(
-        expect.objectContaining({ statusCode: 400, message: expect.any(String) }),
-      );
+      expectErrorBody(response, { status: 400, code: ErrorCodes.BAD_REQUEST, message: 'Invalid or expired token' });
     });
 
     it('rejects an already-used token', async () => {

@@ -1,6 +1,6 @@
 import { INestApplication, Type, ValidationPipe } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
-import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
+import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { EventEmitterModule } from '@nestjs/event-emitter';
 import { JwtModule } from '@nestjs/jwt';
 import { Test } from '@nestjs/testing';
@@ -9,6 +9,7 @@ import cookieParser from 'cookie-parser';
 import request from 'supertest';
 import { createInMemoryRepo } from './in-memory-repo.js';
 import { AdminGuard } from '../../../core/admin.guard.js';
+import { HttpExceptionFilter } from '../../../core/http-exception.filter.js';
 import { JwtGuard } from '../../../core/jwt.guard.js';
 import { LoggingModule } from '../../../core/logging.module.js';
 import { OriginGuard } from '../../../core/origin.guard.js';
@@ -44,7 +45,9 @@ export interface BuildAuthTestAppResult {
 // as in `AppModule`, so CSRF rejections answer `403` before authentication),
 // the `APP_GUARD`/`JwtGuard` provider, and the
 // `APP_INTERCEPTOR`/`SkipCacheInterceptor` provider (so `@SkipCache()`-annotated
-// routes still get `X-Skip-Cache` set, the same as under the real `AppModule`);
+// routes still get `X-Skip-Cache` set, the same as under the real `AppModule`),
+// and the `APP_FILTER`/`HttpExceptionFilter` provider (so error responses use
+// the standard error body, as under the real `AppModule`);
 // overrides the `User`, `RefreshToken`, `Session`, `PasswordResetToken`,
 // `AuthorizationRequest`, and `AccountEditLockout` repository tokens with fresh
 // `createInMemoryRepo()` instances; and registers the `darthjee` test user via
@@ -89,6 +92,7 @@ export async function buildAuthTestApp({
       { provide: APP_GUARD, useClass: JwtGuard },
       ...(adminGuard ? [{ provide: APP_GUARD, useClass: AdminGuard }] : []),
       { provide: APP_INTERCEPTOR, useClass: SkipCacheInterceptor },
+      { provide: APP_FILTER, useClass: HttpExceptionFilter },
     ],
   })
     .overrideProvider(getRepositoryToken(User))

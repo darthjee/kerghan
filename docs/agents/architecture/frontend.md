@@ -126,6 +126,22 @@ Login nav link when logged out, or a Logout action when logged in. Logging out c
 `AccountsClient.logout` and redirects home regardless of whether the request succeeded, since
 `AccountsClient.logout` already clears `AuthSession` unconditionally.
 
+## API errors
+
+Any non-`401` failure from `client/ApiClient.js` rejects with a `client/ApiError.js`, built from
+the backend's standard error body (`{ error: { code, message, details? }, statusCode, timestamp }`
+— see `architecture/backend.md`'s `## Error responses` section for the format and the
+status-to-code mapping):
+
+- `status` — the HTTP status of the response.
+- `message` — `error.message`, human-readable and safe to show in the UI. When the body carries
+  none (empty or non-JSON body, e.g. a proxy-generated error page), it falls back to the
+  response's `statusText`, then to `'Request failed'`, so it is never `undefined`.
+- `code` — `error.code` (e.g. `USERNAME_TAKEN`, `EMAIL_TAKEN`, `VALIDATION_FAILED`, `NOT_FOUND`);
+  prefer branching on it over matching `message` text. `undefined` when the body carries none.
+- `details` — `error.details`, the full list of validation messages; only present on validation
+  failures, `undefined` otherwise.
+
 ## No Vite proxy to the backend
 
 There is no Vite `server.proxy` config pointing at the backend — that's the Tent proxy's job
