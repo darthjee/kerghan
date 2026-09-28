@@ -1,4 +1,4 @@
-import { BadRequestException, HttpException, Injectable, UnauthorizedException } from '@nestjs/common';
+import { BadRequestException, Injectable, UnauthorizedException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import bcrypt from 'bcryptjs';
 import { Repository } from 'typeorm';
@@ -8,10 +8,7 @@ import { AuthService } from './auth.service.js';
 import { UpdateAccountDto } from './dto/update-account.dto.js';
 import { User } from './entities/user.entity.js';
 import { AccountSummary, UserUpdateService } from './user-update.service.js';
-
-// The installed `@nestjs/common` version's `HttpStatus` enum has no `LOCKED` member (423 is not
-// yet part of its `HttpStatus`), so the status code is applied literally here.
-const HTTP_STATUS_LOCKED = 423;
+import { LockedException } from '../core/locked.exception.js';
 
 /**
  * The self-service "My Account" update flow's business logic (`PATCH
@@ -58,9 +55,10 @@ export class AccountService {
    * @param {number} userId - The id of the authenticated user (from the access-token session).
    * @param {UpdateAccountDto} dto - The requested changes plus the current password.
    * @returns {Promise<AccountSummary>} The user's resulting username and email.
-   * @throws {BadRequestException} When no field is being changed, the
-   *   current password is wrong, or the new username/email is already taken.
-   * @throws {HttpException} `423 Locked` when the caller's per-user cool-off
+   * @throws {BadRequestException} When no field is being changed or the
+   *   current password is wrong.
+   * @throws {ConflictException} When the new username/email is already taken.
+   * @throws {LockedException} `423 Locked` when the caller's per-user cool-off
    *   lockout is currently active.
    */
   async updateAccount(userId: number, dto: UpdateAccountDto): Promise<AccountSummary> {
@@ -78,7 +76,7 @@ export class AccountService {
 
   async #assertNotLockedOut(userId: number): Promise<void> {
     if (await this.accountEditAbuseGuardService.isLockedOut(userId)) {
-      throw new HttpException('Account temporarily locked due to too many failed attempts', HTTP_STATUS_LOCKED);
+      throw new LockedException('Account temporarily locked due to too many failed attempts');
     }
   }
 

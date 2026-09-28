@@ -1,8 +1,9 @@
-import { BadRequestException, Injectable, UnauthorizedException } from '@nestjs/common';
+import { ConflictException, Injectable, UnauthorizedException } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { InjectRepository } from '@nestjs/typeorm';
 import bcrypt from 'bcryptjs';
 import { IsNull, Not, Repository } from 'typeorm';
+import { ErrorCodes } from '../core/error-codes.js';
 import { LoginDto } from './dto/login.dto.js';
 import { RecoverDto } from './dto/recover.dto.js';
 import { RegisterDto } from './dto/register.dto.js';
@@ -15,6 +16,9 @@ import { PasswordResetService } from './password-reset.service.js';
 import { TokenService, type AuthResult } from './token.service.js';
 
 export type { AuthResult };
+
+// Specific error code attached to the `409` thrown when a field's value is taken.
+const TAKEN_CODES = { username: ErrorCodes.USERNAME_TAKEN, email: ErrorCodes.EMAIL_TAKEN } as const;
 
 /**
  * Auth module business logic: credential verification, registration,
@@ -62,7 +66,7 @@ export class AuthService {
    * per the issue's JWT flow ("issued on login/register/refresh").
    * @param {RegisterDto} dto - The registration payload.
    * @returns {Promise<AuthResult>} The created user plus access/refresh tokens.
-   * @throws {BadRequestException} When the username/email are already taken.
+   * @throws {ConflictException} When the username/email are already taken (`USERNAME_TAKEN`/`EMAIL_TAKEN`).
    */
   async register(dto: RegisterDto): Promise<AuthResult> {
     await this.#assertAvailable(dto.username, dto.email);
@@ -200,7 +204,8 @@ export class AuthService {
    * @param {string} [username] - Candidate username, when being changed.
    * @param {string} [email] - Candidate email, when being changed.
    * @returns {Promise<void>} Resolves once the provided values are confirmed available.
-   * @throws {BadRequestException} `'Username already in use'` or `'Email already in use'`.
+   * @throws {ConflictException} `'Username already in use'` (`USERNAME_TAKEN`) or
+   *   `'Email already in use'` (`EMAIL_TAKEN`).
    */
   async assertAvailableForUpdate(
     excludeUserId: number,
@@ -226,7 +231,7 @@ export class AuthService {
     }
 
     const field = existing.username === username ? 'username' : 'email';
-    throw new BadRequestException(`${field} is not available`);
+    throw new ConflictException({ code: TAKEN_CODES[field], message: `${field} is not available` });
   }
 
   async #assertFieldAvailable(
@@ -240,7 +245,7 @@ export class AuthService {
     });
 
     if (existing) {
-      throw new BadRequestException(message);
+      throw new ConflictException({ code: TAKEN_CODES[field], message });
     }
   }
 

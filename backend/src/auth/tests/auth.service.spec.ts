@@ -1,7 +1,8 @@
-import { BadRequestException, UnauthorizedException } from '@nestjs/common';
+import { BadRequestException, ConflictException, HttpException, UnauthorizedException } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import bcrypt from 'bcryptjs';
 import { IsNull } from 'typeorm';
+import { ErrorCodes } from '../../core/error-codes.js';
 import { AuthService } from '../auth.service.js';
 import { RefreshToken } from '../entities/refresh-token.entity.js';
 import { User } from '../entities/user.entity.js';
@@ -204,10 +205,16 @@ describe('AuthService', () => {
         userRepository.findOne.mockResolvedValue({ username: 'darthjee', email: 'other@example.com' });
       });
 
-      it('rejects with BadRequestException', async () => {
-        await expect(
-          service.register({ username: 'darthjee', email: 'darthjee@example.com', password: 'my-password' }),
-        ).rejects.toThrow(new BadRequestException('username is not available'));
+      it('rejects with a 409 ConflictException carrying USERNAME_TAKEN', async () => {
+        const error = await service
+          .register({ username: 'darthjee', email: 'darthjee@example.com', password: 'my-password' })
+          .catch((caught: unknown) => caught);
+
+        expect(error).toBeInstanceOf(ConflictException);
+        expect((error as HttpException).getResponse()).toEqual({
+          code: ErrorCodes.USERNAME_TAKEN,
+          message: 'username is not available',
+        });
       });
     });
 
@@ -216,10 +223,45 @@ describe('AuthService', () => {
         userRepository.findOne.mockResolvedValue({ username: 'someone-else', email: 'darthjee@example.com' });
       });
 
-      it('rejects with BadRequestException', async () => {
-        await expect(
-          service.register({ username: 'darthjee', email: 'darthjee@example.com', password: 'my-password' }),
-        ).rejects.toThrow(new BadRequestException('email is not available'));
+      it('rejects with a 409 ConflictException carrying EMAIL_TAKEN', async () => {
+        const error = await service
+          .register({ username: 'darthjee', email: 'darthjee@example.com', password: 'my-password' })
+          .catch((caught: unknown) => caught);
+
+        expect(error).toBeInstanceOf(ConflictException);
+        expect((error as HttpException).getResponse()).toEqual({
+          code: ErrorCodes.EMAIL_TAKEN,
+          message: 'email is not available',
+        });
+      });
+    });
+  });
+
+  describe('assertAvailableForUpdate', () => {
+    describe('when every value is available', () => {
+      beforeEach(() => {
+        userRepository.findOne.mockResolvedValue(null);
+      });
+
+      it('resolves', async () => {
+        await expect(service.assertAvailableForUpdate(1, 'free', 'free@example.com')).resolves.toBeUndefined();
+      });
+    });
+
+    describe.each([
+      ['username', 'Username already in use', ErrorCodes.USERNAME_TAKEN, ['taken', undefined]],
+      ['email', 'Email already in use', ErrorCodes.EMAIL_TAKEN, [undefined, 'taken@example.com']],
+    ] as const)('when the %s is taken by another user', (_field, message, code, [username, email]) => {
+      beforeEach(() => {
+        userRepository.findOne.mockResolvedValue({ id: 2 });
+      });
+
+      it(`rejects with a 409 ConflictException carrying ${code}`, async () => {
+        const error = await service.assertAvailableForUpdate(1, username, email).catch((caught: unknown) => caught);
+
+        expect(error).toBeInstanceOf(ConflictException);
+        expect((error as HttpException).getStatus()).toBe(409);
+        expect((error as HttpException).getResponse()).toEqual({ code, message });
       });
     });
   });
