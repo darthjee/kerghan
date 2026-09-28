@@ -11,6 +11,7 @@ import { createInMemoryRepo } from './in-memory-repo.js';
 import { AdminGuard } from '../../../core/admin.guard.js';
 import { JwtGuard } from '../../../core/jwt.guard.js';
 import { LoggingModule } from '../../../core/logging.module.js';
+import { OriginGuard } from '../../../core/origin.guard.js';
 import { SkipCacheInterceptor } from '../../../core/skip-cache.interceptor.js';
 import { AuthModule } from '../../auth.module.js';
 import { AccountEditLockout } from '../../entities/account-edit-lockout.entity.js';
@@ -39,7 +40,9 @@ export interface BuildAuthTestAppResult {
 
 // Builds a fresh app instance wired the same way across every auth e2e spec
 // file: registers `ConfigModule`, `EventEmitterModule`, `JwtModule`,
-// `LoggingModule`, `AuthModule`, the `APP_GUARD`/`JwtGuard` provider, and the
+// `LoggingModule`, `AuthModule`, the `APP_GUARD`/`OriginGuard` provider (first,
+// as in `AppModule`, so CSRF rejections answer `403` before authentication),
+// the `APP_GUARD`/`JwtGuard` provider, and the
 // `APP_INTERCEPTOR`/`SkipCacheInterceptor` provider (so `@SkipCache()`-annotated
 // routes still get `X-Skip-Cache` set, the same as under the real `AppModule`);
 // overrides the `User`, `RefreshToken`, `Session`, `PasswordResetToken`,
@@ -82,6 +85,7 @@ export async function buildAuthTestApp({
     ],
     controllers,
     providers: [
+      { provide: APP_GUARD, useClass: OriginGuard },
       { provide: APP_GUARD, useClass: JwtGuard },
       ...(adminGuard ? [{ provide: APP_GUARD, useClass: AdminGuard }] : []),
       { provide: APP_INTERCEPTOR, useClass: SkipCacheInterceptor },
