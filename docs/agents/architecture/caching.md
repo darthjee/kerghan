@@ -46,8 +46,10 @@ endpoints send `X-Skip-Cache`.
 
 ## Response headers
 
-The global `CachePolicyInterceptor` sets the headers **before** the handler runs, so error
-responses carry them too:
+The global `CachePolicyInterceptor` sets the headers **before** the handler runs, so errors
+thrown by the handler carry them too. Rejections from global guards (`OriginGuard`, `JwtGuard`,
+`AdminGuard`) happen before interceptors and carry no cache headers; that is harmless because
+Tent only caches 2xx responses.
 
 | Class | `X-Skip-Cache` | `Cache-Control` |
 |---|---|---|
