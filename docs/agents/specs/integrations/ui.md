@@ -29,7 +29,7 @@ here are defined in [api.md](api.md).
 | Label | `label`. |
 | Type | Human name of `type` (Personal Access Token, OAuth App, GitHub App). |
 | GitHub account | `githubLogin`. When two of the user's integrations share the same login, a small hint says so. |
-| Status | `status` as a badge; for `invalid`, the `statusReason` shown as text (from the type's reason texts, see [type-contract.md](type-contract.md#status-reason-codes)). `undecryptable` explains the credential must be replaced or removed. |
+| Status | `status` as a badge; for `invalid`, the `statusReason` shown as text (from the type's reason texts, see [type-contract.md](type-contract.md#status-reason-codes)). `undecryptable` explains the stored credential can't currently be read: the user can test it again (it recovers if the key was fixed), replace it, or remove it. |
 | Credential | `secretHint` (e.g. `ghp_…a1b2`), or "unavailable" when `null`. |
 | Expiry | `expiresAt`, or "no expiry". **Expiring soon** flag when `expiresAt` is within **7 days** and the status is not already `expired`. |
 | Last tested | `lastTestedAt` (relative time) and `lastTestResult` (success, rejected, transient error, undecryptable), or "never". |

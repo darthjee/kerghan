@@ -65,7 +65,9 @@ Binding on every redirect-based type (#298, #299). A GitHub redirect is a cross-
 `GET`: the `SameSite=Strict` `access_token` cookie is not sent, `OriginGuard` doesn't apply, and
 [Security](../../architecture/security.md#csrf) forbids state changes over `GET`. So:
 
-- GitHub redirects to a **frontend hash route**, never to a backend route.
+- GitHub redirects to a **frontend-served landing URL**, never to a backend route. GitHub
+  appends `code`/`state` as a query string (a fragment isn't allowed in `redirect_uri`); the
+  exact landing shape is fixed in #298/#299.
 - The frontend then `POST`s `{ code or installation_id, state }` to a backend `.json` route of
   the type. That request is same-origin, carries the cookie, and goes through `OriginGuard` and
   `JwtGuard`.
@@ -76,8 +78,10 @@ Binding on every redirect-based type (#298, #299). A GitHub redirect is a cross-
 - The callback's credential check counts toward the create/replace failure cool-off
   ([security.md](security.md#create-and-replace-credential-failure-cool-off)), unless the type
   spec explicitly states why it doesn't.
-- The `code`/`state` never stays in the URL or browser history after use: the frontend clears
-  the hash after reading it.
+- The `code`/`state` never stays in the URL or browser history: right after reading them, and
+  before any other request, the frontend removes both the query string and the hash with
+  `history.replaceState`. The landing page is served with `Referrer-Policy: no-referrer` (or
+  `same-origin`).
 
 ### Validate / create
 

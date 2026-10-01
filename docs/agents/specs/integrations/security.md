@@ -140,7 +140,8 @@ A per-user cool-off following `AccountEditAbuseGuardService` and `core/lockout-s
 - Both variables are read once at boot through `getNumberConfig` (`core/numeric-config.ts`).
 - `failed_attempts` is incremented with an **atomic** update (e.g.
   `SET failed_attempts = failed_attempts + 1`), never read-then-write, so parallel failures all
-  count.
+  count. A user's first failure is an atomic upsert on the unique `user_id` (e.g.
+  `INSERT … ON DUPLICATE KEY UPDATE failed_attempts = failed_attempts + 1`).
 - State lives in `integrations_credential_lockouts` ([model.md](model.md#lockout-table)), so it
   holds across instances and restarts.
 
