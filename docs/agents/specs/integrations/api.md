@@ -88,29 +88,39 @@ type.
 - **Never returned:** the credential, the decrypted secret payload, `secret_iv`,
   `secret_auth_tag`, `secret_ciphertext` and `secret_key_id`. The response is built from an
   explicit allowlist of fields, never by serializing the entity.
-- `secretHint` is produced by the type's mask function ([type-contract.md](type-contract.md));
-  it is never enough to reconstruct the secret. For an `undecryptable` row it is `null`.
+- `secretHint` is the stored `secret_hint` column, computed once by the type's mask function at
+  create and replace ([type-contract.md](type-contract.md#mask-the-secret)); it is never enough to
+  reconstruct the secret. It is `null` when the status is `undecryptable`.
 - `status` and `expiresAt` reflect the computed-on-read expiry rule
   ([model.md](model.md#expiry)).
 - Dates are ISO-8601 strings, or `null`.
 
 ## Per-action behaviour
 
+- **Owner lookup first.** On every `:uuid` route, the owner-scoped lookup (`uuid` + `user_id`)
+  runs first, right after auth and CSRF. A miss answers 404 before any row-dependent check: flow
+  kind, type-specific credential validation, the failure cool-off, the test cooldown, or any
+  GitHub call. A foreign `:uuid` is therefore indistinguishable from a missing one.
 - **List mine** returns every integration of the caller, whatever its status (including
-  `undecryptable`). It never decrypts secrets.
-- **Show** returns one integration of the caller.
+  `undecryptable`). It never decrypts secrets: `secretHint` is read from the stored
+  `secret_hint` column. A row whose `secret_key_id` doesn't match the configured key id is
+  reported as `undecryptable` (compared without decrypting).
+- **Show** returns one integration of the caller, with the same no-decryption rules as list.
 - **Create:** checks, in order: payload validation → failure cool-off
   ([security.md](security.md#create-and-replace-credential-failure-cool-off)) → per-user cap →
   label uniqueness → GitHub validation through the type. Nothing is stored on any failure.
 - **Rename** changes only `label`; status and every other field stay unchanged.
-- **Replace credential:** same order as create (minus the cap). On failure the previous
-  credential, metadata and status stay unchanged.
-- **Test connection:** checks the per-integration cooldown first
+- **Replace credential:** checks, in order: owner lookup → flow kind and payload validation for
+  the row's type → failure cool-off → GitHub validation through the type. On failure the
+  previous credential, metadata and status stay unchanged.
+- **Test connection:** checks, in order: owner lookup → per-integration cooldown
   ([security.md](security.md#test-connection-cooldown)), then calls GitHub through the type and
   records `last_tested_at` / `last_test_result`. A GitHub rejection is a **successful** test: it
   answers `200` with the new status (`invalid` or `expired`). A transient failure leaves the
-  status unchanged, records the attempt, and answers with the upstream error below. An
-  `undecryptable` row answers `200` with status `undecryptable`, without calling GitHub.
+  status unchanged, records the attempt, and answers with the upstream error below. A row that
+  still can't be decrypted (unknown key id or auth-tag failure) answers `200` with status
+  `undecryptable`, without calling GitHub; a stored `undecryptable` row whose key id matches the
+  configured key is decrypted again and tested normally ([model.md](model.md#transitions)).
 - **Delete** removes the row after the type's best-effort delete behaviour
   ([type-contract.md](type-contract.md#behaviour-on-delete)), which never blocks the deletion.
 

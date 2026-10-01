@@ -14,6 +14,11 @@ referenced here are listed in [api.md](api.md#error-codes).
   message, so existence is never leaked.
 - **Admins get no access.** `@AdminOnly()` grants nothing here: no admin route or admin UI lists,
   shows, edits, deletes or tests another user's integrations, their metadata, hints or secrets.
+  Existing admin endpoints (e.g. `/admin/users/*`) gain no integration-derived fields (counts,
+  flags, logins).
+- **Owner lookup first:** on every `:uuid` route the owner-scoped lookup runs before any
+  row-dependent check (flow kind, credential validation, cool-off, cooldown, GitHub call), so a
+  foreign `:uuid` always answers 404 ([api.md](api.md#per-action-behaviour)).
 - **Account recovery and admin edits** (password reset, recovery link, admin user edit) leave the
   user's integrations untouched.
 - Admin support tooling (read-only metadata, deleting a leaked credential) may come later as its
@@ -69,7 +74,8 @@ AAD = UTF-8 bytes of "<uuid>:<type>"
 - Every ciphertext stores the id of the key that produced it. With one key the id is only
   recorded; #305 uses it to select a previous key with no data migration.
 - A ciphertext whose `secret_key_id` doesn't match the configured key is treated as
-  `undecryptable` without attempting decryption ([model.md](model.md#status-lifecycle)).
+  `undecryptable` without attempting decryption ([model.md](model.md#status-lifecycle)). A row
+  stored as `undecryptable` is retried on the next test once its key id matches again.
 
 ## Secrets never logged
 
@@ -132,6 +138,9 @@ A per-user cool-off following `AccountEditAbuseGuardService` and `core/lockout-s
 - While locked, requests answer **423** `INTEGRATION_CREDENTIAL_LOCKED` (through
   `LockedException`, consistent with the existing lockouts) **before** any GitHub call.
 - Both variables are read once at boot through `getNumberConfig` (`core/numeric-config.ts`).
+- `failed_attempts` is incremented with an **atomic** update (e.g.
+  `SET failed_attempts = failed_attempts + 1`), never read-then-write, so parallel failures all
+  count.
 - State lives in `integrations_credential_lockouts` ([model.md](model.md#lockout-table)), so it
   holds across instances and restarts.
 
@@ -140,6 +149,10 @@ A per-user cool-off following `AccountEditAbuseGuardService` and `core/lockout-s
 - At most one test per integration every `KERGHAN_INTEGRATIONS_TEST_COOLDOWN_MS` milliseconds
   (default `30000`, read once at boot through `getNumberConfig`).
 - Enforced from `last_tested_at`; no extra table.
+- The cooldown is **claimed atomically** before calling GitHub, e.g.
+  `UPDATE integrations SET last_tested_at = now WHERE uuid = ? AND user_id = ? AND
+  (last_tested_at IS NULL OR last_tested_at < now - cooldown)`, proceeding only if one row was
+  affected. Parallel tests therefore make at most one GitHub call per window.
 - Inside the cooldown the API answers **429** `INTEGRATION_TEST_COOLDOWN` with a `Retry-After`
   header (remaining seconds, rounded up), without calling GitHub.
 - The UI disables the "Test" button until the cooldown ends ([ui.md](ui.md#actions)).
@@ -170,11 +183,14 @@ A per-user cool-off following `AccountEditAbuseGuardService` and `core/lockout-s
 - **`Secret` wrapper:** `toString`, `toJSON`, `JSON.stringify` and `util.inspect` are all
   `[REDACTED]`.
 - **Access:** on every route, unauthenticated → 401, another user's UUID → 404 (same body as a
-  missing UUID), an admin gets no access to another user's integrations.
+  missing UUID), an admin gets no access to another user's integrations; a foreign UUID answers
+  404 (not 400/423/429) on test and replace even while that row is in its test cooldown or the
+  payload is invalid for that row's type.
 - **Rate limiting:** the cool-off trips after the configured failures, answers 423 without a
   GitHub call, resets on success, and ignores transient errors; the test cooldown answers 429
-  with `Retry-After` and makes no GitHub call.
+  with `Retry-After` and makes no GitHub call; concurrent tests on one integration make a single
+  GitHub call, and concurrent failed creates are all counted.
 - **Sanitized GitHub errors:** a GitHub client failure never exposes headers or the token in the
   thrown error.
-- **Canary:** a canary credential never appears in logger calls, error bodies or API responses
-  (backend), nor in `console`, storage or the URL (frontend).
+- **Canary:** a canary credential never appears in logger calls, error bodies, API responses or
+  the stored `metadata` / `secret_hint` (backend), nor in `console`, storage or the URL (frontend).

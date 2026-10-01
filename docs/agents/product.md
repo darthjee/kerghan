@@ -17,7 +17,8 @@ is the canonical place for the `product-owner`, `data-access`, and `security` ag
   based on issues carrying certain labels, across every repo a user tracks, in one place.
 - **Multi-tenant**: each user account registers its own set of repos/orgs to monitor — unlike a
   single shared dataset.
-- **What the backend persists**: only account/login state and each user's repo selection.
+- **What the backend persists**: only account/login state and each user's repo selection
+  (except integrations — see the #295 note under "Deferred").
   Issue data itself is **not** persisted by default — see "Issue fetching model" below.
 - **Issue fetching model**: on demand, live, fetched **client-side** by the frontend directly
   against GitHub's public REST API — not by the backend. This is what lets the backend stay idle
@@ -25,7 +26,8 @@ is the canonical place for the `product-owner`, `data-access`, and `security` ag
   from being shared across every Kerghan user (if the backend fetched) to being scoped to each
   user's own browser IP instead. Refresh is manual (user-triggered), not automatic/polled.
 - **GitHub access**: unauthenticated, public-repo data only for now. No OAuth app, no PAT
-  storage, no GitHub App installation. A per-user GitHub token for private-repo access is a
+  storage, no GitHub App installation (except integrations — see the #295 note under
+  "Deferred"). A per-user GitHub token for private-repo access is a
   planned future addition, not yet built.
 - **Frontend surface**: a dashboard/analytics view (issue volume, age, label breakdowns, "needs
   attention" lists), not just CRUD forms — API design should be aggregation-friendly.

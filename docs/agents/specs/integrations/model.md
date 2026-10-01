@@ -53,6 +53,7 @@ The feature is a new backend module, `integrations`, owning two tables:
 | `last_tested_at` | `datetime` | yes | Last test-connection attempt, whatever its outcome. |
 | `last_test_result` | `varchar(32)` | yes | `success`, `rejected`, `transient_error` or `undecryptable`. |
 | `metadata` | `json` | no | Non-secret, type-defined shape. `{}` when a type has none. |
+| `secret_hint` | `varchar(64)` | yes | Output of the type's mask, computed at create/replace; non-secret ([type-contract.md](type-contract.md#mask-the-secret)). |
 | `secret_key_id` | `char(8)` | no | Id of the key that encrypted the secret ([security.md](security.md#key-id)). |
 | `secret_iv` | `varbinary(12)` | no | 96-bit AES-GCM IV, fresh per encryption. |
 | `secret_auth_tag` | `varbinary(16)` | no | 128-bit AES-GCM authentication tag. |
@@ -81,6 +82,9 @@ documented exception**: it is a physical FK to `auth_users.id` with `ON DELETE C
 - **Limit of the exception:** it is the only physical cross-module FK. Code still never joins
   `auth_users`; anything it needs about the user goes through the Auth module's exported service.
 - The lockout table's `user_id` stays a logical FK, like `auth_account_edit_lockouts`.
+- When this folder is deleted, #304 must record this exception in
+  [Modular Pattern](../../architecture/modular-pattern.md#database-strategy), so it outlives the
+  specs.
 
 ## Constraints
 
@@ -118,15 +122,19 @@ documented exception**: it is a physical FK to `auth_users.id` with `ON DELETE C
 | Trigger | Result |
 |---|---|
 | **Create** | The credential is validated against GitHub. Success: stored as `active`, `last_tested_at` = now, `last_test_result` = `success`. Any failure (invalid, insufficient permissions, transient): rejected, **nothing is stored**. |
-| **Replace credential** | Same validation as create. Success: new secret (re-encrypted with a fresh IV), `github_login`, `expires_at` and `metadata` refreshed, status `active`. Failure: the previous credential, metadata and status stay unchanged. |
+| **Replace credential** | Same validation as create. Success: new secret (re-encrypted with a fresh IV), `secret_hint`, `github_login`, `expires_at` and `metadata` refreshed, status `active`, `status_reason` cleared, `last_tested_at` = now, `last_test_result` = `success`. Failure: the previous credential, metadata and status stay unchanged. |
 | **Test connection** | GitHub accepts: `active`, result `success`. GitHub rejects: `invalid` + reason (including `insufficient_permissions` if permissions were lost) or `expired`, result `rejected`. |
 | **Transient failure** (network error, GitHub 5xx, GitHub rate limit) | **Never** changes the status. On test, recorded as `last_test_result` = `transient_error`. |
-| **Decryption failure**, on any use of the secret (including a key-id mismatch) | Status `undecryptable`. On test, result `undecryptable`; GitHub is not called. |
+| **Decryption failure**, on any use of the secret (an unknown key id, or an auth-tag failure) | Status `undecryptable`. On test, result `undecryptable`; GitHub is not called. |
 | **Rename** | Status unchanged. |
 | **Future backend use** (proxy, out of scope; note only) | A 401 from GitHub may set `invalid`. |
 
-From `undecryptable`, the only ways out are **replace credential** (back to `active` on success)
-or **delete**. A test on an `undecryptable` row stays `undecryptable`.
+`undecryptable` is **not terminal**: a test connection always tries to decrypt again when the
+row's `secret_key_id` matches the configured key (or, after #305, a configured previous key). If
+decryption succeeds, the test proceeds normally and sets the status from GitHub's answer, so a
+temporary key misconfiguration that was later fixed doesn't strand rows. Only an unknown key id
+or an actual auth-tag failure keeps it `undecryptable`. **Replace credential** (back to `active`
+on success) and **delete** are always available.
 
 ### Expiry
 
@@ -188,10 +196,12 @@ Additive only: one migration per table, named `<timestamp>-integrations-<action>
 ## Required tests
 
 - **Status lifecycle:** every transition in the table above, including: create success stores
-  `active`; create failure stores nothing; replace failure leaves secret, metadata and status
-  unchanged; test maps accept/reject to `active`/`invalid`/`expired`; transient errors leave the
-  status unchanged and record `transient_error`; decryption failure sets `undecryptable`; rename
-  keeps the status.
+  `active`; a successful replace sets `last_tested_at`/`last_test_result` and clears
+  `status_reason`; a test on an `undecryptable` row whose key id matches again recovers it;
+  create failure stores nothing; replace failure leaves secret, metadata and status unchanged;
+  test maps accept/reject to `active`/`invalid`/`expired`; transient errors leave the status
+  unchanged and record `transient_error`; decryption failure sets `undecryptable`; rename keeps
+  the status.
 - **Expiry:** an `active` row past `expires_at` is reported `expired` without a test; the stored
   status changes only on the next test.
 - **Label:** trimming, 1–100 length bounds, and a case-insensitive duplicate (`Work` vs
