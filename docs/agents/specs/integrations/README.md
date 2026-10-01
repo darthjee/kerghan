@@ -106,6 +106,6 @@ These notes record intent only. No field, route or behaviour is added for them n
 - [ui.md](ui.md): the Integrations page, list columns, actions, type picker, menu item.
 - [type-contract.md](type-contract.md): what every integration type must provide.
 - `types/`: per-type specs, added by their own issues (not by #296):
-  - `types/pat.md`: #297
+  - [types/pat.md](types/pat.md): #297
   - `types/oauth-app.md`: #298
   - `types/github-app.md`: #299
