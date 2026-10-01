@@ -45,6 +45,9 @@ is the canonical place for the `product-owner`, `data-access`, and `security` ag
 - **Historical/trend collection**: volume-over-time or similar views, which depend on the
   opt-in persistence above. Not built.
 - **Per-user GitHub token**: unlocks private-repo access. Not built.
+  **In progress:** per-user GitHub credentials ("integrations") are being built under #295 and
+  are defined in [specs/integrations/](specs/integrations/README.md) — that spec is the product
+  decision allowing their storage until #304 replaces this note with the real definitions.
 
 ## What's still open
 
