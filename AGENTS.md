@@ -1,6 +1,6 @@
 # Project Instructions
 
-_Last updated: 2026-09-24_
+_Last updated: 2026-10-01_
 
 Kerghan is a GitHub issue monitoring/dashboard app. Users log into a lightweight Kerghan account
 (username/password, a JWT `access_token` cookie, and a rotating refresh token — not GitHub OAuth;
@@ -101,8 +101,9 @@ docker-compose run --rm kerghan_tests yarn test
   (`vite_kerghan*`) images are published.
 - Kerghan has a lightweight per-user account/login (not GitHub OAuth) — see
   [Flow](docs/agents/flow.md). GitHub data itself is still read unauthenticated (public-repo
-  only) for now; a per-user GitHub token for private-repo access is planned but not built. Don't
-  add GitHub credential storage without an explicit product decision backing it.
+  only) for now. Per-user GitHub credentials ("integrations", #295) are being built and may be
+  stored only as defined in [Integrations specs](docs/agents/specs/integrations/README.md); any
+  other GitHub credential storage still needs an explicit product decision backing it.
 
 ## Documentation
 
@@ -119,6 +120,7 @@ All project documentation lives under [`docs/agents/`](docs/agents/):
 | [Product Definitions](docs/agents/product.md) | Stub — restates what's decided vs. still open about Kerghan's data model. Consult before planning any issue that introduces new entities. |
 | [External Tooling](docs/agents/external.md) | Hub linking full usage guides for external, non-Kerghan-specific tools (Tent, Navi, navi-hey-client). |
 | [Cache Warmer](docs/agents/cache-warmer.md) | Navi setup for warming the proxy cache after release (CI and local); used by the `cache` agent. |
+| [Specs](docs/agents/specs.md) | Permanent hub for temporary feature specs (`docs/agents/specs/<feature>/`): lifecycle, conventions, and the active specs list. |
 | [Plans](docs/agents/plans/) | Implementation plans for ongoing or upcoming features. |
 | [Issues](docs/agents/issues/) | Detailed specs for open issues. |
 | [Issue Enhancement](docs/agents/issue-enhancement.md) | Checklist of concerns used by `/enhance-issue` to flesh out vague issue ideas. |
