@@ -30,11 +30,20 @@ rules in [security.md](security.md).
 |---|---|---|---|
 | List mine | `POST /integrations/mine.json` | none | `200` `{ "integrations": [Integration, …] }`, newest first |
 | Show | `POST /integrations/:uuid/show.json` | none | `200` `Integration` |
+| Enabled types | `POST /integrations/types.json` | none | `200` `{ "types": [{ "type": "pat", "flows": { "credentialPaste": true, "redirect": false } }, …] }` |
 | Create (credential-paste types) | `POST /integrations.json` | `{ label, provider, type, credential: { … } }` | `201` `Integration` |
 | Rename | `PATCH /integrations/:uuid.json` | `{ label }` | `200` `Integration` |
 | Replace credential | `POST /integrations/:uuid/credential.json` | `{ credential: { … } }` | `200` `Integration` |
 | Test connection | `POST /integrations/:uuid/test.json` | none | `200` `Integration` (with the test outcome) |
 | Delete | `DELETE /integrations/:uuid.json` | none | `204 No Content` |
+
+### Enabled types
+
+`POST /integrations/types.json` lists the types this server can create, in registry order, each
+with its strategy's `flows`. A type whose server config is missing (e.g. `oauth_app` without its
+client id and secret, see [types/oauth-app.md](types/oauth-app.md#when-disabled)) is left out.
+`pat` is always listed. It needs no row and makes no GitHub call. #300 builds it with the
+generic module; the frontend's type picker reads it ([ui.md](ui.md#type-picker)).
 
 ### Create envelope
 
@@ -133,6 +142,7 @@ type.
 | Unknown, foreign or malformed `:uuid` | 404 | `NOT_FOUND` | all with `:uuid` |
 | Payload validation failed (shape, label length, unknown `provider`/`type`, credential shape) | 400 | `VALIDATION_FAILED` | create, rename, replace |
 | Type is not credential-paste | 400 | `INTEGRATION_FLOW_UNSUPPORTED` | create, replace |
+| Redirect `state` unknown, expired, already used or not the caller's | 400 | `INTEGRATION_REDIRECT_STATE_INVALID` | type-owned redirect callbacks ([types/oauth-app.md](types/oauth-app.md#state)) |
 | Duplicate label (case-insensitive) | 409 | `INTEGRATION_LABEL_TAKEN` | create, rename |
 | Per-user cap reached | 409 | `INTEGRATIONS_LIMIT_REACHED` | create |
 | GitHub rejected the credential | 422 | `INTEGRATION_CREDENTIAL_INVALID` | create, replace |
@@ -169,4 +179,5 @@ Backend e2e specs, split per concern like `auth.controller.skip-cache.e2e-spec.t
 - **Create order:** cool-off, cap and duplicate-label rejections happen without any GitHub call.
 - **Test outcomes:** rejection answers 200 with `invalid`/`expired`; transient failure answers
   502/503 and leaves the status unchanged; cooldown answers 429 with `Retry-After`.
+- **Enabled types:** `pat` is always listed; a type whose server config is missing is not.
 - **Expiry on read:** an `active` row past `expires_at` is returned as `expired` by list and show.

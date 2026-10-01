@@ -29,11 +29,13 @@ the status lifecycle and the edge cases. Security details (encryption, AAD, key 
 
 ## Module and tables
 
-The feature is a new backend module, `integrations`, owning two tables:
+The feature is a new backend module, `integrations`, owning these tables:
 
 - `integrations`: the entity below.
 - `integrations_credential_lockouts`: the per-user failure cool-off state (see
   [Lockout table](#lockout-table)).
+- `integrations_oauth_states`: pending OAuth App redirect flows, added by #302 and defined in
+  [types/oauth-app.md](types/oauth-app.md#state).
 
 ## `integrations` columns
 
