@@ -58,7 +58,10 @@ from [api.md](api.md#error-codes) mapped to friendly text (e.g. `INTEGRATION_LAB
 - Lists the three types: Personal Access Token (`pat`), OAuth App (`oauth_app`) and GitHub App
   (`github_app`), each with a one-line description.
 - Each type contributes its own form or redirect flow, defined in its type spec.
-- Types not implemented yet are hidden, so the picker only offers working flows.
+- The picker lists only the types returned by `POST /integrations/types.json`
+  ([api.md](api.md#enabled-types)), intersected with the types the frontend implements. Types
+  not implemented yet, or disabled on this server, are hidden, so the picker only offers working
+  flows.
 
 ## Credential input rules
 

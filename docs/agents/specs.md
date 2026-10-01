@@ -42,6 +42,6 @@ This hub itself is never deleted, even when no spec is active.
 
 | Spec | Tracking issue | Status | Files |
 |---|---|---|---|
-| [integrations/](specs/integrations/README.md) | #295 (GitHub integrations) | In progress | [README](specs/integrations/README.md), [model](specs/integrations/model.md), [api](specs/integrations/api.md), [security](specs/integrations/security.md), [ui](specs/integrations/ui.md), [type-contract](specs/integrations/type-contract.md) |
+| [integrations/](specs/integrations/README.md) | #295 (GitHub integrations) | In progress | [README](specs/integrations/README.md), [model](specs/integrations/model.md), [api](specs/integrations/api.md), [security](specs/integrations/security.md), [ui](specs/integrations/ui.md), [type-contract](specs/integrations/type-contract.md), [types/pat](specs/integrations/types/pat.md), [types/oauth-app](specs/integrations/types/oauth-app.md) |
 
 When no feature is in progress, this list reads "none".
