@@ -90,6 +90,7 @@ delete, list and show stay generic for every type.
   "metadata": { "…": "type-specific, non-secret" },
   "expiresAt": null,
   "lastTestedAt": "2026-10-01T12:00:00.000Z",
+  "nextTestAt": "2026-10-01T12:00:30.000Z",
   "lastTestResult": "success",
   "createdAt": "2026-10-01T12:00:00.000Z",
   "updatedAt": "2026-10-01T12:00:00.000Z"
@@ -105,6 +106,10 @@ delete, list and show stay generic for every type.
   reconstruct the secret. It is `null` when the status is `undecryptable`.
 - `status` and `expiresAt` reflect the computed-on-read expiry rule
   ([model.md](model.md#expiry)).
+- `nextTestAt` is when the test-connection cooldown ends: `lastTestedAt` plus
+  `KERGHAN_INTEGRATIONS_TEST_COOLDOWN_MS` ([security.md](security.md#test-connection-cooldown)),
+  or `null` when `lastTestedAt` is `null`. It may lie in the past (the cooldown is already over).
+  It lets a client disable *Test* without knowing the server's cooldown config; it is non-secret.
 - Dates are ISO-8601 strings, or `null`.
 
 ## Per-action behaviour
