@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { IntegrationCredentialLockout } from './entities/integration-credential-lockout.entity.js';
+import { IntegrationOauthState } from './entities/integration-oauth-state.entity.js';
 import { Integration } from './entities/integration.entity.js';
 import { GithubClientService } from './github-client.service.js';
 import { IntegrationConnectionTestService } from './integration-connection-test.service.js';
@@ -16,14 +17,15 @@ import { IntegrationsService } from './integrations.service.js';
 import { IntegrationTypeRegistry } from './types/integration-type-registry.js';
 import { INTEGRATION_TYPE_STRATEGIES, IntegrationTypeStrategy } from './types/integration-type-strategy.js';
 import { buildOauthAppConfig, OAUTH_APP_CONFIG } from './types/oauth-app/oauth-app-config.js';
+import { OauthStateService } from './types/oauth-app/oauth-state.service.js';
 import { PatStrategy } from './types/pat/pat.strategy.js';
 
 /**
  * The Integrations module — always-on (imported directly into `AppModule`):
  * labelled, encrypted GitHub credentials owned by one user each (see
- * `docs/agents/specs/integrations/`). Owns tables `integrations` and
- * `integrations_credential_lockouts`; `integrations.user_id` carries the
- * project's only physical cross-module FK (`ON DELETE CASCADE` to
+ * `docs/agents/specs/integrations/`). Owns tables `integrations`,
+ * `integrations_credential_lockouts` and `integrations_oauth_states`;
+ * `integrations.user_id` carries the project's only physical cross-module FK (`ON DELETE CASCADE` to
  * `auth_users`), declared in its migration only. Exports nothing yet.
  *
  * `KERGHAN_INTEGRATIONS_KEY` is validated once, in the `INTEGRATIONS_KEY`
@@ -32,7 +34,7 @@ import { PatStrategy } from './types/pat/pat.strategy.js';
  * registered, in registry order, in `INTEGRATION_TYPE_STRATEGIES`.
  */
 @Module({
-  imports: [TypeOrmModule.forFeature([Integration, IntegrationCredentialLockout])],
+  imports: [TypeOrmModule.forFeature([Integration, IntegrationCredentialLockout, IntegrationOauthState])],
   controllers: [IntegrationsController],
   providers: [
     {
@@ -60,6 +62,7 @@ import { PatStrategy } from './types/pat/pat.strategy.js';
     IntegrationCredentialService,
     IntegrationConnectionTestService,
     IntegrationsService,
+    OauthStateService,
   ],
 })
 // NestJS module classes are intentionally empty; all behavior lives in @Module().

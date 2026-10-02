@@ -16,6 +16,7 @@ import {
   InMemoryIntegrationRepo,
   InMemoryTestCooldown,
 } from './in-memory-integrations.js';
+import { createInMemoryOauthStateRepo, InMemoryOauthStateRepo } from './in-memory-oauth-states.js';
 import { CANARY_CLASSIC, CANARY_FRAGMENT } from './integrations-harness.js';
 import { AuthModule } from '../../../auth/auth.module.js';
 import { AccountEditLockout } from '../../../auth/entities/account-edit-lockout.entity.js';
@@ -33,6 +34,7 @@ import { LoggingModule } from '../../../core/logging.module.js';
 import { OriginGuard } from '../../../core/origin.guard.js';
 import { createConsoleSpies, ConsoleSpies } from '../../../core/tests/console-spies.test-support.js';
 import { IntegrationCredentialLockout } from '../../entities/integration-credential-lockout.entity.js';
+import { IntegrationOauthState } from '../../entities/integration-oauth-state.entity.js';
 import { Integration } from '../../entities/integration.entity.js';
 import { GithubClientService } from '../../github-client.service.js';
 import { IntegrationCredentialAbuseGuardService } from '../../integration-credential-abuse-guard.service.js';
@@ -47,6 +49,7 @@ export const TEST_MAX_ATTEMPTS = 3;
 export interface IntegrationsTestContext {
   app: INestApplication;
   repo: InMemoryIntegrationRepo;
+  oauthStates: InMemoryOauthStateRepo;
   github: FakeGithubClient;
   guard: InMemoryCredentialAbuseGuard;
   userRepo: ReturnType<typeof createInMemoryRepo<User>>;
@@ -72,6 +75,7 @@ export async function buildIntegrationsTestApp(): Promise<IntegrationsTestContex
     KERGHAN_LOG_LEVEL: 'debug',
   };
   const repo = createInMemoryIntegrationRepo();
+  const oauthStates = createInMemoryOauthStateRepo();
   const github = new FakeGithubClient();
   const guard = new InMemoryCredentialAbuseGuard(TEST_MAX_ATTEMPTS);
   const userRepo = createInMemoryRepo<User>();
@@ -102,6 +106,7 @@ export async function buildIntegrationsTestApp(): Promise<IntegrationsTestContex
     .overrideProvider(getRepositoryToken(AccountEditLockout)).useValue(createInMemoryRepo<AccountEditLockout>())
     .overrideProvider(getRepositoryToken(Integration)).useValue(repo)
     .overrideProvider(getRepositoryToken(IntegrationCredentialLockout)).useValue({})
+    .overrideProvider(getRepositoryToken(IntegrationOauthState)).useValue(oauthStates)
     .overrideProvider(GithubClientService).useValue(github)
     .overrideProvider(IntegrationCredentialAbuseGuardService).useValue(guard)
     .overrideProvider(IntegrationTestCooldownService).useValue(new InMemoryTestCooldown(repo, TEST_COOLDOWN_MS))
@@ -124,7 +129,7 @@ export async function buildIntegrationsTestApp(): Promise<IntegrationsTestContex
     }),
   );
 
-  return { app, repo, github, guard, userRepo, owner, intruder, admin };
+  return { app, repo, oauthStates, github, guard, userRepo, owner, intruder, admin };
 }
 
 /**

@@ -3,6 +3,7 @@ import { IntegrationsCreateIntegrations20261002120011 } from '../migrations/2026
 import {
   IntegrationsCreateCredentialLockouts20261002120012,
 } from '../migrations/20261002120012-integrations-create-credential-lockouts.js';
+import { IntegrationsCreateOauthStates20261002120013 } from '../migrations/20261002120013-integrations-create-oauth-states.js';
 
 interface FakeQueryRunner {
   createTable: jest.Mock;
@@ -161,6 +162,57 @@ describe('IntegrationsCreateCredentialLockouts20261002120012', () => {
       await migration.down(runner as unknown as QueryRunner);
 
       expect(runner.dropTable).toHaveBeenCalledWith('integrations_credential_lockouts');
+    });
+  });
+});
+
+describe('IntegrationsCreateOauthStates20261002120013', () => {
+  const migration = new IntegrationsCreateOauthStates20261002120013();
+
+  describe('up', () => {
+    let runner: FakeQueryRunner;
+
+    beforeEach(async () => {
+      runner = fakeQueryRunner();
+      await migration.up(runner as unknown as QueryRunner);
+    });
+
+    it('creates the oauth states table if missing, with its columns', () => {
+      const [table, ifNotExists] = runner.createTable.mock.calls[0] as [Table, boolean];
+
+      expect(table.name).toBe('integrations_oauth_states');
+      expect(ifNotExists).toBe(true);
+      expect(columnsOf(runner)).toEqual({
+        id: { type: 'int', length: '', isNullable: false },
+        uuid: { type: 'char', length: '36', isNullable: false },
+        user_id: { type: 'int', length: '', isNullable: false },
+        secret_hash: { type: 'char', length: '64', isNullable: false },
+        purpose: { type: 'varchar', length: '16', isNullable: false },
+        label: { type: 'varchar', length: '100', isNullable: true },
+        integration_uuid: { type: 'char', length: '36', isNullable: true },
+        code_verifier: { type: 'varchar', length: '128', isNullable: false },
+        expires_at: { type: 'datetime', length: '', isNullable: false },
+        created_at: { type: 'datetime', length: '', isNullable: false },
+      });
+    });
+
+    it('creates the unique uuid, user_id and expires_at indexes, and no physical FK', () => {
+      expect(indexesOf(runner)).toEqual([
+        { name: 'idx_integrations_oauth_states_uuid', columnNames: ['uuid'], isUnique: true },
+        { name: 'idx_integrations_oauth_states_user_id', columnNames: ['user_id'], isUnique: false },
+        { name: 'idx_integrations_oauth_states_expires_at', columnNames: ['expires_at'], isUnique: false },
+      ]);
+      expect(runner.createIndex.mock.calls.every(([table]) => table === 'integrations_oauth_states')).toBe(true);
+      expect(runner.createForeignKey).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('down', () => {
+    it('drops the table', async () => {
+      const runner = fakeQueryRunner();
+      await migration.down(runner as unknown as QueryRunner);
+
+      expect(runner.dropTable).toHaveBeenCalledWith('integrations_oauth_states');
     });
   });
 });

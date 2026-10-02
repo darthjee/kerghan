@@ -139,3 +139,15 @@ export function httpErrorFor(error: IntegrationCredentialError): HttpException {
 
   return githubUnavailable();
 }
+
+/**
+ * 400 `INTEGRATION_REDIRECT_STATE_INVALID`: the same answer for an unknown,
+ * expired, used, foreign or wrong `state` (never echoing it).
+ * @returns {BadRequestException} The exception.
+ */
+export function invalidRedirectState(): BadRequestException {
+  return new BadRequestException({
+    code: ErrorCodes.INTEGRATION_REDIRECT_STATE_INVALID,
+    message: 'This GitHub authorization link expired or was already used',
+  });
+}
