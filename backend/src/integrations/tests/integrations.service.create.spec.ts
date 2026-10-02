@@ -1,5 +1,6 @@
 import { inspect } from 'node:util';
 import { HttpException } from '@nestjs/common';
+import { QueryFailedError } from 'typeorm';
 import { GithubClientError } from '../github-client.service.js';
 import { githubUserResponse } from './support/fake-github-client.js';
 import {
@@ -219,6 +220,25 @@ describe('IntegrationsService (create and replace credential)', () => {
       await Promise.allSettled([1, 2, 3].map(() => harness.service.create(USER, envelope())));
 
       expect(harness.guard.state.get(USER)?.failedAttempts).toBe(3);
+    });
+
+    it('lets an unexpected (non-domain) validation error through, without counting it', async () => {
+      harness.github.respondWith(new Error('boom'));
+
+      await expect(harness.service.create(USER, envelope())).rejects.toThrow('boom');
+      expect(harness.guard.state.has(USER)).toBe(false);
+    });
+
+    it.each([
+      ['another database error', new QueryFailedError('INSERT', [], Object.assign(new Error('x'), { code: 'ER_LOCK' }))],
+      ['a database error without a driver code', new QueryFailedError('INSERT', [], new Error('y'))],
+      ['a non-database error', new Error('disk full')],
+    ])('rethrows %s on insert', async (_label, failure) => {
+      harness.repo.save = async () => {
+        throw failure;
+      };
+
+      await expect(harness.service.create(USER, envelope())).rejects.toBe(failure);
     });
 
     it('answers 409 when a parallel create wins the label race', async () => {

@@ -47,7 +47,9 @@ export function createInMemoryIntegrationRepo() {
     count: async ({ where }: { where: Where }): Promise<number> => rows.filter((row) => matches(row, where)).length,
     save: async (entity: Integration): Promise<Integration> => {
       const now = new Date();
-      const row = { createdAt: now, updatedAt: now, ...entity, id: nextId } as Integration;
+      const row = { ...entity, id: nextId } as Integration;
+      row.createdAt ??= now;
+      row.updatedAt ??= now;
       assertUnique(row);
       nextId += 1;
       rows.push(row);
