@@ -12,3 +12,5 @@ secret:
       match: kerghan-demo
     - name: UserUpdateService spec fixture — non-secret placeholder digest value flagged as a false-positive "Username Password" pair (issue #89, historical commit 013dc43)
       match: original-digest
+    - name: Integrations dev/test placeholder key (KERGHAN_INTEGRATIONS_KEY in .env.dev.sample), rejected in production by boot validation
+      match: a2VyZ2hhbi1kZXYtaW50ZWdyYXRpb25zLWtleS0zMmI=
