@@ -14,3 +14,5 @@ secret:
       match: original-digest
     - name: Integrations dev/test placeholder key (KERGHAN_INTEGRATIONS_KEY in .env.dev.sample), rejected in production by boot validation
       match: a2VyZ2hhbi1kZXYtaW50ZWdyYXRpb25zLWtleS0zMmI=
+    - name: OAuth App spec canary token (issue #302) — fake gho_ value used only in backend Jest specs to assert tokens never leak into logs/responses
+      match: gho_CANARYcanaryNEW0000000000000000000n3w4
