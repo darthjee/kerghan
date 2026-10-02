@@ -9,6 +9,8 @@ export const GITHUB_API_VERSION = '2022-11-28';
 export const GITHUB_USER_AGENT = 'kerghan';
 // Upper bound for a single GitHub call, in milliseconds.
 export const GITHUB_TIMEOUT_MS = 10_000;
+// Largest response body read from GitHub, in bytes; `GET /user` answers are a few KiB.
+export const GITHUB_MAX_BODY_BYTES = 64 * 1024;
 
 /** Why a GitHub call failed without an HTTP answer. */
 export type GithubClientErrorReason = 'timeout' | 'network_error';
@@ -63,7 +65,10 @@ export interface GithubUserResponse {
 @Injectable()
 export class GithubClientService {
   /**
-   * Calls `GET /user` with a token.
+   * Calls `GET /user` with a token. Redirects are refused (`redirect:
+   * 'error'`, surfacing as `network_error`), so the bearer token is only ever
+   * sent to `api.github.com`; at most `GITHUB_MAX_BODY_BYTES` of the body are
+   * read, a larger body counting as unparseable (no login).
    * @param {Secret<string>} token - The token, unwrapped only for the `Authorization` header.
    * @returns {Promise<GithubUserResponse>} GitHub's normalised answer, whatever its status.
    */
@@ -77,9 +82,10 @@ export class GithubClientService {
           'X-GitHub-Api-Version': GITHUB_API_VERSION,
           'User-Agent': GITHUB_USER_AGENT,
         },
+        redirect: 'error',
         signal: AbortSignal.timeout(GITHUB_TIMEOUT_MS),
       });
-      const body = await response.text();
+      const body = await readCappedBody(response, GITHUB_MAX_BODY_BYTES);
 
       return normalise(response.status, response.headers, body);
     } catch (error) {
@@ -92,19 +98,49 @@ export class GithubClientService {
  * Builds the normalised answer from the status, headers and body text.
  * @param {number} status - The HTTP status.
  * @param {Headers} headers - The response headers.
- * @param {string} body - The response body text.
+ * @param {string | null} body - The response body text, or `null` when it was too large.
  * @returns {GithubUserResponse} The normalised answer.
  */
-function normalise(status: number, headers: Headers, body: string): GithubUserResponse {
+function normalise(status: number, headers: Headers, body: string | null): GithubUserResponse {
   return {
     status,
-    login: status === 200 ? parseLogin(body) : null,
+    login: status === 200 && body !== null ? parseLogin(body) : null,
     oauthScopes: headers.get('x-oauth-scopes'),
     tokenExpiration: headers.get('github-authentication-token-expiration'),
     rateLimitRemaining: numericHeader(headers, 'x-ratelimit-remaining'),
     rateLimitReset: numericHeader(headers, 'x-ratelimit-reset'),
     retryAfter: numericHeader(headers, 'retry-after'),
   };
+}
+
+/**
+ * Reads a response body as text, stopping (and cancelling the stream) once
+ * it exceeds `maxBytes`.
+ * @param {Response} response - The fetch response.
+ * @param {number} maxBytes - The largest body accepted, in bytes.
+ * @returns {Promise<string | null>} The body text, or `null` when it was larger than `maxBytes`.
+ */
+async function readCappedBody(response: Response, maxBytes: number): Promise<string | null> {
+  if (response.body === null) {
+    return '';
+  }
+
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+
+  for (let chunk = await reader.read(); !chunk.done; chunk = await reader.read()) {
+    total += chunk.value.byteLength;
+
+    if (total > maxBytes) {
+      await reader.cancel().catch(() => undefined);
+      return null;
+    }
+
+    chunks.push(chunk.value);
+  }
+
+  return Buffer.concat(chunks).toString('utf8');
 }
 
 /**

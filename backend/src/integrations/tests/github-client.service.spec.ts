@@ -1,6 +1,7 @@
 import { inspect } from 'node:util';
 import {
   GITHUB_API_VERSION,
+  GITHUB_MAX_BODY_BYTES,
   GithubClientError,
   GithubClientService,
   GITHUB_USER_AGENT,
@@ -64,6 +65,20 @@ describe('GithubClientService', () => {
         'User-Agent': GITHUB_USER_AGENT,
       });
       expect(init.signal).toBeInstanceOf(AbortSignal);
+    });
+
+    it('refuses redirects, so the token is only ever sent to api.github.com', async () => {
+      fetchMock.mockResolvedValue(reply(200, '{"login":"octocat"}'));
+
+      await service.getUser(new Secret(CANARY));
+
+      expect((fetchMock.mock.calls[0] as [string, RequestInit])[1].redirect).toBe('error');
+    });
+
+    it('rethrows a refused redirect as a network error', async () => {
+      fetchMock.mockRejectedValue(new TypeError('fetch failed', { cause: new Error('unexpected redirect') }));
+
+      expect((await thrown(service.getUser(new Secret(CANARY)))).reason).toBe('network_error');
     });
 
     it('parses the login and the normalised headers', async () => {
@@ -173,10 +188,46 @@ describe('GithubClientService', () => {
       expect(inspect(error)).not.toContain(CANARY);
     });
 
+    it('reads a body of exactly the size cap', async () => {
+      const body = `{"login":"octocat","pad":"${'x'.repeat(GITHUB_MAX_BODY_BYTES - 28)}"}`;
+      expect(Buffer.byteLength(body)).toBe(GITHUB_MAX_BODY_BYTES);
+      fetchMock.mockResolvedValue(reply(200, body));
+
+      expect((await service.getUser(new Secret(CANARY))).login).toBe('octocat');
+    });
+
+    it.each([
+      ['a cancel that succeeds', jest.fn()],
+      ['a cancel that fails', jest.fn().mockRejectedValue(new Error('already closed'))],
+    ])('stops reading a body over the size cap and answers a null login, with %s', async (_label, cancel) => {
+      let sent = 0;
+      const stream = new ReadableStream<Uint8Array>({
+        pull(controller) {
+          sent += 1;
+          controller.enqueue(new TextEncoder().encode(sent === 1 ? '{"login":"octocat","pad":"' : 'x'.repeat(16 * 1024)));
+        },
+        cancel,
+      });
+      fetchMock.mockResolvedValue(new Response(stream, { status: 200, headers: { 'X-OAuth-Scopes': 'repo' } }));
+
+      expect(await service.getUser(new Secret(CANARY))).toMatchObject({ status: 200, login: null, oauthScopes: 'repo' });
+      expect(cancel).toHaveBeenCalled();
+      expect(sent).toBeLessThan(10);
+    });
+
+    it('answers a null login for a 200 without a body', async () => {
+      fetchMock.mockResolvedValue(new Response(null, { status: 200 }));
+
+      expect((await service.getUser(new Secret(CANARY))).login).toBeNull();
+    });
+
     it('rethrows a body read failure as a network error', async () => {
-      const response = reply(200, '{}');
-      jest.spyOn(response, 'text').mockRejectedValue(new Error('socket hang up'));
-      fetchMock.mockResolvedValue(response);
+      const stream = new ReadableStream<Uint8Array>({
+        pull(controller) {
+          controller.error(new Error('socket hang up'));
+        },
+      });
+      fetchMock.mockResolvedValue(new Response(stream, { status: 200 }));
 
       expect((await thrown(service.getUser(new Secret(CANARY)))).reason).toBe('network_error');
     });
