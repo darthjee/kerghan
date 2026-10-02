@@ -1,15 +1,13 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { getNumberConfig } from '../core/numeric-config.js';
 import { Integration } from './entities/integration.entity.js';
+import { integrationNotFound } from './integration-http-errors.js';
 
 // Default minimum delay between two tests of one integration (30 seconds, in milliseconds).
 export const DEFAULT_INTEGRATIONS_TEST_COOLDOWN_MS = 30000;
-
-// Message of the 404 answered for a missing (or foreign) integration.
-export const INTEGRATION_NOT_FOUND_MESSAGE = 'Integration not found';
 
 /** The outcome of a cooldown claim. */
 export type CooldownClaim = { claimed: true } | { claimed: false; retryAfterSeconds: number };
@@ -82,7 +80,7 @@ export class IntegrationTestCooldownService {
     });
 
     if (row === null) {
-      throw new NotFoundException(INTEGRATION_NOT_FOUND_MESSAGE);
+      throw integrationNotFound();
     }
 
     // A null `last_tested_at` here means the claim lost a race that has since been undone: retry shortly.

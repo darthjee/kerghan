@@ -9,7 +9,13 @@ import { CACHE_CLASS_KEY } from '../cache-policy.decorator.js';
 // silently shared-cached. Only static decorator metadata is read — no app bootstrap, no DB.
 
 const SRC_ROOT = resolve(__dirname, '..', '..');
-const KNOWN_CONTROLLERS = ['AdminController', 'AuthController', 'AuthorizationRequestController', 'HealthController'];
+const KNOWN_CONTROLLERS = [
+  'AdminController',
+  'AuthController',
+  'AuthorizationRequestController',
+  'HealthController',
+  'IntegrationsController',
+];
 
 type ClassConstructor = new (...args: never[]) => unknown;
 
