@@ -139,10 +139,17 @@ describe('GithubClientService', () => {
       ['a missing login', '{"id":1}'],
       ['an empty login', '{"login":""}'],
       ['a non-string login', '{"login":42}'],
+      ['a login longer than 255 characters', `{"login":"${'a'.repeat(256)}"}`],
     ])('answers a null login for %s', async (_label, body) => {
       fetchMock.mockResolvedValue(reply(200, body));
 
       expect((await service.getUser(new Secret(CANARY))).login).toBeNull();
+    });
+
+    it('keeps a login of exactly 255 characters', async () => {
+      fetchMock.mockResolvedValue(reply(200, `{"login":"${'a'.repeat(255)}"}`));
+
+      expect((await service.getUser(new Secret(CANARY))).login).toBe('a'.repeat(255));
     });
 
     it('rethrows a timeout as a sanitized error', async () => {

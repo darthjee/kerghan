@@ -11,6 +11,18 @@ export const GITHUB_USER_AGENT = 'kerghan';
 export const GITHUB_TIMEOUT_MS = 10_000;
 // Largest response body read from GitHub, in bytes; `GET /user` answers are a few KiB.
 export const GITHUB_MAX_BODY_BYTES = 64 * 1024;
+// Longest storable login: `integrations.github_login` is a `varchar(255)`.
+export const GITHUB_LOGIN_MAX_LENGTH = 255;
+
+/**
+ * Whether a value is a login Kerghan can store: a non-empty string that fits
+ * `integrations.github_login` (anything longer is treated as no login).
+ * @param {unknown} login - The candidate login.
+ * @returns {boolean} `true` for a non-empty string of at most `GITHUB_LOGIN_MAX_LENGTH` characters.
+ */
+export function isUsableLogin(login: unknown): login is string {
+  return typeof login === 'string' && login !== '' && login.length <= GITHUB_LOGIN_MAX_LENGTH;
+}
 
 /** Why a GitHub call failed without an HTTP answer. */
 export type GithubClientErrorReason = 'timeout' | 'network_error';
@@ -146,13 +158,13 @@ async function readCappedBody(response: Response, maxBytes: number): Promise<str
 /**
  * Reads the `login` field of a JSON body.
  * @param {string} body - The response body text.
- * @returns {string | null} The non-empty login, or `null` when absent or unparseable.
+ * @returns {string | null} The usable login, or `null` when absent, unparseable or too long.
  */
 function parseLogin(body: string): string | null {
   try {
     const { login } = JSON.parse(body) as { login?: unknown };
 
-    return typeof login === 'string' && login !== '' ? login : null;
+    return isUsableLogin(login) ? login : null;
   } catch {
     return null;
   }

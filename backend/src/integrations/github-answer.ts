@@ -1,4 +1,4 @@
-import { GithubClientError, GithubClientService, GithubUserResponse } from './github-client.service.js';
+import { GithubClientError, GithubClientService, GithubUserResponse, isUsableLogin } from './github-client.service.js';
 import type { Secret } from './secret.js';
 
 /**
@@ -6,7 +6,8 @@ import type { Secret } from './secret.js';
  * - `ok`: 200 with a usable `login`;
  * - `unauthorized`: 401;
  * - `rate_limited`: 403/429 with `x-ratelimit-remaining: 0` or a `retry-after`;
- * - `unavailable`: network error, timeout, 5xx, any other status, or a 200 without `login`.
+ * - `unavailable`: network error, timeout, 5xx, any other status, or a 200 without a usable
+ *   `login` (absent, or longer than the 255 characters `github_login` stores).
  */
 export type GithubUserAnswer =
   | { kind: 'ok'; login: string; response: GithubUserResponse }
@@ -48,7 +49,7 @@ export async function fetchGithubUser(
  * @returns {GithubUserAnswer} The classified answer.
  */
 export function classifyGithubUser(response: GithubUserResponse, now: number): GithubUserAnswer {
-  if (response.status === 200 && response.login !== null) {
+  if (response.status === 200 && isUsableLogin(response.login)) {
     return { kind: 'ok', login: response.login, response };
   }
 

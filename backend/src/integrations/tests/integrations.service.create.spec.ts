@@ -195,6 +195,7 @@ describe('IntegrationsService (create and replace credential)', () => {
       ['a 401', githubUserResponse({ status: 401, login: null }), 422, 'INTEGRATION_CREDENTIAL_INVALID', 1],
       ['a classic token without repo', githubUserResponse({ oauthScopes: 'public_repo' }), 422, 'INTEGRATION_INSUFFICIENT_PERMISSIONS', 1],
       ['a 5xx', githubUserResponse({ status: 500, login: null }), 502, 'GITHUB_UNAVAILABLE', 0],
+      ['a 200 with a login too long to store', githubUserResponse({ login: 'a'.repeat(256) }), 502, 'GITHUB_UNAVAILABLE', 0],
       ['a network error', new GithubClientError('network_error'), 502, 'GITHUB_UNAVAILABLE', 0],
       ['a rate limit', githubUserResponse({ status: 429, login: null, retryAfter: 12 }), 503, 'GITHUB_RATE_LIMITED', 0],
     ])('rejects %s, stores nothing and counts it only when counted', async (_label, answer, status, code, counted) => {
