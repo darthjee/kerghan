@@ -26,11 +26,18 @@ describe('ApiError', () => {
     expect(error.details).toEqual(details);
   });
 
-  it('leaves code and details undefined when not given', () => {
+  it('carries the retry-after seconds', () => {
+    const error = new ApiError(429, 'Too soon', 'INTEGRATION_TEST_COOLDOWN', undefined, 30);
+
+    expect(error.retryAfter).toBe(30);
+  });
+
+  it('leaves code, details and retryAfter undefined when not given', () => {
     const error = new ApiError(500, 'Request failed');
 
     expect(error.code).toBeUndefined();
     expect(error.details).toBeUndefined();
+    expect(error.retryAfter).toBeUndefined();
   });
 
   it('is named ApiError', () => {
