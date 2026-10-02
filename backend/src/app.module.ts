@@ -17,6 +17,7 @@ import { RequestContextMiddleware } from './core/request-context.middleware.js';
 import { buildSecretKeys } from './core/secret-keys.js';
 import { HealthController } from './health/health.controller.js';
 import { HealthService } from './health/health.service.js';
+import { IntegrationsModule } from './integrations/integrations.module.js';
 import { MailModule } from './mail/mail.module.js';
 
 // Default access-token lifetime (15 minutes, in milliseconds) used when
@@ -51,6 +52,12 @@ export function buildJwtSignOptions(configService: ConfigService): { expiresIn: 
  * secret key only (`buildSecretKeys(...).current`); retired keys are
  * accepted solely by `JwtGuard` when verifying.
  *
+ * `IntegrationsModule` is always-on, like `AuthModule`: it validates
+ * `KERGHAN_INTEGRATIONS_KEY` at boot (a bad key fails startup) and its
+ * `integrations.user_id` carries the project's only physical cross-module FK
+ * (`ON DELETE CASCADE` to `auth_users`), the documented exception to the
+ * logical-FK strategy.
+ *
  * Global guards run in registration order: `OriginGuard` (CSRF protection
  * for state-changing requests) comes first, so a forged cross-site request
  * is rejected with `403` before `JwtGuard` could answer `401`; then
@@ -73,6 +80,7 @@ export function buildJwtSignOptions(configService: ConfigService): { expiresIn: 
     ConfigModule.forRoot({ isGlobal: true }),
     EventEmitterModule.forRoot(),
     AuthModule,
+    IntegrationsModule,
     LoggingModule,
     MailModule,
     TypeOrmModule.forRootAsync({
