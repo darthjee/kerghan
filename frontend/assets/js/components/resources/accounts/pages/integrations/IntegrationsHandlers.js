@@ -54,6 +54,7 @@ function rowEditHandlers(controller, rowState) {
       credential: { ...rowOf(uuid).credential, [field]: event.target.value },
     }),
     onCancelReplace: (uuid) => () => controller.patchRow(uuid, { replacing: false, credential: {} }),
+    onReconnect: (uuid) => () => controller.startRedirect({ integrationId: uuid }),
     onSubmitReplace: (integration) => onSubmit(
       () => controller.replaceCredential(integration, rowOf(integration.id).credential ?? {}),
     ),

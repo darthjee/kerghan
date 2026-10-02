@@ -1,5 +1,6 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import IntegrationsTableHelper from '../../../../../../../../assets/js/components/resources/accounts/pages/helpers/IntegrationsTableHelper.jsx';
+import OauthAppType from '../../../../../../../../assets/js/components/resources/accounts/pages/integrations/types/oauthApp.js';
 import { taggedHandlers } from '../../../../../../../support/taggedHandlers.js';
 
 describe('IntegrationsTableHelper', () => {
@@ -152,5 +153,39 @@ describe('IntegrationsTableHelper', () => {
 
     expect(markup).toContain('Row failed');
     expect(markup).toContain('>Test</button>');
+  });
+
+  describe('oauth_app rows', () => {
+    const oauthRow = {
+      ...base, type: 'oauth_app', secretHint: 'gho_…a1b2', expiresAt: null,
+    };
+    const markupWithTypes = (types) => renderToStaticMarkup(IntegrationsTableHelper.render(
+      { integrations: [oauthRow], rowState: new Map(), types }, taggedHandlers(),
+    ));
+
+    it('shows the gho_ hint and no expiry', () => {
+      const markup = markupWithTypes([OauthAppType]);
+
+      expect(markup).toContain('gho_…a1b2');
+      expect(markup).toContain('no expiry');
+    });
+
+    it('passes the enabled types to the actions', () => {
+      expect(markupWithTypes([OauthAppType])).toContain('Reconnect with GitHub');
+      expect(markupWithTypes([])).toContain('The OAuth App is disabled on this server.');
+    });
+
+    it('explains the revoked reason', () => {
+      const markup = renderToStaticMarkup(IntegrationsTableHelper.render(
+        {
+          integrations: [{ ...oauthRow, status: 'invalid', statusReason: 'revoked' }],
+          rowState: new Map(),
+          types: [OauthAppType],
+        },
+        taggedHandlers(),
+      ));
+
+      expect(markup).toContain('GitHub no longer accepts this authorization.');
+    });
   });
 });

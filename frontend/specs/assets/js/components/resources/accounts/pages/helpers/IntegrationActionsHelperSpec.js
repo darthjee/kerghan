@@ -1,5 +1,7 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import IntegrationActionsHelper from '../../../../../../../../assets/js/components/resources/accounts/pages/helpers/IntegrationActionsHelper.jsx';
+import OauthAppType from '../../../../../../../../assets/js/components/resources/accounts/pages/integrations/types/oauthApp.js';
+import PatType from '../../../../../../../../assets/js/components/resources/accounts/pages/integrations/types/pat.js';
 import { findButton, findElements } from '../../../../../../../support/elementTree.js';
 import { taggedHandlers } from '../../../../../../../support/taggedHandlers.js';
 
@@ -9,8 +11,8 @@ describe('IntegrationActionsHelper', () => {
   const integration = {
     id: 'abc', type: 'pat', label: 'Work', status: 'active', nextTestAt: null,
   };
-  const render = (overrides = {}, row = {}) => IntegrationActionsHelper.render(
-    { ...integration, ...overrides }, row, handlers,
+  const render = (overrides = {}, row = {}, types = undefined) => IntegrationActionsHelper.render(
+    { ...integration, ...overrides }, row, handlers, types,
   );
   const markupOf = (overrides, row) => renderToStaticMarkup(render(overrides, row));
 
@@ -138,5 +140,57 @@ describe('IntegrationActionsHelper', () => {
   it('renders the row error', () => {
     expect(markupOf({}, { error: 'GitHub is unavailable right now. Try again later.' }))
       .toContain('GitHub is unavailable right now. Try again later.');
+  });
+
+  describe('reconnect with GitHub (oauth_app)', () => {
+    const enabled = [PatType, OauthAppType];
+    const oauth = (overrides = {}, row = {}, types = enabled) => render({ type: 'oauth_app', ...overrides }, row, types);
+
+    it('replaces Replace credential with Reconnect with GitHub, starting the redirect', () => {
+      const tree = oauth();
+
+      expect(findButton(tree, 'Replace credential')).toBeUndefined();
+      expect(findButton(tree, 'Reconnect with GitHub').props.onClick).toBe('onReconnect:abc');
+    });
+
+    ['invalid', 'expired', 'undecryptable'].forEach((status) => {
+      it(`is highlighted for ${status}`, () => {
+        expect(findButton(oauth({ status }), 'Reconnect with GitHub').props.className).toContain('btn-warning');
+      });
+    });
+
+    it('is not highlighted for active', () => {
+      expect(findButton(oauth(), 'Reconnect with GitHub').props.className).not.toContain('btn-warning');
+    });
+
+    it('opens no credential form', () => {
+      expect(findElements(oauth({}, { replacing: true }), (node) => node.type === 'form')).toEqual([]);
+    });
+
+    it('is hidden, with a note, when the type is disabled on the server', () => {
+      const tree = oauth({}, {}, [PatType]);
+
+      expect(findButton(tree, 'Reconnect with GitHub')).toBeUndefined();
+      expect(renderToStaticMarkup(tree)).toContain('The OAuth App is disabled on this server.');
+    });
+
+    it('treats a missing types list as nothing enabled', () => {
+      expect(findButton(render({ type: 'oauth_app' }), 'Reconnect with GitHub')).toBeUndefined();
+    });
+
+    it('shows no disabled note while the type is enabled', () => {
+      expect(renderToStaticMarkup(oauth())).not.toContain('disabled on this server');
+    });
+
+    it('shows no disabled note for a paste-flow type', () => {
+      expect(markupOf({}, {})).not.toContain('disabled on this server');
+    });
+
+    it('reminds that removal tries to revoke the authorization on GitHub', () => {
+      const markup = renderToStaticMarkup(oauth({}, { confirmingRemove: true }));
+
+      expect(markup).toContain('Kerghan will also try to revoke this authorization on GitHub.');
+      expect(markup).toContain('Other connections of the same GitHub account keep working.');
+    });
   });
 });
