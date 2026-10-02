@@ -69,6 +69,7 @@ describe('IntegrationTestCooldownService', () => {
     ['10.2s ago (rounded up)', '2026-10-01T11:59:49.800Z', 20],
     ['29.9s ago (at least 1)', '2026-10-01T11:59:30.100Z', 1],
     ['exactly at the window edge (at least 1)', '2026-10-01T11:59:30.000Z', 1],
+    ['in the future after MySQL rounding (capped at the window)', '2026-10-01T12:00:00.400Z', 30],
   ])('answers the remaining seconds when tested %s', async (_label, lastTestedAt, retryAfterSeconds) => {
     const { service, repo } = build(fakeQueryBuilder(0), { lastTestedAt: new Date(lastTestedAt) });
 

@@ -88,6 +88,10 @@ export class IntegrationTestCooldownService {
       ? 0
       : row.lastTestedAt.getTime() + this.cooldownMs - now.getTime();
 
-    return Math.max(1, Math.ceil(remainingMs / 1000));
+    // `last_tested_at` is a seconds-precision `datetime`, so MySQL may round it up by up to a
+    // second; never answer more than the window itself.
+    const remaining = Math.min(Math.ceil(remainingMs / 1000), Math.ceil(this.cooldownMs / 1000));
+
+    return Math.max(1, remaining);
   }
 }
