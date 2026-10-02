@@ -1,8 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
-import { MoreThanOrEqual, Repository } from 'typeorm';
-import { computeLockoutState } from '../core/lockout-state.js';
+import { Repository } from 'typeorm';
 import { getNumberConfig } from '../core/numeric-config.js';
 import { IntegrationCredentialLockout } from './entities/integration-credential-lockout.entity.js';
 
@@ -11,17 +10,44 @@ export const DEFAULT_INTEGRATIONS_CREDENTIAL_MAX_ATTEMPTS = 5;
 // Default cool-off duration (15 minutes, in milliseconds).
 export const DEFAULT_INTEGRATIONS_CREDENTIAL_LOCK_MS = 900000;
 
-// Atomic first-failure upsert / increment, keyed on the unique `user_id`.
-export const REGISTER_FAILURE_SQL =
-  'INSERT INTO `integrations_credential_lockouts` (`user_id`, `failed_attempts`) VALUES (?, 1) '
-  + 'ON DUPLICATE KEY UPDATE `failed_attempts` = `failed_attempts` + 1';
+// Creates the user's row on first use (a no-op once it exists), so the
+// reservation below is always a single-row conditional UPDATE.
+export const ENSURE_LOCKOUT_ROW_SQL =
+  'INSERT INTO `integrations_credential_lockouts` (`user_id`, `failed_attempts`) VALUES (?, 0) '
+  + 'ON DUPLICATE KEY UPDATE `user_id` = `user_id`';
+
+// Atomically reserves one attempt: counts it up front as a (provisional)
+// failure and sets the lock in the same statement once the threshold is
+// reached, but only while the user is not locked. MySQL evaluates single-table
+// UPDATE assignments left to right, so `locked_until` is computed from the
+// count *before* the increment. Params: max attempts, lock end, user id, now.
+export const RESERVE_ATTEMPT_SQL =
+  'UPDATE `integrations_credential_lockouts` '
+  + 'SET `locked_until` = IF(`failed_attempts` + 1 >= ?, ?, NULL), `failed_attempts` = `failed_attempts` + 1 '
+  + 'WHERE `user_id` = ? AND (`locked_until` IS NULL OR `locked_until` <= ?)';
+
+// Gives back a reservation that did not end in a counted failure. Clearing
+// the lock is safe: any lock still present was set by a reservation, and
+// without this one the count is back to what it was before it (an expired
+// lock with the count at or above the max re-locks on the next failure).
+export const RELEASE_ATTEMPT_SQL =
+  'UPDATE `integrations_credential_lockouts` '
+  + 'SET `failed_attempts` = GREATEST(`failed_attempts` - 1, 0), `locked_until` = NULL '
+  + 'WHERE `user_id` = ?';
 
 /**
  * Per-user failure cool-off for creating an integration and replacing its
  * credential (see `docs/agents/specs/integrations/security.md#create-and-replace-credential-failure-cool-off`).
  * Modelled on `AccountEditAbuseGuardService` and `computeLockoutState`, but
- * every counter write is **atomic**: the counter is never read-then-written,
- * so parallel failures all count.
+ * every counter write is **atomic**: the counter is never read-then-written.
+ *
+ * Every GitHub validation first **reserves** an attempt (`reserveAttempt`):
+ * a conditional UPDATE that counts the attempt as a failure up front and
+ * trips the lock as soon as the threshold is reached, proceeding only if one
+ * row was affected. A burst of parallel requests therefore makes at most
+ * `maxAttempts` GitHub calls. The reservation is then settled: a counted
+ * failure keeps it, a success clears the counter (`reset`), and anything else
+ * gives it back (`releaseAttempt`).
  *
  * Expiry semantics follow `computeLockoutState`: once `locked_until` has
  * passed the counter is not reset, so the next counted failure starts from
@@ -70,28 +96,33 @@ export class IntegrationCredentialAbuseGuardService {
   }
 
   /**
-   * Counts one more failure: an atomic upsert-increment, a re-read, and a
-   * conditional `UPDATE` setting `locked_until` once the threshold is reached.
+   * Atomically reserves one validation attempt, counted as a failure until
+   * settled. Refused while the user is locked out, including when parallel
+   * reservations have just reached the threshold.
    * @param {number} userId - The caller's id.
-   * @returns {Promise<void>} Resolves once the failure (and lock, if tripped) is persisted.
+   * @param {Date} [now] - The current time.
+   * @returns {Promise<boolean>} `true` when the attempt may call GitHub.
    */
-  async registerFailure(userId: number): Promise<void> {
-    await this.lockoutRepository.query(REGISTER_FAILURE_SQL, [userId]);
+  async reserveAttempt(userId: number, now: Date = new Date()): Promise<boolean> {
+    await this.lockoutRepository.query(ENSURE_LOCKOUT_ROW_SQL, [userId]);
 
-    const lockout = await this.lockoutRepository.findOne({ where: { userId } });
+    const lockedUntil = new Date(now.getTime() + this.lockMs);
+    const result: unknown = await this.lockoutRepository.query(
+      RESERVE_ATTEMPT_SQL,
+      [this.maxAttempts, lockedUntil, userId, now],
+    );
 
-    if (lockout === null) {
-      return;
-    }
+    return affectedRows(result) === 1;
+  }
 
-    const { lockedUntil } = computeLockoutState(lockout.failedAttempts - 1, this.maxAttempts, this.lockMs);
-
-    if (lockedUntil !== null) {
-      await this.lockoutRepository.update(
-        { userId, failedAttempts: MoreThanOrEqual(this.maxAttempts) },
-        { lockedUntil },
-      );
-    }
+  /**
+   * Gives back a reservation that did not end in a counted failure (a
+   * transient GitHub failure or an unexpected error).
+   * @param {number} userId - The caller's id.
+   * @returns {Promise<void>} Resolves once the reservation is released.
+   */
+  async releaseAttempt(userId: number): Promise<void> {
+    await this.lockoutRepository.query(RELEASE_ATTEMPT_SQL, [userId]);
   }
 
   /**
@@ -102,4 +133,17 @@ export class IntegrationCredentialAbuseGuardService {
   async reset(userId: number): Promise<void> {
     await this.lockoutRepository.update({ userId }, { failedAttempts: 0, lockedUntil: null });
   }
+}
+
+/**
+ * Reads the affected-row count of a raw MySQL write.
+ * @param {unknown} result - The driver's result (a `ResultSetHeader`).
+ * @returns {number} The affected rows, `0` when absent.
+ */
+function affectedRows(result: unknown): number {
+  const count = typeof result === 'object' && result !== null
+    ? (result as { affectedRows?: unknown }).affectedRows
+    : undefined;
+
+  return typeof count === 'number' ? count : 0;
 }

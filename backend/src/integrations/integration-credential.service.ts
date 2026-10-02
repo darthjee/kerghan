@@ -71,7 +71,9 @@ export class IntegrationCredentialService {
   }
 
   /**
-   * Fails with 423 while the user is in the failure cool-off.
+   * Fails with 423 while the user is in the failure cool-off. A cheap early
+   * check that keeps the spec'd order (before the cap and label checks); the
+   * atomic gate is the reservation in `validate`.
    * @param {number} userId - The caller's id.
    * @returns {Promise<void>} Resolves when not locked out.
    */
@@ -82,19 +84,26 @@ export class IntegrationCredentialService {
   }
 
   /**
-   * Validates the credential against GitHub. Counted failures register in
-   * the cool-off; a success resets it. Domain errors become HTTP errors.
+   * Validates the credential against GitHub. An attempt is atomically
+   * reserved in the cool-off first (423 when refused, so parallel requests
+   * can't exceed the limit); a counted failure keeps it, a success resets
+   * the cool-off, and anything else releases it. Domain errors become HTTP
+   * errors.
    * @param {number} userId - The caller's id.
    * @param {ParsedCredential} parsed - The strategy and the secret.
    * @returns {Promise<ValidatedCredential>} The validated credential.
    */
   async validate(userId: number, { strategy, secret }: ParsedCredential): Promise<ValidatedCredential> {
+    if (!(await this.abuseGuard.reserveAttempt(userId))) {
+      throw credentialLocked();
+    }
+
     let validated: ValidatedCredential;
 
     try {
       validated = await strategy.validate(secret);
     } catch (error) {
-      throw await this.mapFailure(userId, error);
+      throw await this.settleFailure(userId, error);
     }
 
     await this.abuseGuard.reset(userId);
@@ -125,20 +134,20 @@ export class IntegrationCredentialService {
   }
 
   /**
-   * Registers a counted failure and maps a domain error to HTTP; anything else passes through.
+   * Settles the reservation of a failed validation (kept for a counted
+   * failure, released otherwise) and maps a domain error to HTTP; anything
+   * else passes through.
    * @param {number} userId - The caller's id.
    * @param {unknown} error - The caught value.
    * @returns {Promise<unknown>} The error to throw.
    */
-  private async mapFailure(userId: number, error: unknown): Promise<unknown> {
-    if (!(error instanceof IntegrationCredentialError)) {
-      return error;
+  private async settleFailure(userId: number, error: unknown): Promise<unknown> {
+    const isDomainError = error instanceof IntegrationCredentialError;
+
+    if (!isDomainError || !error.countsTowardCoolOff) {
+      await this.abuseGuard.releaseAttempt(userId);
     }
 
-    if (error.countsTowardCoolOff) {
-      await this.abuseGuard.registerFailure(userId);
-    }
-
-    return httpErrorFor(error);
+    return isDomainError ? httpErrorFor(error) : error;
   }
 }

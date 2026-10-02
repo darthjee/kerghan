@@ -1,8 +1,11 @@
-import { FindOperator } from 'typeorm';
 import {
+  ENSURE_LOCKOUT_ROW_SQL,
   IntegrationCredentialAbuseGuardService,
-  REGISTER_FAILURE_SQL,
+  RELEASE_ATTEMPT_SQL,
+  RESERVE_ATTEMPT_SQL,
 } from '../integration-credential-abuse-guard.service.js';
+
+const NOW = new Date('2026-10-01T12:00:00.000Z');
 
 interface FakeRepo {
   findOne: jest.Mock;
@@ -14,7 +17,7 @@ interface FakeRepo {
 function fakeRepo(): FakeRepo {
   return {
     findOne: jest.fn().mockResolvedValue(null),
-    query: jest.fn().mockResolvedValue(undefined),
+    query: jest.fn().mockResolvedValue({ affectedRows: 1 }),
     update: jest.fn().mockResolvedValue({ affected: 1 }),
     save: jest.fn(),
   };
@@ -59,74 +62,80 @@ describe('IntegrationCredentialAbuseGuardService', () => {
     });
   });
 
-  describe('registerFailure', () => {
-    it('increments atomically through the upsert, never findOne → save', async () => {
-      repo.findOne.mockResolvedValue({ userId: 7, failedAttempts: 1, lockedUntil: null });
+  describe('reserveAttempt', () => {
+    it('ensures the row, then reserves with one conditional UPDATE — never findOne → save', async () => {
+      expect(await build(repo).reserveAttempt(7, NOW)).toBe(true);
 
-      await build(repo).registerFailure(7);
-
-      expect(repo.query).toHaveBeenCalledWith(REGISTER_FAILURE_SQL, [7]);
-      expect(REGISTER_FAILURE_SQL).toContain('ON DUPLICATE KEY UPDATE `failed_attempts` = `failed_attempts` + 1');
-      expect(repo.query.mock.invocationCallOrder[0]).toBeLessThan(repo.findOne.mock.invocationCallOrder[0]);
+      expect(repo.query).toHaveBeenNthCalledWith(1, ENSURE_LOCKOUT_ROW_SQL, [7]);
+      expect(repo.query).toHaveBeenNthCalledWith(2, RESERVE_ATTEMPT_SQL, [
+        5,
+        new Date('2026-10-01T12:15:00.000Z'),
+        7,
+        NOW,
+      ]);
+      expect(repo.findOne).not.toHaveBeenCalled();
       expect(repo.save).not.toHaveBeenCalled();
       expect(repo.update).not.toHaveBeenCalled();
     });
 
-    it('trips the lock with a conditional update at the default max (5) for the default 15 minutes', async () => {
-      repo.findOne.mockResolvedValue({ userId: 7, failedAttempts: 5, lockedUntil: null });
-
-      await build(repo).registerFailure(7);
-
-      const [criteria, values] = repo.update.mock.calls[0];
-      expect(criteria.userId).toBe(7);
-      expect(criteria.failedAttempts).toBeInstanceOf(FindOperator);
-      expect((criteria.failedAttempts as FindOperator<number>).type).toBe('moreThanOrEqual');
-      expect((criteria.failedAttempts as FindOperator<number>).value).toBe(5);
-      expect(values).toEqual({ lockedUntil: new Date('2026-10-01T12:15:00.000Z') });
+    it('counts the attempt and trips the lock in the same statement, only while unlocked', () => {
+      expect(ENSURE_LOCKOUT_ROW_SQL).toContain('ON DUPLICATE KEY UPDATE `user_id` = `user_id`');
+      expect(RESERVE_ATTEMPT_SQL).toContain(
+        'SET `locked_until` = IF(`failed_attempts` + 1 >= ?, ?, NULL), `failed_attempts` = `failed_attempts` + 1',
+      );
+      expect(RESERVE_ATTEMPT_SQL).toContain('WHERE `user_id` = ? AND (`locked_until` IS NULL OR `locked_until` <= ?)');
     });
 
-    it('does not lock below the max', async () => {
-      repo.findOne.mockResolvedValue({ userId: 7, failedAttempts: 4, lockedUntil: null });
+    it('is refused when no row was affected (locked out)', async () => {
+      repo.query.mockResolvedValueOnce({ affectedRows: 0 }).mockResolvedValueOnce({ affectedRows: 0 });
 
-      await build(repo).registerFailure(7);
+      expect(await build(repo).reserveAttempt(7, NOW)).toBe(false);
+    });
 
-      expect(repo.update).not.toHaveBeenCalled();
+    it.each([
+      ['no result', undefined],
+      ['a result without a count', {}],
+      ['a non-numeric count', { affectedRows: '1' }],
+    ])('is refused for %s', async (_label, result) => {
+      repo.query.mockResolvedValueOnce({ affectedRows: 1 }).mockResolvedValueOnce(result);
+
+      expect(await build(repo).reserveAttempt(7, NOW)).toBe(false);
     });
 
     it('uses the configured max and lock duration', async () => {
-      repo.findOne.mockResolvedValue({ userId: 7, failedAttempts: 2, lockedUntil: null });
-
       await build(repo, {
         KERGHAN_INTEGRATIONS_CREDENTIAL_MAX_ATTEMPTS: '2',
         KERGHAN_INTEGRATIONS_CREDENTIAL_LOCK_MS: '1000',
-      }).registerFailure(7);
+      }).reserveAttempt(7, NOW);
 
-      expect(repo.update.mock.calls[0][1]).toEqual({ lockedUntil: new Date('2026-10-01T12:00:01.000Z') });
+      expect(repo.query.mock.calls[1][1]).toEqual([2, new Date('2026-10-01T12:00:01.000Z'), 7, NOW]);
     });
 
     it('falls back to the defaults for malformed config', async () => {
-      repo.findOne.mockResolvedValue({ userId: 7, failedAttempts: 4, lockedUntil: null });
-
       await build(repo, {
         KERGHAN_INTEGRATIONS_CREDENTIAL_MAX_ATTEMPTS: 'many',
         KERGHAN_INTEGRATIONS_CREDENTIAL_LOCK_MS: 'long',
-      }).registerFailure(7);
+      }).reserveAttempt(7, NOW);
 
-      expect(repo.update).not.toHaveBeenCalled();
+      expect(repo.query.mock.calls[1][1]).toEqual([5, new Date('2026-10-01T12:15:00.000Z'), 7, NOW]);
     });
 
-    it('re-locks on the next failure after an expired lock (computeLockoutState semantics)', async () => {
-      repo.findOne.mockResolvedValue({ userId: 7, failedAttempts: 6, lockedUntil: new Date('2026-10-01T11:00:00Z') });
+    it('defaults now to the current time', async () => {
+      await build(repo).reserveAttempt(7);
 
-      await build(repo).registerFailure(7);
-
-      expect(repo.update).toHaveBeenCalled();
+      expect(repo.query.mock.calls[1][1][3]).toEqual(NOW);
     });
+  });
 
-    it('does nothing more when the row vanished after the upsert', async () => {
-      await build(repo).registerFailure(7);
+  describe('releaseAttempt', () => {
+    it('gives the attempt back and lifts the lock in one atomic UPDATE', async () => {
+      await build(repo).releaseAttempt(7);
 
-      expect(repo.update).not.toHaveBeenCalled();
+      expect(repo.query).toHaveBeenCalledWith(RELEASE_ATTEMPT_SQL, [7]);
+      expect(RELEASE_ATTEMPT_SQL).toContain(
+        'SET `failed_attempts` = GREATEST(`failed_attempts` - 1, 0), `locked_until` = NULL',
+      );
+      expect(repo.findOne).not.toHaveBeenCalled();
     });
   });
 

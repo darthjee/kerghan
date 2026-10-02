@@ -108,8 +108,9 @@ export class InMemoryTestCooldown {
 
 /**
  * In-memory double of `IntegrationCredentialAbuseGuardService` with the
- * same atomic semantics: the increment runs synchronously, so concurrent
- * failures all count.
+ * same atomic semantics: a reservation is checked and counted synchronously
+ * (as the conditional UPDATE does), so a burst of parallel attempts gets at
+ * most `maxAttempts` reservations.
  */
 export class InMemoryCredentialAbuseGuard {
   readonly state = new Map<number, { failedAttempts: number; lockedUntil: Date | null }>();
@@ -127,15 +128,27 @@ export class InMemoryCredentialAbuseGuard {
     return lockedUntil !== null && lockedUntil > new Date();
   }
 
-  async registerFailure(userId: number): Promise<void> {
+  async reserveAttempt(userId: number, now: Date = new Date()): Promise<boolean> {
     const entry = this.state.get(userId) ?? { failedAttempts: 0, lockedUntil: null };
-    entry.failedAttempts += 1;
+    this.state.set(userId, entry);
 
-    if (entry.failedAttempts >= this.maxAttempts) {
-      entry.lockedUntil = new Date(Date.now() + this.lockMs);
+    if (entry.lockedUntil !== null && entry.lockedUntil > now) {
+      return false;
     }
 
-    this.state.set(userId, entry);
+    entry.lockedUntil = entry.failedAttempts + 1 >= this.maxAttempts ? new Date(now.getTime() + this.lockMs) : null;
+    entry.failedAttempts += 1;
+
+    return true;
+  }
+
+  async releaseAttempt(userId: number): Promise<void> {
+    const entry = this.state.get(userId);
+
+    if (entry) {
+      entry.failedAttempts = Math.max(entry.failedAttempts - 1, 0);
+      entry.lockedUntil = null;
+    }
   }
 
   async reset(userId: number): Promise<void> {

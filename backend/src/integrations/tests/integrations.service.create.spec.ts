@@ -226,7 +226,45 @@ describe('IntegrationsService (create and replace credential)', () => {
       harness.github.respondWith(new Error('boom'));
 
       await expect(harness.service.create(USER, envelope())).rejects.toThrow('boom');
-      expect(harness.guard.state.has(USER)).toBe(false);
+      expect(harness.guard.state.get(USER)?.failedAttempts ?? 0).toBe(0);
+    });
+
+    it('makes at most max-attempts GitHub calls for a burst of parallel bad creates', async () => {
+      harness.github.respondByDefault(githubUserResponse({ status: 401, login: null }));
+
+      const results = await Promise.all(
+        Array.from({ length: 12 }, (_value, index) => httpError(
+          harness.service.create(USER, envelope({ label: `Burst ${index}` })),
+        )),
+      );
+
+      expect(harness.github.callCount).toBe(5);
+      expect(results.filter(({ status }) => status === 422)).toHaveLength(5);
+      expect(results.filter(({ status }) => status === 423)).toHaveLength(7);
+      results.filter(({ status }) => status === 423).forEach(({ body }) => {
+        expect(body.code).toBe('INTEGRATION_CREDENTIAL_LOCKED');
+      });
+      expect(harness.guard.state.get(USER)?.failedAttempts).toBe(5);
+      expect(await harness.guard.isLockedOut(USER)).toBe(true);
+      expect(harness.repo.rows).toHaveLength(0);
+    });
+
+    it('gives the reservation of a transient failure back, so it never trips the cool-off', async () => {
+      harness.guard.state.set(USER, { failedAttempts: 4, lockedUntil: null });
+      harness.github.respondWith(githubUserResponse({ status: 500, login: null }));
+
+      expect((await httpError(harness.service.create(USER, envelope()))).status).toBe(502);
+      expect(harness.guard.state.get(USER)).toEqual({ failedAttempts: 4, lockedUntil: null });
+      expect(await harness.service.create(USER, envelope())).toMatchObject({ status: 'active' });
+    });
+
+    it('allows one more attempt after an expired cool-off and re-locks on its failure', async () => {
+      harness.guard.state.set(USER, { failedAttempts: 5, lockedUntil: new Date(Date.now() - 1000) });
+      harness.github.respondByDefault(githubUserResponse({ status: 401, login: null }));
+
+      expect((await httpError(harness.service.create(USER, envelope()))).status).toBe(422);
+      expect((await httpError(harness.service.create(USER, envelope()))).status).toBe(423);
+      expect(harness.github.callCount).toBe(1);
     });
 
     it.each([
