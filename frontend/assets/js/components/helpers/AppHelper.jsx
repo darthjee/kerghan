@@ -6,6 +6,7 @@ import ResetPasswordLanding from '../resources/accounts/pages/ResetPasswordLandi
 import AdminUsers from '../resources/admin/pages/AdminUsers.jsx';
 import AdminUserEdit from '../resources/admin/pages/AdminUserEdit.jsx';
 import AuthorizationRequests from '../resources/accounts/pages/AuthorizationRequests.jsx';
+import Integrations from '../resources/accounts/pages/Integrations.jsx';
 import MyAccount from '../resources/accounts/pages/MyAccount.jsx';
 
 const PAGES = new Map([
@@ -15,6 +16,7 @@ const PAGES = new Map([
   ['admin-users', <AdminUsers />],
   ['admin-user-edit', <AdminUserEdit />],
   ['authorization-requests', <AuthorizationRequests />],
+  ['integrations', <Integrations />],
   ['my-account', <MyAccount />],
   ['home', <Home />],
 ]);
