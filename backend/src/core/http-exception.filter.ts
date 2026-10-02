@@ -31,6 +31,7 @@ export interface ErrorResponseBody {
 interface HttpExceptionResponse {
   code?: unknown;
   message?: unknown;
+  retryAfterSeconds?: unknown;
 }
 
 /**
@@ -61,6 +62,33 @@ function clientErrorStatusOf(exception: unknown): number | undefined {
 }
 
 /**
+ * Returns the `Retry-After` delay (whole seconds, rounded up) a throw site
+ * attached to an `HttpException` through a `retryAfterSeconds` member of its
+ * response object, if any.
+ * @param {unknown} exception - The thrown value.
+ * @returns {number | undefined} The delay in seconds, or `undefined` when none was attached.
+ */
+export function retryAfterSecondsOf(exception: unknown): number | undefined {
+  if (!(exception instanceof HttpException)) {
+    return undefined;
+  }
+
+  const raw = exception.getResponse();
+
+  if (typeof raw !== 'object' || raw === null) {
+    return undefined;
+  }
+
+  const { retryAfterSeconds } = raw as HttpExceptionResponse;
+
+  if (typeof retryAfterSeconds !== 'number' || !Number.isFinite(retryAfterSeconds) || retryAfterSeconds < 0) {
+    return undefined;
+  }
+
+  return Math.ceil(retryAfterSeconds);
+}
+
+/**
  * Global catch-all exception filter (registered via `APP_FILTER`) that
  * reshapes every error into the standard body
  * `{ error: { code, message, details? }, statusCode, timestamp }`.
@@ -76,6 +104,9 @@ function clientErrorStatusOf(exception: unknown): number | undefined {
  *   anonymous clients cannot flood the error log with them.
  * - Any other error answers `500`/`INTERNAL_ERROR` with a generic message;
  *   the real error and stack are logged, never sent to the client.
+ * - An `HttpException` whose response object carries a numeric
+ *   `retryAfterSeconds` also gets a `Retry-After` header (integer seconds,
+ *   rounded up); the member never reaches the body.
  */
 @Catch()
 export class HttpExceptionFilter implements ExceptionFilter {
@@ -98,6 +129,12 @@ export class HttpExceptionFilter implements ExceptionFilter {
     const response = host.switchToHttp().getResponse<Response>();
     const { status, error } = this.resolve(exception);
     const body: ErrorResponseBody = { error, statusCode: status, timestamp: new Date().toISOString() };
+    const retryAfter = retryAfterSecondsOf(exception);
+
+    if (retryAfter !== undefined) {
+      response.setHeader('Retry-After', String(retryAfter));
+    }
+
     response.status(status).json(body);
   }
 

@@ -8,7 +8,8 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { ErrorCodes } from '../error-codes.js';
-import { HttpExceptionFilter } from '../http-exception.filter.js';
+import { HttpExceptionFilter, retryAfterSecondsOf } from '../http-exception.filter.js';
+import { LockedException } from '../locked.exception.js';
 import { LoggerService } from '../logger.service.js';
 
 const ISO_TIMESTAMP = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
@@ -16,10 +17,11 @@ const ISO_TIMESTAMP = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
 interface FakeResponse {
   status: jest.Mock;
   json: jest.Mock;
+  setHeader: jest.Mock;
 }
 
 function fakeResponse(): FakeResponse {
-  const response = { status: jest.fn(), json: jest.fn() };
+  const response = { status: jest.fn(), json: jest.fn(), setHeader: jest.fn() };
   response.status.mockReturnValue(response);
   return response;
 }
@@ -107,9 +109,12 @@ describe('HttpExceptionFilter', () => {
       [new ForbiddenException('x'), 403, ErrorCodes.FORBIDDEN],
       [new NotFoundException('x'), 404, ErrorCodes.NOT_FOUND],
       [new ConflictException('x'), 409, ErrorCodes.CONFLICT],
+      [new HttpException('x', 422), 422, ErrorCodes.UNPROCESSABLE_ENTITY],
       [new HttpException('x', 423), 423, ErrorCodes.LOCKED],
       [new HttpException('x', 429), 429, ErrorCodes.TOO_MANY_REQUESTS],
       [new HttpException('x', 500), 500, ErrorCodes.INTERNAL_ERROR],
+      [new HttpException('x', 502), 502, ErrorCodes.BAD_GATEWAY],
+      [new HttpException('x', 503), 503, ErrorCodes.SERVICE_UNAVAILABLE],
     ])('maps %p to status %i and code %s', (exception, status, code) => {
       const body = catchAndGetBody(exception);
 
@@ -212,6 +217,64 @@ describe('HttpExceptionFilter', () => {
       expect(body.error).toEqual({ code: ErrorCodes.INTERNAL_ERROR, message: 'Internal server error' });
       expect(logger.error).toHaveBeenCalled();
       expect(logger.debug).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('with a LockedException', () => {
+    it('uses the LOCKED category code when no specific code is given', () => {
+      const body = catchAndGetBody(new LockedException('locked out'));
+
+      expect(response.status).toHaveBeenCalledWith(423);
+      expect(body.error).toEqual({ code: ErrorCodes.LOCKED, message: 'locked out' });
+    });
+
+    it('uses the specific code when one is given', () => {
+      const body = catchAndGetBody(new LockedException('locked out', ErrorCodes.INTEGRATION_CREDENTIAL_LOCKED));
+
+      expect(response.status).toHaveBeenCalledWith(423);
+      expect(body.error).toEqual({ code: ErrorCodes.INTEGRATION_CREDENTIAL_LOCKED, message: 'locked out' });
+    });
+  });
+
+  describe('Retry-After header', () => {
+    it('sets the header (rounded up) and keeps retryAfterSeconds out of the body', () => {
+      const body = catchAndGetBody(
+        new HttpException(
+          { code: ErrorCodes.INTEGRATION_TEST_COOLDOWN, message: 'wait', retryAfterSeconds: 12.2 },
+          429,
+        ),
+      );
+
+      expect(response.setHeader).toHaveBeenCalledWith('Retry-After', '13');
+      expect(response.status).toHaveBeenCalledWith(429);
+      expect(body.error).toEqual({ code: ErrorCodes.INTEGRATION_TEST_COOLDOWN, message: 'wait' });
+      expect(JSON.stringify(body)).not.toContain('retryAfter');
+    });
+
+    it('does not set the header when no delay is attached', () => {
+      catchAndGetBody(new HttpException({ code: ErrorCodes.GITHUB_RATE_LIMITED, message: 'slow down' }, 503));
+
+      expect(response.setHeader).not.toHaveBeenCalled();
+    });
+
+    it('does not set the header for a string response or a non-HTTP error', () => {
+      catchAndGetBody(new HttpException('x', 429));
+      catchAndGetBody(new Error('boom'));
+
+      expect(response.setHeader).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      ['a string', '10'],
+      ['a negative number', -1],
+      ['NaN', Number.NaN],
+      ['Infinity', Number.POSITIVE_INFINITY],
+    ])('ignores %s as retryAfterSeconds', (_label, retryAfterSeconds) => {
+      expect(retryAfterSecondsOf(new HttpException({ message: 'x', retryAfterSeconds }, 429))).toBeUndefined();
+    });
+
+    it('accepts zero', () => {
+      expect(retryAfterSecondsOf(new HttpException({ message: 'x', retryAfterSeconds: 0 }, 429))).toBe(0);
     });
   });
 });
