@@ -16,7 +16,10 @@ import { IntegrationsController } from './integrations.controller.js';
 import { IntegrationsService } from './integrations.service.js';
 import { IntegrationTypeRegistry } from './types/integration-type-registry.js';
 import { INTEGRATION_TYPE_STRATEGIES, IntegrationTypeStrategy } from './types/integration-type-strategy.js';
+import { OauthAppCodeExchangeService } from './types/oauth-app/oauth-app-code-exchange.service.js';
 import { buildOauthAppConfig, OAUTH_APP_CONFIG } from './types/oauth-app/oauth-app-config.js';
+import { OauthAppRevocationService } from './types/oauth-app/oauth-app-revocation.service.js';
+import { OauthAppStrategy } from './types/oauth-app/oauth-app.strategy.js';
 import { OauthStateService } from './types/oauth-app/oauth-state.service.js';
 import { PatStrategy } from './types/pat/pat.strategy.js';
 
@@ -49,13 +52,16 @@ import { PatStrategy } from './types/pat/pat.strategy.js';
     },
     {
       provide: INTEGRATION_TYPE_STRATEGIES,
-      inject: [PatStrategy],
-      useFactory: (pat: PatStrategy): IntegrationTypeStrategy[] => [pat],
+      inject: [PatStrategy, OauthAppStrategy],
+      useFactory: (pat: PatStrategy, oauthApp: OauthAppStrategy): IntegrationTypeStrategy[] => [pat, oauthApp],
     },
     IntegrationsEncryptionService,
     GithubClientService,
     IntegrationTypeRegistry,
     PatStrategy,
+    OauthAppRevocationService,
+    OauthAppCodeExchangeService,
+    OauthAppStrategy,
     IntegrationCredentialAbuseGuardService,
     IntegrationTestCooldownService,
     IntegrationStoreService,
