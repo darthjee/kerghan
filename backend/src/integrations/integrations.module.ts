@@ -15,6 +15,7 @@ import { IntegrationsController } from './integrations.controller.js';
 import { IntegrationsService } from './integrations.service.js';
 import { IntegrationTypeRegistry } from './types/integration-type-registry.js';
 import { INTEGRATION_TYPE_STRATEGIES, IntegrationTypeStrategy } from './types/integration-type-strategy.js';
+import { buildOauthAppConfig, OAUTH_APP_CONFIG } from './types/oauth-app/oauth-app-config.js';
 import { PatStrategy } from './types/pat/pat.strategy.js';
 
 /**
@@ -26,7 +27,8 @@ import { PatStrategy } from './types/pat/pat.strategy.js';
  * `auth_users`), declared in its migration only. Exports nothing yet.
  *
  * `KERGHAN_INTEGRATIONS_KEY` is validated once, in the `INTEGRATIONS_KEY`
- * factory, so a missing or malformed key fails Nest's boot. Strategies are
+ * factory, so a missing or malformed key fails Nest's boot. The optional
+ * OAuth App config is validated once, in the `OAUTH_APP_CONFIG` factory. Strategies are
  * registered, in registry order, in `INTEGRATION_TYPE_STRATEGIES`.
  */
 @Module({
@@ -37,6 +39,11 @@ import { PatStrategy } from './types/pat/pat.strategy.js';
       provide: INTEGRATIONS_KEY,
       inject: [ConfigService],
       useFactory: buildIntegrationsKey,
+    },
+    {
+      provide: OAUTH_APP_CONFIG,
+      inject: [ConfigService],
+      useFactory: buildOauthAppConfig,
     },
     {
       provide: INTEGRATION_TYPE_STRATEGIES,
