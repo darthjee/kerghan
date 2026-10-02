@@ -18,7 +18,10 @@ import { IntegrationTypeRegistry } from './types/integration-type-registry.js';
 import { INTEGRATION_TYPE_STRATEGIES, IntegrationTypeStrategy } from './types/integration-type-strategy.js';
 import { OauthAppCodeExchangeService } from './types/oauth-app/oauth-app-code-exchange.service.js';
 import { buildOauthAppConfig, OAUTH_APP_CONFIG } from './types/oauth-app/oauth-app-config.js';
+import { OauthAppEnabledGuard } from './types/oauth-app/oauth-app-enabled.guard.js';
+import { OauthAppFlowService } from './types/oauth-app/oauth-app-flow.service.js';
 import { OauthAppRevocationService } from './types/oauth-app/oauth-app-revocation.service.js';
+import { OauthAppController } from './types/oauth-app/oauth-app.controller.js';
 import { OauthAppStrategy } from './types/oauth-app/oauth-app.strategy.js';
 import { OauthStateService } from './types/oauth-app/oauth-state.service.js';
 import { PatStrategy } from './types/pat/pat.strategy.js';
@@ -38,7 +41,7 @@ import { PatStrategy } from './types/pat/pat.strategy.js';
  */
 @Module({
   imports: [TypeOrmModule.forFeature([Integration, IntegrationCredentialLockout, IntegrationOauthState])],
-  controllers: [IntegrationsController],
+  controllers: [OauthAppController, IntegrationsController],
   providers: [
     {
       provide: INTEGRATIONS_KEY,
@@ -69,6 +72,8 @@ import { PatStrategy } from './types/pat/pat.strategy.js';
     IntegrationConnectionTestService,
     IntegrationsService,
     OauthStateService,
+    OauthAppEnabledGuard,
+    OauthAppFlowService,
   ],
 })
 // NestJS module classes are intentionally empty; all behavior lives in @Module().

@@ -36,6 +36,8 @@ export interface FakeLogger {
 
 export interface IntegrationsHarness {
   service: IntegrationsService;
+  store: IntegrationStoreService;
+  credentials: IntegrationCredentialService;
   repo: InMemoryIntegrationRepo;
   github: FakeGithubClient;
   guard: InMemoryCredentialAbuseGuard;
@@ -90,5 +92,5 @@ export function buildIntegrationsHarness(options: HarnessOptions = {}): Integrat
     config as unknown as ConfigService,
   );
 
-  return { service, repo, github, guard, cooldown, encryption, logger };
+  return { service, store, credentials, repo, github, guard, cooldown, encryption, logger };
 }
