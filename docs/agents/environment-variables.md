@@ -24,6 +24,11 @@ running `kerghan_prod_app` locally to sanity-check the production image).
 | `KERGHAN_AUTHORIZATION_REQUEST_AUTHORIZE_LOCK_MS` | **Consumed**, optional | Cool-off duration (milliseconds) once the max-attempts threshold above is reached. Defaults to `300000` (5 minutes). | `backend/src/auth/authorization-request-abuse-guard.service.ts` |
 | `KERGHAN_ACCOUNT_EDIT_MAX_ATTEMPTS` | **Consumed**, optional | Consecutive failed `PATCH /auth/account.json` attempts (wrong current password, duplicate username/email), per user, that trip the cool-off lockout. Defaults to `5`. | `backend/src/auth/account-edit-abuse-guard.service.ts` |
 | `KERGHAN_ACCOUNT_EDIT_LOCK_MS` | **Consumed**, optional | Cool-off duration (milliseconds) once the max-attempts threshold above is reached. Defaults to `300000` (5 minutes). | `backend/src/auth/account-edit-abuse-guard.service.ts` |
+| `KERGHAN_INTEGRATIONS_KEY` | **Consumed**, **required** | AES-256-GCM key that encrypts every stored integration credential (see `docs/agents/specs/integrations/security.md`). Base64 of exactly 32 bytes, read once at boot. Boot fails, naming the variable but never the value, when it is missing, blank, not base64, the wrong length, equal to `KERGHAN_SECRET_KEY`, or equal to the public dev placeholder while `NODE_ENV=production`. See "Setting `KERGHAN_INTEGRATIONS_KEY`" below. | `backend/src/integrations/integrations-key.ts` |
+| `KERGHAN_INTEGRATIONS_MAX_PER_USER` | **Consumed**, optional | Cap on how many integrations a single user may hold; creating one past it answers `409`. Defaults to `20`. | `backend/src/integrations/integrations.service.ts` |
+| `KERGHAN_INTEGRATIONS_CREDENTIAL_MAX_ATTEMPTS` | **Consumed**, optional | Consecutive counted credential-validation failures (create / replace credential), per user, that trip the cool-off lockout (`423`). Defaults to `5`. | `backend/src/integrations/integration-credential-abuse-guard.service.ts` |
+| `KERGHAN_INTEGRATIONS_CREDENTIAL_LOCK_MS` | **Consumed**, optional | Cool-off duration (milliseconds) once the max-attempts threshold above is reached. Defaults to `900000` (15 minutes). | `backend/src/integrations/integration-credential-abuse-guard.service.ts` |
+| `KERGHAN_INTEGRATIONS_TEST_COOLDOWN_MS` | **Consumed**, optional | Minimum interval (milliseconds) between two tests of the same integration; an earlier test answers `429` with `Retry-After`. Defaults to `30000` (30 seconds). | `backend/src/integrations/integration-test-cooldown.service.ts` |
 | `NODE_ENV` | **Consumed**, set to `production` in production | Read only by the CORS resolver: when exactly `production`, a `*` entry in `KERGHAN_ALLOWED_ORIGINS` fails boot. The guard fails open — if it is unset or mistyped (`prod`), a `*` is accepted and reflects any origin with credentials — so production deployments must set `NODE_ENV=production`. Nothing else depends on it — the access-token cookie is always `Secure`/`httpOnly`/`SameSite=Strict` regardless of environment. | `backend/src/core/cors-config.ts` |
 | `PORT` | **Consumed**, optional | Port the Nest HTTP server listens on (defaults to `8080`). Render injects its own `PORT` automatically — only set this explicitly for other hosts. | `backend/src/main.ts` |
 | `KERGHAN_MYSQL_HOST` | **Consumed** | Production MySQL connection. | `backend/src/database/data-source.ts`, `backend/src/app.module.ts` |
@@ -48,7 +53,27 @@ running `kerghan_prod_app` locally to sanity-check the production image).
 **Device-authorization tuning — undocumented-but-defaulted in dev.** None of the six
 `KERGHAN_AUTHORIZATION_REQUEST_*` variables above (TTL plus the five rate-limit/cap/cool-off keys)
 are set in `.env.dev.sample` — local dev runs entirely on their code-level defaults (see each
-row above). Set them explicitly only if a deployment needs different tuning.
+row above). Set them explicitly only if a deployment needs different tuning. The same applies to
+the four numeric `KERGHAN_INTEGRATIONS_*` tuning variables (`MAX_PER_USER`,
+`CREDENTIAL_MAX_ATTEMPTS`, `CREDENTIAL_LOCK_MS`, `TEST_COOLDOWN_MS`); only
+`KERGHAN_INTEGRATIONS_KEY` is set in the sample, because it has no default.
+
+### Setting `KERGHAN_INTEGRATIONS_KEY`
+
+`KERGHAN_INTEGRATIONS_KEY` has no default, so the backend refuses to boot without a valid one.
+
+- **Set it on the backend host (Render) before deploying the integrations module (#300).**
+  Otherwise the new release fails to boot.
+- Generate it with `openssl rand -base64 32`, which gives the base64 of exactly 32 random bytes.
+- It must differ from `KERGHAN_SECRET_KEY`. Boot fails when the two are equal.
+- The placeholder in `.env.dev.sample` (`a2VyZ2hhbi1kZXYtaW50ZWdyYXRpb25zLWtleS0zMmI=`) is public.
+  Boot refuses it when `NODE_ENV=production`, so production must also set
+  `NODE_ENV=production` for that guard to apply.
+- Treat it as permanent. If the key is lost or changed, every stored credential becomes
+  `undecryptable` and each user has to replace it. Key rotation (previous keys kept for
+  decryption) is not supported yet; it is tracked in #305.
+- Existing local `.env` files are not regenerated (`make` only copies the sample when `.env` is
+  missing). Add the `KERGHAN_INTEGRATIONS_KEY=...` line from `.env.dev.sample` by hand.
 
 ### Rotating `KERGHAN_SECRET_KEY`
 
@@ -84,9 +109,11 @@ Side effects (both variants):
 - Refresh tokens are random values stored as SHA-256 hashes and do not depend on the key, so
   they are unaffected.
 
-**GitHub credentials — deliberately none.** Kerghan reads only public GitHub REST API data,
-unauthenticated (see `docs/agents/product.md`). There is no PAT/OAuth/App var to set for this,
-now or in production — don't add one without an explicit product decision.
+**GitHub credentials — integrations only.** Issue fetching still reads public GitHub REST API
+data unauthenticated (see `docs/agents/product.md`). User-supplied GitHub credentials are stored
+only as integrations (`docs/agents/specs/integrations/`), encrypted with
+`KERGHAN_INTEGRATIONS_KEY`. There is no server-wide PAT/OAuth/App variable to set; don't add one
+without an explicit product decision.
 
 ## 2. Proxy (production)
 
