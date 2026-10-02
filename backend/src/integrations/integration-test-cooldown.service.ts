@@ -67,6 +67,20 @@ export class IntegrationTestCooldownService {
   }
 
   /**
+   * When an integration last tested at `lastTestedAt` may be tested again:
+   * `lastTestedAt` plus the cooldown window. It may lie in the past.
+   * @param {Date | null} lastTestedAt - The last test time, or `null` if never tested.
+   * @returns {Date | null} The end of the cooldown window, or `null` when never tested.
+   */
+  nextTestAt(lastTestedAt: Date | null): Date | null {
+    if (lastTestedAt === null) {
+      return null;
+    }
+
+    return new Date(new Date(lastTestedAt).getTime() + this.cooldownMs);
+  }
+
+  /**
    * Seconds left in the cooldown of a row that couldn't be claimed.
    * @param {string} uuid - The integration's uuid.
    * @param {number} userId - The caller's id.

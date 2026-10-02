@@ -70,10 +70,12 @@ describe('IntegrationsService (create and replace credential)', () => {
         metadata: { tokenKind: 'classic', scopes: ['read:org', 'repo'], permissionsVerified: true },
         expiresAt: null,
         lastTestedAt: expect.any(String),
+        nextTestAt: expect.any(String),
         lastTestResult: 'success',
         createdAt: expect.any(String),
         updatedAt: expect.any(String),
       });
+      expect(Date.parse(response.nextTestAt as string) - Date.parse(response.lastTestedAt as string)).toBe(30000);
       expectNoCanary(response);
 
       const [row] = harness.repo.rows;

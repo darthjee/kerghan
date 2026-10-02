@@ -83,6 +83,7 @@ export function buildIntegrationsHarness(options: HarnessOptions = {}): Integrat
     store,
     credentials,
     connectionTest,
+    cooldown as unknown as IntegrationTestCooldownService,
     encryption,
     registry,
     logger as unknown as LoggerService,

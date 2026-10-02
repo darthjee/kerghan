@@ -1,6 +1,6 @@
 import { expectErrorBody } from '../../auth/tests/support/error-body.js';
 import { GithubClientError } from '../github-client.service.js';
-import { call, createIntegration, expectSafeBody, useIntegrationsTestApp } from './support/build-integrations-test-app.js';
+import { call, createIntegration, expectSafeBody, TEST_COOLDOWN_MS, useIntegrationsTestApp } from './support/build-integrations-test-app.js';
 import { githubUserResponse } from './support/fake-github-client.js';
 
 describe('IntegrationsController test connection and delete (e2e)', () => {
@@ -22,7 +22,17 @@ describe('IntegrationsController test connection and delete (e2e)', () => {
       const response = await test().expect(200);
 
       expect(response.body).toMatchObject({ id, status: 'active', lastTestResult: 'success' });
+      expect(Date.parse(response.body.nextTestAt) - Date.parse(response.body.lastTestedAt)).toBe(TEST_COOLDOWN_MS);
       expectSafeBody(response.body);
+    });
+
+    it('moves nextTestAt from null before the first test to the end of the cooldown after it', async () => {
+      const before = await call(ctx.app, 'post', `/integrations/${id}/show.json`, ctx.owner).expect(200);
+      const response = await test().expect(200);
+
+      expect(before.body.nextTestAt).toBeNull();
+      expect(Date.parse(response.body.nextTestAt)).toBeGreaterThan(Date.now());
+      expect(Date.parse(response.body.nextTestAt) - Date.parse(response.body.lastTestedAt)).toBe(TEST_COOLDOWN_MS);
     });
 
     it('answers 200 invalid + bad_credentials when GitHub rejects it', async () => {
