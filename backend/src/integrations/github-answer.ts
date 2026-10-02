@@ -1,4 +1,5 @@
 import { GithubClientError, GithubClientService, GithubUserResponse, isUsableLogin } from './github-client.service.js';
+import type { GithubRateLimitFields } from './github-http.js';
 import type { Secret } from './secret.js';
 
 /**
@@ -64,12 +65,15 @@ export function classifyGithubUser(response: GithubUserResponse, now: number): G
   return { kind: 'unavailable' };
 }
 
+/** Any normalised GitHub answer: its status and its rate-limit headers. */
+export type GithubStatusAndRateLimit = GithubRateLimitFields & { status: number };
+
 /**
  * Whether an answer is a primary or secondary rate limit.
- * @param {GithubUserResponse} response - The normalised answer.
+ * @param {GithubStatusAndRateLimit} response - The normalised answer.
  * @returns {boolean} `true` for a 403/429 with `x-ratelimit-remaining: 0` or a `retry-after`.
  */
-function isRateLimited(response: GithubUserResponse): boolean {
+export function isRateLimited(response: GithubStatusAndRateLimit): boolean {
   return RATE_LIMIT_STATUSES.has(response.status)
     && (response.rateLimitRemaining === 0 || response.retryAfter !== null);
 }
@@ -77,11 +81,11 @@ function isRateLimited(response: GithubUserResponse): boolean {
 /**
  * Seconds until GitHub accepts calls again: `retry-after`, else
  * `x-ratelimit-reset` minus now, rounded up and never negative.
- * @param {GithubUserResponse} response - The normalised answer.
+ * @param {GithubRateLimitFields} response - The normalised answer.
  * @param {number} now - Current epoch milliseconds.
  * @returns {number | undefined} The delay, or `undefined` when GitHub gave none.
  */
-export function retryAfterSecondsFor(response: GithubUserResponse, now: number): number | undefined {
+export function retryAfterSecondsFor(response: GithubRateLimitFields, now: number): number | undefined {
   if (response.retryAfter !== null) {
     return Math.max(0, Math.ceil(response.retryAfter));
   }
