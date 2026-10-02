@@ -13,6 +13,7 @@ const MESSAGES = new Map([
   ['INTEGRATION_CREDENTIAL_INVALID', () => 'GitHub rejected this credential. Check it and try again.'],
   ['INTEGRATION_INSUFFICIENT_PERMISSIONS', () => 'This credential lacks the required permissions.'],
   ['INTEGRATION_TEST_COOLDOWN', (error) => cooldownMessage(error.retryAfter)],
+  ['INTEGRATION_REDIRECT_STATE_INVALID', () => 'This GitHub authorization link expired or was already used. Start again.'],
   ['GITHUB_UNAVAILABLE', () => 'GitHub is unavailable right now. Try again later.'],
   ['GITHUB_RATE_LIMITED', () => 'GitHub rate limit reached. Try again later.'],
   ['VALIDATION_FAILED', (error) => `Some fields are invalid: ${error.message}`],

@@ -107,6 +107,54 @@ describe('IntegrationsClient', () => {
     });
   });
 
+  describe('.startOauthApp', () => {
+    const authorizeUrl = 'https://github.com/login/oauth/authorize?client_id=x';
+
+    it('posts the label to start a create', async () => {
+      spyOn(ApiClient, 'postJson').and.resolveTo({ authorizeUrl });
+
+      const response = await IntegrationsClient.startOauthApp({ label: 'Work' });
+
+      expect(ApiClient.postJson).toHaveBeenCalledWith('/integrations/oauth_app/start.json', { label: 'Work' });
+      expect(response).toEqual({ authorizeUrl });
+    });
+
+    it('posts the integrationId to start a reconnect', async () => {
+      spyOn(ApiClient, 'postJson').and.resolveTo({ authorizeUrl });
+
+      await IntegrationsClient.startOauthApp({ integrationId: 'abc-123' });
+
+      expect(ApiClient.postJson).toHaveBeenCalledWith(
+        '/integrations/oauth_app/start.json', { integrationId: 'abc-123' },
+      );
+    });
+
+    it('resolves undefined when the session expired', async () => {
+      spyOn(ApiClient, 'postJson').and.resolveTo(undefined);
+
+      expect(await IntegrationsClient.startOauthApp({ label: 'Work' })).toBeUndefined();
+    });
+  });
+
+  describe('.completeOauthApp', () => {
+    it('posts the code and state to the callback path', async () => {
+      spyOn(ApiClient, 'postJson').and.resolveTo(integration);
+
+      const response = await IntegrationsClient.completeOauthApp({ code: 'code_canary', state: 'state_canary' });
+
+      expect(ApiClient.postJson).toHaveBeenCalledWith(
+        '/integrations/oauth_app/callback.json', { code: 'code_canary', state: 'state_canary' },
+      );
+      expect(response).toEqual(integration);
+    });
+
+    it('resolves undefined when the session expired', async () => {
+      spyOn(ApiClient, 'postJson').and.resolveTo(undefined);
+
+      expect(await IntegrationsClient.completeOauthApp({ code: 'c', state: 's' })).toBeUndefined();
+    });
+  });
+
   describe('error propagation', () => {
     const error = new ApiError(404, 'Not found', 'NOT_FOUND');
 
@@ -133,6 +181,18 @@ describe('IntegrationsClient', () => {
       spyOn(ApiClient, 'deleteJson').and.rejectWith(error);
 
       await expectAsync(IntegrationsClient.remove('abc-123')).toBeRejectedWith(error);
+    });
+
+    it('propagates ApiError from startOauthApp', async () => {
+      spyOn(ApiClient, 'postJson').and.rejectWith(error);
+
+      await expectAsync(IntegrationsClient.startOauthApp({ label: 'Work' })).toBeRejectedWith(error);
+    });
+
+    it('propagates ApiError from completeOauthApp', async () => {
+      spyOn(ApiClient, 'postJson').and.rejectWith(error);
+
+      await expectAsync(IntegrationsClient.completeOauthApp({ code: 'c', state: 's' })).toBeRejectedWith(error);
     });
 
     it('propagates ApiError from listMine', async () => {

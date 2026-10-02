@@ -96,6 +96,29 @@ const IntegrationsClient = {
   async remove(uuid) {
     return ApiClient.deleteJson(integrationPath(uuid), {});
   },
+
+  /**
+   * Start the OAuth App redirect flow, either creating a new integration or reconnecting
+   * (replacing the credential of) an existing `oauth_app` one.
+   *
+   * @param {{label: string}|{integrationId: string}} body - `{ label }` to create, or
+   *   `{ integrationId }` to reconnect an existing integration.
+   * @returns {Promise<{authorizeUrl: string}>} The GitHub authorize URL to navigate to.
+   */
+  async startOauthApp(body) {
+    return ApiClient.postJson('/integrations/oauth_app/start.json', body);
+  },
+
+  /**
+   * Complete the OAuth App redirect flow with the values GitHub sent back to the landing page.
+   *
+   * @param {{code: string, state: string}} values - The `code` and `state` from GitHub's
+   *   redirect; sent only in the request body.
+   * @returns {Promise<object>} The created or reconnected integration.
+   */
+  async completeOauthApp({ code, state }) {
+    return ApiClient.postJson('/integrations/oauth_app/callback.json', { code, state });
+  },
 };
 
 export default IntegrationsClient;

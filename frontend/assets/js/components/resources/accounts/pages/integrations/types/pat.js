@@ -11,6 +11,7 @@ const REASON_TEXTS = new Map([
 const PatType = {
   type: 'pat',
   name: 'Personal Access Token',
+  flow: 'paste',
   description: 'Paste a GitHub personal access token (classic or fine-grained).',
   credentialFields: [{ name: 'token', label: 'Token' }],
   links: [

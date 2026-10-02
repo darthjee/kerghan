@@ -10,6 +10,7 @@ describe('IntegrationErrors', () => {
       'INTEGRATION_CREDENTIAL_INVALID',
       'INTEGRATION_INSUFFICIENT_PERMISSIONS',
       'INTEGRATION_TEST_COOLDOWN',
+      'INTEGRATION_REDIRECT_STATE_INVALID',
       'GITHUB_UNAVAILABLE',
       'GITHUB_RATE_LIMITED',
       'VALIDATION_FAILED',
@@ -31,6 +32,11 @@ describe('IntegrationErrors', () => {
       const error = new ApiError(429, 'Too soon', 'INTEGRATION_TEST_COOLDOWN', undefined, 12);
 
       expect(IntegrationErrors.messageFor(error)).toContain('12 seconds');
+    });
+
+    it('explains an expired or reused redirect state', () => {
+      expect(IntegrationErrors.messageFor(new ApiError(400, 'raw', 'INTEGRATION_REDIRECT_STATE_INVALID')))
+        .toBe('This GitHub authorization link expired or was already used. Start again.');
     });
 
     it('falls back to the API message for an unknown code', () => {

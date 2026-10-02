@@ -3,6 +3,7 @@ import PatType from '../../../../../../../../../assets/js/components/resources/a
 describe('PatType', () => {
   it('describes itself for the type picker', () => {
     expect(PatType.type).toBe('pat');
+    expect(PatType.flow).toBe('paste');
     expect(PatType.description).toBe('Paste a GitHub personal access token (classic or fine-grained).');
   });
 
