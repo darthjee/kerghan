@@ -65,16 +65,18 @@ and frontend-side until a separate feature changes it.
   - The "My account" dropdown only gains an *Integrations* item.
   - Navi warm-up is unaffected, since every new route is cache class `never`.
 - **Database:** additive only (the `integrations` table, the
-  `integrations_credential_lockouts` table and, with #302, the `integrations_oauth_states`
-  table). There is no existing data to migrate. Each migration has a working `down`, so a
-  rollback drops the new tables.
+  `integrations_credential_lockouts` table, with #302 the `integrations_oauth_states` table, and
+  with #303 the `integrations_github_app_states` table). There is no existing data to migrate.
+  Each migration has a working `down`, so a rollback drops the new tables.
 - **New required config:** `KERGHAN_INTEGRATIONS_KEY`.
   - Boot **fails** if it is missing or malformed (see [security.md](security.md#key)).
   - Every environment (dev, CI, production) must have it set **before** #300 is deployed.
   - #300 adds it to the docker-compose and `.env` samples and to CI, and documents the
     production step in `docs/agents/environment-variables.md`.
 - **Optional config:** the OAuth App type's client id and secret
-  ([types/oauth-app.md](types/oauth-app.md#server-config)). When unset, that type is disabled
+  ([types/oauth-app.md](types/oauth-app.md#server-config)), and the GitHub App type's app id,
+  slug, private key, client id and client secret
+  ([types/github-app.md](types/github-app.md#server-config)). When unset, that type is disabled
   and nothing else changes.
 - **Readiness:** `/ready.json` (#288) gets no integrations check; boot validation already covers
   the key.
@@ -112,4 +114,4 @@ These notes record intent only. No field, route or behaviour is added for them n
 - `types/`: per-type specs, added by their own issues (not by #296):
   - [types/pat.md](types/pat.md): #297
   - [types/oauth-app.md](types/oauth-app.md): #298
-  - `types/github-app.md`: #299
+  - [types/github-app.md](types/github-app.md): #299

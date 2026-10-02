@@ -36,6 +36,8 @@ The feature is a new backend module, `integrations`, owning these tables:
   [Lockout table](#lockout-table)).
 - `integrations_oauth_states`: pending OAuth App redirect flows, added by #302 and defined in
   [types/oauth-app.md](types/oauth-app.md#state).
+- `integrations_github_app_states`: pending GitHub App redirect flows and installation
+  selections, added by #303 and defined in [types/github-app.md](types/github-app.md#state).
 
 ## `integrations` columns
 
@@ -158,7 +160,8 @@ on success) and **delete** are always available.
   different scopes). The label tells them apart; the UI may show a hint.
 - **Same GitHub identity or installation for different Kerghan users**: allowed and fully
   isolated. No response, error code or message may reveal that another user holds the same
-  identity. The claim-state check for GitHub App installations is defined in #299.
+  identity. A GitHub App installation is only accepted once the user proves access to it on
+  GitHub ([types/github-app.md](types/github-app.md#access)).
 - **Replace credential with a different GitHub identity**: allowed. An integration is a labelled
   credential slot; `github_login` and `metadata` are refreshed from the new credential.
 - **Credential stops working** (revoked, expired, uninstalled): nothing polls. The status only

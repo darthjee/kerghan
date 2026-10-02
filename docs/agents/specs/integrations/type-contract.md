@@ -61,16 +61,18 @@ type TestOutcome =
 
 ### Redirect flow invariants
 
-Binding on every redirect-based type (#298, #299). A GitHub redirect is a cross-site top-level
+Binding on every redirect-based type ([OAuth App](types/oauth-app.md),
+[GitHub App](types/github-app.md)). A GitHub redirect is a cross-site top-level
 `GET`: the `SameSite=Strict` `access_token` cookie is not sent, `OriginGuard` doesn't apply, and
 [Security](../../architecture/security.md#csrf) forbids state changes over `GET`. So:
 
 - GitHub redirects to a **frontend-served landing URL**, never to a backend route. GitHub
   appends `code`/`state` as a query string (a fragment isn't allowed in `redirect_uri`); the
-  exact landing shape is fixed in #298/#299.
-- The frontend then `POST`s `{ code or installation_id, state }` to a backend `.json` route of
-  the type. That request is same-origin, carries the cookie, and goes through `OriginGuard` and
-  `JwtGuard`.
+  exact landing shapes are fixed in [types/oauth-app.md](types/oauth-app.md#landing) and
+  [types/github-app.md](types/github-app.md#landing).
+- The frontend then `POST`s `{ code, state }` (plus the claimed `installationId` for the GitHub
+  App, which the backend verifies) to a backend `.json` route of the type. That request is
+  same-origin, carries the cookie, and goes through `OriginGuard` and `JwtGuard`.
 - `state` is random, single-use, short-lived, bound server-side to the initiating user, and
   compared in constant time. The owner always comes from `req.user.sub`, never from the callback.
 - Every type-owned route is cache class `never` (`X-Skip-Cache`), requires `JwtGuard`, and
