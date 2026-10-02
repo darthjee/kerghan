@@ -77,6 +77,7 @@ const IntegrationsHandlers = {
   build(controller, { addForm, rowState }) {
     return {
       onRetry: () => controller.retry(),
+      onDismissNotice: () => controller.setNotice(null),
       ...addFormHandlers(controller, addForm),
       ...rowEditHandlers(controller, rowState),
       onAskRemove: (uuid) => () => controller.patchRow(uuid, { confirmingRemove: true, error: null }),

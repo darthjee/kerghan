@@ -20,6 +20,7 @@ describe('Integrations', () => {
         loadState: { loading: true, error: null },
         rowState: new Map(),
         addForm: CLOSED_ADD_FORM,
+        notice: null,
       },
       jasmine.objectContaining({ onRetry: jasmine.any(Function), onTest: jasmine.any(Function) }),
     );

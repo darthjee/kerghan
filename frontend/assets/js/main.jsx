@@ -4,6 +4,7 @@ import 'bootstrap/dist/css/bootstrap.min.css';
 import 'bootstrap/dist/js/bootstrap.bundle.min.js';
 import 'bootstrap-icons/font/bootstrap-icons.css';
 import App from './App.jsx';
+import OauthAppLanding from './utils/oauth/OauthAppLanding.js';
 
 /**
  * Build the root React tree for the frontend application.
@@ -33,5 +34,7 @@ export function renderApplication(container) {
 const container = globalThis.document?.getElementById('root');
 
 if (container) {
+  // Clean the OAuth App landing URL before the app renders, so before any request.
+  OauthAppLanding.capture(globalThis.window.location, globalThis.window.history);
   renderApplication(container);
 }

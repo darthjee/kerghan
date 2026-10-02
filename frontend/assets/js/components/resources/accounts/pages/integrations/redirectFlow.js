@@ -1,6 +1,50 @@
+import OauthAppLanding from '../../../../../utils/oauth/OauthAppLanding.js';
 import IntegrationErrors from './errorMessages.js';
 
 const GITHUB_AUTHORIZE_PREFIX = 'https://github.com/login/oauth/authorize?';
+
+const LANDING_NOTICES = new Map([
+  ['cancelled', { variant: 'warning', text: 'You cancelled the GitHub authorization.' }],
+  ['failed', { variant: 'danger', text: 'GitHub didn\'t complete the authorization. Try again.' }],
+]);
+
+/**
+ * Insert a created integration at the top of the list, or replace a reconnected one in place.
+ *
+ * @param {Array<object>} current - The current integrations.
+ * @param {{id: string}} integration - The created or reconnected integration.
+ * @returns {Array<object>} The updated list.
+ */
+function upsert(current, integration) {
+  if (!current.some(({ id }) => id === integration.id)) {
+    return [integration, ...current];
+  }
+
+  return current.map((existing) => (existing.id === integration.id ? integration : existing));
+}
+
+/**
+ * Send the landing's `code` and `state` to the callback route, once, and show the outcome.
+ *
+ * @param {{client: object, setIntegrations: Function, setNotice: Function}} controller - The
+ *   page's controller.
+ * @param {{code: string, state: string}} landing - The captured landing values.
+ * @returns {Promise<void>} Resolves once the request finishes.
+ */
+async function complete(controller, { code, state }) {
+  try {
+    const integration = await controller.client.completeOauthApp({ code, state });
+
+    if (!integration) {
+      return;
+    }
+
+    controller.setIntegrations((current) => upsert(current, integration));
+    controller.setNotice({ variant: 'success', text: `Connected to GitHub as ${integration.githubLogin}` });
+  } catch (error) {
+    controller.setNotice({ variant: 'danger', text: IntegrationErrors.messageFor(error) });
+  }
+}
 
 /**
  * Build the error reporter of a redirect start: the row's error for a reconnect, the add
@@ -19,8 +63,9 @@ function reporterFor(controller, { integrationId }) {
 }
 
 /**
- * The OAuth App redirect flow's start: asks the backend for the authorize URL and sends the
- * browser there, only when it is GitHub's authorize page.
+ * The OAuth App redirect flow: its start (asks the backend for the authorize URL and sends the
+ * browser there, only when it is GitHub's authorize page) and its landing (sends the captured
+ * `code` and `state` to the callback route).
  */
 const RedirectFlow = {
   /**
@@ -71,6 +116,32 @@ const RedirectFlow = {
     } catch (error) {
       report(IntegrationErrors.messageFor(error));
     }
+  },
+
+  /**
+   * Consume the pending OAuth App landing, if any: a cancelled or failed authorization only
+   * shows its notice; a callback posts `{ code, state }` (held in this call only) and shows
+   * "Connected to GitHub as <login>" or the mapped error.
+   *
+   * @param {{client: object, setIntegrations: Function, setNotice: Function}} controller - The
+   *   page's controller.
+   * @returns {Promise<void>} Resolves once the landing is handled.
+   */
+  async completeLanding(controller) {
+    const landing = OauthAppLanding.take();
+
+    if (!landing) {
+      return;
+    }
+
+    const notice = LANDING_NOTICES.get(landing.kind);
+
+    if (notice) {
+      controller.setNotice(notice);
+      return;
+    }
+
+    await complete(controller, landing);
   },
 };
 

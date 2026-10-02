@@ -43,6 +43,7 @@ export function useIntegrationsControllerHarness() {
       loadState: { loading: true, error: null },
       rowState: new Map(),
       addForm: CLOSED_ADD_FORM,
+      notice: null,
     };
     context.setters = {
       setIntegrations: apply('integrations'),
@@ -50,6 +51,7 @@ export function useIntegrationsControllerHarness() {
       setLoadState: apply('loadState'),
       setRowState: apply('rowState'),
       setAddForm: apply('addForm'),
+      setNotice: apply('notice'),
     };
     context.client = jasmine.createSpyObj('client', [
       'listMine', 'listTypes', 'create', 'rename', 'replaceCredential', 'test', 'remove',

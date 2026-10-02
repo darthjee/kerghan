@@ -39,9 +39,10 @@ export default class IntegrationsController {
    * Create an Integrations controller.
    *
    * @param {{setIntegrations: Function, setTypes: Function, setLoadState: Function,
-   *   setRowState: Function, setAddForm: Function}} setters - React state setters: the
-   *   integrations list, the available type definitions, the `{loading, error}` load state,
-   *   the per-row UI state `Map` (keyed by uuid) and the add form state.
+   *   setRowState: Function, setAddForm: Function, setNotice: Function}} setters - React state
+   *   setters: the integrations list, the available type definitions, the `{loading, error}`
+   *   load state, the per-row UI state `Map` (keyed by uuid), the add form state and the
+   *   page-level `{variant, text}` notice.
    * @param {typeof IntegrationsClient} [client] - Integrations HTTP client override, for
    *   testability.
    * @param {Function} [navigate] - Navigates the browser to a URL (defaults to
@@ -55,11 +56,14 @@ export default class IntegrationsController {
   }
 
   /**
-   * Load the caller's integrations and the enabled types, or store the load error.
+   * Handle a pending OAuth App landing first (see {@link RedirectFlow.completeLanding}), then
+   * load the caller's integrations and the enabled types, or store the load error.
    *
    * @returns {Promise<void>} Resolves once the load finishes.
    */
   async load() {
+    await RedirectFlow.completeLanding(this);
+
     try {
       const [mine, enabled] = await Promise.all([this.client.listMine(), this.client.listTypes()]);
 
