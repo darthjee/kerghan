@@ -32,8 +32,30 @@ export function createInMemoryIntegrationRepo() {
     }
   };
 
-  return {
+  // Transactions run one at a time, like the per-user `FOR UPDATE` row lock serializes them.
+  let transactionQueue: Promise<unknown> = Promise.resolve();
+  const lockQueries: Array<[string, unknown[]]> = [];
+
+  const repo = {
     rows,
+    lockQueries,
+    manager: {
+      transaction: <T>(work: (manager: InMemoryEntityManager) => Promise<T>): Promise<T> => {
+        const run = transactionQueue.then(() => work({
+          query: async (sql: string, parameters: unknown[]): Promise<unknown[]> => {
+            lockQueries.push([sql, parameters]);
+            return [];
+          },
+          count: (_entity: unknown, options: { where: Where }): Promise<number> => repo.count(options),
+          create: (_entity: unknown, attributes: Partial<Integration>): Integration => repo.create(attributes),
+          save: (entity: Integration): Promise<Integration> => repo.save(entity),
+        }));
+
+        transactionQueue = run.catch(() => undefined);
+
+        return run;
+      },
+    },
     create: (attributes: Partial<Integration>): Integration => ({ ...attributes }) as Integration,
     find: async ({ where }: { where: Where }): Promise<Integration[]> =>
       rows
@@ -69,6 +91,16 @@ export function createInMemoryIntegrationRepo() {
       return { affected: before - rows.length };
     },
   };
+
+  return repo;
+}
+
+/** The slice of `EntityManager` used inside an integrations transaction. */
+interface InMemoryEntityManager {
+  query: (sql: string, parameters: unknown[]) => Promise<unknown[]>;
+  count: (entity: unknown, options: { where: Where }) => Promise<number>;
+  create: (entity: unknown, attributes: Partial<Integration>) => Integration;
+  save: (entity: Integration) => Promise<Integration>;
 }
 
 /** The in-memory integration repository type. */

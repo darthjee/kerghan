@@ -2,6 +2,7 @@ import { inspect } from 'node:util';
 import { HttpException } from '@nestjs/common';
 import { QueryFailedError } from 'typeorm';
 import { GithubClientError } from '../github-client.service.js';
+import { LOCK_OWNER_ROW_SQL } from '../integration-store.service.js';
 import { githubUserResponse } from './support/fake-github-client.js';
 import {
   buildIntegrationsHarness,
@@ -135,6 +136,23 @@ describe('IntegrationsService (create and replace credential)', () => {
       expect(body.code).toBe('INTEGRATIONS_LIMIT_REACHED');
       expect(harness.github.callCount).toBe(0);
       expect(harness.repo.rows).toHaveLength(20);
+    });
+
+    it('never exceeds the cap under concurrent creates, checking it again inside the locked insert', async () => {
+      harness = buildIntegrationsHarness({ maxPerUser: 2, maxAttempts: 10 });
+
+      const results = await Promise.allSettled(
+        Array.from({ length: 6 }, (_value, index) => harness.service.create(USER, envelope({ label: `Parallel ${index}` }))),
+      );
+      const rejected = results.filter((result): result is PromiseRejectedResult => result.status === 'rejected');
+
+      expect(harness.repo.rows).toHaveLength(2);
+      expect(rejected).toHaveLength(4);
+      rejected.forEach(({ reason }) => {
+        expect((reason as HttpException).getStatus()).toBe(409);
+        expect(((reason as HttpException).getResponse() as Record<string, unknown>).code).toBe('INTEGRATIONS_LIMIT_REACHED');
+      });
+      expect(harness.repo.lockQueries.map(([sql]) => sql)).toContain(LOCK_OWNER_ROW_SQL);
     });
 
     it('reads the cap from config and counts every status', async () => {

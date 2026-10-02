@@ -102,7 +102,8 @@ export class IntegrationsService {
   /**
    * Creates an integration. Checks, in order: flow kind and credential
    * shape → failure cool-off → per-user cap → label uniqueness → GitHub
-   * validation. Nothing is stored on any failure.
+   * validation. Nothing is stored on any failure. The cap is checked again,
+   * atomically, with the insert (see `IntegrationStoreService#insertWithinCap`).
    * @param {number} userId - The caller's id (the owner).
    * @param {CreateIntegrationDto} dto - The validated create envelope.
    * @returns {Promise<IntegrationResponse>} The created integration.
@@ -121,7 +122,7 @@ export class IntegrationsService {
 
     const validated = await this.credentials.validate(userId, parsed);
     const uuid = randomUUID();
-    const row = await this.store.insert({
+    const row = await this.store.insertWithinCap({
       uuid,
       userId,
       provider: dto.provider,
@@ -133,7 +134,7 @@ export class IntegrationsService {
       lastTestedAt: new Date(),
       lastTestResult: 'success',
       ...this.credentials.seal(parsed.strategy, validated, uuid),
-    });
+    }, this.maxPerUser);
 
     return this.respond(row);
   }

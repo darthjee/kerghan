@@ -3,10 +3,16 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { QueryFailedError, Repository } from 'typeorm';
 import type { QueryDeepPartialEntity } from 'typeorm/query-builder/QueryPartialEntity.js';
 import { Integration } from './entities/integration.entity.js';
-import { integrationNotFound, labelTaken } from './integration-http-errors.js';
+import { ENSURE_LOCKOUT_ROW_SQL } from './integration-credential-abuse-guard.service.js';
+import { integrationNotFound, labelTaken, limitReached } from './integration-http-errors.js';
 
 // Canonical UUID shape; anything else can't be an integration id and answers 404 without a query.
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+// Locks the owner's (just ensured) cool-off row until the transaction ends, so
+// concurrent creates for one user serialize their cap check and insert.
+export const LOCK_OWNER_ROW_SQL =
+  'SELECT `id` FROM `integrations_credential_lockouts` WHERE `user_id` = ? FOR UPDATE';
 
 // MySQL's driver error code for a unique-index violation.
 const MYSQL_DUPLICATE_ENTRY_CODE = 'ER_DUP_ENTRY';
@@ -78,12 +84,30 @@ export class IntegrationStoreService {
   }
 
   /**
-   * Inserts a new row; a `(user_id, label_normalized)` race answers 409.
-   * @param {Partial<Integration>} attributes - The row's columns.
+   * Inserts a new row unless the owner already holds `maxPerUser` rows
+   * (409 `INTEGRATIONS_LIMIT_REACHED`). The cap check and the insert run in
+   * one transaction holding a lock on the owner's row in
+   * `integrations_credential_lockouts` (one per user, created on demand), so
+   * concurrent creates can't exceed the cap. The count is a plain read taken
+   * after the lock, so it sees every insert committed before it. A
+   * `(user_id, label_normalized)` race answers 409 `INTEGRATION_LABEL_TAKEN`.
+   * @param {Partial<Integration> & { userId: number }} attributes - The row's columns.
+   * @param {number} maxPerUser - The per-user cap.
    * @returns {Promise<Integration>} The inserted row.
    */
-  async insert(attributes: Partial<Integration>): Promise<Integration> {
-    return this.guardLabelRace(() => this.repository.save(this.repository.create(attributes)));
+  async insertWithinCap(attributes: Partial<Integration> & { userId: number }, maxPerUser: number): Promise<Integration> {
+    const { userId } = attributes;
+
+    return this.guardLabelRace(() => this.repository.manager.transaction(async (manager) => {
+      await manager.query(ENSURE_LOCKOUT_ROW_SQL, [userId]);
+      await manager.query(LOCK_OWNER_ROW_SQL, [userId]);
+
+      if (await manager.count(Integration, { where: { userId } }) >= maxPerUser) {
+        throw limitReached();
+      }
+
+      return manager.save(manager.create(Integration, attributes));
+    }));
   }
 
   /**
