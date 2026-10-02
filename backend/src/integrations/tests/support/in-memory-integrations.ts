@@ -136,6 +136,10 @@ export class InMemoryTestCooldown {
 
     return { claimed: false, retryAfterSeconds: Math.max(1, Math.ceil((last + this.cooldownMs - now.getTime()) / 1000)) };
   }
+
+  nextTestAt(lastTestedAt: Date | null): Date | null {
+    return lastTestedAt === null ? null : new Date(lastTestedAt.getTime() + this.cooldownMs);
+  }
 }
 
 /**

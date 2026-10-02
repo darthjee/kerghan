@@ -58,7 +58,7 @@ describe('IntegrationsService (list, show, rename, delete, types)', () => {
 
       expect(Object.keys(integration).sort()).toEqual([
         'createdAt', 'expiresAt', 'githubLogin', 'id', 'label', 'lastTestResult', 'lastTestedAt', 'metadata',
-        'provider', 'secretHint', 'status', 'statusReason', 'type', 'updatedAt',
+        'nextTestAt', 'provider', 'secretHint', 'status', 'statusReason', 'type', 'updatedAt',
       ]);
     });
 

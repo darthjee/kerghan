@@ -2,19 +2,34 @@ import AuthSession from '../../assets/js/client/AuthSession.js';
 import LoginModalEvents from '../../assets/js/client/LoginModalEvents.js';
 
 /**
+ * Build a fake `Headers`-like object with a case-insensitive `get`.
+ *
+ * @param {object} headers - Header names to values.
+ * @returns {{get: Function}} The fake headers; `get` returns `null` for an absent header.
+ */
+function fakeHeaders(headers) {
+  const entries = new Map(Object.entries(headers).map(([name, value]) => [name.toLowerCase(), value]));
+
+  return { get: (name) => entries.get(name.toLowerCase()) ?? null };
+}
+
+/**
  * Build a fake `fetch` `Response`-like object whose `json`/`text` behave like a real one: an
  * empty body cannot be parsed as JSON (`json()` rejects, mirroring `SyntaxError: Unexpected
  * end of JSON input`), while a non-empty body is serialized/parsed for real.
  *
- * @param {{ok: boolean, status: number, json: object|undefined}} descriptor - Response shape;
- *   `json` is omitted (or `undefined`) to simulate a truly empty body, e.g. a `204`.
- * @returns {{ok: boolean, status: number, json: Function, text: Function}} The fake response.
+ * @param {{ok: boolean, status: number, json: object|undefined, headers: object}} descriptor -
+ *   Response shape; `json` is omitted (or `undefined`) to simulate a truly empty body, e.g. a
+ *   `204`; `headers` (optional) maps header names to values.
+ * @returns {{ok: boolean, status: number, headers: object, json: Function, text: Function}}
+ *   The fake response.
  */
-export function fakeResponse({ json, ...rest }) {
+export function fakeResponse({ json, headers = {}, ...rest }) {
   const body = json === undefined ? '' : JSON.stringify(json);
 
   return {
     ...rest,
+    headers: fakeHeaders(headers),
     text: () => Promise.resolve(body),
     json: () => (body === '' ? Promise.reject(new SyntaxError('Unexpected end of JSON input')) : Promise.resolve(JSON.parse(body))),
   };

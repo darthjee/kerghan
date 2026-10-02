@@ -1,4 +1,4 @@
-import { call, createIntegration, expectSafeBody, useIntegrationsTestApp } from './support/build-integrations-test-app.js';
+import { call, createIntegration, expectSafeBody, TEST_COOLDOWN_MS, useIntegrationsTestApp } from './support/build-integrations-test-app.js';
 import { githubUserResponse } from './support/fake-github-client.js';
 import { CANARY_CLASSIC, CANARY_FINE, CANARY_FRAGMENT } from './support/integrations-harness.js';
 import { expectErrorBody, expectValidationErrorBody } from '../../auth/tests/support/error-body.js';
@@ -23,6 +23,25 @@ describe('IntegrationsController rename and replace credential (e2e)', () => {
 
       expect(response.body).toMatchObject({ id, label: 'Personal', status: 'invalid', statusReason: 'bad_credentials' });
       expectSafeBody(response.body);
+    });
+
+    it('keeps nextTestAt, derived from the unchanged lastTestedAt', async () => {
+      ctx.repo.rows[0].lastTestedAt = new Date('2026-01-01T12:00:00Z');
+
+      const response = await call(ctx.app, 'patch', `/integrations/${id}.json`, ctx.owner).send({ label: 'Personal' }).expect(200);
+
+      expect(response.body).toMatchObject({
+        lastTestedAt: '2026-01-01T12:00:00.000Z',
+        nextTestAt: new Date(Date.parse('2026-01-01T12:00:00Z') + TEST_COOLDOWN_MS).toISOString(),
+      });
+    });
+
+    it('answers a null nextTestAt when never tested', async () => {
+      ctx.repo.rows[0].lastTestedAt = null;
+
+      const response = await call(ctx.app, 'patch', `/integrations/${id}.json`, ctx.owner).send({ label: 'Personal' }).expect(200);
+
+      expect(response.body).toMatchObject({ lastTestedAt: null, nextTestAt: null });
     });
 
     it('allows the same label with a different case', async () => {
@@ -64,6 +83,7 @@ describe('IntegrationsController rename and replace credential (e2e)', () => {
         secretHint: 'github_pat_…c3d4',
         lastTestResult: 'success',
       });
+      expect(Date.parse(response.body.nextTestAt) - Date.parse(response.body.lastTestedAt)).toBe(TEST_COOLDOWN_MS);
       expectSafeBody(response.body);
     });
 

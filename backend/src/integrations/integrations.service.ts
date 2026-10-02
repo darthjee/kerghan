@@ -11,6 +11,7 @@ import { IntegrationCredentialService } from './integration-credential.service.j
 import { limitReached } from './integration-http-errors.js';
 import { IntegrationResponse, toIntegrationResponse, toIntegrationView } from './integration-response.js';
 import { IntegrationStoreService } from './integration-store.service.js';
+import { IntegrationTestCooldownService } from './integration-test-cooldown.service.js';
 import { IntegrationsEncryptionService } from './integrations-encryption.service.js';
 import { EnabledIntegrationType, IntegrationTypeRegistry } from './types/integration-type-registry.js';
 
@@ -38,6 +39,7 @@ export class IntegrationsService {
   private readonly store: IntegrationStoreService;
   private readonly credentials: IntegrationCredentialService;
   private readonly connectionTest: IntegrationConnectionTestService;
+  private readonly cooldown: IntegrationTestCooldownService;
   private readonly encryption: IntegrationsEncryptionService;
   private readonly registry: IntegrationTypeRegistry;
   private readonly logger: LoggerService;
@@ -47,6 +49,7 @@ export class IntegrationsService {
    * @param {IntegrationStoreService} store - Owner-scoped persistence.
    * @param {IntegrationCredentialService} credentials - The create/replace credential pipeline.
    * @param {IntegrationConnectionTestService} connectionTest - The test-connection action.
+   * @param {IntegrationTestCooldownService} cooldown - Computes each response's `nextTestAt`.
    * @param {IntegrationsEncryptionService} encryption - Key-id checks and decryption on delete.
    * @param {IntegrationTypeRegistry} registry - Resolves type strategies.
    * @param {LoggerService} logger - Logs best-effort delete failures with safe fields only.
@@ -56,6 +59,7 @@ export class IntegrationsService {
     store: IntegrationStoreService,
     credentials: IntegrationCredentialService,
     connectionTest: IntegrationConnectionTestService,
+    cooldown: IntegrationTestCooldownService,
     encryption: IntegrationsEncryptionService,
     registry: IntegrationTypeRegistry,
     logger: LoggerService,
@@ -64,6 +68,7 @@ export class IntegrationsService {
     this.store = store;
     this.credentials = credentials;
     this.connectionTest = connectionTest;
+    this.cooldown = cooldown;
     this.encryption = encryption;
     this.registry = registry;
     this.logger = logger;
@@ -232,6 +237,10 @@ export class IntegrationsService {
    * @returns {IntegrationResponse} The response body.
    */
   private respond(row: Integration): IntegrationResponse {
-    return toIntegrationResponse(row, this.encryption.isDecryptableKeyId(row.secretKeyId));
+    return toIntegrationResponse(
+      row,
+      this.encryption.isDecryptableKeyId(row.secretKeyId),
+      this.cooldown.nextTestAt(row.lastTestedAt),
+    );
   }
 }

@@ -35,6 +35,18 @@ describe('fetchSequence support', () => {
       await expectAsync(response.json()).toBeRejectedWithError(SyntaxError);
     });
 
+    it('exposes the given headers case-insensitively', () => {
+      const response = fakeResponse({ ok: false, status: 429, headers: { 'Retry-After': '30' } });
+
+      expect(response.headers.get('retry-after')).toBe('30');
+    });
+
+    it('returns null for an absent header', () => {
+      const response = fakeResponse({ ok: true, status: 200 });
+
+      expect(response.headers.get('Retry-After')).toBeNull();
+    });
+
     it('keeps the ok and status fields', () => {
       const response = fakeResponse({ ok: false, status: 401 });
 

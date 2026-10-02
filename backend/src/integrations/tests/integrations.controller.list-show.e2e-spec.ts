@@ -1,4 +1,4 @@
-import { call, createIntegration, expectSafeBody, useIntegrationsTestApp } from './support/build-integrations-test-app.js';
+import { call, createIntegration, expectSafeBody, TEST_COOLDOWN_MS, useIntegrationsTestApp } from './support/build-integrations-test-app.js';
 
 describe('IntegrationsController list, show and types (e2e)', () => {
   const { ctx } = useIntegrationsTestApp();
@@ -53,6 +53,29 @@ describe('IntegrationsController list, show and types (e2e)', () => {
 
     expect(list.body.integrations[0]).toMatchObject({ status: 'undecryptable', secretHint: null });
     expect(show.body).toMatchObject({ status: 'undecryptable', secretHint: null });
+  });
+
+  it('answers a null nextTestAt before the first test, on list and show', async () => {
+    const { body: created } = await createIntegration(ctx, ctx.owner);
+    ctx.repo.rows[0].lastTestedAt = null;
+
+    const list = await call(ctx.app, 'post', '/integrations/mine.json', ctx.owner).expect(200);
+    const show = await call(ctx.app, 'post', `/integrations/${created.id}/show.json`, ctx.owner).expect(200);
+
+    expect(list.body.integrations[0]).toMatchObject({ lastTestedAt: null, nextTestAt: null });
+    expect(show.body).toMatchObject({ lastTestedAt: null, nextTestAt: null });
+  });
+
+  it('answers nextTestAt as lastTestedAt plus the cooldown, even in the past, on list and show', async () => {
+    const { body: created } = await createIntegration(ctx, ctx.owner);
+    ctx.repo.rows[0].lastTestedAt = new Date('2026-01-01T12:00:00Z');
+    const expected = new Date(Date.parse('2026-01-01T12:00:00Z') + TEST_COOLDOWN_MS).toISOString();
+
+    const list = await call(ctx.app, 'post', '/integrations/mine.json', ctx.owner).expect(200);
+    const show = await call(ctx.app, 'post', `/integrations/${created.id}/show.json`, ctx.owner).expect(200);
+
+    expect(list.body.integrations[0]).toMatchObject({ lastTestedAt: '2026-01-01T12:00:00.000Z', nextTestAt: expected });
+    expect(show.body).toMatchObject({ lastTestedAt: '2026-01-01T12:00:00.000Z', nextTestAt: expected });
   });
 
   it('lists the enabled types, pat always included', async () => {

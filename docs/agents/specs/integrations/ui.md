@@ -50,8 +50,8 @@ from [api.md](api.md#error-codes) mapped to friendly text (e.g. `INTEGRATION_LAB
   `invalid`, `expired` and `undecryptable`.
 - **Remove:** asks for confirmation (naming the label), then `DELETE /integrations/:uuid.json`.
 - **Test connection:** `POST /integrations/:uuid/test.json`, then shows the new status and
-  result. The "Test" button is **disabled during the cooldown**: until `lastTestedAt` plus the
-  cooldown, and, after a 429, for the `Retry-After` seconds.
+  result. The "Test" button is **disabled during the cooldown**: until `nextTestAt` (enabled when it is
+  `null` or not after now), and, after a 429, for the `Retry-After` seconds.
 
 ## Type picker
 

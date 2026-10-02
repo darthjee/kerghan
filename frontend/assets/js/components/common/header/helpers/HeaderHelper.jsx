@@ -46,6 +46,7 @@ function renderMyAccountDropdown() {
   return (
     <NavDropdown title="My account" id="my-account-dropdown" renderMenuOnMount>
       <NavDropdown.Item href="#/account/authorization-requests">Authorizations</NavDropdown.Item>
+      <NavDropdown.Item href="#/account/integrations">Integrations</NavDropdown.Item>
       <NavDropdown.Item href="#/account/my-account">Account</NavDropdown.Item>
     </NavDropdown>
   );

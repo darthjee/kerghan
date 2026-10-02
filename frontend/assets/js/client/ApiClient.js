@@ -40,13 +40,33 @@ function parseJson(text) {
 }
 
 /**
+ * Parse a response's `Retry-After` header as integer seconds.
+ *
+ * @description Only the delta-seconds form is supported (the backend never sends an HTTP
+ * date). Tolerates a response without `headers` (e.g. a minimal fake in specs).
+ * @param {Response} response - The raw `fetch` response.
+ * @returns {number|undefined} The non-negative number of seconds to wait, or `undefined` when
+ *   the header is absent or not a non-negative integer.
+ */
+function parseRetryAfter(response) {
+  const value = response.headers?.get('Retry-After');
+
+  if (typeof value !== 'string' || !/^\d+$/.test(value.trim())) {
+    return undefined;
+  }
+
+  return Number.parseInt(value.trim(), 10);
+}
+
+/**
  * Build the {@link ApiError} for a failed response.
  *
  * @description Reads the backend's standard error body
  * (`{ error: { code, message, details? }, statusCode, timestamp }`). Falls back to the
  * response's `statusText`, then to a generic message, when the body carries no
  * `error.message` (e.g. a proxy-generated or empty error response), so the resulting error's
- * `message` is never `undefined`.
+ * `message` is never `undefined`. Carries the `Retry-After` header (integer seconds), when
+ * present and valid, as the error's `retryAfter`.
  * @param {Response} response - The raw `fetch` response.
  * @param {object} data - The parsed response body.
  * @returns {ApiError} The error to throw.
@@ -55,7 +75,9 @@ function buildApiError(response, data) {
   const error = data?.error ?? {};
   const message = error.message || response.statusText || FALLBACK_ERROR_MESSAGE;
 
-  return new ApiError(response.status, message, error.code, error.details);
+  return new ApiError(
+    response.status, message, error.code, error.details, parseRetryAfter(response),
+  );
 }
 
 /**

@@ -93,6 +93,48 @@ describe('ApiClient', () => {
         .toBeRejectedWith(jasmine.objectContaining({ status: 500, message: 'Request failed' }));
     });
 
+    describe('on a 429', () => {
+      const cooldownBody = errorBody(429, 'INTEGRATION_TEST_COOLDOWN', 'Too soon');
+
+      it('carries the Retry-After seconds onto the ApiError', async () => {
+        globalThis.fetch = fetchSequence([{
+          ok: false, status: 429, json: cooldownBody, headers: { 'Retry-After': '30' },
+        }]);
+
+        await expectAsync(ApiClient.postJson('/integrations/abc/test.json', {}))
+          .toBeRejectedWith(jasmine.objectContaining(
+            { status: 429, code: 'INTEGRATION_TEST_COOLDOWN', retryAfter: 30 },
+          ));
+      });
+
+      it('accepts a zero Retry-After', async () => {
+        globalThis.fetch = fetchSequence([{
+          ok: false, status: 429, json: cooldownBody, headers: { 'Retry-After': '0' },
+        }]);
+
+        await expectAsync(ApiClient.postJson('/integrations/abc/test.json', {}))
+          .toBeRejectedWith(jasmine.objectContaining({ retryAfter: 0 }));
+      });
+
+      it('leaves retryAfter undefined without a Retry-After header', async () => {
+        globalThis.fetch = fetchSequence([{ ok: false, status: 429, json: cooldownBody }]);
+
+        await expectAsync(ApiClient.postJson('/integrations/abc/test.json', {}))
+          .toBeRejectedWith(jasmine.objectContaining({ status: 429, retryAfter: undefined }));
+      });
+
+      ['soon', '-5', '1.5', 'Wed, 21 Oct 2026 07:28:00 GMT'].forEach((value) => {
+        it(`leaves retryAfter undefined for an invalid Retry-After (${value})`, async () => {
+          globalThis.fetch = fetchSequence([{
+            ok: false, status: 429, json: cooldownBody, headers: { 'Retry-After': value },
+          }]);
+
+          await expectAsync(ApiClient.postJson('/integrations/abc/test.json', {}))
+            .toBeRejectedWith(jasmine.objectContaining({ status: 429, retryAfter: undefined }));
+        });
+      });
+    });
+
     it('throws instances of ApiError', async () => {
       globalThis.fetch = fetchSequence([{ ok: false, status: 400, json: errorBody(400, 'BAD_REQUEST', 'bad request') }]);
 

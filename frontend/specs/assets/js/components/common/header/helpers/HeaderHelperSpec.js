@@ -82,6 +82,13 @@ describe('HeaderHelper', () => {
     it('does not render the My account dropdown', () => {
       expect(markupOf(false, false)).not.toContain('My account');
     });
+
+    it('does not render the Integrations item', () => {
+      const markup = markupOf(false, false);
+
+      expect(markup).not.toContain('href="#/account/integrations"');
+      expect(markup).not.toContain('Integrations');
+    });
   });
 
   describe('when logged in', () => {
@@ -114,6 +121,13 @@ describe('HeaderHelper', () => {
       expect(markup).toContain('My account');
       expect(markup).toContain('href="#/account/authorization-requests"');
       expect(markup).toContain('Authorizations');
+    });
+
+    it('renders the My account dropdown with an Integrations item', () => {
+      const markup = markupOf(true, false);
+
+      expect(markup).toContain('href="#/account/integrations"');
+      expect(markup).toContain('>Integrations<');
     });
   });
 });

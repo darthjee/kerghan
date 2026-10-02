@@ -3,6 +3,7 @@ import { GithubClientError } from '../github-client.service.js';
 import {
   createIntegration,
   expectSafeBody,
+  TEST_COOLDOWN_MS,
   TEST_MAX_ATTEMPTS,
   TEST_MAX_PER_USER,
   useIntegrationsTestApp,
@@ -29,10 +30,12 @@ describe('IntegrationsController create (e2e)', () => {
       metadata: { tokenKind: 'classic', scopes: ['read:org', 'repo'], permissionsVerified: true },
       expiresAt: null,
       lastTestedAt: expect.any(String),
+      nextTestAt: expect.any(String),
       lastTestResult: 'success',
       createdAt: expect.any(String),
       updatedAt: expect.any(String),
     });
+    expect(Date.parse(response.body.nextTestAt) - Date.parse(response.body.lastTestedAt)).toBe(TEST_COOLDOWN_MS);
     expectSafeBody(response.body);
     expect(ctx.repo.rows[0].userId).toBe(ctx.userRepo.rows[0].id);
   });

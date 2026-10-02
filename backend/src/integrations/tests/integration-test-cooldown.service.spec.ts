@@ -100,4 +100,39 @@ describe('IntegrationTestCooldownService', () => {
 
     expect(builder.set.mock.calls[0][0].lastTestedAt).toBeInstanceOf(Date);
   });
+
+  describe('nextTestAt', () => {
+    it('answers null for a never-tested integration', () => {
+      const { service } = build(fakeQueryBuilder(1));
+
+      expect(service.nextTestAt(null)).toBeNull();
+    });
+
+    it('answers lastTestedAt plus the default cooldown', () => {
+      const { service } = build(fakeQueryBuilder(1));
+
+      expect(service.nextTestAt(NOW)).toEqual(new Date('2026-10-01T12:00:30.000Z'));
+    });
+
+    it('answers a date in the past when the cooldown is over', () => {
+      const { service } = build(fakeQueryBuilder(1));
+
+      expect(service.nextTestAt(new Date('2020-01-01T00:00:00.000Z'))).toEqual(new Date('2020-01-01T00:00:30.000Z'));
+    });
+
+    it('uses the configured cooldown', () => {
+      const { service } = build(fakeQueryBuilder(1), null, { KERGHAN_INTEGRATIONS_TEST_COOLDOWN_MS: '5000' });
+
+      expect(service.nextTestAt(NOW)).toEqual(new Date('2026-10-01T12:00:05.000Z'));
+    });
+
+    it('never touches the repository', () => {
+      const { service, repo } = build(fakeQueryBuilder(1));
+
+      service.nextTestAt(NOW);
+
+      expect(repo.createQueryBuilder).not.toHaveBeenCalled();
+      expect(repo.findOne).not.toHaveBeenCalled();
+    });
+  });
 });

@@ -55,7 +55,9 @@ describe('IntegrationsService (test connection)', () => {
       expiresAt: '2030-01-01T00:00:00.000Z',
       lastTestResult: 'success',
       lastTestedAt: expect.any(String),
+      nextTestAt: expect.any(String),
     });
+    expect(Date.parse(response.nextTestAt as string) - Date.parse(response.lastTestedAt as string)).toBe(30000);
     expect(harness.github.callCount).toBe(1);
     expect(JSON.stringify(response)).not.toContain(CANARY_FRAGMENT);
   });

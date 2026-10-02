@@ -19,6 +19,7 @@ export interface IntegrationResponse {
   metadata: Record<string, unknown>;
   expiresAt: string | null;
   lastTestedAt: string | null;
+  nextTestAt: string | null;
   lastTestResult: IntegrationTestResult | null;
   createdAt: string | null;
   updatedAt: string | null;
@@ -50,10 +51,16 @@ export function reportedStatus(row: Integration, keyIsCurrent: boolean, now: Dat
  * Serialises a row for the owner, without decrypting anything.
  * @param {Integration} row - The stored row.
  * @param {boolean} keyIsCurrent - Whether the row's key id matches the configured key.
+ * @param {Date | null} nextTestAt - When the test-connection cooldown ends (`null` if never tested).
  * @param {Date} [now] - The current time.
  * @returns {IntegrationResponse} The response body.
  */
-export function toIntegrationResponse(row: Integration, keyIsCurrent: boolean, now: Date = new Date()): IntegrationResponse {
+export function toIntegrationResponse(
+  row: Integration,
+  keyIsCurrent: boolean,
+  nextTestAt: Date | null,
+  now: Date = new Date(),
+): IntegrationResponse {
   const status = reportedStatus(row, keyIsCurrent, now);
 
   return {
@@ -68,6 +75,7 @@ export function toIntegrationResponse(row: Integration, keyIsCurrent: boolean, n
     metadata: row.metadata,
     expiresAt: isoOrNull(row.expiresAt),
     lastTestedAt: isoOrNull(row.lastTestedAt),
+    nextTestAt: isoOrNull(nextTestAt),
     lastTestResult: row.lastTestResult,
     createdAt: isoOrNull(row.createdAt),
     updatedAt: isoOrNull(row.updatedAt),
