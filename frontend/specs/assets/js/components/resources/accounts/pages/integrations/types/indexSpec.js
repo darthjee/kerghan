@@ -1,4 +1,5 @@
 import IntegrationTypes from '../../../../../../../../../assets/js/components/resources/accounts/pages/integrations/types/index.js';
+import OauthAppType from '../../../../../../../../../assets/js/components/resources/accounts/pages/integrations/types/oauthApp.js';
 import PatType from '../../../../../../../../../assets/js/components/resources/accounts/pages/integrations/types/pat.js';
 
 describe('IntegrationTypes', () => {
@@ -7,8 +8,12 @@ describe('IntegrationTypes', () => {
       expect(IntegrationTypes.get('pat')).toBe(PatType);
     });
 
+    it('returns the oauth_app definition', () => {
+      expect(IntegrationTypes.get('oauth_app')).toBe(OauthAppType);
+    });
+
     it('returns undefined for a type not implemented yet', () => {
-      expect(IntegrationTypes.get('oauth_app')).toBeUndefined();
+      expect(IntegrationTypes.get('github_app')).toBeUndefined();
     });
   });
 
@@ -30,7 +35,13 @@ describe('IntegrationTypes', () => {
         { type: 'oauth_app' }, { type: 'pat' }, { type: 'github_app' },
       ]);
 
-      expect(available).toEqual([PatType]);
+      expect(available).toEqual([OauthAppType, PatType]);
+    });
+
+    it('includes oauth_app only when the server lists it', () => {
+      expect(IntegrationTypes.available([{ type: 'pat' }])).toEqual([PatType]);
+      expect(IntegrationTypes.available([{ type: 'pat' }, { type: 'oauth_app' }]))
+        .toEqual([PatType, OauthAppType]);
     });
 
     it('is empty when no implemented type is enabled', () => {
@@ -47,8 +58,14 @@ describe('IntegrationTypes', () => {
       expect(IntegrationTypes.reasonText('pat', 'bad_credentials')).toContain('GitHub rejected this token');
     });
 
-    it('uses the generic insufficient_permissions text for other types', () => {
+    it('uses the oauth_app texts', () => {
+      expect(IntegrationTypes.reasonText('oauth_app', 'revoked')).toContain('Reconnect to fix it');
       expect(IntegrationTypes.reasonText('oauth_app', 'insufficient_permissions'))
+        .toContain('Reconnect with GitHub to grant it');
+    });
+
+    it('uses the generic insufficient_permissions text for types without their own', () => {
+      expect(IntegrationTypes.reasonText('github_app', 'insufficient_permissions'))
         .toContain('lacks the required permissions');
     });
 

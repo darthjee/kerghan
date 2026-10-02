@@ -1,5 +1,6 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import CredentialFormHelper from '../../../../../../../../assets/js/components/resources/accounts/pages/helpers/CredentialFormHelper.jsx';
+import OauthAppType from '../../../../../../../../assets/js/components/resources/accounts/pages/integrations/types/oauthApp.js';
 import PatType from '../../../../../../../../assets/js/components/resources/accounts/pages/integrations/types/pat.js';
 import { findButton, findElements } from '../../../../../../../support/elementTree.js';
 
@@ -117,6 +118,61 @@ describe('CredentialFormHelper', () => {
       expect(tree.props.onSubmit).toBe(handlers.onSubmit);
       expect(findButton(tree, 'Cancel').props.onClick).toBe(handlers.onCancel);
       expect(findButton(tree, 'Add').props.type).toBe('submit');
+    });
+  });
+
+  describe('.renderForm with a redirect-flow type', () => {
+    const handlers = {
+      onSubmit: jasmine.createSpy('onSubmit'),
+      onLabelChange: jasmine.createSpy('onLabelChange'),
+      onCredentialChange: jasmine.createSpy('onCredentialChange'),
+      onCancel: jasmine.createSpy('onCancel'),
+    };
+    const form = {
+      definition: OauthAppType,
+      idPrefix: 'add',
+      label: 'Work',
+      credential: {},
+      error: null,
+      title: 'Add OAuth App',
+      submitLabel: 'Add',
+    };
+    const render = (overrides = {}) => CredentialFormHelper.renderForm({ ...form, ...overrides }, handlers);
+
+    it('renders only the label input, with no credential field', () => {
+      const inputs = findElements(render(), (node) => node.type === 'input');
+
+      expect(inputs.length).toBe(1);
+      expect(inputs[0].props.type).toBe('text');
+      expect(inputs[0].props.value).toBe('Work');
+      expect(inputs[0].props.onChange).toBe(handlers.onLabelChange);
+      expect(renderToStaticMarkup(render())).not.toContain('password');
+    });
+
+    it('shows the description and every warning', () => {
+      const markup = renderToStaticMarkup(render());
+
+      expect(markup).toContain('Connect a GitHub account by authorizing Kerghan&#x27;s OAuth App.');
+      OauthAppType.warnings.forEach((warning) => expect(markup).toContain(warning));
+    });
+
+    it('tolerates a definition without warnings', () => {
+      const definition = { flow: 'redirect' };
+
+      expect(renderToStaticMarkup(render({ definition }))).toContain('Continue to GitHub');
+    });
+
+    it('submits with Continue to GitHub and offers cancel', () => {
+      const tree = render();
+
+      expect(tree.props.onSubmit).toBe(handlers.onSubmit);
+      expect(findButton(tree, 'Continue to GitHub').props.type).toBe('submit');
+      expect(findButton(tree, 'Add')).toBeUndefined();
+      expect(findButton(tree, 'Cancel').props.onClick).toBe(handlers.onCancel);
+    });
+
+    it('renders the error', () => {
+      expect(renderToStaticMarkup(render({ error: 'Label taken' }))).toContain('Label taken');
     });
   });
 });

@@ -1,13 +1,15 @@
+import OauthAppType from './oauthApp.js';
 import PatType from './pat.js';
 
 /**
- * Integration types the frontend implements a flow for, keyed by `type`. Later types (OAuth
- * App, GitHub App) plug in by adding an entry here.
+ * Integration types the frontend implements a flow for, keyed by `type`. Later types (GitHub
+ * App) plug in by adding an entry here.
  *
  * @type {Map<string, object>}
  */
 const IMPLEMENTED = new Map([
   [PatType.type, PatType],
+  [OauthAppType.type, OauthAppType],
 ]);
 
 const GENERIC_REASONS = new Map([

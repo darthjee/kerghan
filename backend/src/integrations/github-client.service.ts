@@ -1,8 +1,11 @@
 import { Injectable } from '@nestjs/common';
-import type { Secret } from './secret.js';
+import { GithubRateLimitFields, isTimeout, parseJsonObject, rateLimitFields, readCappedBody } from './github-http.js';
+import { Secret } from './secret.js';
 
 // GitHub REST API base URL.
 export const GITHUB_API_URL = 'https://api.github.com';
+// GitHub's OAuth web flow token endpoint (on github.com, not the API host).
+export const GITHUB_OAUTH_TOKEN_URL = 'https://github.com/login/oauth/access_token';
 // REST API version pinned on every request.
 export const GITHUB_API_VERSION = '2022-11-28';
 // User-Agent GitHub requires on every request.
@@ -11,6 +14,10 @@ export const GITHUB_USER_AGENT = 'kerghan';
 export const GITHUB_TIMEOUT_MS = 10_000;
 // Largest response body read from GitHub, in bytes; `GET /user` answers are a few KiB.
 export const GITHUB_MAX_BODY_BYTES = 64 * 1024;
+// Shape of an OAuth error code GitHub answers with (`bad_verification_code`, ...).
+const OAUTH_ERROR_PATTERN = /^[a-z0-9_]{1,64}$/;
+// Recorded instead of an OAuth `error` value that isn't a plain code.
+export const UNRECOGNIZED_OAUTH_ERROR = 'unrecognized_error';
 // Longest storable login: `integrations.github_login` is a `varchar(255)`.
 export const GITHUB_LOGIN_MAX_LENGTH = 255;
 
@@ -52,7 +59,7 @@ export class GithubClientError extends Error {
 /**
  * The typed, header-normalised answer of `GET /user`. Never a raw response.
  */
-export interface GithubUserResponse {
+export interface GithubUserResponse extends GithubRateLimitFields {
   /** HTTP status GitHub answered with. */
   status: number;
   /** The `login` of the authenticated identity (200 only), or `null`. */
@@ -61,141 +68,185 @@ export interface GithubUserResponse {
   oauthScopes: string | null;
   /** Raw `GitHub-Authentication-Token-Expiration` header, or `null` when absent. */
   tokenExpiration: string | null;
-  /** `X-RateLimit-Remaining`, or `null` when absent or not numeric. */
-  rateLimitRemaining: number | null;
-  /** `X-RateLimit-Reset` (epoch seconds), or `null` when absent or not numeric. */
-  rateLimitReset: number | null;
-  /** `Retry-After` (seconds), or `null` when absent or not numeric. */
-  retryAfter: number | null;
+}
+
+/**
+ * What `exchangeOauthCode` sends. Every credential stays wrapped in a `Secret`.
+ */
+export interface OauthCodeExchangeRequest {
+  clientId: string;
+  clientSecret: Secret<string>;
+  code: Secret<string>;
+  codeVerifier: Secret<string>;
+  redirectUri: string;
+}
+
+/**
+ * The normalised answer of the OAuth code exchange. GitHub reports exchange
+ * errors as a 200 with an `error` field; `error_description` is never kept.
+ */
+export interface OauthCodeExchangeResponse extends GithubRateLimitFields {
+  /** HTTP status GitHub answered with. */
+  status: number;
+  /** The `access_token`, when the body has one as a non-empty string, else `null`. */
+  accessToken: Secret<string> | null;
+  /** GitHub's `error` code only, or `null` when the body has none. */
+  error: string | null;
+}
+
+/**
+ * What `revokeOauthToken` sends.
+ */
+export interface OauthTokenRevocationRequest {
+  clientId: string;
+  clientSecret: Secret<string>;
+  token: Secret<string>;
 }
 
 /**
  * The only place in the backend that calls GitHub. Every integration type
  * talks to GitHub through this service, so specs replace it with a fake
  * (`tests/support/fake-github-client.ts`); only its own spec stubs `fetch`.
+ *
+ * Every call refuses redirects (`redirect: 'error'`, surfacing as
+ * `network_error`), so credentials are only ever sent to GitHub's own host,
+ * is bounded by `GITHUB_TIMEOUT_MS`, and reads at most
+ * `GITHUB_MAX_BODY_BYTES` of the body.
  */
 @Injectable()
 export class GithubClientService {
   /**
-   * Calls `GET /user` with a token. Redirects are refused (`redirect:
-   * 'error'`, surfacing as `network_error`), so the bearer token is only ever
-   * sent to `api.github.com`; at most `GITHUB_MAX_BODY_BYTES` of the body are
-   * read, a larger body counting as unparseable (no login).
+   * Calls `GET /user` with a token. A body over the size cap counts as
+   * unparseable (no login).
    * @param {Secret<string>} token - The token, unwrapped only for the `Authorization` header.
    * @returns {Promise<GithubUserResponse>} GitHub's normalised answer, whatever its status.
    */
   async getUser(token: Secret<string>): Promise<GithubUserResponse> {
-    try {
-      const response = await fetch(`${GITHUB_API_URL}/user`, {
-        method: 'GET',
-        headers: {
-          Authorization: `Bearer ${token.reveal()}`,
-          Accept: 'application/vnd.github+json',
-          'X-GitHub-Api-Version': GITHUB_API_VERSION,
-          'User-Agent': GITHUB_USER_AGENT,
-        },
-        redirect: 'error',
-        signal: AbortSignal.timeout(GITHUB_TIMEOUT_MS),
-      });
-      const body = await readCappedBody(response, GITHUB_MAX_BODY_BYTES);
+    const { response, body } = await send(`${GITHUB_API_URL}/user`, {
+      method: 'GET',
+      headers: apiHeaders(`Bearer ${token.reveal()}`),
+    });
 
-      return normalise(response.status, response.headers, body);
-    } catch (error) {
-      throw new GithubClientError(isTimeout(error) ? 'timeout' : 'network_error');
-    }
+    return {
+      status: response.status,
+      login: response.status === 200 ? parseLogin(body) : null,
+      oauthScopes: response.headers.get('x-oauth-scopes'),
+      tokenExpiration: response.headers.get('github-authentication-token-expiration'),
+      ...rateLimitFields(response.headers),
+    };
+  }
+
+  /**
+   * Exchanges an OAuth web flow `code` (with its PKCE `code_verifier`) for a
+   * user access token: `POST https://github.com/login/oauth/access_token`.
+   * @param {OauthCodeExchangeRequest} request - The app credentials, code, verifier and redirect URI.
+   * @returns {Promise<OauthCodeExchangeResponse>} GitHub's normalised answer, whatever its status.
+   */
+  async exchangeOauthCode(request: OauthCodeExchangeRequest): Promise<OauthCodeExchangeResponse> {
+    const { response, body } = await send(GITHUB_OAUTH_TOKEN_URL, {
+      method: 'POST',
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'User-Agent': GITHUB_USER_AGENT,
+      },
+      body: new URLSearchParams({
+        client_id: request.clientId,
+        client_secret: request.clientSecret.reveal(),
+        code: request.code.reveal(),
+        redirect_uri: request.redirectUri,
+        code_verifier: request.codeVerifier.reveal(),
+      }).toString(),
+    });
+    const parsed = parseJsonObject(body);
+
+    return {
+      status: response.status,
+      accessToken: typeof parsed.access_token === 'string' && parsed.access_token !== ''
+        ? new Secret(parsed.access_token)
+        : null,
+      error: oauthErrorCode(parsed.error),
+      ...rateLimitFields(response.headers),
+    };
+  }
+
+  /**
+   * Revokes one OAuth App user access token:
+   * `DELETE /applications/{client_id}/token`, with HTTP Basic app
+   * credentials. Never touches the `/grant` endpoint (which would revoke
+   * every token of the user's authorization).
+   * @param {OauthTokenRevocationRequest} request - The app credentials and the token to revoke.
+   * @returns {Promise<{ status: number }>} GitHub's status (204 on success).
+   */
+  async revokeOauthToken(request: OauthTokenRevocationRequest): Promise<{ status: number }> {
+    const basic = Buffer.from(`${request.clientId}:${request.clientSecret.reveal()}`).toString('base64');
+    const { response } = await send(
+      `${GITHUB_API_URL}/applications/${encodeURIComponent(request.clientId)}/token`,
+      {
+        method: 'DELETE',
+        headers: { ...apiHeaders(`Basic ${basic}`), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ access_token: request.token.reveal() }),
+      },
+    );
+
+    return { status: response.status };
   }
 }
 
 /**
- * Builds the normalised answer from the status, headers and body text.
- * @param {number} status - The HTTP status.
- * @param {Headers} headers - The response headers.
- * @param {string | null} body - The response body text, or `null` when it was too large.
- * @returns {GithubUserResponse} The normalised answer.
+ * Sends one request with the shared safeguards (no redirects, timeout,
+ * capped body read), turning any failure without an HTTP answer into a
+ * sanitized `GithubClientError`.
+ * @param {string} url - The GitHub URL.
+ * @param {RequestInit} init - Method, headers and body.
+ * @returns {Promise<{ response: Response, body: string | null }>} The response and its capped body.
  */
-function normalise(status: number, headers: Headers, body: string | null): GithubUserResponse {
+async function send(url: string, init: RequestInit): Promise<{ response: Response; body: string | null }> {
+  try {
+    const response = await fetch(url, { ...init, redirect: 'error', signal: AbortSignal.timeout(GITHUB_TIMEOUT_MS) });
+    const body = await readCappedBody(response, GITHUB_MAX_BODY_BYTES);
+
+    return { response, body };
+  } catch (error) {
+    throw new GithubClientError(isTimeout(error) ? 'timeout' : 'network_error');
+  }
+}
+
+/**
+ * The REST API headers, with a given `Authorization` value.
+ * @param {string} authorization - The `Authorization` header value.
+ * @returns {Record<string, string>} The headers.
+ */
+function apiHeaders(authorization: string): Record<string, string> {
   return {
-    status,
-    login: status === 200 && body !== null ? parseLogin(body) : null,
-    oauthScopes: headers.get('x-oauth-scopes'),
-    tokenExpiration: headers.get('github-authentication-token-expiration'),
-    rateLimitRemaining: numericHeader(headers, 'x-ratelimit-remaining'),
-    rateLimitReset: numericHeader(headers, 'x-ratelimit-reset'),
-    retryAfter: numericHeader(headers, 'retry-after'),
+    Authorization: authorization,
+    Accept: 'application/vnd.github+json',
+    'X-GitHub-Api-Version': GITHUB_API_VERSION,
+    'User-Agent': GITHUB_USER_AGENT,
   };
 }
 
 /**
- * Reads a response body as text, stopping (and cancelling the stream) once
- * it exceeds `maxBytes`.
- * @param {Response} response - The fetch response.
- * @param {number} maxBytes - The largest body accepted, in bytes.
- * @returns {Promise<string | null>} The body text, or `null` when it was larger than `maxBytes`.
- */
-async function readCappedBody(response: Response, maxBytes: number): Promise<string | null> {
-  if (response.body === null) {
-    return '';
-  }
-
-  const reader = response.body.getReader();
-  const chunks: Uint8Array[] = [];
-  let total = 0;
-
-  for (let chunk = await reader.read(); !chunk.done; chunk = await reader.read()) {
-    total += chunk.value.byteLength;
-
-    if (total > maxBytes) {
-      await reader.cancel().catch(() => undefined);
-      return null;
-    }
-
-    chunks.push(chunk.value);
-  }
-
-  return Buffer.concat(chunks).toString('utf8');
-}
-
-/**
  * Reads the `login` field of a JSON body.
- * @param {string} body - The response body text.
+ * @param {string | null} body - The response body text, or `null` when it was too large.
  * @returns {string | null} The usable login, or `null` when absent, unparseable or too long.
  */
-function parseLogin(body: string): string | null {
-  try {
-    const { login } = JSON.parse(body) as { login?: unknown };
+function parseLogin(body: string | null): string | null {
+  const { login } = parseJsonObject(body);
 
-    return isUsableLogin(login) ? login : null;
-  } catch {
-    return null;
-  }
+  return isUsableLogin(login) ? login : null;
 }
 
 /**
- * Reads a numeric header.
- * @param {Headers} headers - The response headers.
- * @param {string} name - The header name.
- * @returns {number | null} The number, or `null` when absent or not numeric.
+ * Keeps GitHub's OAuth `error` only when it is a plain code, so nothing
+ * free-form (or echoed back) ever reaches a log.
+ * @param {unknown} error - The body's `error` field.
+ * @returns {string | null} The code, `UNRECOGNIZED_OAUTH_ERROR`, or `null` when absent.
  */
-function numericHeader(headers: Headers, name: string): number | null {
-  const raw = headers.get(name);
-
-  if (raw === null || raw.trim() === '') {
+function oauthErrorCode(error: unknown): string | null {
+  if (error === undefined || error === null) {
     return null;
   }
 
-  const value = Number(raw);
-
-  return Number.isFinite(value) ? value : null;
-}
-
-/**
- * Whether a fetch failure was the timeout signal firing.
- * @param {unknown} error - The caught value.
- * @returns {boolean} `true` for a timeout/abort.
- */
-function isTimeout(error: unknown): boolean {
-  // Duck-typed: `DOMException` may come from another realm, so `instanceof Error` isn't reliable.
-  const name = typeof error === 'object' && error !== null ? (error as { name?: unknown }).name : undefined;
-
-  return name === 'TimeoutError' || name === 'AbortError';
+  return typeof error === 'string' && OAUTH_ERROR_PATTERN.test(error) ? error : UNRECOGNIZED_OAUTH_ERROR;
 }

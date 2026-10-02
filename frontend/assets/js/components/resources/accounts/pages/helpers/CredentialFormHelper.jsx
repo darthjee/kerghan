@@ -129,8 +129,23 @@ function renderTypeChoices(types, handlers) {
 }
 
 /**
+ * Render a redirect-flow type's warnings, shown before continuing to GitHub.
+ *
+ * @param {Array<string>} warnings - The type's warnings.
+ * @returns {React.ReactElement} The warnings list.
+ */
+function renderWarnings(warnings) {
+  return (
+    <ul className="small text-warning-emphasis mb-2">
+      {warnings.map((warning) => <li key={warning}>{warning}</li>)}
+    </ul>
+  );
+}
+
+/**
  * Rendering helper for the type picker and the credential-paste forms (add and replace
- * credential), driven by the type registry's definitions.
+ * credential), driven by the type registry's definitions; a redirect-flow type gets a
+ * label-only form instead.
  */
 const CredentialFormHelper = {
   /**
@@ -153,7 +168,8 @@ const CredentialFormHelper = {
   },
 
   /**
-   * Render a credential-paste form for a type.
+   * Render a type's form: the credential-paste form, or the redirect form for a type with
+   * `flow: 'redirect'`.
    *
    * @param {{definition: object, idPrefix: string, label: (string|undefined), credential: object,
    *   error: (string|null), title: string, submitLabel: string}} form - The form description;
@@ -164,6 +180,10 @@ const CredentialFormHelper = {
    * @returns {React.ReactElement} The credential form.
    */
   renderForm(form, handlers) {
+    if (form.definition.flow === 'redirect') {
+      return CredentialFormHelper.renderRedirectForm(form, handlers);
+    }
+
     return (
       <form className="card card-body mb-3" onSubmit={handlers.onSubmit}>
         <h2 className="h5">{form.title}</h2>
@@ -173,6 +193,32 @@ const CredentialFormHelper = {
         {renderError(form.error)}
         <div>
           <button type="submit" className="btn btn-primary me-2">{form.submitLabel}</button>
+          <button type="button" className="btn btn-link" onClick={handlers.onCancel}>Cancel</button>
+        </div>
+      </form>
+    );
+  },
+
+  /**
+   * Render a redirect-flow form: only *Label*, the type's warnings and a *Continue to GitHub*
+   * button. There is no credential input.
+   *
+   * @param {{definition: object, idPrefix: string, label: string, error: (string|null),
+   *   title: string}} form - The form description.
+   * @param {{onSubmit: Function, onLabelChange: Function, onCancel: Function}} handlers - Event
+   *   handlers.
+   * @returns {React.ReactElement} The redirect form.
+   */
+  renderRedirectForm(form, handlers) {
+    return (
+      <form className="card card-body mb-3" onSubmit={handlers.onSubmit}>
+        <h2 className="h5">{form.title}</h2>
+        {renderNote(form.definition.description, 'small mb-1')}
+        {renderWarnings(form.definition.warnings ?? [])}
+        {renderLabelField(form, handlers)}
+        {renderError(form.error)}
+        <div>
+          <button type="submit" className="btn btn-primary me-2">Continue to GitHub</button>
           <button type="button" className="btn btn-link" onClick={handlers.onCancel}>Cancel</button>
         </div>
       </form>

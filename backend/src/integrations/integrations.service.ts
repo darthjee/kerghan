@@ -43,7 +43,8 @@ export class IntegrationsService {
   private readonly encryption: IntegrationsEncryptionService;
   private readonly registry: IntegrationTypeRegistry;
   private readonly logger: LoggerService;
-  private readonly maxPerUser: number;
+  /** The per-user cap, from `KERGHAN_INTEGRATIONS_MAX_PER_USER` (read once). */
+  readonly maxPerUser: number;
 
   /**
    * @param {IntegrationStoreService} store - Owner-scoped persistence.
@@ -212,6 +213,20 @@ export class IntegrationsService {
   }
 
   /**
+   * Serialises a row for its owner. Shared with the OAuth App flow, so
+   * `nextTestAt` and the reported status are computed the same way.
+   * @param {Integration} row - The row.
+   * @returns {IntegrationResponse} The response body.
+   */
+  respond(row: Integration): IntegrationResponse {
+    return toIntegrationResponse(
+      row,
+      this.encryption.isDecryptableKeyId(row.secretKeyId),
+      this.cooldown.nextTestAt(row.lastTestedAt),
+    );
+  }
+
+  /**
    * Runs the type's `onDelete`, logging (safe fields only) and swallowing any failure.
    * @param {Integration} row - The row being deleted.
    * @returns {Promise<void>} Resolves once the cleanup was attempted.
@@ -229,18 +244,5 @@ export class IntegrationsService {
         error: error instanceof Error ? error.name : typeof error,
       });
     }
-  }
-
-  /**
-   * Serialises a row for its owner.
-   * @param {Integration} row - The row.
-   * @returns {IntegrationResponse} The response body.
-   */
-  private respond(row: Integration): IntegrationResponse {
-    return toIntegrationResponse(
-      row,
-      this.encryption.isDecryptableKeyId(row.secretKeyId),
-      this.cooldown.nextTestAt(row.lastTestedAt),
-    );
   }
 }

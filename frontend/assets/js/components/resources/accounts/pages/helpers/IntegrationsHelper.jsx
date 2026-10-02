@@ -142,6 +142,26 @@ function renderBody(state, handlers) {
 }
 
 /**
+ * Render the page-level notice (e.g. the OAuth App landing outcome), if any.
+ *
+ * @param {{variant: string, text: string}|null} notice - The notice.
+ * @param {{onDismissNotice: Function}} handlers - Event handlers.
+ * @returns {React.ReactElement|null} The notice, or `null` without one.
+ */
+function renderNotice(notice, handlers) {
+  if (!notice) {
+    return null;
+  }
+
+  return (
+    <div className={`alert alert-${notice.variant} d-flex justify-content-between align-items-start`} role="status">
+      <span>{notice.text}</span>
+      <button type="button" className="btn-close" aria-label="Dismiss" onClick={handlers.onDismissNotice} />
+    </div>
+  );
+}
+
+/**
  * Rendering helper for the "My account → Integrations" page.
  */
 const IntegrationsHelper = {
@@ -149,7 +169,7 @@ const IntegrationsHelper = {
    * Render the Integrations page.
    *
    * @param {{integrations: Array<object>, types: Array<object>, loadState: object,
-   *   rowState: Map, addForm: object}} state - Page state.
+   *   rowState: Map, addForm: object, notice: (object|null)}} state - Page state.
    * @param {object} handlers - Event handlers built by `IntegrationsHandlers`.
    * @returns {React.ReactElement} The rendered Integrations page.
    */
@@ -157,6 +177,7 @@ const IntegrationsHelper = {
     return (
       <div className="container mt-4">
         <h1>Integrations</h1>
+        {renderNotice(state.notice, handlers)}
         {renderBody(state, handlers)}
       </div>
     );

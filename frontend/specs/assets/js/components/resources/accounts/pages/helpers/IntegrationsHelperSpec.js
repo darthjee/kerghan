@@ -29,6 +29,32 @@ describe('IntegrationsHelper', () => {
     expect(markupOf()).toContain('<h1>Integrations</h1>');
   });
 
+  describe('page notice', () => {
+    it('renders nothing without a notice', () => {
+      expect(markupOf()).not.toContain('alert-');
+    });
+
+    it('renders the success notice with a dismiss action', () => {
+      const tree = render({ notice: { variant: 'success', text: 'Connected to GitHub as octocat' } });
+      const [dismiss] = findElements(tree, (node) => node.type === 'button' && node.props['aria-label'] === 'Dismiss');
+
+      expect(renderToStaticMarkup(tree)).toContain('alert-success');
+      expect(renderToStaticMarkup(tree)).toContain('Connected to GitHub as octocat');
+      expect(dismiss.props.onClick).toBe(handlers.onDismissNotice);
+    });
+
+    it('renders an error notice alongside the load error', () => {
+      const markup = markupOf({
+        notice: { variant: 'danger', text: 'This GitHub authorization link expired or was already used. Start again.' },
+        loadState: { loading: false, error: 'Load failed' },
+      });
+
+      expect(markup).toContain('alert-danger');
+      expect(markup).toContain('This GitHub authorization link expired or was already used. Start again.');
+      expect(markup).toContain('Load failed');
+    });
+  });
+
   it('renders the loading state', () => {
     const markup = markupOf({ loadState: { loading: true, error: null } });
 

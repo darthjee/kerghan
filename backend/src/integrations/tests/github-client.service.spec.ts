@@ -1,5 +1,6 @@
 import { inspect } from 'node:util';
 import {
+  UNRECOGNIZED_OAUTH_ERROR,
   GITHUB_API_VERSION,
   GITHUB_MAX_BODY_BYTES,
   GithubClientError,
@@ -9,6 +10,45 @@ import {
 import { Secret } from '../secret.js';
 
 const CANARY = 'ghp_CANARYcanary0000000000000000000000';
+const CANARY_OAUTH = 'gho_CANARYcanaryOAUTH000000000000000000';
+const CANARY_CODE = 'CANARYcanaryCODE0123';
+const CANARY_CLIENT_SECRET = 'CANARYcanarySECRET0123456789abcdef012345';
+const CANARY_VERIFIER = 'CANARYcanaryVERIFIER0123456789abcdefABCDEF';
+const CLIENT_ID = 'Ov23liAbCdEf01234567';
+const REDIRECT_URI = 'https://kerghan.example.com/integrations/oauth_app/callback';
+
+/**
+ * Builds a code exchange request with canary secrets.
+ * @returns {Parameters<GithubClientService['exchangeOauthCode']>[0]} The request.
+ */
+function exchangeRequest(): Parameters<GithubClientService['exchangeOauthCode']>[0] {
+  return {
+    clientId: CLIENT_ID,
+    clientSecret: new Secret(CANARY_CLIENT_SECRET),
+    code: new Secret(CANARY_CODE),
+    codeVerifier: new Secret(CANARY_VERIFIER),
+    redirectUri: REDIRECT_URI,
+  };
+}
+
+/**
+ * Builds a revocation request with canary secrets.
+ * @returns {Parameters<GithubClientService['revokeOauthToken']>[0]} The request.
+ */
+function revokeRequest(): Parameters<GithubClientService['revokeOauthToken']>[0] {
+  return { clientId: CLIENT_ID, clientSecret: new Secret(CANARY_CLIENT_SECRET), token: new Secret(CANARY_OAUTH) };
+}
+
+/**
+ * Asserts an error holds none of the canaries.
+ * @param {Error} error - The error.
+ * @returns {void}
+ */
+function expectNoCanary(error: Error): void {
+  const text = `${error.message} ${error.stack ?? ''} ${JSON.stringify(error)} ${inspect(error, { depth: 10 })}`;
+
+  expect(text).not.toContain('CANARYcanary');
+}
 
 /**
  * Builds a fetch `Response`.
@@ -237,6 +277,150 @@ describe('GithubClientService', () => {
       fetchMock.mockResolvedValue(new Response(stream, { status: 200 }));
 
       expect((await thrown(service.getUser(new Secret(CANARY)))).reason).toBe('network_error');
+    });
+  });
+  describe('exchangeOauthCode', () => {
+    it('POSTs the form-encoded exchange to github.com with Accept JSON and the User-Agent', async () => {
+      fetchMock.mockResolvedValue(reply(200, '{"access_token":"x","token_type":"bearer","scope":"repo"}'));
+
+      await service.exchangeOauthCode(exchangeRequest());
+
+      const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+      expect(url).toBe('https://github.com/login/oauth/access_token');
+      expect(init.method).toBe('POST');
+      expect(init.headers).toEqual({
+        Accept: 'application/json',
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'User-Agent': GITHUB_USER_AGENT,
+      });
+      expect(Object.fromEntries(new URLSearchParams(init.body as string))).toEqual({
+        client_id: CLIENT_ID,
+        client_secret: CANARY_CLIENT_SECRET,
+        code: CANARY_CODE,
+        redirect_uri: REDIRECT_URI,
+        code_verifier: CANARY_VERIFIER,
+      });
+      expect(init.redirect).toBe('error');
+      expect(init.signal).toBeInstanceOf(AbortSignal);
+    });
+
+    it('wraps the access token in a Secret', async () => {
+      fetchMock.mockResolvedValue(reply(200, `{"access_token":"${CANARY_OAUTH}","token_type":"bearer","scope":"repo"}`));
+
+      const answer = await service.exchangeOauthCode(exchangeRequest());
+
+      expect(answer.accessToken).toBeInstanceOf(Secret);
+      expect(answer.accessToken?.reveal()).toBe(CANARY_OAUTH);
+      expect(answer.error).toBeNull();
+      expect(answer.status).toBe(200);
+      expect(JSON.stringify(answer)).not.toContain(CANARY_OAUTH);
+    });
+
+    it('parses the error code and never keeps the description', async () => {
+      fetchMock.mockResolvedValue(reply(200, JSON.stringify({
+        error: 'bad_verification_code',
+        error_description: `The code ${CANARY_CODE} is incorrect or expired.`,
+        error_uri: 'https://docs.github.com',
+      })));
+
+      const answer = await service.exchangeOauthCode(exchangeRequest());
+
+      expect(answer).toEqual({
+        status: 200,
+        accessToken: null,
+        error: 'bad_verification_code',
+        rateLimitRemaining: null,
+        rateLimitReset: null,
+        retryAfter: null,
+      });
+      expect(inspect(answer)).not.toContain('CANARYcanary');
+    });
+
+    it('replaces a free-form error value', async () => {
+      fetchMock.mockResolvedValue(reply(200, JSON.stringify({ error: `Bad ${CANARY_CODE}` })));
+
+      expect((await service.exchangeOauthCode(exchangeRequest())).error).toBe(UNRECOGNIZED_OAUTH_ERROR);
+    });
+
+    it.each([
+      ['an unparseable body', 'not json'],
+      ['a JSON array', '["x"]'],
+      ['an empty access token', '{"access_token":""}'],
+      ['a non-string access token', '{"access_token":42}'],
+    ])('answers no token and no error for %s', async (_label, body) => {
+      fetchMock.mockResolvedValue(reply(200, body));
+
+      expect(await service.exchangeOauthCode(exchangeRequest())).toMatchObject({ accessToken: null, error: null });
+    });
+
+    it('answers no token for a body over the size cap', async () => {
+      fetchMock.mockResolvedValue(reply(200, `{"access_token":"${'x'.repeat(GITHUB_MAX_BODY_BYTES)}"}`));
+
+      expect((await service.exchangeOauthCode(exchangeRequest())).accessToken).toBeNull();
+    });
+
+    it('normalises the status and rate-limit headers', async () => {
+      fetchMock.mockResolvedValue(reply(429, '{}', { 'Retry-After': '30', 'X-RateLimit-Remaining': '0' }));
+
+      expect(await service.exchangeOauthCode(exchangeRequest())).toMatchObject({
+        status: 429,
+        retryAfter: 30,
+        rateLimitRemaining: 0,
+      });
+    });
+
+    it.each([
+      ['timeout', new DOMException('aborted due to timeout', 'TimeoutError')],
+      ['network_error', new TypeError(`fetch failed ${CANARY_CLIENT_SECRET} ${CANARY_CODE}`)],
+    ])('rethrows a %s as a sanitized error without the canaries', async (reason, failure) => {
+      fetchMock.mockRejectedValue(failure);
+
+      const error = await thrown(service.exchangeOauthCode(exchangeRequest()));
+
+      expect(error).toBeInstanceOf(GithubClientError);
+      expect(error.reason).toBe(reason);
+      expectNoCanary(error);
+    });
+  });
+
+  describe('revokeOauthToken', () => {
+    it('DELETEs the single token with HTTP Basic app credentials, never the grant', async () => {
+      fetchMock.mockResolvedValue(new Response(null, { status: 204 }));
+
+      expect(await service.revokeOauthToken(revokeRequest())).toEqual({ status: 204 });
+
+      const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+      expect(url).toBe(`https://api.github.com/applications/${CLIENT_ID}/token`);
+      expect(url).not.toContain('grant');
+      expect(init.method).toBe('DELETE');
+      expect(init.headers).toEqual({
+        Authorization: `Basic ${Buffer.from(`${CLIENT_ID}:${CANARY_CLIENT_SECRET}`).toString('base64')}`,
+        Accept: 'application/vnd.github+json',
+        'X-GitHub-Api-Version': GITHUB_API_VERSION,
+        'User-Agent': GITHUB_USER_AGENT,
+        'Content-Type': 'application/json',
+      });
+      expect(JSON.parse(init.body as string)).toEqual({ access_token: CANARY_OAUTH });
+      expect(init.redirect).toBe('error');
+      expect(init.signal).toBeInstanceOf(AbortSignal);
+    });
+
+    it('answers GitHub\'s status on failures', async () => {
+      fetchMock.mockResolvedValue(reply(422, '{"message":"Validation Failed"}'));
+
+      expect(await service.revokeOauthToken(revokeRequest())).toEqual({ status: 422 });
+    });
+
+    it.each([
+      ['timeout', new DOMException('aborted due to timeout', 'TimeoutError')],
+      ['network_error', new TypeError(`fetch failed ${CANARY_CLIENT_SECRET} ${CANARY_OAUTH}`)],
+    ])('rethrows a %s as a sanitized error without the canaries', async (reason, failure) => {
+      fetchMock.mockRejectedValue(failure);
+
+      const error = await thrown(service.revokeOauthToken(revokeRequest()));
+
+      expect(error.reason).toBe(reason);
+      expectNoCanary(error);
     });
   });
 });

@@ -23,7 +23,7 @@ export function buildIntegration(overrides = {}) {
 /**
  * Registers `beforeEach`/`afterEach` hooks setting up an `IntegrationsController` harness: a
  * mocked clock at {@link NOW}, setter spies applying values (or updaters) to `context.state`, a
- * spied client, and `context.buildController()`.
+ * spied client, a `context.navigate` spy, and `context.buildController()`.
  *
  * @returns {object} The context, filled in before each spec.
  */
@@ -43,6 +43,7 @@ export function useIntegrationsControllerHarness() {
       loadState: { loading: true, error: null },
       rowState: new Map(),
       addForm: CLOSED_ADD_FORM,
+      notice: null,
     };
     context.setters = {
       setIntegrations: apply('integrations'),
@@ -50,11 +51,16 @@ export function useIntegrationsControllerHarness() {
       setLoadState: apply('loadState'),
       setRowState: apply('rowState'),
       setAddForm: apply('addForm'),
+      setNotice: apply('notice'),
     };
     context.client = jasmine.createSpyObj('client', [
       'listMine', 'listTypes', 'create', 'rename', 'replaceCredential', 'test', 'remove',
+      'startOauthApp', 'completeOauthApp',
     ]);
-    context.buildController = () => new IntegrationsController(context.setters, context.client);
+    context.navigate = jasmine.createSpy('navigate');
+    context.buildController = () => new IntegrationsController(
+      context.setters, context.client, context.navigate,
+    );
   });
 
   afterEach(() => {

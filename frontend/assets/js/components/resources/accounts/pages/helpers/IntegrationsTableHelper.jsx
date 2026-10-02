@@ -109,7 +109,8 @@ function renderLastTested(integration) {
  * Render one integration row.
  *
  * @param {object} integration - The integration.
- * @param {{rowState: Map, sharedLogins: Set<string>}} context - Row UI state and shared logins.
+ * @param {{rowState: Map, types: Array<object>, sharedLogins: Set<string>}} context - Row UI
+ *   state, the available type definitions and shared logins.
  * @param {object} handlers - Page handlers.
  * @returns {React.ReactElement} The row.
  */
@@ -129,7 +130,9 @@ function renderRow(integration, context, handlers) {
       <td>{integration.secretHint ?? 'unavailable'}</td>
       <td>{renderExpiry(integration)}</td>
       <td>{renderLastTested(integration)}</td>
-      <td>{IntegrationActionsHelper.render(integration, context.rowState.get(integration.id) ?? {}, handlers)}</td>
+      <td>{IntegrationActionsHelper.render(
+        integration, context.rowState.get(integration.id) ?? {}, handlers, context.types,
+      )}</td>
     </tr>
   );
 }
@@ -141,13 +144,15 @@ const IntegrationsTableHelper = {
   /**
    * Render the integrations table.
    *
-   * @param {{integrations: Array<object>, rowState: Map}} state - Page state.
+   * @param {{integrations: Array<object>, rowState: Map, types: Array<object>}} state - Page
+   *   state.
    * @param {object} handlers - Page handlers.
    * @returns {React.ReactElement} The table.
    */
   render(state, handlers) {
     const context = {
       rowState: state.rowState,
+      types: state.types ?? [],
       sharedLogins: IntegrationFormatters.sharedLogins(state.integrations),
     };
 

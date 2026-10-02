@@ -29,7 +29,9 @@ running `kerghan_prod_app` locally to sanity-check the production image).
 | `KERGHAN_INTEGRATIONS_CREDENTIAL_MAX_ATTEMPTS` | **Consumed**, optional | Consecutive counted credential-validation failures (create / replace credential), per user, that trip the cool-off lockout (`423`). Defaults to `5`. | `backend/src/integrations/integration-credential-abuse-guard.service.ts` |
 | `KERGHAN_INTEGRATIONS_CREDENTIAL_LOCK_MS` | **Consumed**, optional | Cool-off duration (milliseconds) once the max-attempts threshold above is reached. Defaults to `900000` (15 minutes). | `backend/src/integrations/integration-credential-abuse-guard.service.ts` |
 | `KERGHAN_INTEGRATIONS_TEST_COOLDOWN_MS` | **Consumed**, optional | Minimum interval (milliseconds) between two tests of the same integration; an earlier test answers `429` with `Retry-After`. Defaults to `30000` (30 seconds). | `backend/src/integrations/integration-test-cooldown.service.ts` |
-| `NODE_ENV` | **Consumed**, set to `production` in production | Read only by the CORS resolver: when exactly `production`, a `*` entry in `KERGHAN_ALLOWED_ORIGINS` fails boot. The guard fails open — if it is unset or mistyped (`prod`), a `*` is accepted and reflects any origin with credentials — so production deployments must set `NODE_ENV=production`. Nothing else depends on it — the access-token cookie is always `Secure`/`httpOnly`/`SameSite=Strict` regardless of environment. | `backend/src/core/cors-config.ts` |
+| `KERGHAN_GITHUB_OAUTH_APP_CLIENT_ID` | **Consumed**, optional | Client id of the GitHub OAuth App behind the `oauth_app` integration type: 1–100 characters of `[A-Za-z0-9._-]`. Read once at boot and trimmed. When this and `KERGHAN_GITHUB_OAUTH_APP_CLIENT_SECRET` are both unset/blank, the `oauth_app` type is disabled. Boot fails, naming the missing variable but never either value, when only one of the two is set or the client id is malformed. See "Setting up the GitHub OAuth App" below. | `backend/src/integrations/types/oauth-app/oauth-app-config.ts` |
+| `KERGHAN_GITHUB_OAUTH_APP_CLIENT_SECRET` | **Consumed**, optional, **secret** | Client secret of that same OAuth App. Read once at boot and trimmed. Never logged, never returned by any API, never included in an error message. Must be set together with the client id (see the row above). | `backend/src/integrations/types/oauth-app/oauth-app-config.ts` |
+| `NODE_ENV` | **Consumed**, set to `production` in production | Read only by the CORS resolver and by the OAuth App config: when exactly `production`, a `*` entry in `KERGHAN_ALLOWED_ORIGINS` fails boot, and so does a non-`https` `FRONTEND_BASE_URL` while the `oauth_app` type is enabled. The CORS guard fails open — if it is unset or mistyped (`prod`), a `*` is accepted and reflects any origin with credentials — so production deployments must set `NODE_ENV=production`. Nothing else depends on it — the access-token cookie is always `Secure`/`httpOnly`/`SameSite=Strict` regardless of environment. | `backend/src/core/cors-config.ts` |
 | `PORT` | **Consumed**, optional | Port the Nest HTTP server listens on (defaults to `8080`). Render injects its own `PORT` automatically — only set this explicitly for other hosts. | `backend/src/main.ts` |
 | `KERGHAN_MYSQL_HOST` | **Consumed** | Production MySQL connection. | `backend/src/database/data-source.ts`, `backend/src/app.module.ts` |
 | `KERGHAN_MYSQL_PORT` | **Consumed** | ditto | `backend/src/database/data-source.ts`, `backend/src/app.module.ts` |
@@ -38,7 +40,7 @@ running `kerghan_prod_app` locally to sanity-check the production image).
 | `KERGHAN_MYSQL_NAME` | **Consumed** | ditto | `backend/src/database/data-source.ts`, `backend/src/app.module.ts` |
 | `KERGHAN_DEMO_PASSWORD` | **Consumed**, dev/seed-only | Password for the `demo` user seeded by the demo-seed migration. Falls back to a non-working placeholder (`kerghan-demo-placeholder`) if unset, so the real dev password only exists in `.env`/`.env.dev.sample`, never in source. | `backend/src/database/migrations/20260824120004-auth-seed-demo-user.ts` |
 | `KERGHAN_ALLOWED_ORIGINS` | **Consumed**, optional | Credentialed CORS allowlist (`credentials: true`), resolved once at boot. Comma-separated list of bare origins — `scheme://host[:port]`, `http`/`https` only, no path, query, fragment or trailing slash (e.g. `https://app.example.com,http://localhost:3000`); whitespace is trimmed, empty entries are rejected. Takes precedence over `FRONTEND_BASE_URL`. `*` (must be the sole entry) reflects any request origin and is dev-only — boot fails with it when `NODE_ENV=production`. Any malformed entry fails boot with an error naming the variable and the entry. When both this and `FRONTEND_BASE_URL` are unset/blank, CORS stays disabled (same-origin only). The same resolved list also defines the origins `OriginGuard` trusts for cross-site `POST`/`PUT`/`PATCH`/`DELETE` (CSRF) — see `docs/agents/architecture/security.md` — so adding an origin here is a trust change, not just a CORS tweak. | `backend/src/core/cors-config.ts`, `backend/src/core/origin.guard.ts`, `backend/src/main.ts` |
-| `FRONTEND_BASE_URL` | **Consumed** | Base URL for password-reset links, and the CORS allowlist fallback: when `KERGHAN_ALLOWED_ORIGINS` is unset/blank, CORS allows only this URL's origin (path dropped), and `OriginGuard` trusts that same origin for CSRF. An unparseable or non-http(s) value fails boot. | `backend/src/auth/password-reset.service.ts`, `backend/src/core/cors-config.ts`, `backend/src/core/origin.guard.ts` |
+| `FRONTEND_BASE_URL` | **Consumed** | Base URL for password-reset links, and the CORS allowlist fallback: when `KERGHAN_ALLOWED_ORIGINS` is unset/blank, CORS allows only this URL's origin (path dropped), and `OriginGuard` trusts that same origin for CSRF. An unparseable or non-http(s) value fails boot. Its origin plus `/integrations/oauth_app/callback` is also the GitHub OAuth App callback URL; while the `oauth_app` type is enabled it is required, and must be `https` when `NODE_ENV=production`, or boot fails. | `backend/src/auth/password-reset.service.ts`, `backend/src/core/cors-config.ts`, `backend/src/core/origin.guard.ts`, `backend/src/integrations/types/oauth-app/oauth-app-config.ts` |
 | `KERGHAN_EMAILS_ENABLED` | **Consumed**, optional | Master toggle; `'true'` enables outbound sending, anything else (default) disables it (log-and-skip). | `backend/src/mail/mail.config.ts`, `backend/src/mail/mail.module.ts` |
 | `KERGHAN_EMAIL_HOST` | **Consumed** (required when enabled) | SMTP host. Boot throws if enabled without it. | `backend/src/mail/mail.config.ts` |
 | `KERGHAN_EMAIL_PORT` | **Consumed**, optional | SMTP port; defaults to `587`. `465` ⇒ implicit TLS (`secure`); other ports ⇒ STARTTLS when `KERGHAN_EMAIL_USE_TLS`. | `backend/src/mail/mail.config.ts` |
@@ -74,6 +76,34 @@ the four numeric `KERGHAN_INTEGRATIONS_*` tuning variables (`MAX_PER_USER`,
   decryption) is not supported yet; it is tracked in #305.
 - Existing local `.env` files are not regenerated (`make` only copies the sample when `.env` is
   missing). Add the `KERGHAN_INTEGRATIONS_KEY=...` line from `.env.dev.sample` by hand.
+
+### Setting up the GitHub OAuth App
+
+`KERGHAN_GITHUB_OAUTH_APP_CLIENT_ID` and `KERGHAN_GITHUB_OAUTH_APP_CLIENT_SECRET` enable the
+`oauth_app` integration type (spec: `docs/agents/specs/integrations/types/oauth-app.md`). Both are
+optional and read once at boot:
+
+- **Both unset or blank:** the type is disabled. It is not listed among the integration types, its
+  routes answer `404`, and existing `oauth_app` integrations stay listed but can't be reconnected.
+- **Only one set, or a malformed client id:** boot fails, naming the missing or invalid variable
+  but never printing either value.
+- **The client secret is a secret.** Never log it, return it, or put it in an error message.
+  Keep it out of committed files; set it only in `.env` (dev) or the backend host's env vars.
+- **Callback URL:** not a separate variable. It is the origin of `FRONTEND_BASE_URL` plus
+  `/integrations/oauth_app/callback`, computed at boot. While the type is enabled,
+  `FRONTEND_BASE_URL` must be set, and must be `https` when `NODE_ENV=production`, or boot fails.
+
+Each environment registers its own OAuth App on GitHub, whose *Authorization callback URL* is
+exactly that environment's callback URL:
+
+| Environment | Callback URL | Config |
+|---|---|---|
+| Dev | `http://localhost:3000/integrations/oauth_app/callback` (Tent's port) | Disabled by default. To try it, register a personal OAuth App with this callback URL and set both variables in `.env`. `.env.dev.sample` lists them commented out. |
+| CI | none | Unset, so the type is disabled. Specs use fake config and a fake GitHub client. |
+| Production | `https://<public host>/integrations/oauth_app/callback` | Its own OAuth App, registered with the public host's callback URL. Set both variables as backend host env vars (Render). Not enabled yet. |
+
+No `docker-compose.yml`, CI or deploy-script change is needed: compose's `env_file: .env` already
+passes both variables to the backend when they are set.
 
 ### Rotating `KERGHAN_SECRET_KEY`
 
@@ -112,8 +142,9 @@ Side effects (both variants):
 **GitHub credentials — integrations only.** Issue fetching still reads public GitHub REST API
 data unauthenticated (see `docs/agents/product.md`). User-supplied GitHub credentials are stored
 only as integrations (`docs/agents/specs/integrations/`), encrypted with
-`KERGHAN_INTEGRATIONS_KEY`. There is no server-wide PAT/OAuth/App variable to set; don't add one
-without an explicit product decision.
+`KERGHAN_INTEGRATIONS_KEY`. There is no server-wide GitHub token variable to set; don't add one
+without an explicit product decision. The OAuth App client id/secret above identify Kerghan's own
+OAuth App (used to run the `oauth_app` integration flow), not a credential for reading GitHub.
 
 ## 2. Proxy (production)
 

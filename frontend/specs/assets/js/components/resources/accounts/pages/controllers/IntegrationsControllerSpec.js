@@ -21,6 +21,7 @@ describe('IntegrationsController', () => {
         types: [
           { type: 'pat', flows: { credentialPaste: true, redirect: false } },
           { type: 'oauth_app', flows: { credentialPaste: false, redirect: true } },
+          { type: 'github_app', flows: { credentialPaste: false, redirect: true } },
         ],
       });
     });
@@ -49,7 +50,7 @@ describe('IntegrationsController', () => {
 
       await buildController().load();
 
-      expect(state.types.map(({ type }) => type)).toEqual(['pat']);
+      expect(state.types.map(({ type }) => type)).toEqual(['pat', 'oauth_app']);
     });
 
     it('hides implemented types the server did not enable', async () => {

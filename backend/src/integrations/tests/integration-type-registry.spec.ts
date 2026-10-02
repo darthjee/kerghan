@@ -38,4 +38,15 @@ describe('IntegrationTypeRegistry', () => {
 
     expect(pat.flows.redirect).toBe(false);
   });
+
+  it('lists oauth_app after pat only while it is enabled', () => {
+    const disabled = new IntegrationTypeRegistry([pat, strategy('oauth_app', { credentialPaste: false, redirect: true }, () => false)]);
+    const enabled = new IntegrationTypeRegistry([pat, strategy('oauth_app', { credentialPaste: false, redirect: true }, () => true)]);
+
+    expect(disabled.enabledTypes().map(({ type }) => type)).toEqual(['pat']);
+    expect(enabled.enabledTypes()).toEqual([
+      { type: 'pat', flows: { credentialPaste: true, redirect: false } },
+      { type: 'oauth_app', flows: { credentialPaste: false, redirect: true } },
+    ]);
+  });
 });

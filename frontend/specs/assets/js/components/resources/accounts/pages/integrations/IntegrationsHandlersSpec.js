@@ -15,7 +15,7 @@ describe('IntegrationsHandlers', () => {
   beforeEach(() => {
     controller = jasmine.createSpyObj('controller', [
       'retry', 'setAddForm', 'patchAddForm', 'create', 'patchRow', 'rename',
-      'replaceCredential', 'remove', 'test',
+      'replaceCredential', 'remove', 'test', 'startRedirect', 'setNotice',
     ]);
   });
 
@@ -23,6 +23,12 @@ describe('IntegrationsHandlers', () => {
     build().onRetry();
 
     expect(controller.retry).toHaveBeenCalled();
+  });
+
+  it('dismisses the page notice', () => {
+    build().onDismissNotice();
+
+    expect(controller.setNotice).toHaveBeenCalledWith(null);
   });
 
   describe('add form', () => {
@@ -134,6 +140,12 @@ describe('IntegrationsHandlers', () => {
 
       expect(controller.replaceCredential).toHaveBeenCalledWith(integration, {});
     });
+  });
+
+  it('reconnects a redirect-flow row with its integrationId', () => {
+    build().onReconnect('abc')();
+
+    expect(controller.startRedirect).toHaveBeenCalledWith({ integrationId: 'abc' });
   });
 
   describe('remove', () => {

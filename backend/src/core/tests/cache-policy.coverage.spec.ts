@@ -15,6 +15,7 @@ const KNOWN_CONTROLLERS = [
   'AuthorizationRequestController',
   'HealthController',
   'IntegrationsController',
+  'OauthAppController',
 ];
 
 type ClassConstructor = new (...args: never[]) => unknown;

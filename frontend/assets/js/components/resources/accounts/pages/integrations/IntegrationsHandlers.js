@@ -54,6 +54,7 @@ function rowEditHandlers(controller, rowState) {
       credential: { ...rowOf(uuid).credential, [field]: event.target.value },
     }),
     onCancelReplace: (uuid) => () => controller.patchRow(uuid, { replacing: false, credential: {} }),
+    onReconnect: (uuid) => () => controller.startRedirect({ integrationId: uuid }),
     onSubmitReplace: (integration) => onSubmit(
       () => controller.replaceCredential(integration, rowOf(integration.id).credential ?? {}),
     ),
@@ -76,6 +77,7 @@ const IntegrationsHandlers = {
   build(controller, { addForm, rowState }) {
     return {
       onRetry: () => controller.retry(),
+      onDismissNotice: () => controller.setNotice(null),
       ...addFormHandlers(controller, addForm),
       ...rowEditHandlers(controller, rowState),
       onAskRemove: (uuid) => () => controller.patchRow(uuid, { confirmingRemove: true, error: null }),

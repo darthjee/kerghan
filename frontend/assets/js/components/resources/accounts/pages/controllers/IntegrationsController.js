@@ -2,6 +2,7 @@ import IntegrationsClient from '../../../../../client/IntegrationsClient.js';
 import Cooldown from '../integrations/cooldown.js';
 import CooldownTimers from '../integrations/CooldownTimers.js';
 import IntegrationErrors from '../integrations/errorMessages.js';
+import RedirectFlow from '../integrations/redirectFlow.js';
 import IntegrationTypes from '../integrations/types/index.js';
 
 /**
@@ -13,6 +14,16 @@ import IntegrationTypes from '../integrations/types/index.js';
 export const CLOSED_ADD_FORM = Object.freeze({
   open: false, type: null, label: '', credential: {}, error: null,
 });
+
+/**
+ * Send the browser to a URL (the default `navigate`).
+ *
+ * @param {string} url - The URL to navigate to.
+ * @returns {void} Nothing.
+ */
+function assignLocation(url) {
+  window.location.assign(url);
+}
 
 /**
  * Controller for the "My account → Integrations" page: loads the caller's integrations and the
@@ -28,24 +39,31 @@ export default class IntegrationsController {
    * Create an Integrations controller.
    *
    * @param {{setIntegrations: Function, setTypes: Function, setLoadState: Function,
-   *   setRowState: Function, setAddForm: Function}} setters - React state setters: the
-   *   integrations list, the available type definitions, the `{loading, error}` load state,
-   *   the per-row UI state `Map` (keyed by uuid) and the add form state.
+   *   setRowState: Function, setAddForm: Function, setNotice: Function}} setters - React state
+   *   setters: the integrations list, the available type definitions, the `{loading, error}`
+   *   load state, the per-row UI state `Map` (keyed by uuid), the add form state and the
+   *   page-level `{variant, text}` notice.
    * @param {typeof IntegrationsClient} [client] - Integrations HTTP client override, for
    *   testability.
+   * @param {Function} [navigate] - Navigates the browser to a URL (defaults to
+   *   `window.location.assign`), injected so specs don't navigate.
    */
-  constructor(setters, client = IntegrationsClient) {
+  constructor(setters, client = IntegrationsClient, navigate = assignLocation) {
     Object.assign(this, setters);
     this.client = client;
+    this.navigate = navigate;
     this.timers = new CooldownTimers((uuid) => this.patchRow(uuid, { cooldownUntil: null }));
   }
 
   /**
-   * Load the caller's integrations and the enabled types, or store the load error.
+   * Handle a pending OAuth App landing first (see {@link RedirectFlow.completeLanding}), then
+   * load the caller's integrations and the enabled types, or store the load error.
    *
    * @returns {Promise<void>} Resolves once the load finishes.
    */
   async load() {
+    await RedirectFlow.completeLanding(this);
+
     try {
       const [mine, enabled] = await Promise.all([this.client.listMine(), this.client.listTypes()]);
 
@@ -75,13 +93,17 @@ export default class IntegrationsController {
   /**
    * Create an integration from the add form, prepending it to the list and closing the form on
    * success, or storing the form error on failure. The credential is cleared from the form
-   * right away.
+   * right away. A redirect-flow type starts its redirect instead.
    *
    * @param {{type: string, label: string, credential: object}} form - The add form state.
    * @returns {Promise<void>} Resolves once the request finishes.
    */
   async create({ type, label, credential }) {
     this.patchAddForm({ credential: {}, error: null });
+
+    if (IntegrationTypes.get(type).flow === 'redirect') {
+      return this.startRedirect({ label });
+    }
 
     try {
       const integration = await this.client.create({
@@ -98,6 +120,18 @@ export default class IntegrationsController {
     } catch (error) {
       this.patchAddForm({ error: IntegrationErrors.messageFor(error) });
     }
+  }
+
+  /**
+   * Start the OAuth App redirect flow and navigate to GitHub's authorize page. A URL that isn't
+   * GitHub's is never followed. Errors go to the add form (create) or to the row (reconnect).
+   *
+   * @param {{label: string}|{integrationId: string}} body - `{ label }` to create, or
+   *   `{ integrationId }` to reconnect an existing integration.
+   * @returns {Promise<void>} Resolves once the request finishes.
+   */
+  async startRedirect(body) {
+    return RedirectFlow.start(this, body);
   }
 
   /**
