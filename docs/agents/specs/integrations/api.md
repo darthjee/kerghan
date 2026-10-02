@@ -41,7 +41,9 @@ rules in [security.md](security.md).
 
 `POST /integrations/types.json` lists the types this server can create, in registry order, each
 with its strategy's `flows`. A type whose server config is missing (e.g. `oauth_app` without its
-client id and secret, see [types/oauth-app.md](types/oauth-app.md#when-disabled)) is left out.
+client id and secret, see [types/oauth-app.md](types/oauth-app.md#when-disabled), or
+`github_app` without its app config, see [types/github-app.md](types/github-app.md#when-disabled))
+is left out.
 `pat` is always listed. It needs no row and makes no GitHub call. #300 builds it with the
 generic module; the frontend's type picker reads it ([ui.md](ui.md#type-picker)).
 
@@ -68,9 +70,10 @@ generic module; the frontend's type picker reads it ([ui.md](ui.md#type-picker))
 
 **Redirect-based types** (OAuth App, GitHub App) don't start from a pasted credential. They own
 their start/callback routes under `/integrations/<type>/…`, defined in their type spec
-(#298, #299). Calling create or replace credential with a type that is not credential-paste answers
-**400** `INTEGRATION_FLOW_UNSUPPORTED`. Rename, test, delete, list and show stay generic for every
-type.
+([types/oauth-app.md](types/oauth-app.md#routes),
+[types/github-app.md](types/github-app.md#routes)). Calling create or replace credential with a
+type that is not credential-paste answers **400** `INTEGRATION_FLOW_UNSUPPORTED`. Rename, test,
+delete, list and show stay generic for every type.
 
 ### Integration response
 
@@ -142,11 +145,13 @@ type.
 | Unknown, foreign or malformed `:uuid` | 404 | `NOT_FOUND` | all with `:uuid` |
 | Payload validation failed (shape, label length, unknown `provider`/`type`, credential shape) | 400 | `VALIDATION_FAILED` | create, rename, replace |
 | Type is not credential-paste | 400 | `INTEGRATION_FLOW_UNSUPPORTED` | create, replace |
-| Redirect `state` unknown, expired, already used or not the caller's | 400 | `INTEGRATION_REDIRECT_STATE_INVALID` | type-owned redirect callbacks ([types/oauth-app.md](types/oauth-app.md#state)) |
+| Redirect `state` unknown, expired, already used or not the caller's | 400 | `INTEGRATION_REDIRECT_STATE_INVALID` | type-owned redirect callbacks ([types/oauth-app.md](types/oauth-app.md#state), [types/github-app.md](types/github-app.md#state)) |
 | Duplicate label (case-insensitive) | 409 | `INTEGRATION_LABEL_TAKEN` | create, rename |
 | Per-user cap reached | 409 | `INTEGRATIONS_LIMIT_REACHED` | create |
 | GitHub rejected the credential | 422 | `INTEGRATION_CREDENTIAL_INVALID` | create, replace |
 | Missing required scopes/permissions | 422 | `INTEGRATION_INSUFFICIENT_PERMISSIONS` | create, replace |
+| GitHub App installation not accessible to the caller's GitHub account (or nonexistent, or another app's) | 422 | `INTEGRATION_INSTALLATION_NOT_ACCESSIBLE` | GitHub App callback and select ([types/github-app.md](types/github-app.md#validate--create)) |
+| GitHub App installation suspended | 422 | `INTEGRATION_INSTALLATION_SUSPENDED` | GitHub App callback and select |
 | Failure cool-off active | 423 | `INTEGRATION_CREDENTIAL_LOCKED` | create, replace |
 | Test cooldown active | 429 | `INTEGRATION_TEST_COOLDOWN` (+ `Retry-After`) | test |
 | GitHub unreachable or answered 5xx | 502 | `GITHUB_UNAVAILABLE` | create, replace, test |
