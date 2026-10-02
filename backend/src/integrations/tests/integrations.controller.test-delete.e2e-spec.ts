@@ -1,7 +1,16 @@
 import { expectErrorBody } from '../../auth/tests/support/error-body.js';
 import { GithubClientError } from '../github-client.service.js';
-import { call, createIntegration, expectSafeBody, TEST_COOLDOWN_MS, useIntegrationsTestApp } from './support/build-integrations-test-app.js';
-import { githubUserResponse } from './support/fake-github-client.js';
+import { Secret } from '../secret.js';
+import {
+  call,
+  createIntegration,
+  expectSafeBody,
+  IntegrationsTestContext,
+  TEST_COOLDOWN_MS,
+  TEST_OAUTH_CLIENT_ID,
+  useIntegrationsTestApp,
+} from './support/build-integrations-test-app.js';
+import { CANARY_OAUTH_TOKEN, githubUserResponse, oauthExchangeResponse } from './support/fake-github-client.js';
 
 describe('IntegrationsController test connection and delete (e2e)', () => {
   const { ctx } = useIntegrationsTestApp();
@@ -110,5 +119,69 @@ describe('IntegrationsController test connection and delete (e2e)', () => {
 
       expect(ctx.repo.rows).toHaveLength(0);
     });
+  });
+});
+
+describe('IntegrationsController oauth_app delete (e2e)', () => {
+  const { ctx } = useIntegrationsTestApp({ oauthApp: true });
+  let id: string;
+
+  /**
+   * Connects an `oauth_app` integration through the redirect flow.
+   * @param {IntegrationsTestContext} context - The context.
+   * @param {string} label - The label.
+   * @returns {Promise<string>} The integration's id.
+   */
+  async function connect(context: IntegrationsTestContext, label: string): Promise<string> {
+    const started = await call(context.app, 'post', '/integrations/oauth_app/start.json', context.owner).send({ label }).expect(200);
+    const state = new URL(started.body.authorizeUrl).searchParams.get('state');
+    const created = await call(context.app, 'post', '/integrations/oauth_app/callback.json', context.owner)
+      .send({ code: 'CANARYcanaryCODE0123', state })
+      .expect(201);
+
+    return created.body.id;
+  }
+
+  beforeEach(async () => {
+    id = await connect(ctx, 'Work');
+    ctx.github.exchangeRespondWith(oauthExchangeResponse({ accessToken: new Secret('gho_CANARYcanarySECOND000000000000000s2s2') }));
+    await connect(ctx, 'Second');
+    ctx.github.reset();
+  });
+
+  it('revokes that token only, through DELETE /applications/{client_id}/token', async () => {
+    await call(ctx.app, 'delete', `/integrations/${id}.json`, ctx.owner).expect(204);
+
+    expect(ctx.github.revokedTokens).toEqual([CANARY_OAUTH_TOKEN]);
+    expect(ctx.github.revokeCalls[0].clientId).toBe(TEST_OAUTH_CLIENT_ID);
+    expect(ctx.github.totalCallCount).toBe(1);
+    expect(ctx.repo.rows.map((row) => row.label)).toEqual(['Second']);
+  });
+
+  it.each([
+    ['a GitHub error', { status: 422 }],
+    ['a network error', new GithubClientError('network_error')],
+  ])('still deletes the row when the revocation fails (%s)', async (_label, answer) => {
+    ctx.github.revokeRespondWith(answer);
+
+    await call(ctx.app, 'delete', `/integrations/${id}.json`, ctx.owner).expect(204);
+
+    expect(ctx.repo.rows.map((row) => row.label)).toEqual(['Second']);
+  });
+
+  it('makes no GitHub call for an undecryptable row', async () => {
+    ctx.repo.rows[0].secretKeyId = 'deadbeef';
+
+    await call(ctx.app, 'delete', `/integrations/${id}.json`, ctx.owner).expect(204);
+
+    expect(ctx.github.totalCallCount).toBe(0);
+  });
+
+  it('makes no GitHub call for a token issued to another client id', async () => {
+    ctx.repo.rows[0].metadata = { scopes: ['repo'], clientId: 'Ov23liPreviousApp000' };
+
+    await call(ctx.app, 'delete', `/integrations/${id}.json`, ctx.owner).expect(204);
+
+    expect(ctx.github.totalCallCount).toBe(0);
   });
 });

@@ -44,6 +44,20 @@ import { IntegrationsModule } from '../../integrations.module.js';
 export const TEST_COOLDOWN_MS = 30000;
 export const TEST_MAX_PER_USER = 3;
 export const TEST_MAX_ATTEMPTS = 3;
+/** The fake OAuth App client id used when the type is enabled. */
+export const TEST_OAUTH_CLIENT_ID = 'Ov23liTestClient0001';
+/** A recognisable OAuth App client secret that must never leak anywhere. */
+export const CANARY_OAUTH_CLIENT_SECRET = 'CANARYcanaryCLIENTSECRET000000000000000a';
+/** The frontend base URL the OAuth App callback URL derives from. */
+export const TEST_FRONTEND_BASE_URL = 'https://kerghan.example.com/app/';
+/** The callback URL derived from `TEST_FRONTEND_BASE_URL`. */
+export const TEST_OAUTH_CALLBACK_URL = 'https://kerghan.example.com/integrations/oauth_app/callback';
+
+/** How to build the test app. */
+export interface IntegrationsTestAppOptions {
+  /** Enables the `oauth_app` type (fake client id and secret, `FRONTEND_BASE_URL`). */
+  oauthApp?: boolean;
+}
 
 /** The running app and the doubles behind it. */
 export interface IntegrationsTestContext {
@@ -66,13 +80,19 @@ export interface IntegrationsTestContext {
  * filter and `ValidationPipe` as in `AppModule`/`main.ts`, in-memory
  * repositories, the fake GitHub client and in-memory doubles of the atomic
  * cool-off and cooldown services. Logs in two users and an admin.
+ * @param {IntegrationsTestAppOptions} [options] - Whether the `oauth_app` type is enabled.
  * @returns {Promise<IntegrationsTestContext>} The context.
  */
-export async function buildIntegrationsTestApp(): Promise<IntegrationsTestContext> {
+export async function buildIntegrationsTestApp(options: IntegrationsTestAppOptions = {}): Promise<IntegrationsTestContext> {
   const config: Record<string, unknown> = {
     KERGHAN_INTEGRATIONS_KEY: randomBytes(32).toString('base64'),
     KERGHAN_INTEGRATIONS_MAX_PER_USER: TEST_MAX_PER_USER,
     KERGHAN_LOG_LEVEL: 'debug',
+    ...(options.oauthApp ? {
+      KERGHAN_GITHUB_OAUTH_APP_CLIENT_ID: TEST_OAUTH_CLIENT_ID,
+      KERGHAN_GITHUB_OAUTH_APP_CLIENT_SECRET: CANARY_OAUTH_CLIENT_SECRET,
+      FRONTEND_BASE_URL: TEST_FRONTEND_BASE_URL,
+    } : {}),
   };
   const repo = createInMemoryIntegrationRepo();
   const oauthStates = createInMemoryOauthStateRepo();
@@ -135,14 +155,17 @@ export async function buildIntegrationsTestApp(): Promise<IntegrationsTestContex
 /**
  * Registers the per-test app lifecycle and console spies, and asserts after
  * every test that the canary never reached a log line.
+ * @param {IntegrationsTestAppOptions} [options] - Whether the `oauth_app` type is enabled.
  * @returns {{ ctx: IntegrationsTestContext, spies: ConsoleSpies }} Live accessors.
  */
-export function useIntegrationsTestApp(): { ctx: IntegrationsTestContext; spies: ConsoleSpies } {
+export function useIntegrationsTestApp(
+  options: IntegrationsTestAppOptions = {},
+): { ctx: IntegrationsTestContext; spies: ConsoleSpies } {
   const spies = createConsoleSpies();
   let current: IntegrationsTestContext;
 
   beforeEach(async () => {
-    current = await buildIntegrationsTestApp();
+    current = await buildIntegrationsTestApp(options);
   });
 
   afterEach(async () => {
