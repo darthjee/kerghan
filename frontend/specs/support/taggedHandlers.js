@@ -2,7 +2,7 @@ const HANDLER_NAMES = [
   'onRetry', 'onDismissNotice', 'onOpenAdd', 'onCancelAdd', 'onPickType', 'onAddLabelChange', 'onAddCredentialChange',
   'onSubmitAdd', 'onSubmitAddMode', 'onStartRename', 'onRenameChange', 'onCancelRename', 'onSubmitRename',
   'onStartReplace', 'onReplaceCredentialChange', 'onCancelReplace', 'onSubmitReplace', 'onReconnect',
-  'onAskRemove', 'onCancelRemove', 'onConfirmRemove', 'onTest',
+  'onAskRemove', 'onCancelRemove', 'onConfirmRemove', 'onTest', 'onSelectInstallation', 'onCancelSelection',
 ];
 
 /**

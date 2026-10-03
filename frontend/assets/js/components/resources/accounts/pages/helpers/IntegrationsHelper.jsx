@@ -1,5 +1,6 @@
 import IntegrationTypes from '../integrations/types/index.js';
 import CredentialFormHelper from './CredentialFormHelper.jsx';
+import GithubAppSelection from './GithubAppSelection.jsx';
 import IntegrationsTableHelper from './IntegrationsTableHelper.jsx';
 
 /**
@@ -143,7 +144,7 @@ function renderBody(state, handlers) {
 }
 
 /**
- * Render the page-level notice (e.g. the OAuth App landing outcome), if any.
+ * Render the page-level notice (e.g. a redirect-flow landing outcome), if any.
  *
  * @param {{variant: string, text: string}|null} notice - The notice.
  * @param {{onDismissNotice: Function}} handlers - Event handlers.
@@ -170,7 +171,8 @@ const IntegrationsHelper = {
    * Render the Integrations page.
    *
    * @param {{integrations: Array<object>, types: Array<object>, loadState: object,
-   *   rowState: Map, addForm: object, notice: (object|null)}} state - Page state.
+   *   rowState: Map, addForm: object, notice: (object|null), selection: (object|null)}} state -
+   *   Page state.
    * @param {object} handlers - Event handlers built by `IntegrationsHandlers`.
    * @returns {React.ReactElement} The rendered Integrations page.
    */
@@ -179,6 +181,11 @@ const IntegrationsHelper = {
       <div className="container mt-4">
         <h1>Integrations</h1>
         {renderNotice(state.notice, handlers)}
+        <GithubAppSelection
+          selection={state.selection ?? null}
+          onSelect={handlers.onSelectInstallation}
+          onCancel={handlers.onCancelSelection}
+        />
         {renderBody(state, handlers)}
       </div>
     );

@@ -74,11 +74,11 @@ const IntegrationsHandlers = {
    * are curried by uuid (or integration) so each row gets its own callback.
    *
    * @param {object} controller - The page's `IntegrationsController`.
-   * @param {{addForm: object, rowState: Map}} state - The page's current add form and row
-   *   state.
+   * @param {{addForm: object, rowState: Map, selection: (object|null)}} state - The page's
+   *   current add form, row state and pending GitHub App installation selection.
    * @returns {object} The page handlers.
    */
-  build(controller, { addForm, rowState }) {
+  build(controller, { addForm, rowState, selection }) {
     return {
       onRetry: () => controller.retry(),
       onDismissNotice: () => controller.setNotice(null),
@@ -88,6 +88,8 @@ const IntegrationsHandlers = {
       onCancelRemove: (uuid) => () => controller.patchRow(uuid, { confirmingRemove: false }),
       onConfirmRemove: (uuid) => () => controller.remove(uuid),
       onTest: (uuid) => () => controller.test(uuid),
+      onSelectInstallation: (installationId) => () => controller.selectInstallation(selection, installationId),
+      onCancelSelection: () => controller.setSelection(null),
     };
   },
 };

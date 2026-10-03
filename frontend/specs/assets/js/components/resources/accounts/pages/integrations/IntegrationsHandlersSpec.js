@@ -15,7 +15,8 @@ describe('IntegrationsHandlers', () => {
   beforeEach(() => {
     controller = jasmine.createSpyObj('controller', [
       'retry', 'setAddForm', 'patchAddForm', 'create', 'patchRow', 'rename',
-      'replaceCredential', 'remove', 'test', 'startRedirect', 'setNotice',
+      'replaceCredential', 'remove', 'test', 'startRedirect', 'setNotice', 'selectInstallation',
+      'setSelection',
     ]);
   });
 
@@ -187,5 +188,21 @@ describe('IntegrationsHandlers', () => {
     build().onTest('abc')();
 
     expect(controller.test).toHaveBeenCalledWith('abc');
+  });
+
+  describe('installation selection', () => {
+    const selection = { state: 'SELECTcanary', installations: [] };
+
+    it('selects an installation of the current selection', () => {
+      build({ addForm, rowState, selection }).onSelectInstallation(7)();
+
+      expect(controller.selectInstallation).toHaveBeenCalledWith(selection, 7);
+    });
+
+    it('cancels the selection', () => {
+      build({ addForm, rowState, selection }).onCancelSelection();
+
+      expect(controller.setSelection).toHaveBeenCalledWith(null);
+    });
   });
 });

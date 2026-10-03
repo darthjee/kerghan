@@ -1,3 +1,4 @@
+import { renderToStaticMarkup } from 'react-dom/server';
 import IntegrationsHelper from '../../../../../../../../assets/js/components/resources/accounts/pages/helpers/IntegrationsHelper.jsx';
 import IntegrationsHandlers from '../../../../../../../../assets/js/components/resources/accounts/pages/integrations/IntegrationsHandlers.js';
 import PatType from '../../../../../../../../assets/js/components/resources/accounts/pages/integrations/types/pat.js';
@@ -93,5 +94,34 @@ describe('IntegrationsHelper canary credential', () => {
 
     expect(context.state.addForm.open).toBeTrue();
     expectCanaryNeverLeaked();
+  });
+
+  describe('with a GitHub App selection', () => {
+    const SELECT_STATE = 'SELECTcanary00000000';
+
+    beforeEach(() => {
+      context.state.selection = {
+        state: SELECT_STATE,
+        installations: [{ installationId: 7, accountLogin: 'acme', accountType: 'Organization' }],
+      };
+    });
+
+    it('never renders the selection state, and drops it once an installation is chosen', async () => {
+      context.client.selectGithubAppInstallation.and.resolveTo(buildIntegration({ type: 'github_app', githubLogin: 'acme' }));
+      const controller = context.buildController();
+
+      expect(renderToStaticMarkup(renderPage(controller))).not.toContain(SELECT_STATE);
+
+      await IntegrationsHandlers.build(controller, context.state).onSelectInstallation(7)();
+
+      expect(context.client.selectGithubAppInstallation).toHaveBeenCalledWith({ state: SELECT_STATE, installationId: 7 });
+      expect(context.state.selection).toBeNull();
+      expect(JSON.stringify([
+        ...consoleSpies.map((spy) => spy.calls.allArgs()),
+        storage.setItem.calls.allArgs(),
+        globalThis.window.location,
+        context.state,
+      ])).not.toContain(SELECT_STATE);
+    });
   });
 });
