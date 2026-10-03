@@ -1,13 +1,11 @@
 import { ConfigService } from '@nestjs/config';
 import { Secret } from '../../secret.js';
+import { buildCallbackUrl, readTrimmed } from '../shared/redirect-config.js';
 
 // Env var holding the OAuth App's client id.
 export const OAUTH_APP_CLIENT_ID_VAR = 'KERGHAN_GITHUB_OAUTH_APP_CLIENT_ID';
 // Env var holding the OAuth App's client secret.
 export const OAUTH_APP_CLIENT_SECRET_VAR = 'KERGHAN_GITHUB_OAUTH_APP_CLIENT_SECRET';
-// Env var whose origin the callback URL is derived from.
-const FRONTEND_BASE_URL_VAR = 'FRONTEND_BASE_URL';
-
 // Path (on the frontend origin) GitHub redirects the browser back to.
 export const OAUTH_APP_CALLBACK_PATH = '/integrations/oauth_app/callback';
 
@@ -72,54 +70,6 @@ export function buildOauthAppConfig(configService: ConfigService): OauthAppConfi
     enabled: true,
     clientId,
     clientSecret: new Secret(clientSecret),
-    callbackUrl: buildCallbackUrl(configService),
+    callbackUrl: buildCallbackUrl(configService, OAUTH_APP_CALLBACK_PATH, 'OAuth App'),
   };
-}
-
-/**
- * Derives the callback URL from `FRONTEND_BASE_URL`'s origin.
- * @param {ConfigService} configService - Supplies `FRONTEND_BASE_URL` and `NODE_ENV`.
- * @returns {string} The callback URL.
- */
-function buildCallbackUrl(configService: ConfigService): string {
-  const origin = parseOrigin(readTrimmed(configService, FRONTEND_BASE_URL_VAR));
-  const isProduction = readTrimmed(configService, 'NODE_ENV') === 'production';
-
-  if (isProduction && origin.protocol !== 'https:') {
-    throw new Error(`${FRONTEND_BASE_URL_VAR} must be https when NODE_ENV=production and the OAuth App is enabled`);
-  }
-
-  return `${origin.origin}${OAUTH_APP_CALLBACK_PATH}`;
-}
-
-/**
- * Parses `FRONTEND_BASE_URL`, requiring an http(s) URL.
- * @param {string} raw - The trimmed `FRONTEND_BASE_URL` value.
- * @returns {URL} The parsed URL.
- */
-function parseOrigin(raw: string): URL {
-  const problem = `${FRONTEND_BASE_URL_VAR} must be a valid http(s) URL when the OAuth App is enabled`;
-  let url: URL;
-
-  try {
-    url = new URL(raw);
-  } catch {
-    throw new Error(problem);
-  }
-
-  if (url.protocol !== 'https:' && url.protocol !== 'http:') {
-    throw new Error(problem);
-  }
-
-  return url;
-}
-
-/**
- * Reads a config value, trimmed, defaulting to `''`.
- * @param {ConfigService} configService - The config source.
- * @param {string} key - The variable name.
- * @returns {string} The trimmed value.
- */
-function readTrimmed(configService: ConfigService, key: string): string {
-  return (configService.get<string>(key) ?? '').trim();
 }

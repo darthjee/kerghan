@@ -35,6 +35,36 @@ export class InsufficientPermissionsError extends IntegrationCredentialError {
   }
 }
 
+/**
+ * The claimed or selected GitHub App installation isn't among those the
+ * user proved access to (or doesn't exist, or belongs to another app). The
+ * same message in every case, so nothing leaks. Counted toward the cool-off.
+ */
+export class InstallationNotAccessibleError extends IntegrationCredentialError {
+  readonly countsTowardCoolOff = true;
+
+  /**
+   * Builds the error with a fixed, safe message.
+   */
+  constructor() {
+    super('Your GitHub account cannot access that installation of the GitHub App');
+    this.name = 'InstallationNotAccessibleError';
+  }
+}
+
+/** The GitHub App installation is suspended. Counted toward the cool-off. */
+export class InstallationSuspendedError extends IntegrationCredentialError {
+  readonly countsTowardCoolOff = true;
+
+  /**
+   * Builds the error with a fixed, safe message.
+   */
+  constructor() {
+    super('This installation is suspended on GitHub');
+    this.name = 'InstallationSuspendedError';
+  }
+}
+
 /** GitHub was unreachable, timed out, answered 5xx or something unexpected. Not counted. */
 export class GithubUnavailableError extends IntegrationCredentialError {
   readonly countsTowardCoolOff = false;

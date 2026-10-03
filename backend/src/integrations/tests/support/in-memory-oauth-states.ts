@@ -1,7 +1,14 @@
 import { FindOperator } from 'typeorm';
 import type { IntegrationOauthState } from '../../entities/integration-oauth-state.entity.js';
 
-type Where = Partial<Record<keyof IntegrationOauthState, unknown>>;
+type Where = Record<string, unknown>;
+
+/** The columns every state row double has. */
+export interface StateRow {
+  id: number;
+  uuid: string;
+  createdAt: Date;
+}
 
 /**
  * Whether a column value satisfies a `where` value (plain equality, or the
@@ -26,24 +33,24 @@ function matchesValue(actual: unknown, expected: unknown): boolean {
   throw new Error(`unsupported operator ${expected.type}`);
 }
 
-function matches(row: IntegrationOauthState, where: Where): boolean {
+function matches(row: StateRow, where: Where): boolean {
   return Object.entries(where).every(([key, value]) => matchesValue((row as never)[key], value));
 }
 
 /**
- * In-memory stand-in for `Repository<IntegrationOauthState>`: auto-fills the
- * id and `createdAt`, enforces the unique `uuid`, and deletes synchronously
+ * In-memory stand-in for a state table's `Repository`: auto-fills the id
+ * and `createdAt`, enforces the unique `uuid`, and deletes synchronously
  * (so two parallel deletes of one row affect it once, like MySQL).
  * @returns {object} The repository double, exposing its `rows`.
  */
-export function createInMemoryOauthStateRepo() {
-  const rows: IntegrationOauthState[] = [];
+export function createInMemoryStateRepo<T extends StateRow>() {
+  const rows: T[] = [];
   let nextId = 1;
 
   return {
     rows,
-    create: (attributes: Partial<IntegrationOauthState>): IntegrationOauthState => ({ ...attributes }) as IntegrationOauthState,
-    save: async (entity: IntegrationOauthState): Promise<IntegrationOauthState> => {
+    create: (attributes: Partial<T>): T => ({ ...attributes }) as T,
+    save: async (entity: T): Promise<T> => {
       if (rows.some((row) => row.uuid === entity.uuid)) {
         throw new Error('Duplicate entry');
       }
@@ -53,11 +60,11 @@ export function createInMemoryOauthStateRepo() {
       rows.push(row);
       return { ...row };
     },
-    findOne: async ({ where }: { where: Where }): Promise<IntegrationOauthState | null> => {
+    findOne: async ({ where }: { where: Where }): Promise<T | null> => {
       const row = rows.find((candidate) => matches(candidate, where));
       return row ? { ...row } : null;
     },
-    find: async ({ where }: { where: Where }): Promise<IntegrationOauthState[]> =>
+    find: async ({ where }: { where: Where }): Promise<T[]> =>
       rows.filter((row) => matches(row, where)).sort((a, b) => b.id - a.id).map((row) => ({ ...row })),
     delete: async (where: Where): Promise<{ affected: number }> => {
       const before = rows.length;
@@ -65,6 +72,14 @@ export function createInMemoryOauthStateRepo() {
       return { affected: before - rows.length };
     },
   };
+}
+
+/**
+ * In-memory stand-in for `Repository<IntegrationOauthState>`.
+ * @returns {object} The repository double, exposing its `rows`.
+ */
+export function createInMemoryOauthStateRepo() {
+  return createInMemoryStateRepo<IntegrationOauthState>();
 }
 
 /** The in-memory OAuth state repository type. */

@@ -56,6 +56,23 @@ function renderSharedLoginHint(githubLogin, sharedLogins) {
 }
 
 /**
+ * Render the type-specific details under the GitHub account (e.g. a GitHub App installation's
+ * account type and repository selection).
+ *
+ * @param {object} integration - The integration.
+ * @returns {React.ReactElement|null} The details, or `null` without any.
+ */
+function renderAccountDetails(integration) {
+  const details = IntegrationTypes.detailsOf(integration);
+
+  if (details.length === 0) {
+    return null;
+  }
+
+  return <div className="small text-muted">{details.join(' · ')}</div>;
+}
+
+/**
  * Render the expiring-soon flag when the integration expires within 7 days.
  *
  * @param {{expiresAt: string, status: string}} integration - The integration.
@@ -121,6 +138,7 @@ function renderRow(integration, context, handlers) {
       <td>{IntegrationTypes.nameOf(integration.type)}</td>
       <td>
         {integration.githubLogin}
+        {renderAccountDetails(integration)}
         {renderSharedLoginHint(integration.githubLogin, context.sharedLogins)}
       </td>
       <td>

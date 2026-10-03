@@ -49,4 +49,14 @@ describe('IntegrationTypeRegistry', () => {
       { type: 'oauth_app', flows: { credentialPaste: false, redirect: true } },
     ]);
   });
+
+  it('lists github_app after oauth_app only while it is enabled', () => {
+    const oauthApp = strategy('oauth_app', { credentialPaste: false, redirect: true }, () => true);
+    const build = (enabled: boolean): IntegrationTypeRegistry => new IntegrationTypeRegistry([
+      pat, oauthApp, strategy('github_app', { credentialPaste: false, redirect: true }, () => enabled),
+    ]);
+
+    expect(build(false).enabledTypes().map(({ type }) => type)).toEqual(['pat', 'oauth_app']);
+    expect(build(true).enabledTypes().map(({ type }) => type)).toEqual(['pat', 'oauth_app', 'github_app']);
+  });
 });

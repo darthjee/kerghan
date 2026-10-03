@@ -9,6 +9,8 @@ import {
 import {
   CredentialInvalidError,
   GithubRateLimitedError,
+  InstallationNotAccessibleError,
+  InstallationSuspendedError,
   InsufficientPermissionsError,
   IntegrationCredentialError,
 } from './integration-errors.js';
@@ -129,6 +131,20 @@ export function httpErrorFor(error: IntegrationCredentialError): HttpException {
   if (error instanceof InsufficientPermissionsError) {
     return new UnprocessableEntityException({
       code: ErrorCodes.INTEGRATION_INSUFFICIENT_PERMISSIONS,
+      message: error.message,
+    });
+  }
+
+  if (error instanceof InstallationNotAccessibleError) {
+    return new UnprocessableEntityException({
+      code: ErrorCodes.INTEGRATION_INSTALLATION_NOT_ACCESSIBLE,
+      message: error.message,
+    });
+  }
+
+  if (error instanceof InstallationSuspendedError) {
+    return new UnprocessableEntityException({
+      code: ErrorCodes.INTEGRATION_INSTALLATION_SUSPENDED,
       message: error.message,
     });
   }

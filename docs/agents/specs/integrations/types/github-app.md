@@ -262,6 +262,7 @@ migration (so it works across instances and restarts).
 | `label` | `varchar(100)` | yes | Create only: the label as validated at start. |
 | `integration_uuid` | `char(36)` | yes | Replace only: the target integration. |
 | `candidate_installation_ids` | `json` | yes | `select` only: the verified installation ids (array of at most 100 positive integers). |
+| `verified_by` | `varchar(39)` | yes | `select` only: the GitHub login that proved access in the callback, later stored as `metadata.verifiedBy` (the user token is revoked before the selection is answered). |
 | `expires_at` | `datetime` | no | `created_at` + **10 minutes** (fixed; GitHub's codes also live 10 minutes). A `select` row gets its own 10 minutes. |
 | `created_at` | `datetime` | no | Set on insert. |
 

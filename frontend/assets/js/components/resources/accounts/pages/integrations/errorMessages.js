@@ -1,3 +1,5 @@
+import IntegrationTypes from './types/index.js';
+
 const FALLBACK = 'Request failed';
 
 /**
@@ -14,6 +16,10 @@ const MESSAGES = new Map([
   ['INTEGRATION_INSUFFICIENT_PERMISSIONS', () => 'This credential lacks the required permissions.'],
   ['INTEGRATION_TEST_COOLDOWN', (error) => cooldownMessage(error.retryAfter)],
   ['INTEGRATION_REDIRECT_STATE_INVALID', () => 'This GitHub authorization link expired or was already used. Start again.'],
+  ['INTEGRATION_INSTALLATION_NOT_ACCESSIBLE', () => 'Your GitHub account can\'t access that installation '
+    + 'of Kerghan\'s GitHub App. Install it, or ask the account\'s owner to.'],
+  ['INTEGRATION_INSTALLATION_SUSPENDED', () => 'This installation is suspended on GitHub. Unsuspend it in '
+    + 'the account\'s GitHub settings, then try again.'],
   ['GITHUB_UNAVAILABLE', () => 'GitHub is unavailable right now. Try again later.'],
   ['GITHUB_RATE_LIMITED', () => 'GitHub rate limit reached. Try again later.'],
   ['VALIDATION_FAILED', (error) => `Some fields are invalid: ${error.message}`],
@@ -42,10 +48,18 @@ const IntegrationErrors = {
    *
    * @param {{code: (string|undefined), message: (string|undefined)}} error - The thrown error
    *   (usually an `ApiError`).
+   * @param {string} [type] - The integration type the request was about; its own text for the
+   *   code (see a type's `errorText`) wins over the generic one.
    * @returns {string} Friendly text for a known code, else the error's message, else a
    *   generic fallback.
    */
-  messageFor(error) {
+  messageFor(error, type) {
+    const override = IntegrationTypes.get(type)?.errorText?.(error?.code);
+
+    if (override) {
+      return override;
+    }
+
     const build = MESSAGES.get(error?.code);
 
     return build ? build(error) : (error?.message || FALLBACK);

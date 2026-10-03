@@ -1,8 +1,6 @@
-import Cooldown from '../integrations/cooldown.js';
 import IntegrationTypes from '../integrations/types/index.js';
 import CredentialFormHelper from './CredentialFormHelper.jsx';
-
-const HIGHLIGHT_REPLACE = new Set(['invalid', 'expired', 'undecryptable']);
+import RowButtonsHelper from './RowButtonsHelper.jsx';
 
 /**
  * Render the inline rename form.
@@ -31,86 +29,8 @@ function renderRenameForm(integration, row, handlers) {
 }
 
 /**
- * Whether a type is among the types the server enabled.
- *
- * @param {string} type - The integration type.
- * @param {Array<{type: string}>} types - The available type definitions.
- * @returns {boolean} `true` when the type is enabled.
- */
-function isEnabled(type, types) {
-  return types.some((definition) => definition.type === type);
-}
-
-/**
- * Bootstrap variant of the Replace credential / Reconnect button: highlighted for `invalid`,
- * `expired` and `undecryptable`.
- *
- * @param {{status: string}} integration - The integration.
- * @returns {string} The button variant class.
- */
-function replaceVariant(integration) {
-  return HIGHLIGHT_REPLACE.has(integration.status) ? 'btn-warning' : 'btn-outline-secondary';
-}
-
-/**
- * Render the Reconnect with GitHub button of a redirect-flow row, hidden while its type is
- * disabled on the server.
- *
- * @param {{id: string, type: string, status: string}} integration - The integration.
- * @param {Array<object>} types - The available type definitions.
- * @param {object} handlers - Page handlers.
- * @returns {React.ReactElement|null} The button, or `null` when the type is disabled.
- */
-function renderReconnectButton(integration, types, handlers) {
-  if (!isEnabled(integration.type, types)) {
-    return null;
-  }
-
-  return (
-    <button
-      type="button"
-      className={`btn btn-sm ${replaceVariant(integration)}`}
-      onClick={handlers.onReconnect(integration.id)}
-    >
-      Reconnect with GitHub
-    </button>
-  );
-}
-
-/**
- * Render the Replace credential button (or Reconnect with GitHub for a redirect-flow type);
- * hidden for a type without a frontend flow.
- *
- * @param {{id: string, type: string, status: string}} integration - The integration.
- * @param {Array<object>} types - The available type definitions.
- * @param {object} handlers - Page handlers.
- * @returns {React.ReactElement|null} The button, or `null` for a type not implemented.
- */
-function renderReplaceButton(integration, types, handlers) {
-  const definition = IntegrationTypes.get(integration.type);
-
-  if (!definition) {
-    return null;
-  }
-
-  if (definition.flow === 'redirect') {
-    return renderReconnectButton(integration, types, handlers);
-  }
-
-  return (
-    <button
-      type="button"
-      className={`btn btn-sm ${replaceVariant(integration)}`}
-      onClick={handlers.onStartReplace(integration.id)}
-    >
-      Replace credential
-    </button>
-  );
-}
-
-/**
  * Render the "disabled on this server" note of a redirect-flow row whose type the server
- * doesn't enable (so it can't be reconnected).
+ * doesn't enable (so it can't be reconnected, nor tested for a type needing the server config).
  *
  * @param {{type: string}} integration - The integration.
  * @param {Array<object>} types - The available type definitions.
@@ -119,7 +39,7 @@ function renderReplaceButton(integration, types, handlers) {
 function renderDisabledNote(integration, types) {
   const definition = IntegrationTypes.get(integration.type);
 
-  if (definition?.flow !== 'redirect' || isEnabled(integration.type, types)) {
+  if (definition?.flow !== 'redirect' || RowButtonsHelper.isEnabled(integration.type, types)) {
     return null;
   }
 
@@ -140,25 +60,7 @@ function renderButtons(integration, row, types, handlers) {
     return renderRenameForm(integration, row, handlers);
   }
 
-  return (
-    <div className="d-flex flex-wrap gap-1 mb-2">
-      <button type="button" className="btn btn-sm btn-outline-secondary" onClick={handlers.onStartRename(integration)}>
-        Rename
-      </button>
-      {renderReplaceButton(integration, types, handlers)}
-      <button
-        type="button"
-        className="btn btn-sm btn-outline-primary"
-        disabled={Cooldown.isActive(integration, row)}
-        onClick={handlers.onTest(integration.id)}
-      >
-        Test
-      </button>
-      <button type="button" className="btn btn-sm btn-outline-danger" onClick={handlers.onAskRemove(integration.id)}>
-        Remove
-      </button>
-    </div>
-  );
+  return RowButtonsHelper.render(integration, row, types, handlers);
 }
 
 /**
@@ -210,7 +112,7 @@ function renderRemoveConfirmation(integration, row, handlers) {
   return (
     <div className="alert alert-warning mb-2">
       <p className="mb-1">{`Remove "${integration.label}"?`}</p>
-      <p className="small mb-2">{IntegrationTypes.get(integration.type)?.removeReminder}</p>
+      <p className="small mb-2">{IntegrationTypes.removeReminderFor(integration)}</p>
       <button type="button" className="btn btn-sm btn-danger me-2" onClick={handlers.onConfirmRemove(integration.id)}>
         Confirm remove
       </button>

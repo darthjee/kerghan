@@ -1,4 +1,5 @@
 import { CLOSED_ADD_FORM } from '../controllers/IntegrationsController.js';
+import RedirectFlows from './redirectFlows.js';
 
 /**
  * Wrap a submit action so the browser's default form submission (which would navigate) is
@@ -31,6 +32,7 @@ function addFormHandlers(controller, addForm) {
       credential: { ...addForm.credential, [field]: event.target.value },
     }),
     onSubmitAdd: onSubmit(() => controller.create(addForm)),
+    onSubmitAddMode: (mode) => onSubmit(() => controller.create(addForm, mode)),
   };
 }
 
@@ -54,7 +56,9 @@ function rowEditHandlers(controller, rowState) {
       credential: { ...rowOf(uuid).credential, [field]: event.target.value },
     }),
     onCancelReplace: (uuid) => () => controller.patchRow(uuid, { replacing: false, credential: {} }),
-    onReconnect: (uuid) => () => controller.startRedirect({ integrationId: uuid }),
+    onReconnect: ({ id, type }, mode) => () => controller.startRedirect(
+      type, RedirectFlows.startBody({ integrationId: id }, mode),
+    ),
     onSubmitReplace: (integration) => onSubmit(
       () => controller.replaceCredential(integration, rowOf(integration.id).credential ?? {}),
     ),
@@ -70,11 +74,11 @@ const IntegrationsHandlers = {
    * are curried by uuid (or integration) so each row gets its own callback.
    *
    * @param {object} controller - The page's `IntegrationsController`.
-   * @param {{addForm: object, rowState: Map}} state - The page's current add form and row
-   *   state.
+   * @param {{addForm: object, rowState: Map, selection: (object|null)}} state - The page's
+   *   current add form, row state and pending GitHub App installation selection.
    * @returns {object} The page handlers.
    */
-  build(controller, { addForm, rowState }) {
+  build(controller, { addForm, rowState, selection }) {
     return {
       onRetry: () => controller.retry(),
       onDismissNotice: () => controller.setNotice(null),
@@ -84,6 +88,8 @@ const IntegrationsHandlers = {
       onCancelRemove: (uuid) => () => controller.patchRow(uuid, { confirmingRemove: false }),
       onConfirmRemove: (uuid) => () => controller.remove(uuid),
       onTest: (uuid) => () => controller.test(uuid),
+      onSelectInstallation: (installationId) => () => controller.selectInstallation(selection, installationId),
+      onCancelSelection: () => controller.setSelection(null),
     };
   },
 };

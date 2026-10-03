@@ -10,9 +10,10 @@ use Tent\Configuration;
 
 if (getenv('FRONTEND_DEV_MODE') === 'true') {
     // Development mode: forward to the Vite server (HMR)
-    // OAuth App callback landing: serve Vite's index.html (path rewritten to
-    // `/`), never cached and kept out of Referer headers. `exact` compares the
-    // path only, so any query string matches but no other path does.
+    // OAuth App / GitHub App callback landings: serve Vite's index.html (path
+    // rewritten to `/`), never cached and kept out of Referer headers. `exact`
+    // compares the path only, so any query string matches but no other path
+    // does.
     Configuration::buildRule([
         'handler' => [
             'type' => 'proxy',
@@ -20,6 +21,7 @@ if (getenv('FRONTEND_DEV_MODE') === 'true') {
         ],
         'matchers' => [
             ['method' => 'GET', 'uri' => '/integrations/oauth_app/callback', 'type' => 'exact'],
+            ['method' => 'GET', 'uri' => '/integrations/github_app/callback', 'type' => 'exact'],
         ],
         'middlewares' => [
             [
@@ -52,9 +54,9 @@ if (getenv('FRONTEND_DEV_MODE') === 'true') {
     ]);
 } else {
     // Production mode: serve static files from docker_volumes/static/
-    // OAuth App callback landing: serve index.html, never cached and kept out
-    // of Referer headers. `exact` compares the path only, so any query string
-    // matches but no other path does.
+    // OAuth App / GitHub App callback landings: serve index.html, never cached
+    // and kept out of Referer headers. `exact` compares the path only, so any
+    // query string matches but no other path does.
     Configuration::buildRule([
         'handler' => [
             'type' => 'static',
@@ -62,6 +64,7 @@ if (getenv('FRONTEND_DEV_MODE') === 'true') {
         ],
         'matchers' => [
             ['method' => 'GET', 'uri' => '/integrations/oauth_app/callback', 'type' => 'exact'],
+            ['method' => 'GET', 'uri' => '/integrations/github_app/callback', 'type' => 'exact'],
         ],
         'middlewares' => [
             [

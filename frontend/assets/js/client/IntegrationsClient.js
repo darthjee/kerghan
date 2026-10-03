@@ -1,4 +1,5 @@
 import ApiClient from './ApiClient.js';
+import pickDefined from './pickDefined.js';
 
 const PROVIDER = 'github';
 
@@ -118,6 +119,48 @@ const IntegrationsClient = {
    */
   async completeOauthApp({ code, state }) {
     return ApiClient.postJson('/integrations/oauth_app/callback.json', { code, state });
+  },
+
+  /**
+   * Start the GitHub App flow, either creating a new integration or reconnecting (replacing
+   * the installation of) an existing `github_app` one.
+   *
+   * @param {{label?: string, integrationId?: string, mode?: string}} body - `{ label }` to
+   *   create or `{ integrationId }` to reconnect, plus the optional `mode` (`install` or
+   *   `connect`).
+   * @returns {Promise<{redirectUrl: string}>} The GitHub URL to navigate to.
+   */
+  async startGithubApp({ label, integrationId, mode }) {
+    return ApiClient.postJson(
+      '/integrations/github_app/start.json', pickDefined({ label, integrationId, mode }),
+    );
+  },
+
+  /**
+   * Complete the GitHub App flow with the values GitHub sent back to the landing page.
+   *
+   * @param {{code: string, state: string, installationId?: number, setupAction?: string}} values
+   *   - The `code` and `state` from GitHub's redirect, plus the `installationId` and
+   *   `setupAction` when GitHub sent them; sent only in the request body.
+   * @returns {Promise<object>} The created or reconnected integration, or
+   *   `{ selection: { state, installations } }` when the user must pick an installation.
+   */
+  async completeGithubApp({ code, state, installationId, setupAction }) {
+    return ApiClient.postJson(
+      '/integrations/github_app/callback.json',
+      pickDefined({ code, state, installationId, setupAction }),
+    );
+  },
+
+  /**
+   * Pick one installation out of a GitHub App selection.
+   *
+   * @param {{state: string, installationId: number}} values - The selection `state` and the
+   *   chosen installation id; sent only in the request body.
+   * @returns {Promise<object>} The created or reconnected integration.
+   */
+  async selectGithubAppInstallation({ state, installationId }) {
+    return ApiClient.postJson('/integrations/github_app/select.json', { state, installationId });
   },
 };
 

@@ -1,15 +1,17 @@
+import GithubAppType from './githubApp.js';
 import OauthAppType from './oauthApp.js';
 import PatType from './pat.js';
 
 /**
- * Integration types the frontend implements a flow for, keyed by `type`. Later types (GitHub
- * App) plug in by adding an entry here.
+ * Integration types the frontend implements a flow for, keyed by `type`. Later types plug in
+ * by adding an entry here.
  *
  * @type {Map<string, object>}
  */
 const IMPLEMENTED = new Map([
   [PatType.type, PatType],
   [OauthAppType.type, OauthAppType],
+  [GithubAppType.type, GithubAppType],
 ]);
 
 const GENERIC_REASONS = new Map([
@@ -74,6 +76,31 @@ const IntegrationTypes = {
     }
 
     return IMPLEMENTED.get(type)?.reasonText(reason) ?? GENERIC_REASONS.get(reason) ?? reason;
+  },
+
+  /**
+   * Type-specific row details of an integration (e.g. the GitHub App's account type and
+   * repository selection).
+   *
+   * @param {{type: string}} integration - The integration.
+   * @returns {Array<string>} The details; empty for a type without any.
+   */
+  detailsOf(integration) {
+    return IMPLEMENTED.get(integration.type)?.details?.(integration) ?? [];
+  },
+
+  /**
+   * Text of the Remove confirmation reminder of an integration's type.
+   *
+   * @description A type's `removeReminder` is either a fixed string or a function of the
+   *   integration (e.g. naming the GitHub account).
+   * @param {{type: string}} integration - The integration being removed.
+   * @returns {string|undefined} The reminder, or `undefined` for a type not implemented.
+   */
+  removeReminderFor(integration) {
+    const reminder = IMPLEMENTED.get(integration.type)?.removeReminder;
+
+    return typeof reminder === 'function' ? reminder(integration) : reminder;
   },
 };
 

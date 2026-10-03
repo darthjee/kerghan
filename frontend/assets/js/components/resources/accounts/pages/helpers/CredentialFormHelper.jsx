@@ -1,3 +1,8 @@
+const MODE_LABELS = new Map([
+  ['install', 'Install on GitHub'],
+  ['connect', 'Connect existing installation'],
+]);
+
 /**
  * Render an optional guidance paragraph.
  *
@@ -143,6 +148,30 @@ function renderWarnings(warnings) {
 }
 
 /**
+ * Render the submit controls of a redirect form: one button per mode for a type offering
+ * several (GitHub App), else a single *Continue to GitHub* submit button.
+ *
+ * @param {object} definition - The integration type definition.
+ * @param {{onSubmitMode: (Function|undefined)}} handlers - Event handlers; `onSubmitMode` is
+ *   curried by mode.
+ * @returns {React.ReactElement|Array<React.ReactElement>} The submit controls.
+ */
+function renderRedirectSubmit(definition, handlers) {
+  if (!definition.modes) {
+    return <button type="submit" className="btn btn-primary me-2">Continue to GitHub</button>;
+  }
+
+  return definition.modes.map((mode) => (
+    <div key={mode} className="mb-2">
+      <button type="button" className="btn btn-primary" onClick={handlers.onSubmitMode(mode)}>
+        {MODE_LABELS.get(mode)}
+      </button>
+      {renderNote(mode === 'connect' ? definition.connectHint : undefined, 'small text-muted mb-0')}
+    </div>
+  ));
+}
+
+/**
  * Rendering helper for the type picker and the credential-paste forms (add and replace
  * credential), driven by the type registry's definitions; a redirect-flow type gets a
  * label-only form instead.
@@ -201,12 +230,14 @@ const CredentialFormHelper = {
 
   /**
    * Render a redirect-flow form: only *Label*, the type's warnings and a *Continue to GitHub*
-   * button. There is no credential input.
+   * button (or one button per mode, e.g. *Install on GitHub* and *Connect existing
+   * installation*). There is no credential input.
    *
    * @param {{definition: object, idPrefix: string, label: string, error: (string|null),
    *   title: string}} form - The form description.
-   * @param {{onSubmit: Function, onLabelChange: Function, onCancel: Function}} handlers - Event
-   *   handlers.
+   * @param {{onSubmit: Function, onSubmitMode: (Function|undefined), onLabelChange: Function,
+   *   onCancel: Function}} handlers - Event handlers; `onSubmitMode` (curried by mode) is
+   *   needed for a type with `modes`.
    * @returns {React.ReactElement} The redirect form.
    */
   renderRedirectForm(form, handlers) {
@@ -218,7 +249,7 @@ const CredentialFormHelper = {
         {renderLabelField(form, handlers)}
         {renderError(form.error)}
         <div>
-          <button type="submit" className="btn btn-primary me-2">Continue to GitHub</button>
+          {renderRedirectSubmit(form.definition, handlers)}
           <button type="button" className="btn btn-link" onClick={handlers.onCancel}>Cancel</button>
         </div>
       </form>

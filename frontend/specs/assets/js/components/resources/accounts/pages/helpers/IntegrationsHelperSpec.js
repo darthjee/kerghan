@@ -1,6 +1,7 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import IntegrationsHelper from '../../../../../../../../assets/js/components/resources/accounts/pages/helpers/IntegrationsHelper.jsx';
 import { CLOSED_ADD_FORM } from '../../../../../../../../assets/js/components/resources/accounts/pages/controllers/IntegrationsController.js';
+import GithubAppSelection from '../../../../../../../../assets/js/components/resources/accounts/pages/helpers/GithubAppSelection.jsx';
 import PatType from '../../../../../../../../assets/js/components/resources/accounts/pages/integrations/types/pat.js';
 import { findButton, findElements } from '../../../../../../../support/elementTree.js';
 import { taggedHandlers } from '../../../../../../../support/taggedHandlers.js';
@@ -27,6 +28,25 @@ describe('IntegrationsHelper', () => {
 
   it('renders the heading', () => {
     expect(markupOf()).toContain('<h1>Integrations</h1>');
+  });
+
+  describe('installation selection', () => {
+    const selectionElement = (tree) => findElements(tree, (node) => node.type === GithubAppSelection)[0];
+
+    it('hands no selection to the selection component by default', () => {
+      expect(selectionElement(render()).props.selection).toBeNull();
+      expect(markupOf()).not.toContain('Choose a GitHub App installation');
+    });
+
+    it('hands the pending selection and its handlers to the selection component', () => {
+      const selection = { state: 's', installations: [{ installationId: 7, accountLogin: 'acme', accountType: 'Organization' }] };
+      const element = selectionElement(render({ selection }));
+
+      expect(element.props.selection).toBe(selection);
+      expect(element.props.onSelect).toBe(handlers.onSelectInstallation);
+      expect(element.props.onCancel).toBe(handlers.onCancelSelection);
+      expect(markupOf({ selection })).toContain('Choose acme');
+    });
   });
 
   describe('page notice', () => {
@@ -110,6 +130,15 @@ describe('IntegrationsHelper', () => {
       expect(inputs[0].props.onChange).toBe(handlers.onAddLabelChange);
       expect(inputs[1].props.onChange).toBe('onAddCredentialChange:token');
       expect(form.props.onSubmit).toBe(handlers.onSubmitAdd);
+    });
+
+    it('renders the GitHub App mode buttons once picked', () => {
+      const tree = render({
+        addForm: { ...CLOSED_ADD_FORM, open: true, type: 'github_app', label: 'Work' },
+      });
+
+      expect(findButton(tree, 'Install on GitHub').props.onClick).toBe('onSubmitAddMode:install');
+      expect(findButton(tree, 'Connect existing installation').props.onClick).toBe('onSubmitAddMode:connect');
     });
   });
 });

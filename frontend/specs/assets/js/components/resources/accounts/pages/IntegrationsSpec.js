@@ -21,6 +21,7 @@ describe('Integrations', () => {
         rowState: new Map(),
         addForm: CLOSED_ADD_FORM,
         notice: null,
+        selection: null,
       },
       jasmine.objectContaining({ onRetry: jasmine.any(Function), onTest: jasmine.any(Function) }),
     );

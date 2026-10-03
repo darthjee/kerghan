@@ -253,13 +253,15 @@ export class OauthAppFlowService {
 
 /**
  * Enforces exactly one of `label` and `integrationId`.
- * @param {StartOauthAppDto} dto - The validated body.
+ * @param {{ label?: string | null, integrationId?: string | null }} dto - The validated start body (`null` counts as absent).
  * @returns {{ label: string } | { integrationUuid: string }} The flow's target.
  */
-function exactlyOneTarget(dto: StartOauthAppDto): { label: string } | { integrationUuid: string } {
-  const hasLabel = dto.label !== undefined;
+export function exactlyOneTarget(
+  dto: { label?: string | null; integrationId?: string | null },
+): { label: string } | { integrationUuid: string } {
+  const hasLabel = dto.label !== undefined && dto.label !== null;
 
-  if (hasLabel === (dto.integrationId !== undefined)) {
+  if (hasLabel === (dto.integrationId !== undefined && dto.integrationId !== null)) {
     throw new BadRequestException({
       code: ErrorCodes.VALIDATION_FAILED,
       message: ['exactly one of label and integrationId must be given'],

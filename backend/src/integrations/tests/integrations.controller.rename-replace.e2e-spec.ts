@@ -121,8 +121,8 @@ describe('IntegrationsController rename and replace credential (e2e)', () => {
       expect(ctx.github.callCount).toBe(0);
     });
 
-    it('answers 400 INTEGRATION_FLOW_UNSUPPORTED for a row whose type has no credential-paste flow', async () => {
-      ctx.repo.rows[0].type = 'oauth_app';
+    it.each(['oauth_app', 'github_app'])('answers 400 INTEGRATION_FLOW_UNSUPPORTED for a %s row (no credential-paste flow)', async (type) => {
+      ctx.repo.rows[0].type = type;
 
       expectErrorBody(
         await call(ctx.app, 'post', `/integrations/${id}/credential.json`, ctx.owner).send({ credential: { token: CANARY_FINE } }),

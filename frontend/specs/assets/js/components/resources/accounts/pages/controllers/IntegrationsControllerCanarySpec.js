@@ -62,6 +62,52 @@ describe('IntegrationsController canary credential', () => {
     expectCanaryNeverLeaked();
   });
 
+  describe('with a GitHub App selection state', () => {
+    const SELECT_STATE = `${'0'.repeat(36)}.SELECTcanary${'x'.repeat(31)}`;
+    const selection = { state: SELECT_STATE, installations: [{ installationId: 7, accountLogin: 'acme', accountType: 'Organization' }] };
+
+    const expectSelectStateNeverLeaked = () => {
+      const seen = JSON.stringify([
+        ...consoleSpies.map((spy) => spy.calls.allArgs()),
+        storage.setItem.calls.allArgs(),
+        globalThis.window.location,
+        context.state.selection,
+        context.state.notice,
+        context.state.integrations,
+      ]);
+
+      expect(seen).not.toContain(SELECT_STATE);
+    };
+
+    beforeEach(() => {
+      context.state.selection = selection;
+    });
+
+    it('never leaks it after a successful select', async () => {
+      context.client.selectGithubAppInstallation.and.resolveTo(buildIntegration({ type: 'github_app', githubLogin: 'acme' }));
+
+      await context.buildController().selectInstallation(selection, 7);
+
+      expectSelectStateNeverLeaked();
+    });
+
+    it('never leaks it after a failed select', async () => {
+      context.client.selectGithubAppInstallation.and.rejectWith(
+        new ApiError(422, 'raw', 'INTEGRATION_INSTALLATION_NOT_ACCESSIBLE'),
+      );
+
+      await context.buildController().selectInstallation(selection, 7);
+
+      expectSelectStateNeverLeaked();
+    });
+
+    it('drops it on unmount', () => {
+      context.buildController().dispose();
+
+      expectSelectStateNeverLeaked();
+    });
+  });
+
   it('never leaks a canary credential on a failed create and replace', async () => {
     const error = new ApiError(422, 'invalid', 'INTEGRATION_CREDENTIAL_INVALID');
     context.client.create.and.rejectWith(error);

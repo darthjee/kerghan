@@ -15,7 +15,8 @@ describe('IntegrationsHandlers', () => {
   beforeEach(() => {
     controller = jasmine.createSpyObj('controller', [
       'retry', 'setAddForm', 'patchAddForm', 'create', 'patchRow', 'rename',
-      'replaceCredential', 'remove', 'test', 'startRedirect', 'setNotice',
+      'replaceCredential', 'remove', 'test', 'startRedirect', 'setNotice', 'selectInstallation',
+      'setSelection',
     ]);
   });
 
@@ -69,6 +70,15 @@ describe('IntegrationsHandlers', () => {
 
       expect(submit.preventDefault).toHaveBeenCalled();
       expect(controller.create).toHaveBeenCalledWith(addForm);
+    });
+
+    it('submits the form with a redirect mode, preventing navigation', () => {
+      const click = event();
+
+      build().onSubmitAddMode('connect')(click);
+
+      expect(click.preventDefault).toHaveBeenCalled();
+      expect(controller.create).toHaveBeenCalledWith(addForm, 'connect');
     });
   });
 
@@ -142,10 +152,16 @@ describe('IntegrationsHandlers', () => {
     });
   });
 
-  it('reconnects a redirect-flow row with its integrationId', () => {
-    build().onReconnect('abc')();
+  it('reconnects a redirect-flow row with its type and integrationId', () => {
+    build().onReconnect({ id: 'abc', type: 'oauth_app' })();
 
-    expect(controller.startRedirect).toHaveBeenCalledWith({ integrationId: 'abc' });
+    expect(controller.startRedirect).toHaveBeenCalledWith('oauth_app', { integrationId: 'abc' });
+  });
+
+  it('reconnects a row with the chosen mode', () => {
+    build().onReconnect({ id: 'abc', type: 'github_app' }, 'connect')();
+
+    expect(controller.startRedirect).toHaveBeenCalledWith('github_app', { integrationId: 'abc', mode: 'connect' });
   });
 
   describe('remove', () => {
@@ -172,5 +188,21 @@ describe('IntegrationsHandlers', () => {
     build().onTest('abc')();
 
     expect(controller.test).toHaveBeenCalledWith('abc');
+  });
+
+  describe('installation selection', () => {
+    const selection = { state: 'SELECTcanary', installations: [] };
+
+    it('selects an installation of the current selection', () => {
+      build({ addForm, rowState, selection }).onSelectInstallation(7)();
+
+      expect(controller.selectInstallation).toHaveBeenCalledWith(selection, 7);
+    });
+
+    it('cancels the selection', () => {
+      build({ addForm, rowState, selection }).onCancelSelection();
+
+      expect(controller.setSelection).toHaveBeenCalledWith(null);
+    });
   });
 });
