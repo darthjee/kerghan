@@ -22,10 +22,15 @@ plans point at.
    updates the spec in the same PR.
 3. The feature's **last** sub-issue folds the lasting content into the permanent docs
    (`product.md`, `modules/`, `backend/routes/`, `environment-variables.md`, …).
-4. That last sub-issue then deletes `docs/agents/specs/<feature>/` and removes its entry from
-   [Active specs](#active-specs).
+4. That last sub-issue then deletes `docs/agents/specs/<feature>/` and moves its entry from
+   [Active specs](#active-specs) to [Completed specs](#completed-specs), pointing at the permanent
+   docs that now hold it.
 
 This hub itself is never deleted, even when no spec is active.
+
+Root instruction files (`CLAUDE.md`, `AGENTS.md`) link to this hub, never to a feature's spec
+folder or to the permanent docs it was folded into. When a spec moves or completes, only this
+file changes.
 
 ## Conventions
 
@@ -43,3 +48,11 @@ This hub itself is never deleted, even when no spec is active.
 none
 
 When no feature is in progress, this list reads "none".
+
+## Completed specs
+
+Features whose specs were folded into the permanent docs, and where their definition lives now.
+
+| Feature | Now defined in | Product decision |
+|---------|----------------|------------------|
+| Integrations (GitHub credentials) | [modules/integrations.md](modules/integrations.md) (encryption at rest: its *Security* section) | #295 |
