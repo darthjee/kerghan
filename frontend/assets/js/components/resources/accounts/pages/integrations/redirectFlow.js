@@ -1,5 +1,6 @@
 import OauthAppLanding from '../../../../../utils/oauth/OauthAppLanding.js';
 import IntegrationErrors from './errorMessages.js';
+import RedirectShared from './redirectShared.js';
 
 const GITHUB_AUTHORIZE_PREFIX = 'https://github.com/login/oauth/authorize?';
 
@@ -7,21 +8,6 @@ const LANDING_NOTICES = new Map([
   ['cancelled', { variant: 'warning', text: 'You cancelled the GitHub authorization.' }],
   ['failed', { variant: 'danger', text: 'GitHub didn\'t complete the authorization. Try again.' }],
 ]);
-
-/**
- * Insert a created integration at the top of the list, or replace a reconnected one in place.
- *
- * @param {Array<object>} current - The current integrations.
- * @param {{id: string}} integration - The created or reconnected integration.
- * @returns {Array<object>} The updated list.
- */
-function upsert(current, integration) {
-  if (!current.some(({ id }) => id === integration.id)) {
-    return [integration, ...current];
-  }
-
-  return current.map((existing) => (existing.id === integration.id ? integration : existing));
-}
 
 /**
  * Send the landing's `code` and `state` to the callback route, once, and show the outcome.
@@ -39,27 +25,11 @@ async function complete(controller, { code, state }) {
       return;
     }
 
-    controller.setIntegrations((current) => upsert(current, integration));
+    controller.setIntegrations((current) => RedirectShared.upsert(current, integration));
     controller.setNotice({ variant: 'success', text: `Connected to GitHub as ${integration.githubLogin}` });
   } catch (error) {
     controller.setNotice({ variant: 'danger', text: IntegrationErrors.messageFor(error) });
   }
-}
-
-/**
- * Build the error reporter of a redirect start: the row's error for a reconnect, the add
- * form's error for a create.
- *
- * @param {{patchRow: Function, patchAddForm: Function}} controller - The page's controller.
- * @param {{integrationId: (string|undefined)}} body - The start request body.
- * @returns {Function} Stores an error message (or `null` to clear it).
- */
-function reporterFor(controller, { integrationId }) {
-  if (integrationId) {
-    return (error) => controller.patchRow(integrationId, { error });
-  }
-
-  return (error) => controller.patchAddForm({ error });
 }
 
 /**
@@ -73,7 +43,7 @@ const RedirectFlow = {
    *
    * @type {string}
    */
-  UNEXPECTED_URL_MESSAGE: 'Kerghan received an unexpected authorization address and did not follow it.',
+  UNEXPECTED_URL_MESSAGE: RedirectShared.UNEXPECTED_URL_MESSAGE,
 
   /**
    * Whether a URL is GitHub's OAuth authorize page, the only place a redirect flow may go.
@@ -96,7 +66,7 @@ const RedirectFlow = {
    * @returns {Promise<void>} Resolves once the request finishes.
    */
   async start(controller, body) {
-    const report = reporterFor(controller, body);
+    const report = RedirectShared.reporterFor(controller, body);
 
     report(null);
 
@@ -134,10 +104,7 @@ const RedirectFlow = {
       return;
     }
 
-    const notice = LANDING_NOTICES.get(landing.kind);
-
-    if (notice) {
-      controller.setNotice(notice);
+    if (RedirectShared.showLandingNotice(controller, LANDING_NOTICES, landing)) {
       return;
     }
 
