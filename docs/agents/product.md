@@ -1,8 +1,9 @@
 # Product Definitions
 
 **Status: partial.** The high-level flow (login, repo selection, on-demand issue fetching) is
-decided — see [Flow](flow.md). Entity definitions, an ownership chain, and role definitions
-still don't exist, because the core tracked-repo/label-rule data model is still open. This file
+decided — see [Flow](flow.md), and so are [integrations](#integrations). Entity definitions,
+an ownership chain, and role definitions for the core tracked-repo/label-rule data model still
+don't exist, because that model is still open. This file
 is the canonical place for the `product-owner`, `data-access`, and `security` agents to check
 "is this decided yet?".
 
@@ -17,18 +18,19 @@ is the canonical place for the `product-owner`, `data-access`, and `security` ag
   based on issues carrying certain labels, across every repo a user tracks, in one place.
 - **Multi-tenant**: each user account registers its own set of repos/orgs to monitor — unlike a
   single shared dataset.
-- **What the backend persists**: only account/login state and each user's repo selection
-  (except integrations — see the #295 note under "Deferred").
+- **What the backend persists**: account/login state, each user's repo selection, and each
+  user's [integrations](#integrations) (labelled, encrypted GitHub credentials).
   Issue data itself is **not** persisted by default — see "Issue fetching model" below.
 - **Issue fetching model**: on demand, live, fetched **client-side** by the frontend directly
   against GitHub's public REST API — not by the backend. This is what lets the backend stay idle
   between visits and moves GitHub's unauthenticated rate limit (60 requests/hour per source IP)
   from being shared across every Kerghan user (if the backend fetched) to being scoped to each
   user's own browser IP instead. Refresh is manual (user-triggered), not automatic/polled.
-- **GitHub access**: unauthenticated, public-repo data only for now. No OAuth app, no PAT
-  storage, no GitHub App installation (except integrations — see the #295 note under
-  "Deferred"). A per-user GitHub token for private-repo access is a
-  planned future addition, not yet built.
+- **GitHub access**: issue data is still fetched unauthenticated and client-side, public-repo
+  data only. Users can store GitHub credentials (Personal Access Token, OAuth App
+  authorization, GitHub App installation) as [integrations](#integrations), which are the
+  **only** allowed GitHub credential storage; nothing uses them for issue fetching yet (see
+  "Deferred").
 - **Frontend surface**: a dashboard/analytics view (issue volume, age, label breakdowns, "needs
   attention" lists), not just CRUD forms — API design should be aggregation-friendly.
 - **No file uploads, no GitHub webhooks.** An admin-role-gated UI is allowed (see #40's admin
@@ -40,16 +42,32 @@ is the canonical place for the `product-owner`, `data-access`, and `security` ag
   format and production wildcard rule in [Environment Variables](environment-variables.md)),
   `NODE_ENV`/`DEBUG`.
 
+## Integrations
+
+Decided by #295; the full definition is in the
+[Integrations module](modules/integrations.md).
+
+- **Entity**: an `Integration` is a labelled GitHub credential slot. It is owned by exactly one
+  user, and a user can have many (up to a configurable cap). Each has a `provider` (`github`), a
+  `type` (`pat`, `oauth_app` or `github_app`), a user-defined label unique per user, and a
+  status (`active`, `invalid`, `expired`, `undecryptable`).
+- **Access rules**: only the owner can see or manage an integration. Another user's integration
+  answers 404, like a missing one. Admins get no access to anyone's integrations.
+- **Secrets**: encrypted at rest (AES-256-GCM, with a dedicated `KERGHAN_INTEGRATIONS_KEY`),
+  never returned by the API, never logged; the owner only sees a masked hint.
+- **Credential storage boundary**: integrations are the only allowed way to store GitHub
+  credentials. Any other way still needs its own product decision.
+
 ## Deferred (future, not current scope)
 
 - **Opt-in issue persistence**: persisting fetched issues to MySQL, only when a user opts in
   (e.g. for history/trend views). Not built.
 - **Historical/trend collection**: volume-over-time or similar views, which depend on the
   opt-in persistence above. Not built.
-- **Per-user GitHub token**: unlocks private-repo access. Not built.
-  **In progress:** per-user GitHub credentials ("integrations") are being built under #295 and
-  are defined in [specs/integrations/](specs/integrations/README.md) — that spec is the product
-  decision allowing their storage until #304 replaces this note with the real definitions.
+- **Using integration credentials**: credentials can be stored as
+  [integrations](modules/integrations.md), but nothing uses them yet. Backend proxying of
+  GitHub calls with a user's integration, and reading private repositories with it, are not
+  built.
 
 ## What's still open
 
