@@ -134,7 +134,7 @@ describe('OauthAppStrategy', () => {
       expect(exchange.clientId).toBe(CLIENT_ID);
       expect(exchange.clientSecret.reveal()).toBe(CANARY_CLIENT_SECRET);
       expect(exchange.code.reveal()).toBe(CANARY_CODE);
-      expect(exchange.codeVerifier.reveal()).toBe(CANARY_VERIFIER);
+      expect(exchange.codeVerifier?.reveal()).toBe(CANARY_VERIFIER);
       expect(exchange.redirectUri).toBe(ENABLED.enabled && ENABLED.callbackUrl);
       expect(built.github.calls[0].reveal()).toBe(CANARY_OAUTH_TOKEN);
       expect(validated.secret.reveal()).toEqual({ token: CANARY_OAUTH_TOKEN });

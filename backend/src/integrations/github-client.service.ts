@@ -77,7 +77,8 @@ export interface OauthCodeExchangeRequest {
   clientId: string;
   clientSecret: Secret<string>;
   code: Secret<string>;
-  codeVerifier: Secret<string>;
+  /** The PKCE verifier; omitted (not sent) by flows without PKCE (the GitHub App's). */
+  codeVerifier?: Secret<string>;
   redirectUri: string;
 }
 
@@ -137,8 +138,8 @@ export class GithubClientService {
   }
 
   /**
-   * Exchanges an OAuth web flow `code` (with its PKCE `code_verifier`) for a
-   * user access token: `POST https://github.com/login/oauth/access_token`.
+   * Exchanges an OAuth web flow `code` (with its PKCE `code_verifier`, when
+   * given) for a user access token: `POST https://github.com/login/oauth/access_token`.
    * @param {OauthCodeExchangeRequest} request - The app credentials, code, verifier and redirect URI.
    * @returns {Promise<OauthCodeExchangeResponse>} GitHub's normalised answer, whatever its status.
    */
@@ -155,7 +156,7 @@ export class GithubClientService {
         client_secret: request.clientSecret.reveal(),
         code: request.code.reveal(),
         redirect_uri: request.redirectUri,
-        code_verifier: request.codeVerifier.reveal(),
+        ...(request.codeVerifier === undefined ? {} : { code_verifier: request.codeVerifier.reveal() }),
       }).toString(),
     });
     const parsed = parseJsonObject(body);
@@ -199,12 +200,17 @@ export class GithubClientService {
  * sanitized `GithubClientError`.
  * @param {string} url - The GitHub URL.
  * @param {RequestInit} init - Method, headers and body.
+ * @param {number} [maxBodyBytes] - The largest body read, in bytes.
  * @returns {Promise<{ response: Response, body: string | null }>} The response and its capped body.
  */
-async function send(url: string, init: RequestInit): Promise<{ response: Response; body: string | null }> {
+export async function send(
+  url: string,
+  init: RequestInit,
+  maxBodyBytes: number = GITHUB_MAX_BODY_BYTES,
+): Promise<{ response: Response; body: string | null }> {
   try {
     const response = await fetch(url, { ...init, redirect: 'error', signal: AbortSignal.timeout(GITHUB_TIMEOUT_MS) });
-    const body = await readCappedBody(response, GITHUB_MAX_BODY_BYTES);
+    const body = await readCappedBody(response, maxBodyBytes);
 
     return { response, body };
   } catch (error) {
@@ -217,7 +223,7 @@ async function send(url: string, init: RequestInit): Promise<{ response: Respons
  * @param {string} authorization - The `Authorization` header value.
  * @returns {Record<string, string>} The headers.
  */
-function apiHeaders(authorization: string): Record<string, string> {
+export function apiHeaders(authorization: string): Record<string, string> {
   return {
     Authorization: authorization,
     Accept: 'application/vnd.github+json',

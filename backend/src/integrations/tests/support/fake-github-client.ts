@@ -1,3 +1,22 @@
+import {
+  appInstallationResponse,
+  FakeAppInstallationAnswer,
+  FakeExchangeAnswer,
+  FakeGithubAnswer,
+  FakeInstallationsAnswer,
+  FakeRevokeAnswer,
+  FakeTokenAnswer,
+  githubUserResponse,
+  installationsPage,
+  installationTokenResponse,
+  oauthExchangeResponse,
+} from './fake-github-answers.js';
+import type {
+  GithubAppClientService,
+  GithubAppInstallationResponse,
+  GithubInstallationsPage,
+  GithubInstallationTokenResponse,
+} from '../../github-app-client.service.js';
 import type {
   GithubClientService,
   GithubUserResponse,
@@ -5,34 +24,9 @@ import type {
   OauthCodeExchangeResponse,
   OauthTokenRevocationRequest,
 } from '../../github-client.service.js';
-import { Secret } from '../../secret.js';
+import type { Secret } from '../../secret.js';
 
-/** A recognisable OAuth App user access token that must never leak anywhere. */
-export const CANARY_OAUTH_TOKEN = 'gho_CANARYcanaryOAUTH0000000000000000e5f6';
-
-/** A scripted answer: a response, or an error to throw (e.g. a `GithubClientError`). */
-export type FakeGithubAnswer = GithubUserResponse | Error;
-/** A scripted code exchange answer. */
-export type FakeExchangeAnswer = OauthCodeExchangeResponse | Error;
-/** A scripted revocation answer. */
-export type FakeRevokeAnswer = { status: number } | Error;
-
-/**
- * Builds a successful code exchange answer (the canary OAuth token by default).
- * @param {Partial<OauthCodeExchangeResponse>} overrides - Fields to override.
- * @returns {OauthCodeExchangeResponse} The answer.
- */
-export function oauthExchangeResponse(overrides: Partial<OauthCodeExchangeResponse> = {}): OauthCodeExchangeResponse {
-  return {
-    status: 200,
-    accessToken: new Secret(CANARY_OAUTH_TOKEN),
-    error: null,
-    rateLimitRemaining: null,
-    rateLimitReset: null,
-    retryAfter: null,
-    ...overrides,
-  };
-}
+export * from './fake-github-answers.js';
 
 /**
  * Answers with the next queued answer (or the default), throwing errors.
@@ -51,31 +45,24 @@ async function answer<T>(queue: T[], fallback: T): Promise<Exclude<T, Error>> {
 }
 
 /**
- * Builds a `GET /user` response with sensible defaults.
- * @param {Partial<GithubUserResponse>} overrides - Fields to override.
- * @returns {GithubUserResponse} The response.
- */
-export function githubUserResponse(overrides: Partial<GithubUserResponse> = {}): GithubUserResponse {
-  return {
-    status: 200,
-    login: 'octocat',
-    oauthScopes: 'repo, read:org',
-    tokenExpiration: null,
-    rateLimitRemaining: 4999,
-    rateLimitReset: null,
-    retryAfter: null,
-    ...overrides,
-  };
-}
-
-/**
  * Scriptable stand-in for `GithubClientService`. Answers are consumed in
  * order; once the queue is empty, the default answer is used. Every call is
  * recorded with its token still wrapped in a `Secret`, so an assertion
  * failure never prints the token.
  */
-export class FakeGithubClient implements Pick<GithubClientService, 'getUser' | 'exchangeOauthCode' | 'revokeOauthToken'> {
+export class FakeGithubClient implements
+  Pick<GithubClientService, 'getUser' | 'exchangeOauthCode' | 'revokeOauthToken'>,
+  Pick<GithubAppClientService, 'listUserInstallations' | 'getAppInstallation' | 'createInstallationToken'> {
   readonly calls: Array<Secret<string>> = [];
+  readonly installationsCalls: Array<{ token: Secret<string>; pageUrl: string | undefined }> = [];
+  readonly appInstallationCalls: Array<{ jwt: Secret<string>; installationId: number }> = [];
+  readonly tokenCalls: Array<{ jwt: Secret<string>; installationId: number }> = [];
+  readonly installationsQueue: FakeInstallationsAnswer[] = [];
+  readonly appInstallationQueue: FakeAppInstallationAnswer[] = [];
+  readonly tokenQueue: FakeTokenAnswer[] = [];
+  defaultInstallations: FakeInstallationsAnswer = installationsPage();
+  defaultAppInstallation: FakeAppInstallationAnswer = appInstallationResponse();
+  defaultToken: FakeTokenAnswer = installationTokenResponse();
   readonly exchangeCalls: OauthCodeExchangeRequest[] = [];
   readonly revokeCalls: OauthTokenRevocationRequest[] = [];
   readonly exchangeQueue: FakeExchangeAnswer[] = [];
@@ -149,6 +136,55 @@ export class FakeGithubClient implements Pick<GithubClientService, 'getUser' | '
     this.defaultAnswer = githubUserResponse();
     this.defaultExchange = oauthExchangeResponse();
     this.defaultRevoke = { status: 204 };
+    this.installationsCalls.length = 0;
+    this.appInstallationCalls.length = 0;
+    this.tokenCalls.length = 0;
+    this.installationsQueue.length = 0;
+    this.appInstallationQueue.length = 0;
+    this.tokenQueue.length = 0;
+    this.defaultInstallations = installationsPage();
+    this.defaultAppInstallation = appInstallationResponse();
+    this.defaultToken = installationTokenResponse();
+  }
+
+  /**
+   * Records the call and answers with the next scripted installations page.
+   * @param {Secret<string>} token - The user token.
+   * @param {string} [pageUrl] - The page URL.
+   * @returns {Promise<GithubInstallationsPage>} The scripted page.
+   */
+  async listUserInstallations(token: Secret<string>, pageUrl?: string): Promise<GithubInstallationsPage> {
+    this.installationsCalls.push({ token, pageUrl });
+    return answer(this.installationsQueue, this.defaultInstallations);
+  }
+
+  /**
+   * Records the app-JWT call and answers with the next scripted installation.
+   * @param {Secret<string>} jwt - The app JWT.
+   * @param {number} installationId - The installation id.
+   * @returns {Promise<GithubAppInstallationResponse>} The scripted answer.
+   */
+  async getAppInstallation(jwt: Secret<string>, installationId: number): Promise<GithubAppInstallationResponse> {
+    this.appInstallationCalls.push({ jwt, installationId });
+    return answer(this.appInstallationQueue, this.defaultAppInstallation);
+  }
+
+  /**
+   * Records the app-JWT token mint and answers with the next scripted answer.
+   * @param {Secret<string>} jwt - The app JWT.
+   * @param {number} installationId - The installation id.
+   * @returns {Promise<GithubInstallationTokenResponse>} The scripted answer.
+   */
+  async createInstallationToken(jwt: Secret<string>, installationId: number): Promise<GithubInstallationTokenResponse> {
+    this.tokenCalls.push({ jwt, installationId });
+    return answer(this.tokenQueue, this.defaultToken);
+  }
+
+  /**
+   * @returns {number} How many app-JWT calls (installation lookups and token mints) were made.
+   */
+  get appJwtCallCount(): number {
+    return this.appInstallationCalls.length + this.tokenCalls.length;
   }
 
   /**
@@ -193,7 +229,8 @@ export class FakeGithubClient implements Pick<GithubClientService, 'getUser' | '
    * @returns {number} How many GitHub calls of any kind were made.
    */
   get totalCallCount(): number {
-    return this.calls.length + this.exchangeCalls.length + this.revokeCalls.length;
+    return this.calls.length + this.exchangeCalls.length + this.revokeCalls.length
+      + this.installationsCalls.length + this.appJwtCallCount;
   }
 
   /**
