@@ -1,10 +1,11 @@
-import { createHash, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
+import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, LessThanOrEqual, Repository } from 'typeorm';
 import { IntegrationOauthState } from '../../entities/integration-oauth-state.entity.js';
 import { invalidRedirectState } from '../../integration-http-errors.js';
 import { Secret } from '../../secret.js';
+import { secretMatches, sha256Hex } from '../shared/state-secret.js';
 
 // How long a started flow stays valid (GitHub's codes also live 10 minutes).
 export const OAUTH_STATE_TTL_MS = 10 * 60 * 1000;
@@ -133,28 +134,6 @@ export class OauthStateService {
  */
 export function pkceChallenge(codeVerifier: string): string {
   return createHash('sha256').update(codeVerifier).digest('base64url');
-}
-
-/**
- * Hex SHA-256 of a value.
- * @param {string} value - The value.
- * @returns {string} 64 hex characters.
- */
-function sha256Hex(value: string): string {
-  return createHash('sha256').update(value).digest('hex');
-}
-
-/**
- * Compares the submitted secret's hash with the stored one in constant time.
- * @param {string} secret - The submitted secret.
- * @param {string} storedHash - The stored hex SHA-256.
- * @returns {boolean} Whether they match.
- */
-function secretMatches(secret: string, storedHash: string): boolean {
-  const submitted = Buffer.from(sha256Hex(secret), 'hex');
-  const stored = Buffer.from(storedHash, 'hex');
-
-  return submitted.length === stored.length && timingSafeEqual(submitted, stored);
 }
 
 /**
