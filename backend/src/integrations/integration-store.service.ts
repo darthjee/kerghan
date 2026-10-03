@@ -5,6 +5,7 @@ import type { QueryDeepPartialEntity } from 'typeorm/query-builder/QueryPartialE
 import { Integration } from './entities/integration.entity.js';
 import { ENSURE_LOCKOUT_ROW_SQL } from './integration-credential-abuse-guard.service.js';
 import { integrationNotFound, labelTaken, limitReached } from './integration-http-errors.js';
+import type { EncryptedSecret } from './integrations-encryption.service.js';
 
 // Canonical UUID shape; anything else can't be an integration id and answers 404 without a query.
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -123,6 +124,39 @@ export class IntegrationStoreService {
     ));
 
     return Object.assign(row, changes, { updatedAt: new Date() });
+  }
+
+  /**
+   * Rewrites a row's four secret columns, but only while its stored key id
+   * is still `expectedKeyId`: the `UPDATE` is scoped by `id`, `user_id` and
+   * `secret_key_id`, so a concurrent credential replacement is never
+   * clobbered (0 affected rows is a silent no-op). On success the loaded row
+   * is updated in place.
+   * @param {Pick<Integration, 'id' | 'userId'> & Partial<Integration>} row - The row to rewrite.
+   * @param {EncryptedSecret} encrypted - The new key id, IV, auth tag and ciphertext.
+   * @param {string} expectedKeyId - The key id the row must still hold.
+   * @returns {Promise<boolean>} `true` when the row was rewritten.
+   */
+  async rewriteSecret(
+    row: Pick<Integration, 'id' | 'userId'> & Partial<Integration>,
+    encrypted: EncryptedSecret,
+    expectedKeyId: string,
+  ): Promise<boolean> {
+    const changes = {
+      secretKeyId: encrypted.keyId,
+      secretIv: encrypted.iv,
+      secretAuthTag: encrypted.authTag,
+      secretCiphertext: encrypted.ciphertext,
+    };
+    const result = await this.repository.update({ id: row.id, userId: row.userId, secretKeyId: expectedKeyId }, changes);
+
+    if ((result.affected ?? 0) === 0) {
+      return false;
+    }
+
+    Object.assign(row, changes);
+
+    return true;
   }
 
   /**

@@ -190,4 +190,116 @@ describe('IntegrationsService (test connection)', () => {
     expect(await harness.service.test(USER, uuid)).toMatchObject({ status: 'active', lastTestResult: 'success' });
     expect(harness.github.callCount).toBe(1);
   });
+
+  describe('lazy re-encryption of a row stored under a previous key', () => {
+    let previousKeyId: string;
+
+    beforeEach(async () => {
+      const row = harness.repo.rows[0];
+      const { Secret } = await import('../secret.js');
+      const encrypted = harness.previousEncryption.encrypt(new Secret({ token: CANARY_CLASSIC }), { uuid: row.uuid, type: row.type });
+      previousKeyId = encrypted.keyId;
+      Object.assign(row, {
+        secretKeyId: encrypted.keyId,
+        secretIv: encrypted.iv,
+        secretAuthTag: encrypted.authTag,
+        secretCiphertext: encrypted.ciphertext,
+      });
+    });
+
+    afterEach(() => {
+      expect(inspect(harness.logger.info.mock.calls, { depth: 10 })).not.toContain(CANARY_FRAGMENT);
+    });
+
+    /**
+     * Asserts the stored row now sits on the current key and still decrypts to the same token.
+     * @returns {void}
+     */
+    function expectRewrittenUnderCurrentKey(): void {
+      const row = harness.repo.rows[0];
+
+      expect(row.secretKeyId).toBe(harness.encryption.currentKeyId);
+      expect(harness.previousEncryption.isDecryptableKeyId(row.secretKeyId)).toBe(false);
+      expect(harness.encryption.decrypt({
+        keyId: row.secretKeyId,
+        iv: row.secretIv,
+        authTag: row.secretAuthTag,
+        ciphertext: row.secretCiphertext,
+        uuid: row.uuid,
+        type: row.type,
+      })?.reveal()).toEqual({ token: CANARY_CLASSIC });
+      expect(harness.logger.info).toHaveBeenCalledWith('integration secret re-encrypted', {
+        uuid,
+        fromKeyId: previousKeyId,
+        toKeyId: harness.encryption.currentKeyId,
+      });
+    }
+
+    it('is reported decryptable before the test', async () => {
+      expect((await harness.service.show(USER, uuid)).status).not.toBe('undecryptable');
+    });
+
+    it('re-encrypts under the current key on an active outcome', async () => {
+      expect(await harness.service.test(USER, uuid)).toMatchObject({ status: 'active', lastTestResult: 'success' });
+      expectRewrittenUnderCurrentKey();
+    });
+
+    it('re-encrypts under the current key on an invalid outcome', async () => {
+      harness.github.respondWith(githubUserResponse({ status: 401, login: null }));
+
+      expect(await harness.service.test(USER, uuid)).toMatchObject({ status: 'invalid', lastTestResult: 'rejected' });
+      expectRewrittenUnderCurrentKey();
+    });
+
+    it('re-encrypts under the current key on an expired outcome', async () => {
+      harness.repo.rows[0].expiresAt = new Date('2000-01-01T00:00:00Z');
+      harness.github.respondWith(githubUserResponse({ status: 401, login: null }));
+
+      expect(await harness.service.test(USER, uuid)).toMatchObject({ status: 'expired', lastTestResult: 'rejected' });
+      expectRewrittenUnderCurrentKey();
+    });
+
+    it('re-encrypts under the current key on a transient outcome', async () => {
+      harness.github.respondWith(githubUserResponse({ status: 500, login: null }));
+
+      expect((await httpError(harness.service.test(USER, uuid))).status).toBe(502);
+      expect(harness.repo.rows[0].lastTestResult).toBe('transient_error');
+      expectRewrittenUnderCurrentKey();
+    });
+
+    it('skips the rewrite when the secret key id changed concurrently', async () => {
+      const update = harness.repo.update;
+      jest.spyOn(harness.repo, 'update').mockImplementationOnce(async (where, changes) => {
+        harness.repo.rows[0].secretKeyId = 'abcdef01';
+        return update(where, changes);
+      });
+
+      expect(await harness.service.test(USER, uuid)).toMatchObject({ status: 'active' });
+      expect(harness.repo.rows[0].secretKeyId).toBe('abcdef01');
+      expect(harness.logger.info).not.toHaveBeenCalledWith('integration secret re-encrypted', expect.anything());
+    });
+  });
+
+  it('does not rewrite a row stored under the current key', async () => {
+    const before = { ...harness.repo.rows[0] };
+    const update = jest.spyOn(harness.repo, 'update');
+
+    await harness.service.test(USER, uuid);
+
+    expect(harness.repo.rows[0]).toMatchObject({
+      secretKeyId: before.secretKeyId,
+      secretIv: before.secretIv,
+      secretCiphertext: before.secretCiphertext,
+    });
+    expect(update.mock.calls.every(([, changes]) => !('secretKeyId' in changes))).toBe(true);
+  });
+
+  it('does not rewrite a row under an unknown key, which stays undecryptable', async () => {
+    harness.repo.rows[0].secretKeyId = 'deadbeef';
+    const update = jest.spyOn(harness.repo, 'update');
+
+    expect((await harness.service.test(USER, uuid)).status).toBe('undecryptable');
+    expect(harness.repo.rows[0].secretKeyId).toBe('deadbeef');
+    expect(update.mock.calls.every(([, changes]) => !('secretKeyId' in changes))).toBe(true);
+  });
 });
