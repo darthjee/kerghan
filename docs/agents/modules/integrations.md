@@ -50,7 +50,6 @@ reference. Every route requires `JwtGuard`, ends in `.json` and is cache class `
 - Admin support tooling (read-only metadata, deleting a leaked credential) may come later, as its
   own issue with its own product decision. Today admins have **no** access
   ([Access rules](#access-rules)).
-- Rotation of `KERGHAN_INTEGRATIONS_KEY` is tracked separately (#305).
 
 ## Data model
 
@@ -163,7 +162,7 @@ migration only.
 | `active` | The last check against GitHub succeeded. |
 | `invalid` | GitHub rejected the credential, or it is no longer usable. `status_reason` gives the cause. |
 | `expired` | The credential is past its known expiry. |
-| `undecryptable` | The stored secret can't be decrypted with the configured key. |
+| `undecryptable` | The stored secret can't be decrypted with any configured key (current or previous). |
 
 **`status_reason`** is a short code, set only with `invalid` (and cleared on any other status):
 
@@ -184,7 +183,7 @@ migration only.
 | **Rename** | Status unchanged. |
 
 `undecryptable` is **not terminal**: a test connection always tries to decrypt again when the
-row's `secret_key_id` matches the configured key. If decryption succeeds, the test proceeds
+row's `secret_key_id` matches a configured key (current or previous). If decryption succeeds, the test proceeds
 normally and sets the status from GitHub's answer, so a temporary key misconfiguration that was
 later fixed doesn't strand rows. Only an unknown key id or an actual auth-tag failure keeps it
 `undecryptable`. **Replace credential** (back to `active` on success) and **delete** are always
@@ -309,18 +308,41 @@ format validation).
 - **Environments:** the docker-compose and `.env` samples and CI ship one fixed, valid but
   **public** placeholder key, defined once in `integrations-key.ts` so the production check can
   compare against it. See [environment variables](../environment-variables.md).
-- **Single key.** No previous-key list and no re-encryption today; rotation is tracked
-  separately (#305).
+- **Key set.** `KERGHAN_PREVIOUS_INTEGRATIONS_KEYS` (optional, comma-separated) lists retired
+  keys that stay **decrypt-only**. New secrets are always encrypted with the current key.
+  - Entries are trimmed. Blank entries, duplicates and entries equal to the current key are
+    dropped (the same rules as `KERGHAN_PREVIOUS_SECRET_KEYS`, `core/secret-keys.ts`).
+  - Every remaining entry gets the same boot validation as the current key. Boot also fails when
+    two configured keys share a key id.
+  - Errors name the variable and the entry's 1-based position, never the value.
+- **Lazy re-encryption.** When a test connection decrypts a row stored under a previous key, the
+  row is re-encrypted with the current key, whatever GitHub answers. The write is conditioned on
+  the old key id, so a concurrent credential replacement wins silently. Logged with the uuid and
+  both key ids only.
+- **Operator commands** (`backend/package.json`, run against the compiled `dist/`; in dev,
+  `make integrations-keys-status` / `make integrations-keys-reencrypt` build first):
+  - `yarn integrations:keys:status` is read-only. It prints one `<keyId> <current|previous|unknown>
+    <count>` line per key id: the current key, then the previous keys (both listed even at `0`),
+    then any stored key id matching no configured key. Exits `0`.
+  - `yarn integrations:keys:reencrypt` re-encrypts, in id-ordered batches, every row stored under
+    a previous key, with the same conditional write as the lazy path. It is idempotent and prints
+    `reencrypted=<n> skipped_undecryptable=<n> skipped_changed=<n>`. Exits `1` when
+    `skipped_undecryptable` is above 0, otherwise `0`. Skipped rows are logged by uuid.
+  - Neither command prints a key, a ciphertext or a secret. Both are operator-only: they read
+    every user's rows, and are never reachable from a request.
+  - Re-encryption is never an automatic boot step. The operator procedure is in
+    [Rotating `KERGHAN_INTEGRATIONS_KEY`](../environment-variables.md#rotating-kerghan_integrations_key).
 
 #### Key id
 
 - `secret_key_id` = the first **8 hex characters of SHA-256 over the raw 32 key bytes**. The key
   can't be recovered from it.
-- Every ciphertext stores the id of the key that produced it. With one key the id is only
-  recorded; rotation can use it to select a previous key with no data migration.
-- A ciphertext whose `secret_key_id` doesn't match the configured key is treated as
-  `undecryptable` without attempting decryption ([Status lifecycle](#status-lifecycle)). A row
-  stored as `undecryptable` is retried on the next test once its key id matches again.
+- Every ciphertext stores the id of the key that produced it. Decryption uses it to pick the
+  right key (current or previous), with no data migration.
+- Any configured key id is decryptable. A ciphertext whose `secret_key_id` matches no configured
+  key is treated as `undecryptable` without attempting decryption
+  ([Status lifecycle](#status-lifecycle)). A row stored as `undecryptable` is retried on the next
+  test once its key id matches a configured key again.
 
 ### Secrets never logged
 
@@ -331,7 +353,7 @@ must never reach either.
 1. **Never logged, never in an exception message, never in a response:**
    - the plaintext credential
    - the decrypted secret payload
-   - `KERGHAN_INTEGRATIONS_KEY`
+   - `KERGHAN_INTEGRATIONS_KEY` and every `KERGHAN_PREVIOUS_INTEGRATIONS_KEYS` entry
    - the stored IV, auth tag and ciphertext
 2. **Safe to log:**
    - integration UUID and user id
