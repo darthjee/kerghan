@@ -70,7 +70,7 @@ full file before loading it. For a bare link-only table of contents instead, see
 
 - **[Specs](specs.md)** — Permanent hub for temporary feature specs under `specs/<feature>/`:
   purpose, lifecycle (first sub-issue writes them, last one folds them into the permanent docs
-  and deletes them), conventions, and the list of active specs (today: `integrations/`, #295).
+  and deletes them), conventions, and the list of active specs (none today).
 - **[Plans](plans/)** — Implementation plans for ongoing or upcoming features, one directory per
   issue (`<issue_id>_<topic>/`).
 - **[Issues](issues/)** — Detailed specs for open issues, one file per issue
