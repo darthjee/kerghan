@@ -8,7 +8,7 @@ import type { Secret } from '../../secret.js';
  * Best-effort revocation of the GitHub App user-to-server token obtained by
  * the callback's code exchange (`DELETE /applications/{client_id}/token`,
  * with the GitHub App's client id and secret). See
- * `docs/agents/specs/integrations/types/github-app.md#user-token`.
+ * `docs/agents/modules/integrations/github-app.md#user-token`.
  */
 @Injectable()
 export class GithubAppRevocationService {

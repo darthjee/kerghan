@@ -8,7 +8,7 @@ export type GithubAppStatePurpose = 'create' | 'replace';
 
 /**
  * A server-side, single-use record of one started GitHub App flow (see
- * `docs/agents/specs/integrations/types/github-app.md#state`). Owns table
+ * `docs/agents/modules/integrations/github-app.md#state`). Owns table
  * `integrations_github_app_states`. `userId` is a logical foreign key (no
  * physical FK, no cross-module JOIN) into `auth_users`. Only the SHA-256 of
  * the `state` secret is stored. A `select` row also records the result of

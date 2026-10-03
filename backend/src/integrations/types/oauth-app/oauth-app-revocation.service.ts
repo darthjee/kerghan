@@ -14,7 +14,7 @@ export interface RevocationLogContext {
  * Best-effort revocation of single OAuth App user access tokens
  * (`DELETE /applications/{client_id}/token`; never the `/grant` endpoint),
  * used on delete, on replace (the previous token) and on callback failures
- * (the new token). See `docs/agents/specs/integrations/types/oauth-app.md#revocation`.
+ * (the new token). See `docs/agents/modules/integrations/oauth-app.md#revocation`.
  */
 @Injectable()
 export class OauthAppRevocationService {

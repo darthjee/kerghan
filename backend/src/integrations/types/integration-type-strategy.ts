@@ -45,7 +45,7 @@ export interface IntegrationView {
 
 /**
  * The extension point every integration type implements (see
- * `docs/agents/specs/integrations/type-contract.md`). The generic code never
+ * `docs/agents/modules/integrations.md#type-contract`). The generic code never
  * branches on `type`; it delegates to the strategy looked up in the registry.
  */
 export interface IntegrationTypeStrategy {

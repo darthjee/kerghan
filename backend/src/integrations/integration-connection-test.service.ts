@@ -10,7 +10,7 @@ import { IntegrationTypeRegistry } from './types/integration-type-registry.js';
 import type { IntegrationTypeStrategy, TestOutcome } from './types/integration-type-strategy.js';
 
 /**
- * Test connection (see `docs/agents/specs/integrations/api.md#per-action-behaviour`):
+ * Test connection (see `docs/agents/backend/routes/integrations.md#per-action-behaviour`):
  * owner lookup → atomic cooldown claim → decrypt → the type's `test` →
  * record `last_tested_at` / `last_test_result`. A rejection is a successful
  * test (200); a transient failure leaves the status unchanged and answers

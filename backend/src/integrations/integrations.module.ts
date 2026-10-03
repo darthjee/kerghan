@@ -42,7 +42,7 @@ import { PatStrategy } from './types/pat/pat.strategy.js';
 /**
  * The Integrations module — always-on (imported directly into `AppModule`):
  * labelled, encrypted GitHub credentials owned by one user each (see
- * `docs/agents/specs/integrations/`). Owns tables `integrations`,
+ * `docs/agents/modules/integrations.md`). Owns tables `integrations`,
  * `integrations_credential_lockouts`, `integrations_oauth_states` and
  * `integrations_github_app_states`;
  * `integrations.user_id` carries the project's only physical cross-module FK (`ON DELETE CASCADE` to

@@ -13,7 +13,7 @@ import type { IntegrationResponse } from '../../integration-response.js';
 /**
  * The OAuth App type-owned routes — thin, delegating everything to
  * `OauthAppFlowService` (see
- * `docs/agents/specs/integrations/types/oauth-app.md#routes`). Both sit
+ * `docs/agents/modules/integrations/oauth-app.md#routes`). Both sit
  * behind the global `JwtGuard` (no `@Public()`, no `@AdminOnly()`) and
  * `OriginGuard`, answer 404 while the type is disabled
  * (`OauthAppEnabledGuard`), and are cache class `never`. The owner is always

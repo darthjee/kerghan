@@ -33,7 +33,7 @@ export type ConsumedOauthState =
 /**
  * Issues and consumes the server-side, single-use, PKCE-backed `state` of
  * the OAuth App redirect flow (see
- * `docs/agents/specs/integrations/types/oauth-app.md#state`).
+ * `docs/agents/modules/integrations/oauth-app.md#state`).
  *
  * The `state`, its secret and the verifier are never logged nor put in an
  * error message; only the SHA-256 of the secret is stored. Every rejected

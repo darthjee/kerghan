@@ -38,7 +38,7 @@ const REQUIRED_SCOPE = 'repo';
 /**
  * The GitHub OAuth App (`oauth_app`) type: the user authorizes Kerghan's
  * OAuth App through a redirect flow and the resulting user access token is
- * stored (see `docs/agents/specs/integrations/types/oauth-app.md`). Its
+ * stored (see `docs/agents/modules/integrations/oauth-app.md`). Its
  * `validate` exchanges the callback's code (with the PKCE verifier) and
  * checks the token with `GET /user`; any failure after a token was obtained
  * revokes it best-effort.

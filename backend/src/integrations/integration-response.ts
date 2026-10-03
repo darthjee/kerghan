@@ -4,7 +4,7 @@ import type { IntegrationView } from './types/integration-type-strategy.js';
 
 /**
  * The public shape of an integration (see
- * `docs/agents/specs/integrations/api.md#integration-response`). Built from
+ * `docs/agents/backend/routes/integrations.md#integration-response`). Built from
  * an explicit allowlist: never the internal id, the owner, or any `secret_*`.
  */
 export interface IntegrationResponse {

@@ -27,7 +27,7 @@ export interface OauthAppCallbackResult {
 
 /**
  * The OAuth App redirect flow (see
- * `docs/agents/specs/integrations/types/oauth-app.md#flow`): `start` checks
+ * `docs/agents/modules/integrations/oauth-app.md#flow`): `start` checks
  * the request and answers GitHub's authorize URL (no GitHub call); `callback`
  * consumes the single-use `state`, validates the code through the generic
  * credential pipeline (same cool-off as a pasted credential) and stores the

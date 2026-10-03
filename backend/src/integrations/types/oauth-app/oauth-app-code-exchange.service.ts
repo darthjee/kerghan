@@ -14,7 +14,7 @@ const BAD_VERIFICATION_CODE = 'bad_verification_code';
 /**
  * Exchanges an OAuth App callback `code` (with its PKCE verifier) for a user
  * access token and maps GitHub's answer to the spec's *Validate / create*
- * errors (see `docs/agents/specs/integrations/types/oauth-app.md#validate--create`).
+ * errors (see `docs/agents/modules/integrations/oauth-app.md#validate--create`).
  */
 @Injectable()
 export class OauthAppCodeExchangeService {
