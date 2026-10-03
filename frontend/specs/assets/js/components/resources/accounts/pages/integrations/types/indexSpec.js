@@ -1,3 +1,4 @@
+import GithubAppType from '../../../../../../../../../assets/js/components/resources/accounts/pages/integrations/types/githubApp.js';
 import IntegrationTypes from '../../../../../../../../../assets/js/components/resources/accounts/pages/integrations/types/index.js';
 import OauthAppType from '../../../../../../../../../assets/js/components/resources/accounts/pages/integrations/types/oauthApp.js';
 import PatType from '../../../../../../../../../assets/js/components/resources/accounts/pages/integrations/types/pat.js';
@@ -12,8 +13,12 @@ describe('IntegrationTypes', () => {
       expect(IntegrationTypes.get('oauth_app')).toBe(OauthAppType);
     });
 
-    it('returns undefined for a type not implemented yet', () => {
-      expect(IntegrationTypes.get('github_app')).toBeUndefined();
+    it('returns the github_app definition', () => {
+      expect(IntegrationTypes.get('github_app')).toBe(GithubAppType);
+    });
+
+    it('returns undefined for a type not implemented', () => {
+      expect(IntegrationTypes.get('other')).toBeUndefined();
     });
   });
 
@@ -32,10 +37,10 @@ describe('IntegrationTypes', () => {
   describe('.available', () => {
     it('intersects the enabled types with the implemented ones', () => {
       const available = IntegrationTypes.available([
-        { type: 'oauth_app' }, { type: 'pat' }, { type: 'github_app' },
+        { type: 'oauth_app' }, { type: 'pat' }, { type: 'github_app' }, { type: 'other' },
       ]);
 
-      expect(available).toEqual([OauthAppType, PatType]);
+      expect(available).toEqual([OauthAppType, PatType, GithubAppType]);
     });
 
     it('includes oauth_app only when the server lists it', () => {
@@ -45,7 +50,12 @@ describe('IntegrationTypes', () => {
     });
 
     it('is empty when no implemented type is enabled', () => {
-      expect(IntegrationTypes.available([{ type: 'github_app' }])).toEqual([]);
+      expect(IntegrationTypes.available([{ type: 'other' }])).toEqual([]);
+    });
+
+    it('includes github_app only when the server lists it', () => {
+      expect(IntegrationTypes.available([{ type: 'pat' }, { type: 'github_app' }]))
+        .toEqual([PatType, GithubAppType]);
     });
   });
 
@@ -65,12 +75,34 @@ describe('IntegrationTypes', () => {
     });
 
     it('uses the generic insufficient_permissions text for types without their own', () => {
-      expect(IntegrationTypes.reasonText('github_app', 'insufficient_permissions'))
+      expect(IntegrationTypes.reasonText('other', 'insufficient_permissions'))
         .toContain('lacks the required permissions');
+    });
+
+    it('uses the github_app texts', () => {
+      expect(IntegrationTypes.reasonText('github_app', 'uninstalled')).toContain('no longer installed');
+      expect(IntegrationTypes.reasonText('github_app', 'insufficient_permissions'))
+        .toContain('Issues and Metadata read access');
     });
 
     it('falls back to the raw code', () => {
       expect(IntegrationTypes.reasonText('pat', 'mystery')).toBe('mystery');
+    });
+  });
+
+  describe('.removeReminderFor', () => {
+    it('returns a fixed reminder', () => {
+      expect(IntegrationTypes.removeReminderFor({ type: 'pat' })).toBe(PatType.removeReminder);
+      expect(IntegrationTypes.removeReminderFor({ type: 'oauth_app' })).toBe(OauthAppType.removeReminder);
+    });
+
+    it('builds the reminder from the integration', () => {
+      expect(IntegrationTypes.removeReminderFor({ type: 'github_app', githubLogin: 'acme' }))
+        .toContain('stays installed on acme');
+    });
+
+    it('is undefined for a type not implemented', () => {
+      expect(IntegrationTypes.removeReminderFor({ type: 'other' })).toBeUndefined();
     });
   });
 });

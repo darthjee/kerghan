@@ -210,7 +210,7 @@ function renderRemoveConfirmation(integration, row, handlers) {
   return (
     <div className="alert alert-warning mb-2">
       <p className="mb-1">{`Remove "${integration.label}"?`}</p>
-      <p className="small mb-2">{IntegrationTypes.get(integration.type)?.removeReminder}</p>
+      <p className="small mb-2">{IntegrationTypes.removeReminderFor(integration)}</p>
       <button type="button" className="btn btn-sm btn-danger me-2" onClick={handlers.onConfirmRemove(integration.id)}>
         Confirm remove
       </button>

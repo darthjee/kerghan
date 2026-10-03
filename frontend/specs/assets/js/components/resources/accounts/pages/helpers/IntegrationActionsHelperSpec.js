@@ -76,7 +76,7 @@ describe('IntegrationActionsHelper', () => {
     });
 
     it('is hidden for a type without a frontend flow', () => {
-      expect(findButton(render({ type: 'github_app' }), 'Replace credential')).toBeUndefined();
+      expect(findButton(render({ type: 'unknown_type' }), 'Replace credential')).toBeUndefined();
     });
 
     it('renders the credential form without a label field while replacing', () => {
@@ -91,7 +91,7 @@ describe('IntegrationActionsHelper', () => {
     });
 
     it('renders no credential form for a type without a frontend flow', () => {
-      const tree = render({ type: 'github_app' }, { replacing: true });
+      const tree = render({ type: 'unknown_type' }, { replacing: true });
 
       expect(findElements(tree, (node) => node.type === 'form')).toEqual([]);
     });
