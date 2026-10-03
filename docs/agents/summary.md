@@ -29,8 +29,8 @@ full file before loading it. For a bare link-only table of contents instead, see
     `KERGHAN_INTEGRATIONS_KEY`, rate limits, the type contract and the Integrations page. Not yet
     used for issue fetching.
 - **[Routes](backend/routes.md)** — Per-endpoint backend route reference, one file per domain
-  under `backend/routes/` (`auth.md` and `integrations.md` today), complementing the entity/event-focused
-  `modules/` pages.
+  under `backend/routes/` (`auth.md` and `integrations.md` today), complementing the
+  entity/event-focused `modules/` pages.
 
 ## Conventions
 
