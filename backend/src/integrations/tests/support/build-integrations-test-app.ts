@@ -94,6 +94,7 @@ export interface IntegrationsTestContext {
 export async function buildIntegrationsTestApp(options: IntegrationsTestAppOptions = {}): Promise<IntegrationsTestContext> {
   const config: Record<string, unknown> = {
     KERGHAN_INTEGRATIONS_KEY: randomBytes(32).toString('base64'),
+    KERGHAN_PREVIOUS_INTEGRATIONS_KEYS: randomBytes(32).toString('base64'),
     KERGHAN_INTEGRATIONS_MAX_PER_USER: TEST_MAX_PER_USER,
     KERGHAN_LOG_LEVEL: 'debug',
     ...(options.oauthApp ? {

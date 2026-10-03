@@ -37,8 +37,11 @@ const config: Config = {
     // app and by `yarn migration:run`/`migration:revert` against a real
     // database (see docs/agents/architecture/backend.md), not by unit
     // tests — excluded here the same way `nest new`'s default Jest config
-    // excludes `main.ts`.
+    // excludes `main.ts`. The `integrations-keys` CLI entrypoint is the same
+    // kind of thin bootstrap (all its logic lives in the unit-tested
+    // `IntegrationsKeyRotationService`).
     '!main.ts',
+    '!integrations/cli/**',
     '!app.module.ts',
     '!mail/mail.module.ts',
     '!database/**',

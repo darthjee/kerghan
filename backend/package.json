@@ -12,6 +12,8 @@
     "start:dev": "nest start --watch",
     "migration:run": "typeorm-ts-node-esm migration:run -d src/database/data-source.ts",
     "migration:revert": "typeorm-ts-node-esm migration:revert -d src/database/data-source.ts",
+    "integrations:keys:status": "node dist/integrations/cli/integrations-keys.js status",
+    "integrations:keys:reencrypt": "node dist/integrations/cli/integrations-keys.js reencrypt",
     "test": "jest",
     "coverage": "jest --coverage",
     "lint": "eslint src",

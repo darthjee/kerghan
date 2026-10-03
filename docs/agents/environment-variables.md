@@ -24,7 +24,8 @@ running `kerghan_prod_app` locally to sanity-check the production image).
 | `KERGHAN_AUTHORIZATION_REQUEST_AUTHORIZE_LOCK_MS` | **Consumed**, optional | Cool-off duration (milliseconds) once the max-attempts threshold above is reached. Defaults to `300000` (5 minutes). | `backend/src/auth/authorization-request-abuse-guard.service.ts` |
 | `KERGHAN_ACCOUNT_EDIT_MAX_ATTEMPTS` | **Consumed**, optional | Consecutive failed `PATCH /auth/account.json` attempts (wrong current password, duplicate username/email), per user, that trip the cool-off lockout. Defaults to `5`. | `backend/src/auth/account-edit-abuse-guard.service.ts` |
 | `KERGHAN_ACCOUNT_EDIT_LOCK_MS` | **Consumed**, optional | Cool-off duration (milliseconds) once the max-attempts threshold above is reached. Defaults to `300000` (5 minutes). | `backend/src/auth/account-edit-abuse-guard.service.ts` |
-| `KERGHAN_INTEGRATIONS_KEY` | **Consumed**, **required** | AES-256-GCM key that encrypts every stored integration credential (see `docs/agents/modules/integrations.md#encryption-at-rest`). Base64 of exactly 32 bytes, read once at boot. Boot fails, naming the variable but never the value, when it is missing, blank, not base64, the wrong length, equal to `KERGHAN_SECRET_KEY`, or equal to the public dev placeholder while `NODE_ENV=production`. See "Setting `KERGHAN_INTEGRATIONS_KEY`" below. | `backend/src/integrations/integrations-key.ts` |
+| `KERGHAN_INTEGRATIONS_KEY` | **Consumed**, **required** | AES-256-GCM key that encrypts every stored integration credential (see `docs/agents/modules/integrations.md#encryption-at-rest`). Base64 of exactly 32 bytes, read once at boot. Boot fails, naming the variable but never the value, when it is missing, blank, not base64, the wrong length, equal to `KERGHAN_SECRET_KEY`, or equal to the public dev placeholder while `NODE_ENV=production`. Rotatable through `KERGHAN_PREVIOUS_INTEGRATIONS_KEYS`. See "Setting `KERGHAN_INTEGRATIONS_KEY`" and "Rotating `KERGHAN_INTEGRATIONS_KEY`" below. | `backend/src/integrations/integrations-key.ts` |
+| `KERGHAN_PREVIOUS_INTEGRATIONS_KEYS` | **Consumed**, optional | Comma-separated retired integrations keys, **decrypt-only**, used during a `KERGHAN_INTEGRATIONS_KEY` rotation. Defaults to empty. Entries are trimmed; blank entries, duplicates and entries equal to the current key are dropped. Each remaining entry is validated like `KERGHAN_INTEGRATIONS_KEY` (base64 of exactly 32 bytes, not `KERGHAN_SECRET_KEY`, not the dev placeholder in production), and boot fails when two configured keys share a key id. Errors name the variable and the entry's 1-based position, never the value. | `backend/src/integrations/integrations-key.ts` |
 | `KERGHAN_INTEGRATIONS_MAX_PER_USER` | **Consumed**, optional | Cap on how many integrations a single user may hold; creating one past it answers `409`. Defaults to `20`. | `backend/src/integrations/integrations.service.ts` |
 | `KERGHAN_INTEGRATIONS_CREDENTIAL_MAX_ATTEMPTS` | **Consumed**, optional | Consecutive counted credential-validation failures (create / replace credential), per user, that trip the cool-off lockout (`423`). Defaults to `5`. | `backend/src/integrations/integration-credential-abuse-guard.service.ts` |
 | `KERGHAN_INTEGRATIONS_CREDENTIAL_LOCK_MS` | **Consumed**, optional | Cool-off duration (milliseconds) once the max-attempts threshold above is reached. Defaults to `900000` (15 minutes). | `backend/src/integrations/integration-credential-abuse-guard.service.ts` |
@@ -63,7 +64,8 @@ are set in `.env.dev.sample` — local dev runs entirely on their code-level def
 row above). Set them explicitly only if a deployment needs different tuning. The same applies to
 the four numeric `KERGHAN_INTEGRATIONS_*` tuning variables (`MAX_PER_USER`,
 `CREDENTIAL_MAX_ATTEMPTS`, `CREDENTIAL_LOCK_MS`, `TEST_COOLDOWN_MS`); only
-`KERGHAN_INTEGRATIONS_KEY` is set in the sample, because it has no default.
+`KERGHAN_INTEGRATIONS_KEY` is set in the sample, because it has no default (alongside an empty
+`KERGHAN_PREVIOUS_INTEGRATIONS_KEYS`, which only matters during a rotation).
 
 ### Setting `KERGHAN_INTEGRATIONS_KEY`
 
@@ -76,9 +78,10 @@ the four numeric `KERGHAN_INTEGRATIONS_*` tuning variables (`MAX_PER_USER`,
 - The placeholder in `.env.dev.sample` (`a2VyZ2hhbi1kZXYtaW50ZWdyYXRpb25zLWtleS0zMmI=`) is public.
   Boot refuses it when `NODE_ENV=production`, so production must also set
   `NODE_ENV=production` for that guard to apply.
-- Treat it as permanent. If the key is lost or changed, every stored credential becomes
-  `undecryptable` and each user has to replace it. Key rotation (previous keys kept for
-  decryption) is not supported yet; it is tracked in #305.
+- Never just swap or drop it. If the key is lost, or changed without keeping the old one in
+  `KERGHAN_PREVIOUS_INTEGRATIONS_KEYS`, every credential stored under it becomes `undecryptable`
+  and each user has to replace it. To change it, follow "Rotating `KERGHAN_INTEGRATIONS_KEY`"
+  below.
 - Existing local `.env` files are not regenerated (`make` only copies the sample when `.env` is
   missing). Add the `KERGHAN_INTEGRATIONS_KEY=...` line from `.env.dev.sample` by hand.
 
@@ -204,6 +207,56 @@ Side effects (both variants):
   deploy. That only causes cache misses.
 - Refresh tokens are random values stored as SHA-256 hashes and do not depend on the key, so
   they are unaffected.
+
+### Rotating `KERGHAN_INTEGRATIONS_KEY`
+
+`KERGHAN_PREVIOUS_INTEGRATIONS_KEYS` keeps retired keys **decrypt-only**: new and replaced
+credentials are always encrypted with the current key, and each stored row's `secret_key_id`
+picks the key that decrypts it (see `docs/agents/modules/integrations.md#encryption-at-rest`).
+Keys must not contain commas, and must not have leading or trailing whitespace (entries are
+trimmed).
+
+Rows under a previous key move to the current key in two ways:
+
+- **Lazily**, whenever a test connection decrypts one.
+- **Explicitly**, with `yarn integrations:keys:reencrypt` (`make integrations-keys-reencrypt` in
+  dev). It prints `reencrypted=<n> skipped_undecryptable=<n> skipped_changed=<n>` and exits `1`
+  when any row couldn't be decrypted. It is idempotent, so it is safe to run again.
+
+`yarn integrations:keys:status` (`make integrations-keys-status` in dev) is read-only. It prints
+one `<keyId> <current|previous|unknown> <count>` line per key id, so you can tell when a retired
+key no longer protects any row. Neither command ever prints a key, a ciphertext or a secret. In
+production (Render), `dist/` is already built: run them from a shell on the backend service.
+
+**Routine rotation.** Use this only when the old key is *not* suspected to be compromised:
+
+1. Generate a new key with `openssl rand -base64 32`.
+2. Deploy with `KERGHAN_INTEGRATIONS_KEY=<new>` and `KERGHAN_PREVIOUS_INTEGRATIONS_KEYS=<old>`.
+   Existing credentials keep working; new ones are encrypted with `<new>`.
+3. Once *every* backend instance runs the new config, run `yarn integrations:keys:reencrypt`.
+4. Run `yarn integrations:keys:status` and confirm the old key id shows `0`.
+5. Deploy again with `<old>` removed from `KERGHAN_PREVIOUS_INTEGRATIONS_KEYS`.
+
+If Kerghan runs several backend instances behind a rolling deploy, an instance still on the old
+config can't decrypt a row that a new instance already re-encrypted (lazily, on a test
+connection) or encrypted with `<new>`. Use three phases instead: (a)
+`KERGHAN_INTEGRATIONS_KEY=<old>`, `KERGHAN_PREVIOUS_INTEGRATIONS_KEYS=<new>`, so every instance
+can read `<new>` before any row uses it; (b) `KERGHAN_INTEGRATIONS_KEY=<new>`,
+`KERGHAN_PREVIOUS_INTEGRATIONS_KEYS=<old>`, then reencrypt and check the status; (c) remove
+`<old>`.
+
+**Compromised key.**
+
+1. Rotate right away, keeping the leaked key in `KERGHAN_PREVIOUS_INTEGRATIONS_KEYS` only long
+   enough to re-encrypt, then run `yarn integrations:keys:reencrypt`.
+2. Drop the leaked key as soon as `yarn integrations:keys:status` shows `0` for it.
+3. Tell users to rotate their GitHub credentials (and replace them in Kerghan). Re-encrypting
+   does not undo the exposure: anyone holding the leaked key and a copy of the old ciphertexts
+   can still read them.
+
+**Lost previous key.** Rows encrypted under a key that is no longer configured show as
+`unknown` in `status` and are `undecryptable` until their owners replace the credential (or
+delete the integration). `reencrypt` can't recover them.
 
 **GitHub credentials — integrations only.** Issue fetching still reads public GitHub REST API
 data unauthenticated (see `docs/agents/product.md`). User-supplied GitHub credentials are stored

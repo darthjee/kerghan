@@ -15,7 +15,7 @@ import { IntegrationCredentialService } from '../../integration-credential.servi
 import { IntegrationStoreService } from '../../integration-store.service.js';
 import type { IntegrationTestCooldownService } from '../../integration-test-cooldown.service.js';
 import { IntegrationsEncryptionService } from '../../integrations-encryption.service.js';
-import { integrationsKeyIdFor } from '../../integrations-key.js';
+import { integrationsKeySetOf } from '../../integrations-key.js';
 import { IntegrationsService } from '../../integrations.service.js';
 import { IntegrationTypeRegistry } from '../../types/integration-type-registry.js';
 import { PatStrategy } from '../../types/pat/pat.strategy.js';
@@ -43,6 +43,8 @@ export interface IntegrationsHarness {
   guard: InMemoryCredentialAbuseGuard;
   cooldown: InMemoryTestCooldown;
   encryption: IntegrationsEncryptionService;
+  /** Encrypts under the harness's previous (decrypt-only) key, to seed rows stored before a rotation. */
+  previousEncryption: IntegrationsEncryptionService;
   logger: FakeLogger;
 }
 
@@ -60,7 +62,9 @@ export interface HarnessOptions {
  */
 export function buildIntegrationsHarness(options: HarnessOptions = {}): IntegrationsHarness {
   const key = randomBytes(32);
-  const encryption = new IntegrationsEncryptionService({ key, keyId: integrationsKeyIdFor(key) });
+  const previousKey = randomBytes(32);
+  const encryption = new IntegrationsEncryptionService(integrationsKeySetOf(key, [previousKey]));
+  const previousEncryption = new IntegrationsEncryptionService(integrationsKeySetOf(previousKey));
   const repo = createInMemoryIntegrationRepo();
   const github = new FakeGithubClient();
   const guard = new InMemoryCredentialAbuseGuard(options.maxAttempts);
@@ -79,6 +83,7 @@ export function buildIntegrationsHarness(options: HarnessOptions = {}): Integrat
     cooldown as unknown as IntegrationTestCooldownService,
     encryption,
     registry,
+    logger as unknown as LoggerService,
   );
   const config = { get: (name: string) => (name === 'KERGHAN_INTEGRATIONS_MAX_PER_USER' ? options.maxPerUser : undefined) };
   const service = new IntegrationsService(
@@ -92,5 +97,5 @@ export function buildIntegrationsHarness(options: HarnessOptions = {}): Integrat
     config as unknown as ConfigService,
   );
 
-  return { service, store, credentials, repo, github, guard, cooldown, encryption, logger };
+  return { service, store, credentials, repo, github, guard, cooldown, encryption, previousEncryption, logger };
 }

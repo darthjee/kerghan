@@ -1,10 +1,11 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { QueryFailedError, Repository } from 'typeorm';
+import { In, MoreThan, QueryFailedError, Repository } from 'typeorm';
 import type { QueryDeepPartialEntity } from 'typeorm/query-builder/QueryPartialEntity.js';
 import { Integration } from './entities/integration.entity.js';
 import { ENSURE_LOCKOUT_ROW_SQL } from './integration-credential-abuse-guard.service.js';
 import { integrationNotFound, labelTaken, limitReached } from './integration-http-errors.js';
+import type { EncryptedSecret } from './integrations-encryption.service.js';
 
 // Canonical UUID shape; anything else can't be an integration id and answers 404 without a query.
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -13,6 +14,26 @@ const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{
 // concurrent creates for one user serialize their cap check and insert.
 export const LOCK_OWNER_ROW_SQL =
   'SELECT `id` FROM `integrations_credential_lockouts` WHERE `user_id` = ? FOR UPDATE';
+
+// Columns the operator-only key-rotation batch read selects (no label, metadata, etc.).
+const ROTATION_COLUMNS = {
+  id: true,
+  userId: true,
+  uuid: true,
+  type: true,
+  secretKeyId: true,
+  secretIv: true,
+  secretAuthTag: true,
+  secretCiphertext: true,
+} as const;
+
+/**
+ * How many integrations are stored under one `secret_key_id`.
+ */
+export interface SecretKeyIdCount {
+  keyId: string;
+  count: number;
+}
 
 // MySQL's driver error code for a unique-index violation.
 const MYSQL_DUPLICATE_ENTRY_CODE = 'ER_DUP_ENTRY';
@@ -123,6 +144,78 @@ export class IntegrationStoreService {
     ));
 
     return Object.assign(row, changes, { updatedAt: new Date() });
+  }
+
+  /**
+   * Rewrites a row's four secret columns, but only while its stored key id
+   * is still `expectedKeyId`: the `UPDATE` is scoped by `id`, `user_id` and
+   * `secret_key_id`, so a concurrent credential replacement is never
+   * clobbered (0 affected rows is a silent no-op). On success the loaded row
+   * is updated in place.
+   * @param {Pick<Integration, 'id' | 'userId'> & Partial<Integration>} row - The row to rewrite.
+   * @param {EncryptedSecret} encrypted - The new key id, IV, auth tag and ciphertext.
+   * @param {string} expectedKeyId - The key id the row must still hold.
+   * @returns {Promise<boolean>} `true` when the row was rewritten.
+   */
+  async rewriteSecret(
+    row: Pick<Integration, 'id' | 'userId'> & Partial<Integration>,
+    encrypted: EncryptedSecret,
+    expectedKeyId: string,
+  ): Promise<boolean> {
+    const changes = {
+      secretKeyId: encrypted.keyId,
+      secretIv: encrypted.iv,
+      secretAuthTag: encrypted.authTag,
+      secretCiphertext: encrypted.ciphertext,
+    };
+    const result = await this.repository.update({ id: row.id, userId: row.userId, secretKeyId: expectedKeyId }, changes);
+
+    if ((result.affected ?? 0) === 0) {
+      return false;
+    }
+
+    Object.assign(row, changes);
+
+    return true;
+  }
+
+  /**
+   * OPERATOR-ONLY (key-rotation CLI; never call from a request path): counts
+   * every user's integrations grouped by `secret_key_id`. Not owner-scoped.
+   * @returns {Promise<SecretKeyIdCount[]>} One entry per stored key id.
+   */
+  async countBySecretKeyIdForOperator(): Promise<SecretKeyIdCount[]> {
+    const raw = await this.repository
+      .createQueryBuilder('integration')
+      .select('integration.secret_key_id', 'keyId')
+      .addSelect('COUNT(*)', 'count')
+      .groupBy('integration.secret_key_id')
+      .getRawMany<{ keyId: string; count: string | number }>();
+
+    return raw.map(({ keyId, count }) => ({ keyId, count: Number(count) }));
+  }
+
+  /**
+   * OPERATOR-ONLY (key-rotation CLI; never call from a request path): reads
+   * one batch of any user's rows stored under one of `keyIds`, with an id
+   * above `afterId`, in id order, selecting only the columns re-encryption
+   * needs. Not owner-scoped.
+   * @param {string[]} keyIds - The `secret_key_id`s to match.
+   * @param {number} afterId - The cursor: only rows with a greater id.
+   * @param {number} limit - The batch size.
+   * @returns {Promise<Integration[]>} The batch (partial rows).
+   */
+  findBySecretKeyIdsForOperator(keyIds: string[], afterId: number, limit: number): Promise<Integration[]> {
+    if (keyIds.length === 0) {
+      return Promise.resolve([]);
+    }
+
+    return this.repository.find({
+      select: ROTATION_COLUMNS,
+      where: { secretKeyId: In(keyIds), id: MoreThan(afterId) },
+      order: { id: 'ASC' },
+      take: limit,
+    });
   }
 
   /**

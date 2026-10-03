@@ -149,8 +149,8 @@ Built by `integration-response.ts`:
   GitHub call. A foreign `:uuid` is therefore indistinguishable from a missing one.
 - **List mine** returns every integration of the caller, whatever its status (including
   `undecryptable`). It never decrypts secrets: `secretHint` is read from the stored
-  `secret_hint` column. A row whose `secret_key_id` doesn't match the configured key id is
-  reported as `undecryptable` (compared without decrypting).
+  `secret_hint` column. A row whose `secret_key_id` matches no configured key id (current or
+  previous) is reported as `undecryptable` (compared without decrypting).
 - **Show** returns one integration of the caller, with the same no-decryption rules as list.
 - **Create:** checks, in order: payload validation → failure cool-off
   ([cool-off](../../modules/integrations.md#create-and-replace-credential-failure-cool-off)) →
@@ -167,8 +167,10 @@ Built by `integration-response.ts`:
   `expired`). A transient failure leaves the status unchanged, records the attempt, and answers
   with the upstream error below. A row that still can't be decrypted (unknown key id or auth-tag
   failure) answers `200` with status `undecryptable`, without calling GitHub; a stored
-  `undecryptable` row whose key id matches the configured key is decrypted again and tested
-  normally ([transitions](../../modules/integrations.md#transitions)).
+  `undecryptable` row whose key id matches a configured key is decrypted again and tested
+  normally ([transitions](../../modules/integrations.md#transitions)). A row decrypted under a
+  previous key is re-encrypted with the current key during the test
+  ([key set](../../modules/integrations.md#encryption-at-rest)).
 - **Delete** removes the row after the type's best-effort delete behaviour
   ([behaviour on delete](../../modules/integrations.md#behaviour-on-delete)), which never blocks
   the deletion.

@@ -51,4 +51,98 @@ describe('IntegrationStoreService', () => {
       expect(manager.save).not.toHaveBeenCalled();
     });
   });
+
+  describe('rewriteSecret', () => {
+    const encrypted = {
+      keyId: 'cccccccc',
+      iv: Buffer.alloc(12, 1),
+      authTag: Buffer.alloc(16, 2),
+      ciphertext: Buffer.from([3, 4, 5]),
+    };
+    const columns = {
+      secretKeyId: 'cccccccc',
+      secretIv: encrypted.iv,
+      secretAuthTag: encrypted.authTag,
+      secretCiphertext: encrypted.ciphertext,
+    };
+
+    /**
+     * Builds the store over a repository whose update affects the given row count.
+     * @param {number | undefined} affected - The affected row count.
+     * @returns {{ store: IntegrationStoreService; update: jest.Mock }} The store and its update double.
+     */
+    function buildForUpdate(affected: number | undefined): { store: IntegrationStoreService; update: jest.Mock } {
+      const update = jest.fn().mockResolvedValue({ affected });
+
+      return { store: new IntegrationStoreService({ update } as never), update };
+    }
+
+    it('updates the four secret columns scoped by id, owner and expected key id', async () => {
+      const { store, update } = buildForUpdate(1);
+      const row = { id: 3, userId: 7, secretKeyId: 'pppppppp' } as Integration;
+
+      expect(await store.rewriteSecret(row, encrypted, 'pppppppp')).toBe(true);
+      expect(update).toHaveBeenCalledWith({ id: 3, userId: 7, secretKeyId: 'pppppppp' }, columns);
+      expect(row).toMatchObject(columns);
+    });
+
+    it.each([0, undefined])('is a silent no-op when %s rows are affected', async (affected) => {
+      const { store } = buildForUpdate(affected);
+      const row = { id: 3, userId: 7, secretKeyId: 'pppppppp' } as Integration;
+
+      expect(await store.rewriteSecret(row, encrypted, 'pppppppp')).toBe(false);
+      expect(row.secretKeyId).toBe('pppppppp');
+    });
+  });
+});
+describe('IntegrationStoreService (operator-only key rotation reads)', () => {
+  it('counts every row grouped by secret key id, as numbers', async () => {
+    const builder = {
+      select: jest.fn().mockReturnThis(),
+      addSelect: jest.fn().mockReturnThis(),
+      groupBy: jest.fn().mockReturnThis(),
+      getRawMany: jest.fn().mockResolvedValue([{ keyId: 'aaaaaaaa', count: '3' }, { keyId: 'bbbbbbbb', count: 1 }]),
+    };
+    const createQueryBuilder = jest.fn().mockReturnValue(builder);
+    const store = new IntegrationStoreService({ createQueryBuilder } as never);
+
+    expect(await store.countBySecretKeyIdForOperator()).toEqual([
+      { keyId: 'aaaaaaaa', count: 3 },
+      { keyId: 'bbbbbbbb', count: 1 },
+    ]);
+    expect(builder.select).toHaveBeenCalledWith('integration.secret_key_id', 'keyId');
+    expect(builder.addSelect).toHaveBeenCalledWith('COUNT(*)', 'count');
+    expect(builder.groupBy).toHaveBeenCalledWith('integration.secret_key_id');
+  });
+
+  it('reads one id-ordered batch above the cursor, selecting only the rotation columns', async () => {
+    const find = jest.fn().mockResolvedValue([]);
+    const store = new IntegrationStoreService({ find } as never);
+
+    await store.findBySecretKeyIdsForOperator(['aaaaaaaa', 'bbbbbbbb'], 42, 100);
+
+    const options = find.mock.calls[0][0];
+    expect(options.select).toEqual({
+      id: true,
+      userId: true,
+      uuid: true,
+      type: true,
+      secretKeyId: true,
+      secretIv: true,
+      secretAuthTag: true,
+      secretCiphertext: true,
+    });
+    expect(options.where.secretKeyId).toMatchObject({ _type: 'in', _value: ['aaaaaaaa', 'bbbbbbbb'] });
+    expect(options.where.id).toMatchObject({ _type: 'moreThan', _value: 42 });
+    expect(options.where).not.toHaveProperty('userId');
+    expect(options).toMatchObject({ order: { id: 'ASC' }, take: 100 });
+  });
+
+  it('answers an empty batch without a query when no key id is given', async () => {
+    const find = jest.fn();
+    const store = new IntegrationStoreService({ find } as never);
+
+    expect(await store.findBySecretKeyIdsForOperator([], 0, 100)).toEqual([]);
+    expect(find).not.toHaveBeenCalled();
+  });
 });
