@@ -47,7 +47,7 @@ function renderInstallation(installation, onSelect) {
 /**
  * GitHub App installation selection: shown when a connect flow found several installations the
  * user can access, so they pick one (see
- * `docs/agents/specs/integrations/types/github-app.md#selection`).
+ * `docs/agents/modules/integrations/github-app.md#selection`).
  *
  * @description Renders nothing without a pending selection. The selection's `state` is never
  * rendered; only the installations are.

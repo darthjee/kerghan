@@ -5,7 +5,7 @@ const REASON_TEXTS = new Map([
 
 /**
  * Personal Access Token (`pat`) integration type, as defined in
- * `docs/agents/specs/integrations/types/pat.md`: its picker texts, credential-paste form fields,
+ * `docs/agents/modules/integrations/pat.md`: its picker texts, credential-paste form fields,
  * credential builder, `invalid` reason texts and UI guidance.
  */
 const PatType = {

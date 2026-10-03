@@ -58,7 +58,7 @@ function classify(params) {
 /**
  * Captures the GitHub App landing
  * (`/integrations/github_app/callback?code=…&state=…[&installation_id=…&setup_action=…]`), as
- * described in `docs/agents/specs/integrations/types/github-app.md#landing` (see
+ * described in `docs/agents/modules/integrations/github-app.md#landing` (see
  * {@link createRedirectLanding}). The Integrations page takes it once.
  *
  * @type {{path: string, capture: Function, take: Function}}

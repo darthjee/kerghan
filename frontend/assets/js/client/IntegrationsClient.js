@@ -16,7 +16,7 @@ function integrationPath(uuid, suffix = '') {
 }
 
 /**
- * HTTP client for the caller's GitHub integrations (`docs/agents/specs/integrations/api.md`).
+ * HTTP client for the caller's GitHub integrations (`docs/agents/backend/routes/integrations.md`).
  *
  * @description Every route is scoped to the logged-in user. Like the other clients, each
  * method resolves `undefined` when the session turned out to be expired (a `401` that could not
