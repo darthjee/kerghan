@@ -17,6 +17,7 @@ import { buildIntegrationsKey, INTEGRATIONS_KEY } from './integrations-key.js';
 import { IntegrationsController } from './integrations.controller.js';
 import { IntegrationsService } from './integrations.service.js';
 import { buildGithubAppConfig, GITHUB_APP_CONFIG } from './types/github-app/github-app-config.js';
+import { GithubAppEnabledGuard } from './types/github-app/github-app-enabled.guard.js';
 import { GithubAppFlowService } from './types/github-app/github-app-flow.service.js';
 import { GithubAppInstallationService } from './types/github-app/github-app-installation.service.js';
 import { GithubAppRevocationService } from './types/github-app/github-app-revocation.service.js';
@@ -24,6 +25,7 @@ import { GithubAppSelectionService } from './types/github-app/github-app-selecti
 import { GithubAppStateService } from './types/github-app/github-app-state.service.js';
 import { GithubAppStore } from './types/github-app/github-app-store.js';
 import { GithubAppUserVerificationService } from './types/github-app/github-app-user-verification.service.js';
+import { GithubAppController } from './types/github-app/github-app.controller.js';
 import { GithubAppStrategy } from './types/github-app/github-app.strategy.js';
 import { IntegrationTypeRegistry } from './types/integration-type-registry.js';
 import { INTEGRATION_TYPE_STRATEGIES, IntegrationTypeStrategy } from './types/integration-type-strategy.js';
@@ -59,7 +61,7 @@ import { PatStrategy } from './types/pat/pat.strategy.js';
     IntegrationOauthState,
     IntegrationGithubAppState,
   ])],
-  controllers: [OauthAppController, IntegrationsController],
+  controllers: [OauthAppController, GithubAppController, IntegrationsController],
   providers: [
     {
       provide: INTEGRATIONS_KEY,
@@ -107,6 +109,7 @@ import { PatStrategy } from './types/pat/pat.strategy.js';
     GithubAppStore,
     GithubAppSelectionService,
     GithubAppFlowService,
+    GithubAppEnabledGuard,
   ],
 })
 // NestJS module classes are intentionally empty; all behavior lives in @Module().
