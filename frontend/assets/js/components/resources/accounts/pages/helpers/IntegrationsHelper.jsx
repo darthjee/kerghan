@@ -46,6 +46,7 @@ function renderAddFlow(state, handlers) {
     },
     {
       onSubmit: handlers.onSubmitAdd,
+      onSubmitMode: handlers.onSubmitAddMode,
       onLabelChange: handlers.onAddLabelChange,
       onCredentialChange: handlers.onAddCredentialChange,
       onCancel: handlers.onCancelAdd,

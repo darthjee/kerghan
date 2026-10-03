@@ -1,5 +1,6 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import CredentialFormHelper from '../../../../../../../../assets/js/components/resources/accounts/pages/helpers/CredentialFormHelper.jsx';
+import GithubAppType from '../../../../../../../../assets/js/components/resources/accounts/pages/integrations/types/githubApp.js';
 import OauthAppType from '../../../../../../../../assets/js/components/resources/accounts/pages/integrations/types/oauthApp.js';
 import PatType from '../../../../../../../../assets/js/components/resources/accounts/pages/integrations/types/pat.js';
 import { findButton, findElements } from '../../../../../../../support/elementTree.js';
@@ -173,6 +174,43 @@ describe('CredentialFormHelper', () => {
 
     it('renders the error', () => {
       expect(renderToStaticMarkup(render({ error: 'Label taken' }))).toContain('Label taken');
+    });
+  });
+
+  describe('.renderForm with a multi-mode redirect type', () => {
+    const handlers = {
+      onSubmit: jasmine.createSpy('onSubmit'),
+      onSubmitMode: jasmine.createSpy('onSubmitMode').and.callFake((mode) => `mode-${mode}`),
+      onLabelChange: jasmine.createSpy('onLabelChange'),
+      onCancel: jasmine.createSpy('onCancel'),
+    };
+    const render = () => CredentialFormHelper.renderForm({
+      definition: GithubAppType, idPrefix: 'add', label: 'Work', credential: {}, error: null, title: 'Add GitHub App',
+    }, handlers);
+
+    it('offers Install on GitHub and Connect existing installation instead of Continue', () => {
+      const tree = render();
+
+      expect(findButton(tree, 'Continue to GitHub')).toBeUndefined();
+      expect(findButton(tree, 'Install on GitHub').props.onClick).toBe('mode-install');
+      expect(findButton(tree, 'Install on GitHub').props.type).toBe('button');
+      expect(findButton(tree, 'Connect existing installation').props.onClick).toBe('mode-connect');
+      expect(findButton(tree, 'Cancel').props.onClick).toBe(handlers.onCancel);
+    });
+
+    it('shows the connect hint, the description and the warnings', () => {
+      const markup = renderToStaticMarkup(render());
+
+      expect(markup).toContain('Use this if the app is already installed on your account or organization.');
+      expect(markup).toContain('no token is stored');
+      expect(markup).toContain('read access to issues and metadata');
+      expect(markup).toContain('without admin rights');
+    });
+
+    it('keeps only the label input', () => {
+      const inputs = findElements(render(), (node) => node.type === 'input');
+
+      expect(inputs.map((input) => input.props.type)).toEqual(['text']);
     });
   });
 });

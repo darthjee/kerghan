@@ -1,6 +1,6 @@
 const HANDLER_NAMES = [
   'onRetry', 'onDismissNotice', 'onOpenAdd', 'onCancelAdd', 'onPickType', 'onAddLabelChange', 'onAddCredentialChange',
-  'onSubmitAdd', 'onStartRename', 'onRenameChange', 'onCancelRename', 'onSubmitRename',
+  'onSubmitAdd', 'onSubmitAddMode', 'onStartRename', 'onRenameChange', 'onCancelRename', 'onSubmitRename',
   'onStartReplace', 'onReplaceCredentialChange', 'onCancelReplace', 'onSubmitReplace', 'onReconnect',
   'onAskRemove', 'onCancelRemove', 'onConfirmRemove', 'onTest',
 ];

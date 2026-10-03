@@ -32,6 +32,7 @@ function addFormHandlers(controller, addForm) {
       credential: { ...addForm.credential, [field]: event.target.value },
     }),
     onSubmitAdd: onSubmit(() => controller.create(addForm)),
+    onSubmitAddMode: (mode) => onSubmit(() => controller.create(addForm, mode)),
   };
 }
 

@@ -111,5 +111,14 @@ describe('IntegrationsHelper', () => {
       expect(inputs[1].props.onChange).toBe('onAddCredentialChange:token');
       expect(form.props.onSubmit).toBe(handlers.onSubmitAdd);
     });
+
+    it('renders the GitHub App mode buttons once picked', () => {
+      const tree = render({
+        addForm: { ...CLOSED_ADD_FORM, open: true, type: 'github_app', label: 'Work' },
+      });
+
+      expect(findButton(tree, 'Install on GitHub').props.onClick).toBe('onSubmitAddMode:install');
+      expect(findButton(tree, 'Connect existing installation').props.onClick).toBe('onSubmitAddMode:connect');
+    });
   });
 });

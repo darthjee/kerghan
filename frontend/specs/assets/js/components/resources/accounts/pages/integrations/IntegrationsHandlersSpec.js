@@ -70,6 +70,15 @@ describe('IntegrationsHandlers', () => {
       expect(submit.preventDefault).toHaveBeenCalled();
       expect(controller.create).toHaveBeenCalledWith(addForm);
     });
+
+    it('submits the form with a redirect mode, preventing navigation', () => {
+      const click = event();
+
+      build().onSubmitAddMode('connect')(click);
+
+      expect(click.preventDefault).toHaveBeenCalled();
+      expect(controller.create).toHaveBeenCalledWith(addForm, 'connect');
+    });
   });
 
   describe('rename', () => {
