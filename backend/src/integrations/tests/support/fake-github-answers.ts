@@ -121,3 +121,12 @@ export function githubUserResponse(overrides: Partial<GithubUserResponse> = {}):
     ...overrides,
   };
 }
+
+/**
+ * Builds a successful GitHub App code exchange answer (the canary user token).
+ * @param {Partial<OauthCodeExchangeResponse>} overrides - Fields to override.
+ * @returns {OauthCodeExchangeResponse} The answer.
+ */
+export function githubAppExchangeResponse(overrides: Partial<OauthCodeExchangeResponse> = {}): OauthCodeExchangeResponse {
+  return oauthExchangeResponse({ accessToken: new Secret(CANARY_USER_TOKEN), ...overrides });
+}
