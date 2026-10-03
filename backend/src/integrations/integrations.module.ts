@@ -4,6 +4,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { IntegrationCredentialLockout } from './entities/integration-credential-lockout.entity.js';
 import { IntegrationOauthState } from './entities/integration-oauth-state.entity.js';
 import { Integration } from './entities/integration.entity.js';
+import { GithubAppClientService } from './github-app-client.service.js';
 import { GithubClientService } from './github-client.service.js';
 import { IntegrationConnectionTestService } from './integration-connection-test.service.js';
 import { IntegrationCredentialAbuseGuardService } from './integration-credential-abuse-guard.service.js';
@@ -14,6 +15,11 @@ import { IntegrationsEncryptionService } from './integrations-encryption.service
 import { buildIntegrationsKey, INTEGRATIONS_KEY } from './integrations-key.js';
 import { IntegrationsController } from './integrations.controller.js';
 import { IntegrationsService } from './integrations.service.js';
+import { buildGithubAppConfig, GITHUB_APP_CONFIG } from './types/github-app/github-app-config.js';
+import { GithubAppInstallationService } from './types/github-app/github-app-installation.service.js';
+import { GithubAppRevocationService } from './types/github-app/github-app-revocation.service.js';
+import { GithubAppUserVerificationService } from './types/github-app/github-app-user-verification.service.js';
+import { GithubAppStrategy } from './types/github-app/github-app.strategy.js';
 import { IntegrationTypeRegistry } from './types/integration-type-registry.js';
 import { INTEGRATION_TYPE_STRATEGIES, IntegrationTypeStrategy } from './types/integration-type-strategy.js';
 import { OauthAppCodeExchangeService } from './types/oauth-app/oauth-app-code-exchange.service.js';
@@ -54,9 +60,15 @@ import { PatStrategy } from './types/pat/pat.strategy.js';
       useFactory: buildOauthAppConfig,
     },
     {
+      provide: GITHUB_APP_CONFIG,
+      inject: [ConfigService],
+      useFactory: buildGithubAppConfig,
+    },
+    {
       provide: INTEGRATION_TYPE_STRATEGIES,
-      inject: [PatStrategy, OauthAppStrategy],
-      useFactory: (pat: PatStrategy, oauthApp: OauthAppStrategy): IntegrationTypeStrategy[] => [pat, oauthApp],
+      inject: [PatStrategy, OauthAppStrategy, GithubAppStrategy],
+      useFactory: (pat: PatStrategy, oauthApp: OauthAppStrategy, githubApp: GithubAppStrategy): IntegrationTypeStrategy[] =>
+        [pat, oauthApp, githubApp],
     },
     IntegrationsEncryptionService,
     GithubClientService,
@@ -65,6 +77,11 @@ import { PatStrategy } from './types/pat/pat.strategy.js';
     OauthAppRevocationService,
     OauthAppCodeExchangeService,
     OauthAppStrategy,
+    GithubAppClientService,
+    GithubAppRevocationService,
+    GithubAppUserVerificationService,
+    GithubAppInstallationService,
+    GithubAppStrategy,
     IntegrationCredentialAbuseGuardService,
     IntegrationTestCooldownService,
     IntegrationStoreService,
