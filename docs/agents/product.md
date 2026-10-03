@@ -65,9 +65,10 @@ Decided by #295; the full definition is in the
 - **Historical/trend collection**: volume-over-time or similar views, which depend on the
   opt-in persistence above. Not built.
 - **Using integration credentials**: credentials can be stored as
-  [integrations](modules/integrations.md), but nothing uses them yet. Backend proxying of
-  GitHub calls with a user's integration, and reading private repositories with it, are not
-  built.
+  [integrations](modules/integrations.md), but nothing uses them for issue fetching yet (the
+  backend only calls GitHub with them to test a connection or list GitHub App installations).
+  Backend proxying of GitHub calls with a user's integration, and reading private repositories
+  with it, are not built.
 
 ## What's still open
 
