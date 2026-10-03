@@ -1,4 +1,5 @@
 import { CLOSED_ADD_FORM } from '../controllers/IntegrationsController.js';
+import RedirectFlows from './redirectFlows.js';
 
 /**
  * Wrap a submit action so the browser's default form submission (which would navigate) is
@@ -54,7 +55,9 @@ function rowEditHandlers(controller, rowState) {
       credential: { ...rowOf(uuid).credential, [field]: event.target.value },
     }),
     onCancelReplace: (uuid) => () => controller.patchRow(uuid, { replacing: false, credential: {} }),
-    onReconnect: (uuid) => () => controller.startRedirect({ integrationId: uuid }),
+    onReconnect: ({ id, type }, mode) => () => controller.startRedirect(
+      type, RedirectFlows.startBody({ integrationId: id }, mode),
+    ),
     onSubmitReplace: (integration) => onSubmit(
       () => controller.replaceCredential(integration, rowOf(integration.id).credential ?? {}),
     ),

@@ -70,7 +70,7 @@ function renderReconnectButton(integration, types, handlers) {
     <button
       type="button"
       className={`btn btn-sm ${replaceVariant(integration)}`}
-      onClick={handlers.onReconnect(integration.id)}
+      onClick={handlers.onReconnect(integration)}
     >
       Reconnect with GitHub
     </button>

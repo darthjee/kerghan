@@ -2,7 +2,8 @@ import IntegrationsClient from '../../../../../client/IntegrationsClient.js';
 import Cooldown from '../integrations/cooldown.js';
 import CooldownTimers from '../integrations/CooldownTimers.js';
 import IntegrationErrors from '../integrations/errorMessages.js';
-import RedirectFlow from '../integrations/redirectFlow.js';
+import GithubAppFlow from '../integrations/githubAppFlow.js';
+import RedirectFlows from '../integrations/redirectFlows.js';
 import IntegrationTypes from '../integrations/types/index.js';
 
 /**
@@ -39,10 +40,11 @@ export default class IntegrationsController {
    * Create an Integrations controller.
    *
    * @param {{setIntegrations: Function, setTypes: Function, setLoadState: Function,
-   *   setRowState: Function, setAddForm: Function, setNotice: Function}} setters - React state
-   *   setters: the integrations list, the available type definitions, the `{loading, error}`
-   *   load state, the per-row UI state `Map` (keyed by uuid), the add form state and the
-   *   page-level `{variant, text}` notice.
+   *   setRowState: Function, setAddForm: Function, setNotice: Function, setSelection: Function}}
+   *   setters - React state setters: the integrations list, the available type definitions,
+   *   the `{loading, error}` load state, the per-row UI state `Map` (keyed by uuid), the add
+   *   form state, the page-level `{variant, text}` notice and the pending GitHub App
+   *   installation selection.
    * @param {typeof IntegrationsClient} [client] - Integrations HTTP client override, for
    *   testability.
    * @param {Function} [navigate] - Navigates the browser to a URL (defaults to
@@ -56,13 +58,13 @@ export default class IntegrationsController {
   }
 
   /**
-   * Handle a pending OAuth App landing first (see {@link RedirectFlow.completeLanding}), then
-   * load the caller's integrations and the enabled types, or store the load error.
+   * Handle a pending redirect-flow landing first (see each flow's `completeLanding`), then load
+   * the caller's integrations and the enabled types, or store the load error.
    *
    * @returns {Promise<void>} Resolves once the load finishes.
    */
   async load() {
-    await RedirectFlow.completeLanding(this);
+    await RedirectFlows.completeLandings(this);
 
     try {
       const [mine, enabled] = await Promise.all([this.client.listMine(), this.client.listTypes()]);
@@ -96,13 +98,15 @@ export default class IntegrationsController {
    * right away. A redirect-flow type starts its redirect instead.
    *
    * @param {{type: string, label: string, credential: object}} form - The add form state.
+   * @param {string} [mode] - The redirect mode (`install` or `connect`) of a type offering
+   *   several (GitHub App).
    * @returns {Promise<void>} Resolves once the request finishes.
    */
-  async create({ type, label, credential }) {
+  async create({ type, label, credential }, mode) {
     this.patchAddForm({ credential: {}, error: null });
 
     if (IntegrationTypes.get(type).flow === 'redirect') {
-      return this.startRedirect({ label });
+      return this.startRedirect(type, RedirectFlows.startBody({ label }, mode));
     }
 
     try {
@@ -123,15 +127,30 @@ export default class IntegrationsController {
   }
 
   /**
-   * Start the OAuth App redirect flow and navigate to GitHub's authorize page. A URL that isn't
-   * GitHub's is never followed. Errors go to the add form (create) or to the row (reconnect).
+   * Start a type's redirect flow and navigate to GitHub. A URL that isn't one GitHub page the
+   * type expects is never followed. Errors go to the add form (create) or to the row
+   * (reconnect).
    *
-   * @param {{label: string}|{integrationId: string}} body - `{ label }` to create, or
-   *   `{ integrationId }` to reconnect an existing integration.
+   * @param {string} type - The redirect-flow integration type (`oauth_app`, `github_app`).
+   * @param {{label?: string, integrationId?: string, mode?: string}} body - `{ label }` to
+   *   create, or `{ integrationId }` to reconnect an existing integration, plus the `mode` of
+   *   a type offering several.
    * @returns {Promise<void>} Resolves once the request finishes.
    */
-  async startRedirect(body) {
-    return RedirectFlow.start(this, body);
+  async startRedirect(type, body) {
+    return RedirectFlows.start(this, type, body);
+  }
+
+  /**
+   * Pick one installation out of the pending GitHub App selection; the selection is cleared
+   * whatever the outcome.
+   *
+   * @param {{state: string}} selection - The pending selection.
+   * @param {number} installationId - The chosen installation's id.
+   * @returns {Promise<void>} Resolves once the request finishes.
+   */
+  async selectInstallation(selection, installationId) {
+    return GithubAppFlow.select(this, selection, installationId);
   }
 
   /**
@@ -227,12 +246,14 @@ export default class IntegrationsController {
   }
 
   /**
-   * Cancel every pending cooldown timer (on unmount).
+   * Cancel every pending cooldown timer and drop any pending installation selection (on
+   * unmount).
    *
    * @returns {void} Nothing.
    */
   dispose() {
     this.timers.clearAll();
+    this.setSelection(null);
   }
 
   async #rowAction(uuid, apiCall, onSuccess, onError = () => undefined) {

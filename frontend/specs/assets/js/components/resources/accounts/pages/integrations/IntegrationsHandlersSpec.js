@@ -142,10 +142,16 @@ describe('IntegrationsHandlers', () => {
     });
   });
 
-  it('reconnects a redirect-flow row with its integrationId', () => {
-    build().onReconnect('abc')();
+  it('reconnects a redirect-flow row with its type and integrationId', () => {
+    build().onReconnect({ id: 'abc', type: 'oauth_app' })();
 
-    expect(controller.startRedirect).toHaveBeenCalledWith({ integrationId: 'abc' });
+    expect(controller.startRedirect).toHaveBeenCalledWith('oauth_app', { integrationId: 'abc' });
+  });
+
+  it('reconnects a row with the chosen mode', () => {
+    build().onReconnect({ id: 'abc', type: 'github_app' }, 'connect')();
+
+    expect(controller.startRedirect).toHaveBeenCalledWith('github_app', { integrationId: 'abc', mode: 'connect' });
   });
 
   describe('remove', () => {

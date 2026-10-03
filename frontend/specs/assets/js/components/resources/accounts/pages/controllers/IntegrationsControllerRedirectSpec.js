@@ -55,7 +55,7 @@ describe('IntegrationsController redirect flow', () => {
     it('starts with the integrationId and navigates', async () => {
       client.startOauthApp.and.resolveTo({ authorizeUrl: AUTHORIZE_URL });
 
-      await context.buildController().startRedirect({ integrationId: 'abc' });
+      await context.buildController().startRedirect('oauth_app', { integrationId: 'abc' });
 
       expect(client.startOauthApp).toHaveBeenCalledWith({ integrationId: 'abc' });
       expect(navigate).toHaveBeenCalledWith(AUTHORIZE_URL);
@@ -64,7 +64,7 @@ describe('IntegrationsController redirect flow', () => {
     it('maps an API error onto the row', async () => {
       client.startOauthApp.and.rejectWith(new ApiError(404, 'Not found', 'NOT_FOUND'));
 
-      await context.buildController().startRedirect({ integrationId: 'abc' });
+      await context.buildController().startRedirect('oauth_app', { integrationId: 'abc' });
 
       expect(state.rowState.get('abc').error).toBe('Not found');
       expect(navigate).not.toHaveBeenCalled();

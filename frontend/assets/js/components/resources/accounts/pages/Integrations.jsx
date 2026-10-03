@@ -35,17 +35,18 @@ export default function Integrations() {
   const [rowState, setRowState] = useState(INITIAL_ROW_STATE);
   const [addForm, setAddForm] = useState(CLOSED_ADD_FORM);
   const [notice, setNotice] = useState(null);
+  const [selection, setSelection] = useState(null);
 
   const controller = useMemo(() => new IntegrationsController({
-    setIntegrations, setTypes, setLoadState, setRowState, setAddForm, setNotice,
+    setIntegrations, setTypes, setLoadState, setRowState, setAddForm, setNotice, setSelection,
   }), []);
 
   useEffect(() => buildLoadEffect(controller)(), [controller]);
 
   return IntegrationsHelper.render(
     {
-      integrations, types, loadState, rowState, addForm, notice,
+      integrations, types, loadState, rowState, addForm, notice, selection,
     },
-    IntegrationsHandlers.build(controller, { addForm, rowState }),
+    IntegrationsHandlers.build(controller, { addForm, rowState, selection }),
   );
 }

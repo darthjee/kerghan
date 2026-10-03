@@ -44,6 +44,7 @@ export function useIntegrationsControllerHarness() {
       rowState: new Map(),
       addForm: CLOSED_ADD_FORM,
       notice: null,
+      selection: null,
     };
     context.setters = {
       setIntegrations: apply('integrations'),
@@ -52,10 +53,12 @@ export function useIntegrationsControllerHarness() {
       setRowState: apply('rowState'),
       setAddForm: apply('addForm'),
       setNotice: apply('notice'),
+      setSelection: apply('selection'),
     };
     context.client = jasmine.createSpyObj('client', [
       'listMine', 'listTypes', 'create', 'rename', 'replaceCredential', 'test', 'remove',
-      'startOauthApp', 'completeOauthApp',
+      'startOauthApp', 'completeOauthApp', 'startGithubApp', 'completeGithubApp',
+      'selectGithubAppInstallation',
     ]);
     context.navigate = jasmine.createSpy('navigate');
     context.buildController = () => new IntegrationsController(
