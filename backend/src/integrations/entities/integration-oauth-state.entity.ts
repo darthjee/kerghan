@@ -5,7 +5,7 @@ export type OauthStatePurpose = 'create' | 'replace';
 
 /**
  * A server-side, single-use record of one started OAuth App redirect flow
- * (see `docs/agents/specs/integrations/types/oauth-app.md#state`). Owns table
+ * (see `docs/agents/modules/integrations/oauth-app.md#state`). Owns table
  * `integrations_oauth_states`. `userId` is a logical foreign key (no
  * physical FK, no cross-module JOIN) into `auth_users`, like
  * `IntegrationCredentialLockout`. Only the SHA-256 of the `state` secret is

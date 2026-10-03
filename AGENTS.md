@@ -1,11 +1,12 @@
 # Project Instructions
 
-_Last updated: 2026-10-01_
+_Last updated: 2026-10-02_
 
 Kerghan is a GitHub issue monitoring/dashboard app. Users log into a lightweight Kerghan account
 (username/password, a JWT `access_token` cookie, and a rotating refresh token — not GitHub OAuth;
-a per-user GitHub token for private repos is planned as a future addition), either directly or by
-approving the login from an already-logged-in device via the device-authorization flow, and
+users can store GitHub credentials as integrations — see [Specs](docs/agents/specs.md) — not
+yet used for issue fetching), either directly or by approving the login from an
+already-logged-in device via the device-authorization flow, and
 choose which of their repos/orgs to monitor; that selection is what the backend persists. Issue
 data itself is fetched live, on demand, by the frontend calling GitHub's public API directly —
 each user's own browser IP (Internet Protocol) address absorbs GitHub's unauthenticated rate
@@ -101,9 +102,10 @@ docker-compose run --rm kerghan_tests yarn test
   (`vite_kerghan*`) images are published.
 - Kerghan has a lightweight per-user account/login (not GitHub OAuth) — see
   [Flow](docs/agents/flow.md). GitHub data itself is still read unauthenticated (public-repo
-  only) for now. Per-user GitHub credentials ("integrations", #295) are being built and may be
-  stored only as defined in [Integrations specs](docs/agents/specs/integrations/README.md); any
-  other GitHub credential storage still needs an explicit product decision backing it.
+  only) for now. Per-user GitHub credentials may be stored only as integrations, exactly as
+  defined by the integrations entry in [Specs](docs/agents/specs.md) (#295 is the product
+  decision); any other GitHub credential storage still needs an explicit product decision
+  backing it.
 
 ## Documentation
 

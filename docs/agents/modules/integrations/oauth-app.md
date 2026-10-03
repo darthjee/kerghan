@@ -1,28 +1,26 @@
 # Integration type: GitHub OAuth App (`oauth_app`)
 
-Part of the [integrations spec](../README.md). Defines the `oauth_app` type, following the
-[type contract](../type-contract.md#what-a-type-spec-must-contain) and its
-[redirect flow invariants](../type-contract.md#redirect-flow-invariants). It fills every
-per-type slot the generic specs leave open.
+Part of the [Integrations module](../integrations.md). Defines the `oauth_app` type, following the
+[type contract](../integrations.md#what-a-type-doc-must-contain) and its
+[redirect flow invariants](../integrations.md#redirect-flow-invariants). It fills every
+per-type slot the generic module leaves open. Code: `backend/src/integrations/types/oauth-app/`.
 
 ## Overview
 
 - The user clicks *Connect with GitHub*, approves Kerghan's OAuth App on GitHub, and Kerghan
   stores the resulting user access token as an integration.
-- #302 implements this type (backend strategy, routes and table; frontend flow; Tent rule),
-  on top of the generic module built by #300 and #301.
 - **Flow kind:** redirect-based only (see [Flow](#flow)).
 - **Server config:** optional. Without the app's client id and secret the type is **disabled**
   (see [Server config](#server-config)).
 - GitHub's exact endpoints, parameters, headers and token limits below follow GitHub's OAuth App
-  and REST API docs. #302 checks them again against the docs when it implements the type.
+  and REST API docs.
 
 ## Flow
 
 **Redirect-based only** (`flows: { credentialPaste: false, redirect: true }`). Generic create
 (`POST /integrations.json`) and replace credential (`POST /integrations/:uuid/credential.json`)
 with `type: oauth_app`, or on an `oauth_app` row, answer **400** `INTEGRATION_FLOW_UNSUPPORTED`
-([api.md](../api.md#create-envelope)).
+([routes](../../backend/routes/integrations.md#create-envelope)).
 
 ### Routes
 
@@ -39,7 +37,8 @@ with `type: oauth_app`, or on an `oauth_app` row, answer **400** `INTEGRATION_FL
 - The owner is always `req.user.sub`; nothing in the body or the GitHub redirect names a user.
 - Their paths don't collide with the generic `:uuid` routes: those always end in `/show.json`,
   `/test.json` or `/credential.json`, or are `PATCH`/`DELETE`.
-- The `Integration` response is the generic one ([api.md](../api.md#integration-response)).
+- The `Integration` response is the generic one
+  ([routes](../../backend/routes/integrations.md#integration-response)).
 
 ### Start
 
@@ -47,7 +46,7 @@ Request body, validated with the usual DTO rules (unknown fields stripped):
 
 - **Exactly one** of `label` (create) and `integrationId` (replace credential). Both or neither
   answer 400 `VALIDATION_FAILED`.
-- `label`: the generic label rules ([model.md](../model.md#constraints)).
+- `label`: the generic label rules ([data model](../integrations.md#constraints)).
 - `integrationId`: a UUID string.
 
 Checks, in order. Each failure stops there and stores nothing:
@@ -59,7 +58,7 @@ Checks, in order. Each failure stops there and stores nothing:
    missing row answers **404** `NOT_FOUND`. A row whose `type` isn't `oauth_app` answers 400
    `INTEGRATION_FLOW_UNSUPPORTED` (changing type means delete and create).
 5. Failure cool-off active → **423** `INTEGRATION_CREDENTIAL_LOCKED`
-   ([security.md](../security.md#create-and-replace-credential-failure-cool-off)). Checked here
+   ([security](../integrations.md#create-and-replace-credential-failure-cool-off)). Checked here
    so the user isn't sent to GitHub for nothing; it is checked again on callback.
 6. **Create only:** per-user cap (409 `INTEGRATIONS_LIMIT_REACHED`) and label uniqueness (409
    `INTEGRATION_LABEL_TAKEN`). Also checked again on callback.
@@ -92,7 +91,7 @@ GitHub redirects the browser to the callback URL with `code` and `state` (or `er
 1. Reads `code`, `state` and `error` from `window.location.search`.
 2. **Before any other request**, calls `history.replaceState` to
    `/#/account/integrations`, removing the path, query string and hash
-   ([redirect flow invariants](../type-contract.md#redirect-flow-invariants)). The values only
+   ([redirect flow invariants](../integrations.md#redirect-flow-invariants)). The values only
    live in memory from then on.
 3. With `error=access_denied`: shows "You cancelled the GitHub authorization." and makes no
    call. Any other `error`, or a missing `code` or `state`: shows "GitHub didn't complete the
@@ -128,7 +127,7 @@ Checks, in order:
 8. `validate`: exchange the code and check the token ([Validate / create](#validate--create)).
 9. Store through the generic storage and encryption code: create inserts an `active` row
    (**201**); replace refreshes the row like a generic replace credential (**200**,
-   [model.md](../model.md#transitions)).
+   [data model](../integrations.md#transitions)).
 10. **Replace only:** best-effort revocation of the **previous** token
     ([Revocation](#revocation)), unless GitHub returned the same token. Its failure doesn't
     change the response.
@@ -143,7 +142,7 @@ pasted credential's ([Validate / create](#validate--create)).
 ### State
 
 A server-side, single-use record of one started flow, in the table
-`integrations_oauth_states`, owned by the Integrations module and created by #302's migration
+`integrations_oauth_states`, owned by the Integrations module and created by its own migration
 (so it works across instances and restarts).
 
 | Column | Type | Null | Notes |
@@ -187,7 +186,7 @@ Rules:
 ## Required scopes
 
 - Request and require **`repo`** only, for the same reason as classic PATs: private
-  repositories need it ([PAT spec](pat.md#classic-tokens)).
+  repositories need it ([PAT](pat.md#classic-tokens)).
 - Granted scopes are read from the `X-OAuth-Scopes` header of `GET /user` made with the new
   token, parsed like a PAT's (split on `,`, trimmed, empty entries dropped). The `scope` field of
   the token response is not trusted on its own.
@@ -195,15 +194,15 @@ Rules:
   - callback fails with **422** `INTEGRATION_INSUFFICIENT_PERMISSIONS` (counted toward the
     cool-off), and the new token is revoked;
   - test connection sets `invalid` + `insufficient_permissions`.
-- **Warning** (spec and UI): `repo` also grants **write** access to every repository the user can
-  reach. Kerghan only reads, but the token can do more.
+- **Warning** (also shown in the UI): `repo` also grants **write** access to every
+  repository the user can reach. Kerghan only reads, but the token can do more.
 - Organizations with OAuth App access restrictions only expose their private repositories once
   an owner approves Kerghan's app. That doesn't fail validation; the UI mentions it.
 
 ## Validate / create
 
 `validate` runs on callback, through the shared, injectable GitHub client
-([security.md](../security.md#faking-github)), with two GitHub calls.
+([security](../integrations.md#faking-github-in-tests)), with two GitHub calls.
 
 1. **Code exchange:** `POST https://github.com/login/oauth/access_token` with
    `Accept: application/json` and `client_id`, `client_secret`, `code`, `redirect_uri` and
@@ -232,7 +231,8 @@ token ([Callback](#callback)).
 
 ## Secret payload shape
 
-The plaintext JSON encrypted into `secret_ciphertext` ([model.md](../model.md#storage-model)):
+The plaintext JSON encrypted into `secret_ciphertext`
+([data model](../integrations.md#storage-model)):
 
 ```json
 { "token": "gho_…" }
@@ -299,7 +299,7 @@ credentials.
 - The outcome is never `expired`, since `expiresAt` is never known.
 - Test needs neither the client id nor the secret, so it keeps working when the type is
   disabled.
-- Transient outcomes leave the status unchanged ([model.md](../model.md#transitions)).
+- Transient outcomes leave the status unchanged ([data model](../integrations.md#transitions)).
 
 ## `invalid` reason codes
 
@@ -338,13 +338,15 @@ token than the prefix and the last 4 characters.
   | CI | none | Unset: the type is disabled. Specs build the strategy and routes with fake config and the fake GitHub client. |
   | Production | `https://<public host>/integrations/oauth_app/callback` | Both set as backend host env vars. |
 
-- #302 documents both variables and the per-environment setup in
-  `docs/agents/environment-variables.md`, and adds the commented entries to `.env.dev.sample`.
+- Both variables and the per-environment setup are documented in
+  [environment variables](../../environment-variables.md); `.env.dev.sample` lists them
+  commented out.
 
 ### When disabled
 
-- `POST /integrations/types.json` doesn't list `oauth_app` ([api.md](../api.md#routes)), so the
-  type picker hides it ([ui.md](../ui.md#type-picker)).
+- `POST /integrations/types.json` doesn't list `oauth_app`
+  ([routes](../../backend/routes/integrations.md#enabled-types)), so the type picker hides it
+  ([frontend](../integrations.md#type-picker)).
 - Both type-owned backend routes answer **404** `NOT_FOUND`, before any other check except
   auth and CSRF, as if they didn't exist.
 - Existing `oauth_app` rows (from when it was enabled) stay listed and can be renamed, tested
@@ -357,25 +359,24 @@ token than the prefix and the last 4 characters.
 
 A **dedicated Tent rule** serves the frontend directly for the landing path, so it never goes
 through the `GET /path → /#/path` catch-all (which would move `code` and `state` into the hash)
-nor the backend's `.json` rule. #302's `proxy` work adds it to both `dev_configuration` and
+nor the backend's `.json` rule. It lives in `rules/frontend.php` of both `dev_configuration` and
 `prod_configuration`:
 
 - **Matcher:** `GET` on the path `/integrations/oauth_app/callback`, with or without a query
-  string, and nothing else (no prefix match on other paths). If Tent's `exact` matcher compares
-  the query string too, a regex anchored as `^/integrations/oauth_app/callback(\?|$)` is used
-  instead.
+  string, and nothing else (Tent's `exact` matcher on the path; no prefix match on other
+  paths).
 - **Precedence:** the rule must win over `backend.php` and `redirects.php` for this path;
   `frontend.php` is already loaded first in both `configure.php` files.
 - **Handler:** production serves `index.html` from the static root (the `static` handler with
   `SetPathMiddleware` to `/index.html`, like the `/` rule). Dev proxies to the Vite server,
   which answers its SPA `index.html`.
 - **No caching:** `Cache-Control: no-store`, and no Tent file cache (the `static` handler doesn't
-  use one). The existing `CacheControlMiddleware` only sets `max-age`, so #302 either extends it
-  or adds a header middleware in `proxy/extension/`, with its PHPUnit specs.
+  use one). The headers are set by `SetResponseHeadersMiddleware`
+  (`proxy/extension/lib/middlewares/`), since `CacheControlMiddleware` only sets `max-age`.
 - **Referrer policy:** the response carries `Referrer-Policy: no-referrer`, so the URL with
   `code` and `state` never leaks through a `Referer` header before `replaceState` runs.
 - The SPA's assets must load from this nested path: they are referenced by absolute paths
-  (`/assets/…`), which #302 confirms in both dev and production builds.
+  (`/assets/…`) in both dev and production builds.
 
 ### Backend routes
 
@@ -411,14 +412,14 @@ Used on delete, on replace (the previous token) and on callback failures (the ne
 ## Access
 
 Both type-owned routes follow the checklist of the
-[type contract](../type-contract.md#what-a-type-spec-must-contain):
+[type contract](../integrations.md#what-a-type-doc-must-contain):
 
 - They require `JwtGuard` and are covered by `OriginGuard`.
 - The owner comes from `req.user.sub` only. The GitHub redirect is bound to the initiating user
   through the `state` row's `user_id`, never through any id carried in the callback.
 - Replace credential targets only a row found with `uuid` + `user_id` in the query, both at
   start and again at callback; a foreign or missing row answers 404
-  ([security.md](../security.md#access-rules)). Admins get no access to anyone else's flow.
+  ([security](../integrations.md#access-rules)). Admins get no access to anyone else's flow.
 - They are cache class `never`.
 - They follow the generic logging, `Secret` and canary rules: the code, the token, the client
   secret, the `state` and the verifier never reach a logger call, an error message or a
@@ -426,7 +427,8 @@ Both type-owned routes follow the checklist of the
 
 ## Error cases
 
-Summary of the error codes ([api.md](../api.md#error-codes)) this type produces:
+Summary of the error codes
+([routes](../../backend/routes/integrations.md#error-codes)) this type produces:
 
 | Code | Status | When |
 |---|---|---|
@@ -442,9 +444,9 @@ Summary of the error codes ([api.md](../api.md#error-codes)) this type produces:
 | `GITHUB_UNAVAILABLE` | 502 | Network error, timeout, 5xx, unexpected answer or exchange misconfiguration, on callback or test. |
 | `GITHUB_RATE_LIMITED` | 503 | GitHub's rate limit, on callback or test. |
 
-## UI guidance
+## Frontend
 
-For #302's frontend work (on top of the generic [UI shell](../ui.md)):
+On top of the generic [UI shell](../integrations.md#frontend):
 
 - **Type picker** one-line description: "Connect a GitHub account by authorizing Kerghan's
   OAuth App."
@@ -463,76 +465,3 @@ For #302's frontend work (on top of the generic [UI shell](../ui.md)):
 - **Remove confirmation:** see [Behaviour on delete](#behaviour-on-delete).
 - The `code` and `state` never reach `console`, storage, component state beyond the single
   callback request, or the URL after `replaceState`.
-
-## Required tests
-
-Every spec uses the fake GitHub client ([security.md](../security.md#faking-github)) and a
-recognisable **canary** token, code, `state` secret and client secret, asserting none of them
-appears in logger calls, thrown errors, error bodies, API responses (other than `state` inside
-`authorizeUrl`), the stored `metadata` or the `secretHint` beyond the token's last 4
-characters.
-
-- **Config (boot):** both unset → disabled; both set → enabled with the callback URL derived
-  from `FRONTEND_BASE_URL`'s origin; only one set → boot fails naming the missing variable;
-  malformed client id, missing `FRONTEND_BASE_URL`, and a non-`https` origin under
-  `NODE_ENV=production` each fail boot; no error contains the secret.
-- **Start:** create and replace each return an authorize URL with every parameter above (and a
-  `code_challenge` matching the stored verifier); both or neither of `label`/`integrationId` →
-  400; disabled → 404; foreign or missing `integrationId` → 404 (even while locked out); a
-  non-`oauth_app` target → 400 `INTEGRATION_FLOW_UNSUPPORTED`; cool-off → 423; cap and duplicate
-  label → 409; no GitHub call in any case; expired rows are purged and at most 5 pending rows
-  are kept per user.
-- **State:** a valid `state` is consumed once (a replay → 400); expired, unknown, another
-  user's, and a wrong secret each → the same 400 `INTEGRATION_REDIRECT_STATE_INVALID` without a
-  GitHub call and without counting toward the cool-off; two parallel callbacks with the same
-  `state` make a single code exchange; the stored row never holds the raw secret.
-- **Callback / validate:** success creates an `active` row (201) with `gho_…` hint, login,
-  scopes, `clientId` and `expiresAt: null`; replace refreshes the row (200) and revokes the
-  previous token; `bad_verification_code` and a 401 on `GET /user` → 422
-  `INTEGRATION_CREDENTIAL_INVALID` (counted); no `repo` → 422
-  `INTEGRATION_INSUFFICIENT_PERMISSIONS` (counted) and the new token is revoked; other exchange
-  errors → 502 (not counted); rate limit → 503 with `Retry-After`; 5xx and network errors → 502;
-  label taken or cap reached at callback → 409 and the new token is revoked; a replace target
-  deleted meanwhile → 404 and the new token is revoked; disabled → 404.
-- **Test:** each row of the [Test connection](#test-connection) table, including while the type
-  is disabled.
-- **Metadata:** `describeMetadata` accepts the valid shape and rejects an extra key, a missing
-  key and wrong types.
-- **Mask:** `gho_…` plus the last 4 characters.
-- **Delete / revocation:** delete calls `DELETE /applications/{client_id}/token` for that token
-  only (never the grant endpoint); a failing revocation still deletes the row; an
-  `undecryptable` row, a disabled type and a different `metadata.clientId` make no GitHub call.
-- **Generic routes:** generic create and replace credential with `oauth_app` → 400
-  `INTEGRATION_FLOW_UNSUPPORTED`.
-- **Caching and CSRF:** both routes declare cache class `never` and send `X-Skip-Cache` and
-  `Cache-Control: no-store`; a cross-site `POST` → 403.
-- **Frontend:** the landing handler calls `replaceState` before any request; `access_denied`,
-  other errors and missing values make no call; the callback result and error texts render; a
-  non-GitHub `authorizeUrl` is not followed; the picker hides `oauth_app` when the types route
-  doesn't list it; canary `code`/`state` never reach `console`, storage or the URL.
-- **Proxy:** PHPUnit specs for any new or changed middleware (`Cache-Control: no-store`,
-  `Referrer-Policy: no-referrer`).
-
-## Manual smoke check (#302)
-
-In the running app (dev), with a personal throwaway OAuth App whose callback URL is
-`http://localhost:3000/integrations/oauth_app/callback`, and both variables set:
-
-1. Open `http://localhost:3000/integrations/oauth_app/callback?code=x&state=y` directly: the
-   SPA loads (no redirect to `/#/…`), the response has `Cache-Control: no-store` and
-   `Referrer-Policy: no-referrer`, and the address bar ends up at `/#/account/integrations` with
-   no `code` or `state`. The "expired or already used" error shows.
-2. Add an *OAuth App* integration with a label: GitHub's consent page asks for `repo`; approve
-   it. Back in Kerghan the row is `active`, shows `gho_…` plus 4 characters, the right login and
-   `repo`, and "no expiry".
-3. Use the browser's back button to replay the landing URL: the "expired or already used" error
-   shows, nothing is created.
-4. Start again and click *Cancel* on GitHub: "You cancelled the GitHub authorization.", nothing
-   created.
-5. Create a second `oauth_app` integration for the same account, then delete it: the first one
-   still tests `active`, and GitHub's *Authorized OAuth Apps* page still lists the app.
-6. Revoke the app on GitHub, then test the first one: `invalid` with the `revoked` text.
-   *Reconnect with GitHub*: back to `active` with a new hint.
-7. Unset both variables and restart: the type is gone from the picker, the existing row can
-   still be tested and deleted, and `POST /integrations/oauth_app/start.json` answers 404.
-8. Check the backend and Tent logs: no token, code, `state` secret or client secret appears.

@@ -15,7 +15,7 @@ import type { IntegrationResponse } from '../../integration-response.js';
 /**
  * The GitHub App type-owned routes — thin, delegating everything to
  * `GithubAppFlowService` and `GithubAppSelectionService` (see
- * `docs/agents/specs/integrations/types/github-app.md#routes`). All sit
+ * `docs/agents/modules/integrations/github-app.md#routes`). All sit
  * behind the global `JwtGuard` (no `@Public()`, no `@AdminOnly()`) and
  * `OriginGuard`, answer 404 while the type is disabled
  * (`GithubAppEnabledGuard`), and are cache class `never`. The owner is

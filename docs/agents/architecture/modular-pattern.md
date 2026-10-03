@@ -12,7 +12,7 @@ See `docs/agents/architecture/backend.md` for the stack/layout this pattern live
 | Type | Loading | Examples |
 |---|---|---|
 | Core | Always resident, at boot | `src/core/` — JWT Guard, DB connection, CacheToken Service, `LazyModuleLoader` wrapper |
-| Always-on | Always resident, at boot | Auth module, Mail module — imported directly into `AppModule` |
+| Always-on | Always resident, at boot | Auth module, Mail module, Integrations module — imported directly into `AppModule` |
 | Lazy | On demand, first request | Future modules (tracked-repo, label-rule, etc.) — none exist yet |
 
 A **lazy** module is *not* imported into `AppModule` directly. Instead, its controller's first
@@ -76,6 +76,10 @@ want to block on) any reaction.
   `RefreshToken.userId`), with no physical FK constraint and no cross-module SQL JOIN. Fetching
   the referenced row, if ever needed, goes through the owning module's exported service (direct
   DI), not a query against its table.
+- **One documented exception:** `integrations.user_id` is a physical FK to `auth_users.id` with
+  `ON DELETE CASCADE`, so a stored GitHub credential can never outlive its owner. Code still
+  never joins `auth_users`. See [Owner foreign key](../modules/integrations.md#owner-foreign-key).
+  Any other physical cross-module FK needs its own documented decision.
 - Migrations live in `src/database/migrations/`, named `<timestamp>-<module>-<action>.ts`, run
   via `yarn migration:run`/`yarn migration:revert` (TypeORM CLI, `-d src/database/data-source.ts`).
 

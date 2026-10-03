@@ -17,7 +17,7 @@ const ERROR_TEXTS = new Map([
 
 /**
  * GitHub App installation (`github_app`) integration type, as defined in
- * `docs/agents/specs/integrations/types/github-app.md`: a redirect-flow type with two modes
+ * `docs/agents/modules/integrations/github-app.md`: a redirect-flow type with two modes
  * (install and connect existing), no credential input, its picker texts, warnings, `invalid`
  * reason texts, per-type error texts and UI guidance.
  */

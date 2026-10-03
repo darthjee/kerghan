@@ -14,7 +14,7 @@ export type CooldownClaim = { claimed: true } | { claimed: false; retryAfterSeco
 
 /**
  * Per-integration test-connection cooldown, enforced from `last_tested_at`
- * (see `docs/agents/specs/integrations/security.md#test-connection-cooldown`).
+ * (see `docs/agents/modules/integrations.md#test-connection-cooldown`).
  * The claim is a single conditional `UPDATE`, so parallel tests of one
  * integration make at most one GitHub call per window. The window comes from
  * `KERGHAN_INTEGRATIONS_TEST_COOLDOWN_MS`, read once at construction.

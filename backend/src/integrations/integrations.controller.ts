@@ -12,7 +12,7 @@ import type { EnabledIntegrationType } from './types/integration-type-registry.j
 
 /**
  * Integrations routes — thin, delegating everything to
- * `IntegrationsService` (see `docs/agents/specs/integrations/api.md`).
+ * `IntegrationsService` (see `docs/agents/backend/routes/integrations.md`).
  * Every route sits behind the global `JwtGuard` (no `@Public()`, no
  * `@AdminOnly()`) and is scoped to the caller from `@CurrentUser()`; user-
  * scoped reads use `POST`. Cache class `never` at controller level, so

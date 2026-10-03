@@ -6,7 +6,7 @@ const REASON_TEXTS = new Map([
 
 /**
  * GitHub OAuth App (`oauth_app`) integration type, as defined in
- * `docs/agents/specs/integrations/types/oauth-app.md`: a redirect-flow type with no credential
+ * `docs/agents/modules/integrations/oauth-app.md`: a redirect-flow type with no credential
  * input, its picker texts, warnings, `invalid` reason texts and UI guidance.
  */
 const OauthAppType = {

@@ -1,0 +1,671 @@
+# Module — Integrations
+
+Labelled, encrypted GitHub credentials, each owned by one Kerghan user. Lives in
+`backend/src/integrations/` (backend) and the *Integrations* account page (frontend).
+
+## Overview
+
+An **integration** is a labelled GitHub credential slot owned by one Kerghan user. Kerghan's
+**backend** (never the browser) uses it to talk to GitHub on that user's behalf.
+
+- `provider`: `github` (the only provider).
+- `type`: `pat` (Personal Access Token), `oauth_app` (GitHub OAuth App) or `github_app`
+  (GitHub App installation). See [Types](#types).
+- A user can have many integrations, each with its own user-defined label.
+- Users manage them from the **Integrations** page, reached from the "My account" dropdown.
+
+**Why integrations exist:**
+
+- **Private repositories**: unauthenticated access only sees public data.
+- **Per-credential rate limit**: an authenticated GitHub call is limited per credential, not by
+  the unauthenticated 60 requests/hour per IP.
+- **Groundwork for backend proxying**: a later feature can fetch issues through the backend with
+  the user's credential. That proxy does not exist yet; issue fetching stays unauthenticated and
+  frontend-side (see [product.md](../product.md)).
+
+**Product decision:** issue #295 lifts the "no GitHub credential storage" boundary **for
+integrations only**, exactly as defined in this page and its type pages. Any other way of
+storing GitHub credentials still needs its own product decision (see `CLAUDE.md`).
+
+**Secrets never reach the browser.** The API returns only non-secret fields (label, status,
+GitHub login, metadata, a masked `secretHint`); the decrypted credential never leaves the
+backend. See [Security](#security).
+
+**Module classification:** **always-on**, imported directly into `AppModule`, like Auth (see
+[Modular Pattern](../architecture/modular-pattern.md#module-classification)). It validates
+`KERGHAN_INTEGRATIONS_KEY` at boot, so a bad key fails startup, and `integrations.user_id` carries
+the project's only physical cross-module FK ([Owner foreign key](#owner-foreign-key)). The module
+exports nothing yet.
+
+**Routes:** see [Integrations routes](../backend/routes/integrations.md) for the full endpoint
+reference. Every route requires `JwtGuard`, ends in `.json` and is cache class `never`
+(`X-Skip-Cache`), so Navi's warm-up never touches it.
+
+**Not built yet (non-binding intent):**
+
+- A backend proxy may pick a user's "default" integration, or one integration per tracked repo,
+  to fetch issues with.
+- When the backend uses an integration and GitHub answers 401, that use may set the integration
+  to `invalid`.
+- Admin support tooling (read-only metadata, deleting a leaked credential) may come later, as its
+  own issue with its own product decision. Today admins have **no** access
+  ([Access rules](#access-rules)).
+- Rotation of `KERGHAN_INTEGRATIONS_KEY` is tracked separately (#305).
+
+## Data model
+
+### Storage model
+
+**A single `integrations` table with opaque, type-specific payloads.**
+
+- Common, generic fields are real columns (below).
+- The **secret** is an encrypted JSON blob whose plaintext shape each type defines. It is stored
+  in four separate columns (`secret_key_id`, `secret_iv`, `secret_auth_tag`,
+  `secret_ciphertext`), so key rotation can query "rows still on an old key" without string
+  matching.
+- Type-specific, **non-secret metadata** (scopes, installation id, app slug, …) goes in a JSON
+  `metadata` column, whose shape each type defines.
+- **Validation**: each type validates its own secret plaintext and metadata in code, through the
+  [type contract](#type-contract). The database only enforces the generic columns.
+- **New types** need no migration, unless they promote a new generic column.
+
+**Rejected alternatives:**
+
+- **A base table plus a 1:1 detail table per type**: DB-level typing, but joins everywhere and a
+  migration per type.
+- **A table per type, no shared table**: fully typed, but the generic list, rename, test and
+  delete would span several tables, contradicting the generic API.
+- **A single packed ciphertext string** (`v1:<keyId>:<iv>:<tag>:<ct>`): self-describing, but the
+  key id is only queryable with string matching.
+
+### Tables
+
+The module owns these tables:
+
+- `integrations`: the entity below (`entities/integration.entity.ts`).
+- `integrations_credential_lockouts`: the per-user failure cool-off state
+  ([Lockout table](#lockout-table)).
+- `integrations_oauth_states`: pending OAuth App redirect flows
+  ([OAuth App state](integrations/oauth-app.md#state)).
+- `integrations_github_app_states`: pending GitHub App redirect flows and installation
+  selections ([GitHub App state](integrations/github-app.md#state)).
+
+### `integrations` columns
+
+| Column | Type | Null | Notes |
+|---|---|---|---|
+| `id` | `int` auto-increment | no | Internal primary key. Never exposed. |
+| `uuid` | `char(36)` | no | Exposed identifier, unique. Generated by the **application** before encryption, because it is part of the AAD ([Binding to the row](#binding-to-the-row-aad)). |
+| `user_id` | `int` | no | Owner. FK to `auth_users.id`, `ON DELETE CASCADE` ([Owner foreign key](#owner-foreign-key)). |
+| `provider` | `varchar(32)` | no | `github`. |
+| `type` | `varchar(32)` | no | `pat`, `oauth_app` or `github_app`. |
+| `label` | `varchar(100)` | no | User-defined, trimmed, as entered. |
+| `label_normalized` | `varchar(100)` | no | `label` trimmed and lower-cased; carries the uniqueness index. |
+| `status` | `varchar(32)` | no | Stored status ([Status lifecycle](#status-lifecycle)). |
+| `status_reason` | `varchar(64)` | yes | Reason code; set only with `invalid`. |
+| `github_login` | `varchar(255)` | no | The GitHub identity (user or organization login) the credential belongs to. |
+| `expires_at` | `datetime` | yes | Known credential expiry, if any. |
+| `last_tested_at` | `datetime` | yes | Last test-connection attempt, whatever its outcome. |
+| `last_test_result` | `varchar(32)` | yes | `success`, `rejected`, `transient_error` or `undecryptable`. |
+| `metadata` | `json` | no | Non-secret, type-defined shape. `{}` when a type has none. |
+| `secret_hint` | `varchar(64)` | yes | Output of the type's mask, computed at create/replace; non-secret ([Mask the secret](#mask-the-secret)). |
+| `secret_key_id` | `char(8)` | no | Id of the key that encrypted the secret ([Key id](#key-id)). |
+| `secret_iv` | `varbinary(12)` | no | 96-bit AES-GCM IV, fresh per encryption. |
+| `secret_auth_tag` | `varbinary(16)` | no | 128-bit AES-GCM authentication tag. |
+| `secret_ciphertext` | `blob` | no | Encrypted JSON secret payload. |
+| `created_at` | `datetime` | no | Set on insert. |
+| `updated_at` | `datetime` | no | Set on every update. |
+
+**Indexes:** unique `uuid`; unique `(user_id, label_normalized)`; non-unique `user_id`;
+non-unique `secret_key_id` (for key rotation).
+
+**Enumerations** are validated in code (`integration-enums.ts`); the database stores plain
+strings:
+
+- `provider`: `github`.
+- `type`: `pat`, `oauth_app`, `github_app`.
+- `status`: `active`, `invalid`, `expired`, `undecryptable`.
+- `last_test_result`: `success`, `rejected`, `transient_error`, `undecryptable`.
+
+### Owner foreign key
+
+The project's [database strategy](../architecture/modular-pattern.md#database-strategy) uses
+logical foreign keys only between modules. **`integrations.user_id` is a deliberate, documented
+exception**: it is a physical FK to `auth_users.id` with `ON DELETE CASCADE`, declared in its
+migration only.
+
+- **Why:** a credential must never outlive its owner. The database guarantees it even if a
+  future user-deletion path forgets to notify the Integrations module.
+- **Limit of the exception:** it is the only physical cross-module FK. Code still never joins
+  `auth_users`; anything it needs about the user goes through the Auth module's exported service.
+- The lockout table's `user_id` stays a logical FK, like `auth_account_edit_lockouts`.
+
+### Constraints
+
+- **Label:**
+  - required; trimmed; 1–100 characters after trimming
+  - unique per user, compared case-insensitively through `label_normalized`
+  - a duplicate answers **409** `INTEGRATION_LABEL_TAKEN`
+    ([error codes](../backend/routes/integrations.md#error-codes))
+- **Per-user cap:** at most `KERGHAN_INTEGRATIONS_MAX_PER_USER` integrations per user (default
+  `20`), read once at boot through `getNumberConfig` (`backend/src/core/numeric-config.ts`).
+  Every integration counts, whatever its status. Creating one past the cap answers **409**
+  `INTEGRATIONS_LIMIT_REACHED`. The check runs before any GitHub call.
+- **Owner:** set from the authenticated caller on create, never from the request body, and never
+  changed afterwards.
+- **`provider` and `type`:** fixed on create; never changed. Changing type means deleting and
+  creating a new integration.
+
+### Status lifecycle
+
+| Status | Meaning |
+|---|---|
+| `active` | The last check against GitHub succeeded. |
+| `invalid` | GitHub rejected the credential, or it is no longer usable. `status_reason` gives the cause. |
+| `expired` | The credential is past its known expiry. |
+| `undecryptable` | The stored secret can't be decrypted with the configured key. |
+
+**`status_reason`** is a short code, set only with `invalid` (and cleared on any other status):
+
+- Generic code: `insufficient_permissions` (the credential lost required scopes/permissions).
+- Each type adds its own codes (e.g. `revoked`, `uninstalled`, `suspended`, `bad_credentials`),
+  with their UI text ([Status reason codes](#status-reason-codes)).
+- The UI shows the reason as text, never the raw code alone.
+
+#### Transitions
+
+| Trigger | Result |
+|---|---|
+| **Create** | The credential is validated against GitHub. Success: stored as `active`, `last_tested_at` = now, `last_test_result` = `success`. Any failure (invalid, insufficient permissions, transient): rejected, **nothing is stored**. |
+| **Replace credential** | Same validation as create. Success: new secret (re-encrypted with a fresh IV), `secret_hint`, `github_login`, `expires_at` and `metadata` refreshed, status `active`, `status_reason` cleared, `last_tested_at` = now, `last_test_result` = `success`. Failure: the previous credential, metadata and status stay unchanged. |
+| **Test connection** | GitHub accepts: `active`, result `success`. GitHub rejects: `invalid` + reason (including `insufficient_permissions` if permissions were lost) or `expired`, result `rejected`. |
+| **Transient failure** (network error, GitHub 5xx, GitHub rate limit) | **Never** changes the status. On test, recorded as `last_test_result` = `transient_error`. |
+| **Decryption failure**, on any use of the secret (an unknown key id, or an auth-tag failure) | Status `undecryptable`. On test, result `undecryptable`; GitHub is not called. |
+| **Rename** | Status unchanged. |
+
+`undecryptable` is **not terminal**: a test connection always tries to decrypt again when the
+row's `secret_key_id` matches the configured key. If decryption succeeds, the test proceeds
+normally and sets the status from GitHub's answer, so a temporary key misconfiguration that was
+later fixed doesn't strand rows. Only an unknown key id or an actual auth-tag failure keeps it
+`undecryptable`. **Replace credential** (back to `active` on success) and **delete** are always
+available.
+
+#### Expiry
+
+- When `expires_at` is known and `expires_at < now`, an integration whose stored status is
+  `active` is **reported** as `expired` by every API response, even if it was never tested.
+  Other stored statuses are reported as stored.
+- It is computed on read: no background job. The stored status becomes `expired` on the next
+  test connection.
+- **Expiring soon** is a UI hint only, not a status, with a fixed 7-day window
+  ([List columns](#list-columns)). There are no notifications.
+
+### Edge cases
+
+- **User deleted** (not possible today; defined for when it is): rows are removed by the
+  `ON DELETE CASCADE` FK. Per-type revocation on GitHub (OAuth App, GitHub App) is best-effort,
+  runs before the user row is removed, never blocks the deletion, and is defined by each type
+  ([Behaviour on delete](#behaviour-on-delete)).
+- **Same GitHub identity twice for one user**: allowed (e.g. two PATs for the same login with
+  different scopes). The label tells them apart; the UI shows a hint.
+- **Same GitHub identity or installation for different Kerghan users**: allowed and fully
+  isolated. No response, error code or message may reveal that another user holds the same
+  identity. A GitHub App installation is only accepted once the user proves access to it on
+  GitHub ([GitHub App access](integrations/github-app.md#access)).
+- **Replace credential with a different GitHub identity**: allowed. An integration is a labelled
+  credential slot; `github_login` and `metadata` are refreshed from the new credential.
+- **Credential stops working** (revoked, expired, uninstalled): nothing polls. The status only
+  changes on an explicit test connection. The UI shows when it was last tested.
+- **Secret can't be decrypted** (key lost or misconfigured, ciphertext tampered): the row is
+  still listed with status `undecryptable`; the user can replace the credential or delete it.
+  The app refuses to boot if `KERGHAN_INTEGRATIONS_KEY` is missing or malformed ([Key](#key)).
+- **Concurrent edits**: last write wins. Any action on a deleted or foreign integration answers
+  **404**.
+- **GitHub unreachable or rate-limited:**
+  - on create or replace: rejected with an upstream error, nothing stored or changed, and the
+    attempt does **not** count toward the failure cool-off
+  - on test: the stored status is left unchanged, the attempt is recorded (`last_tested_at`,
+    `last_test_result` = `transient_error`), and the error is returned
+
+### Lockout table
+
+`integrations_credential_lockouts` holds the per-user failure cool-off for create and replace
+credential ([cool-off](#create-and-replace-credential-failure-cool-off)). It mirrors
+`auth_account_edit_lockouts`:
+
+| Column | Type | Null | Notes |
+|---|---|---|---|
+| `id` | `int` auto-increment | no | Primary key. |
+| `user_id` | `int` | no | Logical FK to `auth_users.id`; unique (one row per user, upserted in place). |
+| `failed_attempts` | `int` | no | Consecutive counted failures; default `0`. |
+| `locked_until` | `datetime` | yes | End of the cool-off, when tripped. |
+| `created_at`, `updated_at` | `datetime` | no | Timestamps. |
+
+### Migrations
+
+Additive only: one migration per table, named `<timestamp>-integrations-<action>.ts` under
+`backend/src/database/migrations/`, each with a working `down` that drops its table.
+
+## Security
+
+### Access rules
+
+- **Owner-only.** An integration is visible to and manageable by its owner only.
+- Every route requires authentication (the global `JwtGuard`) and every query is scoped to the
+  caller's id (`req.user.sub`) **in the query itself** (e.g. `WHERE uuid = ? AND user_id = ?`),
+  never by loading the row and comparing afterwards.
+- Another user's integration answers **404**, exactly like a missing one: same status, code and
+  message, so existence is never leaked.
+- **Admins get no access.** `@AdminOnly()` grants nothing here: no admin route or admin UI lists,
+  shows, edits, deletes or tests another user's integrations, their metadata, hints or secrets.
+  Existing admin endpoints (e.g. `/admin/users/*`) carry no integration-derived fields (counts,
+  flags, logins).
+- **Owner lookup first:** on every `:uuid` route the owner-scoped lookup runs before any
+  row-dependent check (flow kind, credential validation, cool-off, cooldown, GitHub call), so a
+  foreign `:uuid` always answers 404
+  ([per-action behaviour](../backend/routes/integrations.md#per-action-behaviour)).
+- **Account recovery and admin edits** (password reset, recovery link, admin user edit) leave the
+  user's integrations untouched.
+
+### Encryption at rest
+
+Implemented by `IntegrationsEncryptionService` (`integrations-encryption.service.ts`).
+
+- **Algorithm:** AES-256-GCM (Node's `crypto`, no extra dependency).
+- **IV:** a fresh random 96-bit IV for every encryption, never reused. Replacing a credential
+  always re-encrypts with a new IV.
+- **Auth tag:** 128 bits, stored in `secret_auth_tag` and verified on every decryption.
+- **Plaintext:** the type's secret payload, serialized as JSON. Only the encryption service sees
+  it as a string; everywhere else it is a `Secret`.
+
+#### Binding to the row (AAD)
+
+Each ciphertext is bound to its row with AES-GCM additional authenticated data:
+
+```text
+AAD = UTF-8 bytes of "<uuid>:<type>"
+```
+
+- A ciphertext copied into another row (e.g. by someone with database write access) fails
+  authentication, and that row becomes `undecryptable`.
+- The `uuid` is therefore generated by the application before encryption, never by the
+  database, and is immutable.
+
+#### Key
+
+`KERGHAN_INTEGRATIONS_KEY` encrypts every integration secret (`integrations-key.ts`). It is
+**independent** of `KERGHAN_SECRET_KEY` and deliberately stricter (`KERGHAN_SECRET_KEY` has no
+format validation).
+
+- **Format:** exactly 32 random bytes, base64-encoded. Generate one with
+  `openssl rand -base64 32`.
+- **Boot validation:** read once at boot (DI, no env reads inside classes). The app refuses to
+  start, with an error naming the variable but never printing its value, when the key:
+  - is missing or blank
+  - isn't valid base64
+  - doesn't decode to exactly 32 bytes
+  - equals `KERGHAN_SECRET_KEY`
+  - equals the public dev/test placeholder while `NODE_ENV=production`
+- **Environments:** the docker-compose and `.env` samples and CI ship one fixed, valid but
+  **public** placeholder key, defined once in `integrations-key.ts` so the production check can
+  compare against it. See [environment variables](../environment-variables.md).
+- **Single key.** No previous-key list and no re-encryption today; rotation is tracked
+  separately (#305).
+
+#### Key id
+
+- `secret_key_id` = the first **8 hex characters of SHA-256 over the raw 32 key bytes**. The key
+  can't be recovered from it.
+- Every ciphertext stores the id of the key that produced it. With one key the id is only
+  recorded; rotation can use it to select a previous key with no data migration.
+- A ciphertext whose `secret_key_id` doesn't match the configured key is treated as
+  `undecryptable` without attempting decryption ([Status lifecycle](#status-lifecycle)). A row
+  stored as `undecryptable` is retried on the next test once its key id matches again.
+
+### Secrets never logged
+
+Context: `core/logger.service.ts` logs structured attributes to the console with no redaction,
+and `HttpExceptionFilter` logs `error.message` and `stack` for unhandled exceptions. So secrets
+must never reach either.
+
+1. **Never logged, never in an exception message, never in a response:**
+   - the plaintext credential
+   - the decrypted secret payload
+   - `KERGHAN_INTEGRATIONS_KEY`
+   - the stored IV, auth tag and ciphertext
+2. **Safe to log:**
+   - integration UUID and user id
+   - provider and type
+   - status and `status_reason`
+   - key id
+   - the GitHub login/account
+   - the HTTP status GitHub returned
+3. **`Secret` wrapper** (`secret.ts`):
+   - In the backend, plaintext credentials only ever exist inside a `Secret` value type whose
+     `toString()`, `toJSON()` and `util.inspect` all return `[REDACTED]`.
+   - It is unwrapped only at the GitHub client call site and at the encryption/decryption
+     boundary.
+   - DTO-to-`Secret` conversion happens as early as possible after validation.
+4. **GitHub client errors** are caught inside the GitHub client and rethrown as sanitized errors
+   carrying only safe data (status, a short reason): no request config, headers, or URL query
+   that could contain a credential. The unhandled-exception logger can then never print a token.
+5. **Validation messages** never echo the credential value: "credential.token must be a string",
+   never a message including the submitted value.
+6. **Frontend:** see [Credential input rules](#credential-input-rules).
+7. **Canary testing:** backend and frontend specs submit a recognisable canary credential and
+   assert it never reaches any logger call, error response body or API response (backend), nor
+   `console`, storage or the URL (frontend).
+
+Tent request-body logging is not a concern today; no extra proxy check is required.
+
+### Rate limiting
+
+Create, replace credential and test connection make the **backend** call GitHub. Without limits,
+Kerghan could be used as an oracle for checking stolen tokens, get its shared IP blocked by
+GitHub after repeated bad-credential attempts, or burn GitHub quota on repeated tests.
+
+### Create and replace credential: failure cool-off
+
+A per-user cool-off (`IntegrationCredentialAbuseGuardService`) following
+`AccountEditAbuseGuardService` and `core/lockout-state.ts` (`computeLockoutState`):
+
+- **Counted failures:** GitHub rejected the credential (`INTEGRATION_CREDENTIAL_INVALID`) or it
+  lacks required permissions (`INTEGRATION_INSUFFICIENT_PERMISSIONS`).
+- **Not counted:** transient GitHub failures (network, 5xx, rate limit), payload validation
+  failures, duplicate label and cap rejections. None of these is a credential check.
+- After `KERGHAN_INTEGRATIONS_CREDENTIAL_MAX_ATTEMPTS` consecutive counted failures (default
+  `5`), the user is locked out of create **and** replace credential for
+  `KERGHAN_INTEGRATIONS_CREDENTIAL_LOCK_MS` milliseconds (default `900000`, 15 minutes).
+- A successful validation resets the counter.
+- While locked, requests answer **423** `INTEGRATION_CREDENTIAL_LOCKED` (through
+  `LockedException`, consistent with the existing lockouts) **before** any GitHub call.
+- Both variables are read once at boot through `getNumberConfig` (`core/numeric-config.ts`).
+- `failed_attempts` is incremented with an **atomic** update
+  (`SET failed_attempts = failed_attempts + 1`), never read-then-write, so parallel failures all
+  count. A user's first failure is an atomic upsert on the unique `user_id`
+  (`INSERT … ON DUPLICATE KEY UPDATE failed_attempts = failed_attempts + 1`).
+- State lives in `integrations_credential_lockouts` ([Lockout table](#lockout-table)), so it
+  holds across instances and restarts.
+- Redirect-based types count their callback's credential check toward the same cool-off
+  ([Redirect flow invariants](#redirect-flow-invariants)).
+
+### Test connection cooldown
+
+- At most one test per integration every `KERGHAN_INTEGRATIONS_TEST_COOLDOWN_MS` milliseconds
+  (default `30000`, read once at boot through `getNumberConfig`), enforced by
+  `IntegrationTestCooldownService`.
+- Enforced from `last_tested_at`; no extra table.
+- The cooldown is **claimed atomically** before calling GitHub, e.g.
+  `UPDATE integrations SET last_tested_at = now WHERE uuid = ? AND user_id = ? AND
+  (last_tested_at IS NULL OR last_tested_at < now - cooldown)`, proceeding only if one row was
+  affected. Parallel tests therefore make at most one GitHub call per window.
+- Inside the cooldown the API answers **429** `INTEGRATION_TEST_COOLDOWN` with a `Retry-After`
+  header (remaining seconds, rounded up), without calling GitHub.
+- The UI disables the "Test" button until the cooldown ends ([Actions](#actions)).
+- There is no global, app-wide circuit breaker on failed validations: per-user cool-offs plus
+  the per-user cap ([Constraints](#constraints)) are considered enough.
+
+### Faking GitHub in tests
+
+- All GitHub HTTP traffic goes through **one injectable GitHub client**
+  (`GithubClientService`, plus `GithubAppClientService` for app-authenticated calls); types call
+  GitHub only through it.
+- Service and e2e specs replace it with a fake. Only the client's own spec stubs `fetch`.
+- No HTTP-mocking dependency (e.g. nock).
+- CI never calls GitHub.
+
+## Type contract
+
+The extension point every integration type implements. The generic code (entity, API,
+encryption, rate limits) never branches on `type`; it delegates to the type's strategy.
+
+### Strategy interface
+
+Every type provides one strategy (`types/integration-type-strategy.ts`), looked up by `type` in
+the registry:
+
+```ts
+interface IntegrationTypeStrategy {
+  readonly type: 'pat' | 'oauth_app' | 'github_app';
+  readonly flows: { credentialPaste: boolean; redirect: boolean };
+
+  // Whether this server can create the type (e.g. its server config is set).
+  // Omitted means always enabled.
+  isEnabled?(): boolean;
+
+  // Validate the `credential` request object and wrap it as early as possible.
+  parseCredential(raw: unknown): Secret;
+
+  // Re-validate a decrypted payload against the type's secret shape;
+  // `null` means unusable (handled as undecryptable).
+  parseSecretPayload(payload: Secret): Secret | null;
+
+  // Validate against GitHub (through the shared GitHub client) and build what gets stored.
+  validate(secret: Secret): Promise<ValidatedCredential>;
+
+  // Map GitHub's answer for a stored secret to a test outcome.
+  test(secret: Secret, current: IntegrationView): Promise<TestOutcome>;
+
+  // Validate and normalize the non-secret metadata this type stores.
+  describeMetadata(metadata: unknown): TypeMetadata;
+
+  // Produce the `secretHint`; called only at create/replace, result stored.
+  mask(secret: Secret): string;
+
+  // Best-effort cleanup when the integration (or its owner) is deleted.
+  onDelete(secret: Secret | null, current: IntegrationView): Promise<void>;
+}
+
+interface ValidatedCredential {
+  secret: Secret;           // the plaintext payload to encrypt (type-defined JSON shape)
+  githubLogin: string;
+  expiresAt: Date | null;
+  metadata: TypeMetadata;   // non-secret
+}
+
+type TestOutcome =
+  | { kind: 'active'; githubLogin: string; expiresAt: Date | null; metadata: TypeMetadata }
+  | { kind: 'invalid'; reason: string }
+  | { kind: 'expired' }
+  | { kind: 'transient'; error: 'unavailable' | 'rate_limited'; retryAfterSeconds?: number };
+```
+
+### Flow kind
+
+- **Credential-paste:** the user pastes a credential. The type uses the generic create
+  (`POST /integrations.json`) and replace-credential routes and implements `parseCredential`.
+- **Redirect-based:** the credential comes from a GitHub redirect. The type owns its start and
+  callback routes under `/integrations/<type>/…`, defined in its type page, and those routes
+  still end by calling `validate` and the generic storage/encryption code.
+- A type may support **both**. Generic create/replace with a type lacking credential-paste
+  answers 400 `INTEGRATION_FLOW_UNSUPPORTED`
+  ([create envelope](../backend/routes/integrations.md#create-envelope)).
+- Rename, test, delete, list and show are generic for every type.
+
+### Redirect flow invariants
+
+Binding on every redirect-based type ([OAuth App](integrations/oauth-app.md),
+[GitHub App](integrations/github-app.md)). A GitHub redirect is a cross-site top-level `GET`:
+the `SameSite=Strict` `access_token` cookie is not sent, `OriginGuard` doesn't apply, and
+[Security](../architecture/security.md#csrf) forbids state changes over `GET`. So:
+
+- GitHub redirects to a **frontend-served landing URL**, never to a backend route. GitHub
+  appends `code`/`state` as a query string (a fragment isn't allowed in `redirect_uri`); the
+  exact landing shapes are fixed in [OAuth App landing](integrations/oauth-app.md#landing) and
+  [GitHub App landing](integrations/github-app.md#landing).
+- The frontend then `POST`s `{ code, state }` (plus the claimed `installationId` for the GitHub
+  App, which the backend verifies) to a backend `.json` route of the type. That request is
+  same-origin, carries the cookie, and goes through `OriginGuard` and `JwtGuard`.
+- `state` is random, single-use, short-lived, bound server-side to the initiating user, and
+  compared in constant time. The owner always comes from `req.user.sub`, never from the callback.
+- Every type-owned route is cache class `never` (`X-Skip-Cache`), requires `JwtGuard`, and
+  follows the same logging, `Secret` and canary rules as the generic routes.
+- The callback's credential check counts toward the
+  [create/replace failure cool-off](#create-and-replace-credential-failure-cool-off), unless the
+  type page explicitly states why it doesn't.
+- The `code`/`state` never stays in the URL or browser history: right after reading them, and
+  before any other request, the frontend removes both the query string and the hash with
+  `history.replaceState`. The landing page is served with `Referrer-Policy: no-referrer` (or
+  `same-origin`).
+
+### Validate / create
+
+- Validate the credential's shape; validation messages never echo the value
+  ([Secrets never logged](#secrets-never-logged)).
+- Call GitHub **only** through the shared, injectable GitHub client
+  ([Faking GitHub in tests](#faking-github-in-tests)).
+- Check the required scopes/permissions. Missing ones reject with
+  `INTEGRATION_INSUFFICIENT_PERMISSIONS`; the type defines what counts as sufficient.
+- Reject a credential GitHub refuses with `INTEGRATION_CREDENTIAL_INVALID`.
+- Map network errors, GitHub 5xx and GitHub rate limits to the transient errors
+  (`GITHUB_UNAVAILABLE`, `GITHUB_RATE_LIMITED`), which don't count toward the failure cool-off.
+- Return the secret payload, `githubLogin`, `expiresAt` and `metadata`. The generic code
+  encrypts and stores them.
+
+### Test connection
+
+- Map GitHub's answer to `active`, `invalid` + reason (including `insufficient_permissions` if
+  permissions were lost), `expired`, or a transient error that leaves the status unchanged
+  ([Transitions](#transitions)).
+- On `active`, return refreshed `githubLogin`, `expiresAt` and `metadata`.
+
+### Describe metadata
+
+- Define the JSON shape stored in `metadata` (e.g. scopes, installation id, app slug) and
+  validate it. Metadata is **non-secret by definition**: it is returned to the owner as-is.
+- Metadata must never contain tokens, refresh tokens, client secrets, private keys, or anything
+  usable as a credential; such values belong in the encrypted secret payload.
+
+### Mask the secret
+
+- Produce `secretHint`: enough for the owner to recognise the credential (e.g. a known prefix
+  and the last 4 characters), never enough to reconstruct it. The type fixes the format.
+- Called **only** at create and replace credential; the result is stored in `secret_hint`, so
+  list and show never decrypt a secret. At most 64 characters.
+
+### Behaviour on delete
+
+- Best-effort cleanup on GitHub (e.g. revoking an OAuth token, or nothing for a PAT), run on
+  integration delete and on owner deletion.
+- It never blocks the deletion: failures are logged with safe fields only, and the row is
+  deleted anyway. An `undecryptable` row is deleted without cleanup (`secret` is `null`).
+
+### Status reason codes
+
+- Each type defines its `invalid` reason codes (e.g. `revoked`, `uninstalled`, `suspended`,
+  `bad_credentials`) and their UI text.
+- The generic code `insufficient_permissions` is shared by every type.
+- Codes are lower-case snake_case, at most 64 characters (`status_reason` column).
+
+### Registration
+
+- Strategies are registered by `type`, in registry order, in `INTEGRATION_TYPE_STRATEGIES`
+  (`integrations.module.ts`), and resolved by `IntegrationTypeRegistry`.
+- An unknown `type` is rejected by validation (400 `VALIDATION_FAILED`) before any strategy is
+  looked up.
+- A type whose `isEnabled()` returns `false` is left out of
+  [`POST /integrations/types.json`](../backend/routes/integrations.md#enabled-types).
+- Adding a type needs no migration, unless it promotes a new generic column.
+- Type-specific env vars or app credentials (e.g. an OAuth App's client secret) are defined in
+  the type page and read once at boot, like every other config.
+
+### What a type doc must contain
+
+Each `modules/integrations/<type>.md` page covers:
+
+- Credential payload shape (the plaintext encrypted in `secret_ciphertext`) and, for
+  credential-paste types, the `credential` request shape.
+- Metadata shape.
+- Required scopes/permissions, and how they are checked.
+- `secretHint` format.
+- `invalid` reason codes and their UI text.
+- Flow kind, with any routes, callbacks, env vars and app credentials.
+- Expiry: whether `expiresAt` is known and how it is obtained.
+- Behaviour on delete.
+- Access, for any type-owned route: it requires `JwtGuard`, sets the owner from `req.user.sub`
+  only, binds the GitHub callback to the initiating user
+  ([Redirect flow invariants](#redirect-flow-invariants)) and never to an id carried in the
+  callback, follows the [access rules](#access-rules), and is cache class `never`.
+- Its frontend form or redirect flow, under a `## Frontend` heading.
+
+## Frontend
+
+The UI shell shared by every type. Per-type forms and redirect flows live in each
+[type page](#types). The endpoints used here are in
+[Integrations routes](../backend/routes/integrations.md).
+
+### Menu item
+
+- An **Integrations** item in the "My account" dropdown
+  (`frontend/assets/js/components/common/header/helpers/HeaderHelper.jsx`), next to
+  *Authorizations* and *Account*. It is shown only when logged in, like the rest of the dropdown.
+- It links to `#/account/integrations`, following the existing `#/account/...` hash routes.
+  Tent's catch-all redirect (`/path → /#/path`) makes `/account/integrations` work too.
+- Visiting the page while logged out behaves like the other `#/account/...` pages.
+
+### Page
+
+The page is `frontend/assets/js/components/resources/accounts/pages/Integrations.jsx`.
+
+- Loads the list with `POST /integrations/mine.json` on mount.
+- **Loading** state while the list loads.
+- **Empty** state: explains what integrations are for, with an "Add integration" action.
+- **Error** state: shows the standard error message, with a retry action.
+- After any successful action, the affected row is updated from the response (or the list is
+  reloaded); no stale status is shown.
+
+### List columns
+
+| Column | Content |
+|---|---|
+| Label | `label`. |
+| Type | Human name of `type` (Personal Access Token, OAuth App, GitHub App). |
+| GitHub account | `githubLogin`. When two of the user's integrations share the same login, a small hint says so. |
+| Status | `status` as a badge; for `invalid`, the `statusReason` shown as text (from the type's reason texts, see [Status reason codes](#status-reason-codes)). `undecryptable` explains the stored credential can't currently be read: the user can test it again (it recovers if the key was fixed), replace it, or remove it. |
+| Credential | `secretHint` (e.g. `ghp_…a1b2`), or "unavailable" when `null`. |
+| Expiry | `expiresAt`, or "no expiry". **Expiring soon** flag when `expiresAt` is within **7 days** and the status is not already `expired`. |
+| Last tested | `lastTestedAt` (relative time) and `lastTestResult` (success, rejected, transient error, undecryptable), or "never". |
+| Actions | See below. |
+
+### Actions
+
+Every action shows API errors using the standard error format: the message, with known codes
+from the [error codes](../backend/routes/integrations.md#error-codes) mapped to friendly text
+(e.g. `INTEGRATION_LABEL_TAKEN`, `INTEGRATIONS_LIMIT_REACHED`, `INTEGRATION_CREDENTIAL_LOCKED`,
+`GITHUB_UNAVAILABLE`).
+
+- **Add:** opens the [type picker](#type-picker), then the chosen type's flow: a
+  credential-paste form posting to `POST /integrations.json` with a label field, or the type's
+  redirect start. When the cap is reached the action still opens, and the API's error is shown.
+- **Rename:** inline or modal edit of the label, `PATCH /integrations/:uuid.json`.
+- **Replace credential:** the type's credential form (or redirect flow) for an existing row,
+  `POST /integrations/:uuid/credential.json`. Offered for every status, and highlighted for
+  `invalid`, `expired` and `undecryptable`.
+- **Remove:** asks for confirmation (naming the label), then `DELETE /integrations/:uuid.json`.
+- **Test connection:** `POST /integrations/:uuid/test.json`, then shows the new status and
+  result. The "Test" button is **disabled during the cooldown**: until `nextTestAt` (enabled
+  when it is `null` or not after now), and, after a 429, for the `Retry-After` seconds.
+
+### Type picker
+
+- Lists the three types: Personal Access Token (`pat`), OAuth App (`oauth_app`) and GitHub App
+  (`github_app`), each with a one-line description.
+- Each type contributes its own form or redirect flow, defined in its type page.
+- The picker lists only the types returned by `POST /integrations/types.json`
+  ([enabled types](../backend/routes/integrations.md#enabled-types)), intersected with the types
+  the frontend implements. Types disabled on this server are hidden, so the picker only offers
+  working flows.
+
+### Credential input rules
+
+- Credential inputs are `type="password"` with `autocomplete="off"`.
+- The credential is cleared from component state after submit, on success **and** on failure.
+- It is never written to `console`, `localStorage`/`sessionStorage`, or the URL (including the
+  hash route).
+- The label input is a plain text input; only credential fields follow these rules.
+
+## Types
+
+- [Personal Access Token (`pat`)](integrations/pat.md): credential-paste.
+- [GitHub OAuth App (`oauth_app`)](integrations/oauth-app.md): redirect-based.
+- [GitHub App installation (`github_app`)](integrations/github-app.md): redirect-based.

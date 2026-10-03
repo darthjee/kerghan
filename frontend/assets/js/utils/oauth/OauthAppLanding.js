@@ -26,7 +26,7 @@ function classify(params) {
 
 /**
  * Captures the OAuth App landing (`/integrations/oauth_app/callback?code=…&state=…`), as
- * described in `docs/agents/specs/integrations/types/oauth-app.md#landing` (see
+ * described in `docs/agents/modules/integrations/oauth-app.md#landing` (see
  * {@link createRedirectLanding}). The Integrations page takes it once.
  *
  * @type {{path: string, capture: Function, take: Function}}

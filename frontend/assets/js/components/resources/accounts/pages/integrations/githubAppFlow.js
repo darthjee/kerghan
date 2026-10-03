@@ -53,7 +53,7 @@ function showResult(controller, result) {
 }
 
 /**
- * The GitHub App flow (`docs/agents/specs/integrations/types/github-app.md`): its start (asks
+ * The GitHub App flow (`docs/agents/modules/integrations/github-app.md`): its start (asks
  * the backend for the install or authorize URL and sends the browser there, only when it is one
  * of GitHub's two expected shapes), its landing (posts the captured values to the callback
  * route) and the installation selection (posts the chosen installation to the select route).

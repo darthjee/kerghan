@@ -29,7 +29,7 @@ export function normalizeLabel(label: string): string {
 
 /**
  * The Integrations module's business logic (see
- * `docs/agents/specs/integrations/api.md`). Every action is scoped to the
+ * `docs/agents/backend/routes/integrations.md`). Every action is scoped to the
  * caller; on `:uuid` actions the owner lookup runs first, so a foreign uuid
  * answers 404 before any other check. Responses are built from an explicit
  * allowlist and never decrypt anything.

@@ -14,8 +14,8 @@ full file before loading it. For a bare link-only table of contents instead, see
   frontend, backend, modular pattern, infra) to keep agent contexts small. Read the linked area
   page relevant to your task instead of loading everything.
 - **[Modules](modules/)** — Per-backend-module documentation (routes, entities, events), one
-  file per module (`modules/auth.md` and `modules/mail.md` today). Read the module's page before
-  extending or consuming it.
+  file per module (`modules/auth.md`, `modules/mail.md` and `modules/integrations.md` today).
+  Read the module's page before extending or consuming it.
   - **[Auth](modules/auth.md)** — Kerghan's always-on login module: `/auth/*.json` routes, the
     `auth_` tables, the JWT/refresh-token flow, and the `user.registered` and
     `password-recovery.requested` events.
@@ -23,19 +23,24 @@ full file before loading it. For a bare link-only table of contents instead, see
     surface; consumed via the exported `MailService`. `KERGHAN_EMAIL_*` config read once at boot;
     disabled by default (log-and-skip). Templated sends via `sendEmailTemplate`, backed by
     filesystem templates under `mail/templates/` read once at boot. First consumer: #39.
+  - **[Integrations](modules/integrations.md)** — Always-on module for labelled GitHub
+    credentials owned by one user each (`pat`, `oauth_app`, `github_app`, one page per type
+    under `modules/integrations/`): data model, owner-only access, AES-256-GCM encryption with
+    `KERGHAN_INTEGRATIONS_KEY`, rate limits, the type contract and the Integrations page. Not yet
+    used for issue fetching.
 - **[Routes](backend/routes.md)** — Per-endpoint backend route reference, one file per domain
-  under `backend/routes/` (`auth.md` today), complementing the entity/event-focused
-  `modules/` pages.
+  under `backend/routes/` (`auth.md` and `integrations.md` today), complementing the
+  entity/event-focused `modules/` pages.
 
 ## Conventions
 
 - **[Contributing](contributing.md)** — Commit guidelines (atomic, no unrelated changes,
   separate refactors) and PR standards (descriptive summary, description files when needed).
-- **[Product Definitions](product.md)** — What's decided (login/session, repo selection is the
-  only persisted state, issues fetched live client-side, no issue persistence by default) vs.
-  still open (the tracked-repo/label-rule data model) and deferred (opt-in issue persistence,
-  history/trends, private-repo GitHub tokens). Read it before planning any issue that introduces
-  new entities.
+- **[Product Definitions](product.md)** — What's decided (login/session, persisted repo
+  selection, integrations as the only GitHub credential storage, issues fetched live
+  client-side, no issue persistence by default) vs. still open (the tracked-repo/label-rule data
+  model) and deferred (opt-in issue persistence, history/trends, using integration credentials
+  for private repos). Read it before planning any issue that introduces new entities.
 - **[Issue Enhancement](issue-enhancement.md)** — Checklist of concerns (`/enhance-issue` uses
   this) for fleshing out a vague issue idea before it reaches the `Created` stage.
 - **[Environment Variables](environment-variables.md)** — Every env var Kerghan's production
@@ -65,7 +70,7 @@ full file before loading it. For a bare link-only table of contents instead, see
 
 - **[Specs](specs.md)** — Permanent hub for temporary feature specs under `specs/<feature>/`:
   purpose, lifecycle (first sub-issue writes them, last one folds them into the permanent docs
-  and deletes them), conventions, and the list of active specs (today: `integrations/`, #295).
+  and deletes them), conventions, and the list of active specs (none today).
 - **[Plans](plans/)** — Implementation plans for ongoing or upcoming features, one directory per
   issue (`<issue_id>_<topic>/`).
 - **[Issues](issues/)** — Detailed specs for open issues, one file per issue

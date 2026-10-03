@@ -1,9 +1,9 @@
 # Integration type: GitHub App installation (`github_app`)
 
-Part of the [integrations spec](../README.md). Defines the `github_app` type, following the
-[type contract](../type-contract.md#what-a-type-spec-must-contain) and its
-[redirect flow invariants](../type-contract.md#redirect-flow-invariants). It fills every
-per-type slot the generic specs leave open.
+Part of the [Integrations module](../integrations.md). Defines the `github_app` type, following the
+[type contract](../integrations.md#what-a-type-doc-must-contain) and its
+[redirect flow invariants](../integrations.md#redirect-flow-invariants). It fills every
+per-type slot the generic module leaves open. Code: `backend/src/integrations/types/github-app/`.
 
 ## Overview
 
@@ -11,14 +11,11 @@ per-type slot the generic specs leave open.
   connects an installation they can already access, and Kerghan stores **which installation**
   it is as an integration. No token is stored: installation access tokens are minted on demand
   from the app's private key.
-- #303 implements this type (backend strategy, routes and table; frontend flow; Tent rule), on
-  top of the generic module built by #300 and #301 and the redirect plumbing added by #302.
 - **Flow kind:** redirect-based only (see [Flow](#flow)).
 - **Server config:** optional. Without the app's id, slug, private key, client id and client
   secret the type is **disabled** (see [Server config](#server-config)).
 - GitHub's exact endpoints, parameters, headers, redirect behaviour and token limits below follow
-  GitHub's GitHub App and REST API docs. #303 checks them again against the docs when it
-  implements the type.
+  GitHub's GitHub App and REST API docs.
 
 ### Why ownership has to be verified
 
@@ -39,7 +36,7 @@ installation is accepted only if GitHub lists it among **that user's** installat
 **Redirect-based only** (`flows: { credentialPaste: false, redirect: true }`). Generic create
 (`POST /integrations.json`) and replace credential (`POST /integrations/:uuid/credential.json`)
 with `type: github_app`, or on a `github_app` row, answer **400** `INTEGRATION_FLOW_UNSUPPORTED`
-([api.md](../api.md#create-envelope)).
+([routes](../../backend/routes/integrations.md#create-envelope)).
 
 Two entry points share the same callback:
 
@@ -69,7 +66,8 @@ Two entry points share the same callback:
   ([Callback](#callback)).
 - Their paths don't collide with the generic `:uuid` routes: those always end in `/show.json`,
   `/test.json` or `/credential.json`, or are `PATCH`/`DELETE`.
-- The `Integration` response is the generic one ([api.md](../api.md#integration-response)).
+- The `Integration` response is the generic one
+  ([routes](../../backend/routes/integrations.md#integration-response)).
 
 ### Start
 
@@ -77,7 +75,7 @@ Request body, validated with the usual DTO rules (unknown fields stripped):
 
 - **Exactly one** of `label` (create) and `integrationId` (replace credential). Both or neither
   answer 400 `VALIDATION_FAILED`.
-- `label`: the generic label rules ([model.md](../model.md#constraints)).
+- `label`: the generic label rules ([data model](../integrations.md#constraints)).
 - `integrationId`: a UUID string.
 - `mode`: optional, `install` (default) or `connect`. Any other value answers 400
   `VALIDATION_FAILED`.
@@ -92,7 +90,7 @@ Checks, in order. Each failure stops there and stores nothing (same order as the
    missing row answers **404** `NOT_FOUND`. A row whose `type` isn't `github_app` answers 400
    `INTEGRATION_FLOW_UNSUPPORTED` (changing type means delete and create).
 5. Failure cool-off active → **423** `INTEGRATION_CREDENTIAL_LOCKED`
-   ([security.md](../security.md#create-and-replace-credential-failure-cool-off)). Checked again
+   ([security](../integrations.md#create-and-replace-credential-failure-cool-off)). Checked again
    on callback and select.
 6. **Create only:** per-user cap (409 `INTEGRATIONS_LIMIT_REACHED`) and label uniqueness (409
    `INTEGRATION_LABEL_TAKEN`). Checked again on callback and select.
@@ -110,8 +108,8 @@ The `redirectUrl` depends on `mode` (query parameters URL-encoded):
 - No `scope` parameter: a GitHub App's user token gets the app's permissions, not OAuth scopes.
 - No PKCE parameters. GitHub's installation page doesn't take them, and keeping one shape for
   both modes keeps the state row simpler. The code is useless without the client secret, which
-  only the server holds. #303 re-checks whether GitHub's install flow forwards PKCE; if it does,
-  adding a `code_verifier` column like the OAuth App's is a compatible later change.
+  only the server holds. If GitHub's install flow ever forwards PKCE, adding a `code_verifier`
+  column like the OAuth App's is a compatible later change.
 - The frontend navigates with `window.location.assign`, after checking the URL matches
   `^https://github\.com/apps/[a-z0-9-]+/installations/new\?` or starts with
   `https://github.com/login/oauth/authorize?`. Anything else is shown as an error and not
@@ -123,8 +121,8 @@ With *Request user authorization (OAuth) during installation* enabled, GitHub se
 to the app's **callback URL** (not its setup URL) after installation and authorization. Per
 GitHub's docs, the query string then carries `code`, `state`, and, for install flows,
 `installation_id` and `setup_action`. A connect flow carries only `code` and `state`. A
-cancelled authorization carries `error`, `error_description` and `state`. #303 re-checks these
-against GitHub's docs, including that `state` survives the installation page.
+cancelled authorization carries `error`, `error_description` and `state`. The `state` survives
+the installation page.
 
 The frontend, booting on that path:
 
@@ -132,7 +130,7 @@ The frontend, booting on that path:
    `window.location.search`.
 2. **Before any other request**, calls `history.replaceState` to `/#/account/integrations`,
    removing the path, query string and hash
-   ([redirect flow invariants](../type-contract.md#redirect-flow-invariants)). The values only
+   ([redirect flow invariants](../integrations.md#redirect-flow-invariants)). The values only
    live in memory from then on.
 3. Decides, without any call:
    - `error=access_denied`: shows "You cancelled the GitHub authorization."
@@ -200,7 +198,8 @@ Checks, in order:
     JWT.
 12. Store through the generic storage and encryption code: create inserts an `active` row
     (**201**); replace refreshes the row like a generic replace credential (**200**,
-    [model.md](../model.md#transitions)). Nothing happens on GitHub to a previous installation.
+    [data model](../integrations.md#transitions)). Nothing happens on GitHub to a previous
+    installation.
 
 The checks of steps 8, 10 and 11 count toward the create/replace failure cool-off exactly like a
 pasted credential's ([Validate / create](#validate--create)). Counting the
@@ -248,7 +247,7 @@ guess. It answers **200**:
 ### State
 
 A server-side, single-use record of one started flow, in the table
-`integrations_github_app_states`, owned by the Integrations module and created by #303's
+`integrations_github_app_states`, owned by the Integrations module and created by its own
 migration (so it works across instances and restarts).
 
 | Column | Type | Null | Notes |
@@ -290,7 +289,7 @@ Rules: the same as the [OAuth App's state](oauth-app.md#state), namely:
   them; they expire within 10 minutes regardless.
 
 **Rejected alternative:** generalizing `integrations_oauth_states` with a `type` column. It would
-avoid a second table, but it reopens #298's merged spec and #302's migration, and the two flows
+avoid a second table, but it would rework the OAuth App's table and migration, and the two flows
 need different columns (`code_verifier` there, `stage` and candidates here).
 
 ## User token
@@ -330,9 +329,9 @@ which installations they can access.
 ## Validate / create
 
 Runs on callback (and select, from step 3), through the shared, injectable GitHub client
-([security.md](../security.md#faking-github)). There is no `validate(secret)` call on a pasted
-value: the strategy exposes the steps below to the type-owned routes, which end with the generic
-storage code, as the [type contract](../type-contract.md#flow-kind) requires.
+([security](../integrations.md#faking-github-in-tests)). There is no `validate(secret)` call on
+a pasted value: the strategy exposes the steps below to the type-owned routes, which end with
+the generic storage code, as the [type contract](../integrations.md#flow-kind) requires.
 
 1. **Code exchange:** `POST https://github.com/login/oauth/access_token` with
    `Accept: application/json` and `client_id`, `client_secret`, `code` and `redirect_uri`. On
@@ -371,8 +370,8 @@ Error mapping (callback and select):
 - The rate-limit row takes precedence over the 403 rows: a 403 is a rate limit only with the
   headers above.
 - More than 10 pages of installations (over 1000) → only those pages are considered; a claimed
-  installation beyond them answers `INTEGRATION_INSTALLATION_NOT_ACCESSIBLE`. #303 logs it at
-  warn level.
+  installation beyond them answers `INTEGRATION_INSTALLATION_NOT_ACCESSIBLE`. The truncation is
+  logged at warn level.
 - The suspended case gets its own code, rather than `INTEGRATION_CREDENTIAL_INVALID`, because
   the user can fix it on GitHub and the UI must tell them how.
 
@@ -380,14 +379,15 @@ Error mapping (callback and select):
 
 - Signed **RS256** with the private key ([Server config](#server-config)); claims `iat` = now
   − 60 s, `exp` = now + 9 min (GitHub's maximum is 10), `iss` = the app's **client id** (GitHub
-  accepts the client id or the app id; #303 re-checks the current recommendation).
+  accepts the client id or the app id; the client id is its current recommendation).
 - Minted per use, kept only in memory for that call, never logged, stored or returned.
-- Signing uses Node's `crypto` (or a vetted JWT library already in the backend). #303 picks
-  one; no hand-rolled base64url or signature code beyond what `crypto` provides.
+- Signing uses Node's `crypto` (`sign` with SHA-256, in `github-app-jwt.ts`); no JWT library
+  and no hand-rolled signature code beyond what `crypto` provides.
 
 ## Secret payload shape
 
-The plaintext JSON encrypted into `secret_ciphertext` ([model.md](../model.md#storage-model)):
+The plaintext JSON encrypted into `secret_ciphertext`
+([data model](../integrations.md#storage-model)):
 
 ```json
 { "installationId": 12345678 }
@@ -395,7 +395,7 @@ The plaintext JSON encrypted into `secret_ciphertext` ([model.md](../model.md#st
 
 - Only the installation id. The id isn't secret on its own, but it goes through the generic
   secret path anyway, so the generic code stays type-agnostic, and the AAD binds it to its row
-  ([security.md](../security.md#binding-to-the-row-aad)): copying one row's ciphertext onto
+  ([security](../integrations.md#binding-to-the-row-aad)): copying one row's ciphertext onto
   another row fails to decrypt.
 - What makes it usable is the server's private key, which lives only in server config.
 - When decrypted, the payload is validated against the same shape (`installationId` a positive
@@ -478,7 +478,7 @@ value from the last callback or select.
   `GITHUB_UNAVAILABLE`. This differs from the [OAuth App](oauth-app.md#test-connection), whose
   test only needs the stored token. The UI avoids the case: it disables *Test* on `github_app`
   rows while the type is disabled ([When disabled](#when-disabled)).
-- Transient outcomes leave the status unchanged ([model.md](../model.md#transitions)).
+- Transient outcomes leave the status unchanged ([data model](../integrations.md#transitions)).
 
 ## `invalid` reason codes
 
@@ -533,13 +533,15 @@ isn't secret; the hint just follows the contract's format.
   - *Webhook*: **inactive** (no webhook URL or secret);
   - repository permissions: Issues: read, Metadata: read; nothing else;
   - *Where can this GitHub App be installed?*: *Any account* in production; either in dev.
-- #303 documents the variables and the per-environment setup in
-  `docs/agents/environment-variables.md`, and adds the commented entries to `.env.dev.sample`.
+- The variables and the per-environment setup are documented in
+  [environment variables](../../environment-variables.md); `.env.dev.sample` lists them
+  commented out.
 
 ### When disabled
 
-- `POST /integrations/types.json` doesn't list `github_app` ([api.md](../api.md#enabled-types)),
-  so the type picker hides it ([ui.md](../ui.md#type-picker)).
+- `POST /integrations/types.json` doesn't list `github_app`
+  ([routes](../../backend/routes/integrations.md#enabled-types)), so the type picker hides it
+  ([frontend](../integrations.md#type-picker)).
 - The three type-owned backend routes answer **404** `NOT_FOUND`, before any other check except
   auth and CSRF, as if they didn't exist.
 - Existing `github_app` rows stay listed and can be renamed and deleted. Test answers
@@ -551,18 +553,16 @@ isn't secret; the hint just follows the contract's format.
 ### Landing page rule
 
 A **dedicated Tent rule** for `/integrations/github_app/callback`, identical in behaviour to the
-[OAuth App's landing rule](oauth-app.md#landing-page-rule), which #302 adds. #303's `proxy` work
-adds it to both `dev_configuration` and `prod_configuration`:
+[OAuth App's landing rule](oauth-app.md#landing-page-rule), in `rules/frontend.php` of
+both `dev_configuration` and `prod_configuration`:
 
 - **Matcher:** `GET` on the path `/integrations/github_app/callback`, with or without a query
-  string, and nothing else. If Tent's `exact` matcher compares the query string too, a regex
-  anchored as `^/integrations/github_app/callback(\?|$)` is used instead.
+  string, and nothing else (Tent's `exact` matcher on the path).
 - **Precedence:** it wins over `backend.php` and `redirects.php` for this path, so the query
   string is never moved into the hash by the catch-all.
 - **Handler:** production serves `index.html` from the static root; dev proxies to Vite.
 - **Headers:** `Cache-Control: no-store` and `Referrer-Policy: no-referrer`, reusing the
-  middleware #302 adds (no new middleware unless #302's can't be reused, in which case #303 adds
-  it with PHPUnit specs).
+  OAuth App's `SetResponseHeadersMiddleware`.
 
 ### Backend routes
 
@@ -583,7 +583,7 @@ Tent's cache, and Navi never warms them.
 ## Access
 
 The type-owned routes follow the checklist of the
-[type contract](../type-contract.md#what-a-type-spec-must-contain):
+[type contract](../integrations.md#what-a-type-doc-must-contain):
 
 - They require `JwtGuard` and are covered by `OriginGuard`.
 - The owner comes from `req.user.sub` only. The flow is bound to the initiating user through the
@@ -595,10 +595,10 @@ The type-owned routes follow the checklist of the
   one.
 - Replace credential targets only a row found with `uuid` + `user_id` in the query, at start and
   again at callback or select; a foreign or missing row answers 404
-  ([security.md](../security.md#access-rules)). Admins get no access to anyone else's flow.
+  ([security](../integrations.md#access-rules)). Admins get no access to anyone else's flow.
 - **Same installation, several integrations or users:** allowed and isolated
-  ([model.md](../model.md#edge-cases)). Each user proves access on their own. Nothing (status,
-  error code, message, selection list) reveals that another Kerghan user holds the same
+  ([data model](../integrations.md#edge-cases)). Each user proves access on their own. Nothing
+  (status, error code, message, selection list) reveals that another Kerghan user holds the same
   installation.
 - They are cache class `never`.
 - They follow the generic logging, `Secret` and canary rules: the code, the user token, its
@@ -608,7 +608,8 @@ The type-owned routes follow the checklist of the
 
 ## Error cases
 
-Summary of the error codes ([api.md](../api.md#error-codes)) this type produces:
+Summary of the error codes
+([routes](../../backend/routes/integrations.md#error-codes)) this type produces:
 
 | Code | Status | When |
 |---|---|---|
@@ -626,10 +627,10 @@ Summary of the error codes ([api.md](../api.md#error-codes)) this type produces:
 | `GITHUB_UNAVAILABLE` | 502 | Network error, timeout, 5xx, unexpected answer, or app misconfiguration, on callback, select or test; test while disabled. |
 | `GITHUB_RATE_LIMITED` | 503 | GitHub's rate limit, on callback, select or test. |
 
-## UI guidance
+## Frontend
 
-For #303's frontend work (on top of the generic [UI shell](../ui.md) and #302's landing
-plumbing):
+On top of the generic [UI shell](../integrations.md#frontend) and the OAuth App's landing
+plumbing:
 
 - **Type picker** one-line description: "Connect a GitHub account or organization by installing
   Kerghan's GitHub App. Read-only access to issues; no token is stored."
@@ -660,98 +661,3 @@ plumbing):
 - **Remove confirmation:** see [Behaviour on delete](#behaviour-on-delete).
 - The `code` and `state` (including a selection `state`) never reach `console`, storage,
   component state beyond the request that uses them, or the URL after `replaceState`.
-
-## Required tests
-
-Every spec uses the fake GitHub client ([security.md](../security.md#faking-github)) and a
-recognisable **canary** code, user token, refresh token, installation token, `state` secret,
-client secret and private key (a test-only RSA key), asserting none of them, nor any app JWT,
-appears in logger calls, thrown errors, error bodies, API responses (other than `state` inside
-`redirectUrl` or a selection), the stored `metadata` or the `secretHint`.
-
-- **Config (boot):** all unset → disabled; all set → enabled with the callback URL derived from
-  `FRONTEND_BASE_URL`'s origin; any partial set → boot fails naming the missing variables; a
-  non-numeric app id, bad slug, undecodable or non-RSA key, bad client id, missing
-  `FRONTEND_BASE_URL` and a non-`https` origin under `NODE_ENV=production` each fail boot; no
-  error contains the key or the secret.
-- **App JWT:** RS256, `iat`/`exp`/`iss` as specified, verifiable with the test key's public
-  half; a fresh JWT per call.
-- **Start:** both modes, create and replace, return the right `redirectUrl`; an unknown `mode`,
-  and both or neither of `label`/`integrationId` → 400; disabled → 404; foreign or missing
-  `integrationId` → 404 (even while locked out); a non-`github_app` target → 400
-  `INTEGRATION_FLOW_UNSUPPORTED`; cool-off → 423; cap and duplicate label → 409; no GitHub call
-  in any case; expired rows are purged and at most 5 pending rows are kept per user.
-- **State:** a valid `state` is consumed once (a replay → 400); expired, unknown, another user's,
-  wrong secret and wrong stage (a `select` row on callback, a `redirect` row on select) each →
-  the same 400 `INTEGRATION_REDIRECT_STATE_INVALID` without a GitHub call and without counting;
-  two parallel callbacks with the same `state` make a single code exchange; no row holds the raw
-  secret.
-- **Ownership (the key security tests):**
-  - a forged `installationId` that isn't in `GET /user/installations` → 422
-    `INTEGRATION_INSTALLATION_NOT_ACCESSIBLE`, counted, with no app-JWT call and nothing stored,
-    even though the app JWT would see the installation;
-  - an installation of a different `app_id` in the user's list is ignored;
-  - a select with an id outside the row's candidates → 422, counted;
-  - the error body is the same for "doesn't exist", "someone else's" and "another app's";
-  - the user token is revoked on success and on every failure after the exchange, and is never
-    stored.
-- **Callback / select:** install success creates an `active` row (201) with the
-  `installation …` hint, the account's login, the full metadata and `expiresAt: null`; replace
-  refreshes the row (200) and makes no GitHub call about the previous installation; connect with
-  one installation stores it directly; with several, answers the selection (sorted, at most
-  100, other apps filtered out) and creates a `select` row; select stores the chosen one;
-  connect with none → 422; each row of the [error mapping](#validate--create) table; label taken
-  or cap reached at callback or select → 409; a replace target deleted meanwhile → 404; disabled
-  → 404.
-- **Test:** each row of the [Test connection](#test-connection) table, including `unavailable`
-  without a GitHub call while disabled, and `verifiedBy` kept on refresh.
-- **Metadata:** `describeMetadata` accepts the valid shape and rejects an extra key, a missing
-  key, wrong types and out-of-range values; a decrypted payload with an extra key or a non-integer
-  id is handled as `undecryptable`.
-- **Mask:** `installation …` plus the last 4 digits.
-- **Delete:** no GitHub call, for active, invalid and `undecryptable` rows, and with the type
-  disabled.
-- **Generic routes:** generic create and replace credential with `github_app` → 400
-  `INTEGRATION_FLOW_UNSUPPORTED`; the types route lists `github_app` only when enabled.
-- **Caching and CSRF:** the three routes declare cache class `never` and send `X-Skip-Cache` and
-  `Cache-Control: no-store`; a cross-site `POST` → 403.
-- **Frontend:** the landing handler calls `replaceState` before any request;
-  `access_denied`, `setup_action=request`, other errors and missing or malformed values make no
-  call and show their texts; the callback, selection and select results render; a `redirectUrl`
-  that isn't one of the two GitHub shapes is not followed; the picker hides `github_app` when the
-  types route doesn't list it; *Test* and *Reconnect* are disabled for `github_app` rows then;
-  canary `code`/`state` never reach `console`, storage or the URL.
-- **Proxy:** the landing rule in both configurations serves the SPA for the path, with and
-  without a query string, with `Cache-Control: no-store` and `Referrer-Policy: no-referrer`.
-
-## Manual smoke check (#303)
-
-In the running app (dev), with a personal throwaway GitHub App registered as in
-[Server config](#server-config) (callback URL
-`http://localhost:3000/integrations/github_app/callback`, user authorization during installation
-on, webhook inactive, Issues and Metadata read), and all five variables set:
-
-1. Open `http://localhost:3000/integrations/github_app/callback?code=x&state=y` directly: the SPA
-   loads (no redirect to `/#/…`), the response has `Cache-Control: no-store` and
-   `Referrer-Policy: no-referrer`, the address bar ends up at `/#/account/integrations` with no
-   query string, and the "expired or already used" error shows.
-2. Add a *GitHub App* integration with *Install on GitHub*, install it on your user account
-   (selected repositories) and authorize: the row is `active`, shows `installation …` plus 4
-   digits, your login, "selected repositories" and "no expiry".
-3. Replay the landing URL with the back button: "expired or already used", nothing created.
-4. Start a flow, then edit the landing URL's `installation_id` to another number before it
-   loads: 422 "can't access that installation", nothing created; repeat until the cool-off
-   locks (423).
-5. With the app installed on your account and on a test organization, use *Connect existing
-   installation*: the selection lists both; pick the organization; the row shows it.
-6. As a second Kerghan user with the same GitHub account, connect the same installation: it
-   works, and nothing in either account mentions the other.
-7. Suspend the installation on GitHub, then test: `invalid` with the `suspended` text. Unsuspend
-   and test: `active`.
-8. Uninstall it on GitHub, then test: `invalid` with the `uninstalled` text. Delete the row: the
-   app stays as it is on GitHub (reinstall first to check that delete didn't uninstall it).
-9. Unset the five variables and restart: the type is gone from the picker, existing rows can be
-   renamed and deleted, *Test* is disabled for them, and
-   `POST /integrations/github_app/start.json` answers 404.
-10. Check the backend and Tent logs: no code, token, JWT, `state` secret, client secret or key
-    appears.

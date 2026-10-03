@@ -11,7 +11,7 @@ export const REDACTED = '[REDACTED]';
  *
  * Only `reveal()` unwraps the value, and it is called only at the GitHub
  * client call site and at the encryption/decryption boundary (see
- * `docs/agents/specs/integrations/security.md#secrets-never-logged`).
+ * `docs/agents/modules/integrations.md#secrets-never-logged`).
  */
 export class Secret<T = unknown> {
   readonly #value: T;

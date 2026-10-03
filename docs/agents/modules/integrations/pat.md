@@ -1,18 +1,15 @@
 # Integration type: Personal Access Token (`pat`)
 
-Part of the [integrations spec](../README.md). Defines the `pat` type, following the
-[type contract](../type-contract.md#what-a-type-spec-must-contain). It fills every per-type slot
-the generic specs leave open.
+Part of the [Integrations module](../integrations.md). Defines the `pat` type, following the
+[type contract](../integrations.md#what-a-type-doc-must-contain). It fills every per-type slot
+the generic module leaves open. Code: `backend/src/integrations/types/pat/`.
 
 ## Overview
 
 - The user pastes a GitHub Personal Access Token, and Kerghan stores it as an integration.
-- This is the first type to be implemented. #300 ships it with the generic backend module, and
-  #301 builds its create form.
 - **Flow kind:** credential-paste only (see
   [Flow kind, routes and config](#flow-kind-routes-and-config)).
-- GitHub's exact header names and status codes below follow GitHub's REST API docs. #300 checks
-  them again against the docs when it implements the type.
+- GitHub's exact header names and status codes below follow GitHub's REST API docs.
 
 ## Supported tokens
 
@@ -27,19 +24,19 @@ Both GitHub PAT kinds are accepted. The kind is recognised **by prefix only**:
   40-hex tokens and other GitHub token kinds (`gho_`, `ghu_`, `ghs_`, `ghr_`). The message never
   echoes the value, e.g. "credential.token must be a GitHub personal access token".
 - The UI recommends **fine-grained** tokens, since they give least privilege (see
-  [UI guidance](#ui-guidance)).
+  [UI guidance](#frontend)).
 
 ## `credential` request shape
 
-The `credential` object of the [create envelope](../api.md#create-envelope) and of replace
-credential:
+The `credential` object of the
+[create envelope](../../backend/routes/integrations.md#create-envelope) and of replace credential:
 
 ```json
 { "token": "ghp_…" }
 ```
 
 Validation, in this order. Every message names the field, never the value
-([security.md](../security.md#secrets-never-logged)):
+([security](../integrations.md#secrets-never-logged)):
 
 - `credential` is an object with exactly one key, `token`. **Unknown credential fields are
   rejected** (400 `VALIDATION_FAILED`), so nothing unexpected is ever encrypted.
@@ -54,7 +51,7 @@ at the GitHub client call site and at the encryption boundary.
 ## Secret payload shape
 
 The plaintext JSON that gets encrypted into `secret_ciphertext`
-([model.md](../model.md#storage-model)):
+([data model](../integrations.md#storage-model)):
 
 ```json
 { "token": "<trimmed token>" }
@@ -94,7 +91,7 @@ The plaintext JSON that gets encrypted into `secret_ciphertext`
 ### Classic tokens
 
 - The **`repo`** scope is **required**. Private repositories are the main reason for
-  integrations (#295), and a classic token needs `repo` to read them. Narrower scopes such as
+  integrations, and a classic token needs `repo` to read them. Narrower scopes such as
   `public_repo` don't count.
 - The scopes are read from the `X-OAuth-Scopes` response header of `GET /user`: a
   comma-separated list, split on `,`, each entry trimmed, empty entries dropped. A missing or
@@ -102,11 +99,11 @@ The plaintext JSON that gets encrypted into `secret_ciphertext`
 - Without `repo`:
   - create and replace credential fail with **422** `INTEGRATION_INSUFFICIENT_PERMISSIONS`,
     which counts toward the
-    [failure cool-off](../security.md#create-and-replace-credential-failure-cool-off);
+    [failure cool-off](../integrations.md#create-and-replace-credential-failure-cool-off);
   - test connection sets `invalid` + `insufficient_permissions`.
-- **Warning** (spec and UI): `repo` also grants **write** access to every repository the user
-  can reach. Kerghan only reads, but the token can do more. The UI points to fine-grained
-  tokens as the narrower option.
+- **Warning** (also shown in the UI): `repo` also grants **write** access to every
+  repository the user can reach. Kerghan only reads, but the token can do more. The UI points
+  to fine-grained tokens as the narrower option.
 
 ### Fine-grained tokens
 
@@ -118,12 +115,12 @@ The plaintext JSON that gets encrypted into `secret_ciphertext`
 - The UI tells the user to grant **Issues: read** and **Metadata: read** on the repositories
   they want Kerghan to see.
 - A missing permission only shows up when the token is used later. That use (the backend
-  proxy) is out of scope for #295.
+  proxy) does not exist yet.
 
 ## Validate / create
 
 `validate(secret)` makes **one** GitHub call, `GET /user`, through the shared, injectable GitHub
-client ([security.md](../security.md#faking-github)), sending the token as
+client ([security](../integrations.md#faking-github-in-tests)), sending the token as
 `Authorization: Bearer <token>`.
 
 On **200**, it captures:
@@ -160,7 +157,7 @@ counted either.
   only.
 - It is refreshed on every successful validate (create, replace) and every `active` test.
 - The generic computed-on-read rule then reports an `active` row past `expiresAt` as `expired`
-  ([model.md](../model.md#expiry)).
+  ([data model](../integrations.md#expiry)).
 
 ## Test connection
 
@@ -179,7 +176,7 @@ GitHub answers 401 to both an expired and a revoked token. The stored `expiresAt
 them apart; a token revoked after its expiry date still reads as `expired`, which is accurate
 enough, since the fix (replace the credential) is the same.
 
-Transient outcomes leave the status unchanged ([model.md](../model.md#transitions)).
+Transient outcomes leave the status unchanged ([data model](../integrations.md#transitions)).
 
 ## `invalid` reason codes
 
@@ -202,10 +199,11 @@ the token than the prefix and the last 4 characters.
 
 - **Credential-paste only** (`flows: { credentialPaste: true, redirect: false }`). It uses the
   generic create (`POST /integrations.json`) and replace-credential
-  (`POST /integrations/:uuid/credential.json`) routes ([api.md](../api.md#routes)).
+  (`POST /integrations/:uuid/credential.json`) routes
+  ([routes](../../backend/routes/integrations.md#routes)).
 - **No type-owned routes, no callbacks.** The checklist item on type-owned route access
   therefore doesn't apply: every route the type uses is a generic one, already covered by
-  [security.md's access rules](../security.md#access-rules) and cache class `never`.
+  [security.md's access rules](../integrations.md#access-rules) and cache class `never`.
 - **No env vars and no app credentials.**
 
 ## Behaviour on delete
@@ -215,11 +213,12 @@ the token than the prefix and the last 4 characters.
 - This applies to integration delete and to owner deletion alike. An `undecryptable` row is
   deleted the same way.
 - The UI reminds the user to **revoke the token on GitHub** if they no longer need it (see
-  [UI guidance](#ui-guidance)).
+  [UI guidance](#frontend)).
 
 ## Error cases
 
-Summary of the generic error codes ([api.md](../api.md#error-codes)) this type produces:
+Summary of the generic error codes
+([routes](../../backend/routes/integrations.md#error-codes)) this type produces:
 
 | Code | Status | When |
 |---|---|---|
@@ -231,10 +230,10 @@ Summary of the generic error codes ([api.md](../api.md#error-codes)) this type p
 
 `INTEGRATION_FLOW_UNSUPPORTED` never applies to `pat`, since it supports credential-paste.
 
-## UI guidance
+## Frontend
 
-For #301's create and replace-credential forms (on top of the generic
-[credential input rules](../ui.md#credential-input-rules)):
+The create and replace-credential forms (on top of the generic
+[credential input rules](../integrations.md#credential-input-rules)):
 
 - **Fields:** *Label* (plain text) and *Token* (`type="password"`, `autocomplete="off"`).
 - **Link** to GitHub's token settings (`https://github.com/settings/personal-access-tokens`
@@ -246,51 +245,3 @@ For #301's create and replace-credential forms (on top of the generic
   should revoke it on GitHub if they no longer need it.
 - The type picker's one-line description: "Paste a GitHub personal access token (classic or
   fine-grained)."
-
-## Required tests
-
-Unit specs for the PAT strategy, against the fake GitHub client
-([security.md](../security.md#faking-github)). Each one submits a recognisable **canary token**
-and asserts it never appears in logger calls, thrown errors, error bodies, API responses, the
-stored `metadata` or the `secretHint` beyond its last 4 characters.
-
-- **Credential validation:** a valid classic and a valid fine-grained token pass; surrounding
-  whitespace is trimmed; an unknown prefix (`gho_`, a legacy 40-hex token), an empty or too long
-  token, a bad character, a non-string and an unknown credential field each fail with
-  `VALIDATION_FAILED`, with a message not containing the value.
-- **Validate:**
-  - classic with `repo` → success with `tokenKind: classic`, the parsed scopes and
-    `permissionsVerified: true`;
-  - classic without `repo` (including `public_repo` only and an empty `X-OAuth-Scopes`) →
-    `INTEGRATION_INSUFFICIENT_PERMISSIONS`;
-  - fine-grained → success with `scopes: null` and `permissionsVerified: false`, whatever
-    the headers;
-  - 401 → `INTEGRATION_CREDENTIAL_INVALID`;
-  - rate limit (403 and 429) → `GITHUB_RATE_LIMITED` with the retry delay; 5xx, network error
-    and an unexpected status → `GITHUB_UNAVAILABLE`.
-- **Expiry:** the header present (UTC and numeric-offset forms) sets `expiresAt`; absent or
-  unparseable gives `null`.
-- **Test:** each row of the [Test connection](#test-connection) table, including 401 with a past
-  `expiresAt` (`expired`), 401 with a future or `null` `expiresAt` (`bad_credentials`), and a
-  classic token that lost `repo` (`insufficient_permissions`).
-- **Metadata:** `describeMetadata` accepts both valid shapes and rejects an extra key, a
-  mismatched `scopes`/`permissionsVerified` for the kind, and a wrong type.
-- **Mask:** `ghp_…` and `github_pat_…` plus the last 4 characters.
-- **Delete:** `onDelete` makes no GitHub call, for a decryptable and for an `undecryptable`
-  (`secret: null`) row.
-
-## Manual smoke check (#300)
-
-In the running app, with real throwaway tokens:
-
-1. Create a `pat` integration with a **classic** token that has the `repo` scope: it is
-   `active`, shows `ghp_…<last 4>`, the right login, its scopes and its expiry (or "no expiry").
-2. Create one with a **fine-grained** token: it is `active` with `github_pat_…<last 4>` and
-   unverified permissions.
-3. Try a classic token **without** `repo`: rejected with `INTEGRATION_INSUFFICIENT_PERMISSIONS`,
-   nothing stored.
-4. Test connection on both: still `active`. Revoke one on GitHub and test again: `invalid` with
-   the `bad_credentials` text.
-5. Replace the revoked one's credential with a new token: back to `active`, new hint.
-6. Delete both: the rows are gone, and nothing changed on GitHub (the tokens still exist there).
-7. Check the backend logs: no token value appears anywhere.

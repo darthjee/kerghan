@@ -23,8 +23,9 @@ being scoped to each user's own browser IP instead.
    frontend's route-independent login modal (`LoginModal`) is the single entry point for this —
    Password/Register/Recover modes, plus a device-authorization mode: the user can instead ask an
    already-logged-in device to vouch for their username, and poll until that device approves or
-   denies the request. A per-user GitHub token, to unlock private repos, is planned as a future
-   addition — not built yet, and not required for the public-repo flow described here.
+   denies the request. A user can also store GitHub credentials as integrations (see
+   `docs/agents/modules/integrations.md`), but issue fetching doesn't use them yet, and they
+   aren't required for the public-repo flow described here.
 
 2. **Repo discovery.** The backend fetches the full list of the handle's public repositories
    from GitHub (`GET /users/{handle}/repos`, paginated) and shows it to the user.
@@ -55,9 +56,10 @@ These are known future directions, not part of the current design:
   future addition — see `docs/agents/product.md`.
 - **Historical/trend collection.** Volume-over-time or similar trend views need periodic
   snapshotting, which depends on the opt-in persistence above. Not built yet.
-- **Private repos via personal GitHub token.** Each user will eventually be able to attach their
-  own GitHub token so the frontend (or backend, depending on how this is designed) can read
-  private repos on their behalf. Not built yet.
+- **Private repos via personal GitHub token.** Users can already store their own GitHub
+  credentials as integrations (see `docs/agents/modules/integrations.md`), but issue fetching
+  doesn't use them yet: reading private repos on their behalf (most likely by proxying through
+  the backend) is not built.
 
 ## Per-user cache (upcoming)
 

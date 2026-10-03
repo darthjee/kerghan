@@ -24,7 +24,7 @@ running `kerghan_prod_app` locally to sanity-check the production image).
 | `KERGHAN_AUTHORIZATION_REQUEST_AUTHORIZE_LOCK_MS` | **Consumed**, optional | Cool-off duration (milliseconds) once the max-attempts threshold above is reached. Defaults to `300000` (5 minutes). | `backend/src/auth/authorization-request-abuse-guard.service.ts` |
 | `KERGHAN_ACCOUNT_EDIT_MAX_ATTEMPTS` | **Consumed**, optional | Consecutive failed `PATCH /auth/account.json` attempts (wrong current password, duplicate username/email), per user, that trip the cool-off lockout. Defaults to `5`. | `backend/src/auth/account-edit-abuse-guard.service.ts` |
 | `KERGHAN_ACCOUNT_EDIT_LOCK_MS` | **Consumed**, optional | Cool-off duration (milliseconds) once the max-attempts threshold above is reached. Defaults to `300000` (5 minutes). | `backend/src/auth/account-edit-abuse-guard.service.ts` |
-| `KERGHAN_INTEGRATIONS_KEY` | **Consumed**, **required** | AES-256-GCM key that encrypts every stored integration credential (see `docs/agents/specs/integrations/security.md`). Base64 of exactly 32 bytes, read once at boot. Boot fails, naming the variable but never the value, when it is missing, blank, not base64, the wrong length, equal to `KERGHAN_SECRET_KEY`, or equal to the public dev placeholder while `NODE_ENV=production`. See "Setting `KERGHAN_INTEGRATIONS_KEY`" below. | `backend/src/integrations/integrations-key.ts` |
+| `KERGHAN_INTEGRATIONS_KEY` | **Consumed**, **required** | AES-256-GCM key that encrypts every stored integration credential (see `docs/agents/modules/integrations.md#encryption-at-rest`). Base64 of exactly 32 bytes, read once at boot. Boot fails, naming the variable but never the value, when it is missing, blank, not base64, the wrong length, equal to `KERGHAN_SECRET_KEY`, or equal to the public dev placeholder while `NODE_ENV=production`. See "Setting `KERGHAN_INTEGRATIONS_KEY`" below. | `backend/src/integrations/integrations-key.ts` |
 | `KERGHAN_INTEGRATIONS_MAX_PER_USER` | **Consumed**, optional | Cap on how many integrations a single user may hold; creating one past it answers `409`. Defaults to `20`. | `backend/src/integrations/integrations.service.ts` |
 | `KERGHAN_INTEGRATIONS_CREDENTIAL_MAX_ATTEMPTS` | **Consumed**, optional | Consecutive counted credential-validation failures (create / replace credential), per user, that trip the cool-off lockout (`423`). Defaults to `5`. | `backend/src/integrations/integration-credential-abuse-guard.service.ts` |
 | `KERGHAN_INTEGRATIONS_CREDENTIAL_LOCK_MS` | **Consumed**, optional | Cool-off duration (milliseconds) once the max-attempts threshold above is reached. Defaults to `900000` (15 minutes). | `backend/src/integrations/integration-credential-abuse-guard.service.ts` |
@@ -69,7 +69,7 @@ the four numeric `KERGHAN_INTEGRATIONS_*` tuning variables (`MAX_PER_USER`,
 
 `KERGHAN_INTEGRATIONS_KEY` has no default, so the backend refuses to boot without a valid one.
 
-- **Set it on the backend host (Render) before deploying the integrations module (#300).**
+- **Set it on the backend host (Render) before deploying.**
   Otherwise the new release fails to boot.
 - Generate it with `openssl rand -base64 32`, which gives the base64 of exactly 32 random bytes.
 - It must differ from `KERGHAN_SECRET_KEY`. Boot fails when the two are equal.
@@ -85,7 +85,8 @@ the four numeric `KERGHAN_INTEGRATIONS_*` tuning variables (`MAX_PER_USER`,
 ### Setting up the GitHub OAuth App
 
 `KERGHAN_GITHUB_OAUTH_APP_CLIENT_ID` and `KERGHAN_GITHUB_OAUTH_APP_CLIENT_SECRET` enable the
-`oauth_app` integration type (spec: `docs/agents/specs/integrations/types/oauth-app.md`). Both are
+`oauth_app` integration type (see
+`docs/agents/modules/integrations/oauth-app.md#server-config`). Both are
 optional and read once at boot:
 
 - **Both unset or blank:** the type is disabled. It is not listed among the integration types, its
@@ -114,7 +115,7 @@ passes both variables to the backend when they are set.
 
 `KERGHAN_GITHUB_APP_ID`, `KERGHAN_GITHUB_APP_SLUG`, `KERGHAN_GITHUB_APP_PRIVATE_KEY`,
 `KERGHAN_GITHUB_APP_CLIENT_ID` and `KERGHAN_GITHUB_APP_CLIENT_SECRET` enable the `github_app`
-integration type (spec: `docs/agents/specs/integrations/types/github-app.md`, *Server config*).
+integration type (see `docs/agents/modules/integrations/github-app.md#server-config`).
 All five are optional, all-or-nothing, read once at boot and trimmed:
 
 - **All five unset or blank:** the type is disabled. It is not listed among the integration types,
@@ -206,7 +207,7 @@ Side effects (both variants):
 
 **GitHub credentials — integrations only.** Issue fetching still reads public GitHub REST API
 data unauthenticated (see `docs/agents/product.md`). User-supplied GitHub credentials are stored
-only as integrations (`docs/agents/specs/integrations/`), encrypted with
+only as integrations (`docs/agents/modules/integrations.md`), encrypted with
 `KERGHAN_INTEGRATIONS_KEY`. There is no server-wide GitHub token variable to set; don't add one
 without an explicit product decision. The OAuth App client id/secret above identify Kerghan's own
 OAuth App (used to run the `oauth_app` integration flow), not a credential for reading GitHub.

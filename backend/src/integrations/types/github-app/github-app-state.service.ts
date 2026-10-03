@@ -46,7 +46,7 @@ export interface ConsumedGithubAppState {
 
 /**
  * Issues and consumes the server-side, single-use `state` of the GitHub App
- * flow (see `docs/agents/specs/integrations/types/github-app.md#state`):
+ * flow (see `docs/agents/modules/integrations/github-app.md#state`):
  * `redirect` rows (issued by start, consumed by callback) and `select` rows
  * (issued by a callback answering a selection, consumed by select).
  *

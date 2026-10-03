@@ -25,7 +25,7 @@ import {
  * Kerghan's GitHub App (or connects an installation they can access) and
  * Kerghan stores only **which installation** it is; installation tokens are
  * minted on demand from the app's private key and never stored (see
- * `docs/agents/specs/integrations/types/github-app.md`).
+ * `docs/agents/modules/integrations/github-app.md`).
  *
  * It has no `validate(secret)` on a pasted value: the type-owned routes call
  * `verifyUser` (ownership, with a user token) and `validateInstallation`

@@ -39,7 +39,7 @@ type Verified =
   | { kind: 'several'; user: VerifiedGithubUser };
 
 /**
- * The GitHub App flow (see `docs/agents/specs/integrations/types/github-app.md#flow`):
+ * The GitHub App flow (see `docs/agents/modules/integrations/github-app.md#flow`):
  * `start` checks the request and answers the install or authorize URL (no
  * GitHub call, never counted); `callback` consumes the single-use `redirect`
  * state, proves which installations the user can access with a short-lived

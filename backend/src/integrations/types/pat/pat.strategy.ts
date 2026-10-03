@@ -44,7 +44,7 @@ interface PatIdentity {
 /**
  * The Personal Access Token (`pat`) type: the user pastes a classic
  * (`ghp_`) or fine-grained (`github_pat_`) token, validated with one
- * `GET /user` (see `docs/agents/specs/integrations/types/pat.md`).
+ * `GET /user` (see `docs/agents/modules/integrations/pat.md`).
  */
 @Injectable()
 export class PatStrategy implements IntegrationTypeStrategy {
