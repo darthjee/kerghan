@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { QueryFailedError, Repository } from 'typeorm';
+import { In, MoreThan, QueryFailedError, Repository } from 'typeorm';
 import type { QueryDeepPartialEntity } from 'typeorm/query-builder/QueryPartialEntity.js';
 import { Integration } from './entities/integration.entity.js';
 import { ENSURE_LOCKOUT_ROW_SQL } from './integration-credential-abuse-guard.service.js';
@@ -14,6 +14,26 @@ const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{
 // concurrent creates for one user serialize their cap check and insert.
 export const LOCK_OWNER_ROW_SQL =
   'SELECT `id` FROM `integrations_credential_lockouts` WHERE `user_id` = ? FOR UPDATE';
+
+// Columns the operator-only key-rotation batch read selects (no label, metadata, etc.).
+const ROTATION_COLUMNS = {
+  id: true,
+  userId: true,
+  uuid: true,
+  type: true,
+  secretKeyId: true,
+  secretIv: true,
+  secretAuthTag: true,
+  secretCiphertext: true,
+} as const;
+
+/**
+ * How many integrations are stored under one `secret_key_id`.
+ */
+export interface SecretKeyIdCount {
+  keyId: string;
+  count: number;
+}
 
 // MySQL's driver error code for a unique-index violation.
 const MYSQL_DUPLICATE_ENTRY_CODE = 'ER_DUP_ENTRY';
@@ -157,6 +177,45 @@ export class IntegrationStoreService {
     Object.assign(row, changes);
 
     return true;
+  }
+
+  /**
+   * OPERATOR-ONLY (key-rotation CLI; never call from a request path): counts
+   * every user's integrations grouped by `secret_key_id`. Not owner-scoped.
+   * @returns {Promise<SecretKeyIdCount[]>} One entry per stored key id.
+   */
+  async countBySecretKeyIdForOperator(): Promise<SecretKeyIdCount[]> {
+    const raw = await this.repository
+      .createQueryBuilder('integration')
+      .select('integration.secret_key_id', 'keyId')
+      .addSelect('COUNT(*)', 'count')
+      .groupBy('integration.secret_key_id')
+      .getRawMany<{ keyId: string; count: string | number }>();
+
+    return raw.map(({ keyId, count }) => ({ keyId, count: Number(count) }));
+  }
+
+  /**
+   * OPERATOR-ONLY (key-rotation CLI; never call from a request path): reads
+   * one batch of any user's rows stored under one of `keyIds`, with an id
+   * above `afterId`, in id order, selecting only the columns re-encryption
+   * needs. Not owner-scoped.
+   * @param {string[]} keyIds - The `secret_key_id`s to match.
+   * @param {number} afterId - The cursor: only rows with a greater id.
+   * @param {number} limit - The batch size.
+   * @returns {Promise<Integration[]>} The batch (partial rows).
+   */
+  findBySecretKeyIdsForOperator(keyIds: string[], afterId: number, limit: number): Promise<Integration[]> {
+    if (keyIds.length === 0) {
+      return Promise.resolve([]);
+    }
+
+    return this.repository.find({
+      select: ROTATION_COLUMNS,
+      where: { secretKeyId: In(keyIds), id: MoreThan(afterId) },
+      order: { id: 'ASC' },
+      take: limit,
+    });
   }
 
   /**

@@ -13,6 +13,7 @@ import { IntegrationCredentialService } from './integration-credential.service.j
 import { IntegrationStoreService } from './integration-store.service.js';
 import { IntegrationTestCooldownService } from './integration-test-cooldown.service.js';
 import { IntegrationsEncryptionService } from './integrations-encryption.service.js';
+import { IntegrationsKeyRotationService } from './integrations-key-rotation.service.js';
 import { buildIntegrationsKeys, INTEGRATIONS_KEY } from './integrations-key.js';
 import { IntegrationsController } from './integrations.controller.js';
 import { IntegrationsService } from './integrations.service.js';
@@ -46,7 +47,9 @@ import { PatStrategy } from './types/pat/pat.strategy.js';
  * `integrations_credential_lockouts`, `integrations_oauth_states` and
  * `integrations_github_app_states`;
  * `integrations.user_id` carries the project's only physical cross-module FK (`ON DELETE CASCADE` to
- * `auth_users`), declared in its migration only. Exports nothing yet.
+ * `auth_users`), declared in its migration only. Exports only
+ * `IntegrationsKeyRotationService`, for the operator-only
+ * `integrations-keys` CLI's application context (never used by a request).
  *
  * `KERGHAN_INTEGRATIONS_KEY` and the optional, decrypt-only
  * `KERGHAN_PREVIOUS_INTEGRATIONS_KEYS` are validated once, in the
@@ -104,6 +107,7 @@ import { PatStrategy } from './types/pat/pat.strategy.js';
     IntegrationCredentialService,
     IntegrationConnectionTestService,
     IntegrationsService,
+    IntegrationsKeyRotationService,
     OauthStateService,
     OauthAppEnabledGuard,
     OauthAppFlowService,
@@ -113,6 +117,7 @@ import { PatStrategy } from './types/pat/pat.strategy.js';
     GithubAppFlowService,
     GithubAppEnabledGuard,
   ],
+  exports: [IntegrationsKeyRotationService],
 })
 // NestJS module classes are intentionally empty; all behavior lives in @Module().
 // eslint-disable-next-line @typescript-eslint/no-extraneous-class
