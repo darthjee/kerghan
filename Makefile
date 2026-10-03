@@ -1,4 +1,4 @@
-.PHONY: build-base push-base build build-fe-base push-fe-base build-fe push-fe build-circleci-base push-circleci-base build-production-base push-production-base dev dev-up setup tests
+.PHONY: build-base push-base build build-fe-base push-fe-base build-fe push-fe build-circleci-base push-circleci-base build-production-base push-production-base dev dev-up setup tests integrations-keys-status integrations-keys-reencrypt
 
 PROJECT?=kerghan
 IMAGE?=$(PROJECT)
@@ -66,6 +66,14 @@ dev-up:
 
 tests:
 	docker-compose run $(PROJECT)_tests /bin/bash
+
+# Integrations key rotation (KERGHAN_INTEGRATIONS_KEY / KERGHAN_PREVIOUS_INTEGRATIONS_KEYS).
+# Both build dist/ first; they need a reachable kerghan_mysql, like `make setup`.
+integrations-keys-status:
+	docker-compose run --rm $(PROJECT)_app sh -c "yarn build && yarn integrations:keys:status"
+
+integrations-keys-reencrypt:
+	docker-compose run --rm $(PROJECT)_app sh -c "yarn build && yarn integrations:keys:reencrypt"
 
 # ── Environment files ─────────────────────────────────────────────────────────
 
