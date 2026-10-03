@@ -79,6 +79,17 @@ const IntegrationTypes = {
   },
 
   /**
+   * Type-specific row details of an integration (e.g. the GitHub App's account type and
+   * repository selection).
+   *
+   * @param {{type: string}} integration - The integration.
+   * @returns {Array<string>} The details; empty for a type without any.
+   */
+  detailsOf(integration) {
+    return IMPLEMENTED.get(integration.type)?.details?.(integration) ?? [];
+  },
+
+  /**
    * Text of the Remove confirmation reminder of an integration's type.
    *
    * @description A type's `removeReminder` is either a fixed string or a function of the

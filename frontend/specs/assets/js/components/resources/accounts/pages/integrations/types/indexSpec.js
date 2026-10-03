@@ -105,4 +105,16 @@ describe('IntegrationTypes', () => {
       expect(IntegrationTypes.removeReminderFor({ type: 'other' })).toBeUndefined();
     });
   });
+
+  describe('.detailsOf', () => {
+    it('uses the type details', () => {
+      expect(IntegrationTypes.detailsOf({ type: 'github_app', metadata: { accountType: 'User', repositorySelection: 'all' } }))
+        .toEqual(['User', 'all repositories']);
+    });
+
+    it('is empty for a type without details', () => {
+      expect(IntegrationTypes.detailsOf({ type: 'pat' })).toEqual([]);
+      expect(IntegrationTypes.detailsOf({ type: 'other' })).toEqual([]);
+    });
+  });
 });

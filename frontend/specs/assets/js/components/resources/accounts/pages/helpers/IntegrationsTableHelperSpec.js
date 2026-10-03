@@ -188,4 +188,45 @@ describe('IntegrationsTableHelper', () => {
       expect(markup).toContain('GitHub no longer accepts this authorization.');
     });
   });
+
+  describe('github_app rows', () => {
+    const githubApp = {
+      type: 'github_app',
+      githubLogin: 'acme',
+      secretHint: 'installation …5678',
+      expiresAt: null,
+      metadata: {
+        installationId: 12345678,
+        appId: 1,
+        accountLogin: 'acme',
+        accountType: 'Organization',
+        repositorySelection: 'selected',
+        permissions: { issues: 'read', metadata: 'read' },
+        verifiedBy: 'octocat',
+      },
+    };
+
+    it('shows the account login, its type, the repository selection and no expiry', () => {
+      const markup = markupFor(githubApp);
+
+      expect(markup).toContain('acme');
+      expect(markup).toContain('Organization · selected repositories');
+      expect(markup).toContain('installation …5678');
+      expect(markup).toContain('no expiry');
+    });
+
+    it('shows all repositories', () => {
+      expect(markupFor({ ...githubApp, metadata: { ...githubApp.metadata, accountType: 'User', repositorySelection: 'all' } }))
+        .toContain('User · all repositories');
+    });
+
+    it('shows no details without metadata', () => {
+      expect(markupFor({ ...githubApp, metadata: undefined })).not.toContain('repositories');
+    });
+
+    it('shows the uninstalled reason text', () => {
+      expect(markupFor({ ...githubApp, status: 'invalid', statusReason: 'uninstalled' }))
+        .toContain('no longer installed on this account');
+    });
+  });
 });

@@ -77,4 +77,22 @@ describe('GithubAppType', () => {
       expect(GithubAppType.errorText('GITHUB_UNAVAILABLE')).toBeUndefined();
     });
   });
+
+  it('needs the server config for its actions', () => {
+    expect(GithubAppType.requiresServerConfig).toBeTrue();
+  });
+
+  describe('.details', () => {
+    it('lists the account type and repository selection', () => {
+      expect(GithubAppType.details({ metadata: { accountType: 'User', repositorySelection: 'all' } }))
+        .toEqual(['User', 'all repositories']);
+      expect(GithubAppType.details({ metadata: { accountType: 'Organization', repositorySelection: 'selected' } }))
+        .toEqual(['Organization', 'selected repositories']);
+    });
+
+    it('skips missing values', () => {
+      expect(GithubAppType.details({ metadata: null })).toEqual([]);
+      expect(GithubAppType.details({ metadata: { repositorySelection: 'other' } })).toEqual([]);
+    });
+  });
 });

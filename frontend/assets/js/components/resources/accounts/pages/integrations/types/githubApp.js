@@ -6,6 +6,11 @@ const REASON_TEXTS = new Map([
     + 'Accept the app\'s requested permissions on GitHub, then test again.'],
 ]);
 
+const REPOSITORY_SELECTIONS = new Map([
+  ['all', 'all repositories'],
+  ['selected', 'selected repositories'],
+]);
+
 const ERROR_TEXTS = new Map([
   ['INTEGRATION_REDIRECT_STATE_INVALID', 'This GitHub link expired or was already used. Start again.'],
 ]);
@@ -29,6 +34,19 @@ const GithubAppType = {
       + 'an existing installation.',
   ],
   connectHint: 'Use this if the app is already installed on your account or organization.',
+  requiresServerConfig: true,
+
+  /**
+   * Row details shown under the account login: the account type and the repository selection.
+   *
+   * @param {{metadata: (object|undefined|null)}} integration - The integration.
+   * @returns {Array<string>} The details, skipping any the metadata lacks.
+   */
+  details(integration) {
+    const metadata = integration?.metadata ?? {};
+
+    return [metadata.accountType, REPOSITORY_SELECTIONS.get(metadata.repositorySelection)].filter(Boolean);
+  },
 
   /**
    * Build the Remove confirmation reminder, naming the installation's account.
