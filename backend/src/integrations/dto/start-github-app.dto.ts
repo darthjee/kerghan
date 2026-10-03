@@ -1,5 +1,6 @@
-import { IsIn, IsOptional, IsUUID } from 'class-validator';
+import { IsIn, IsOptional, IsUUID, ValidateIf } from 'class-validator';
 import { IsIntegrationLabel } from './integration-label.js';
+import { isGiven } from './is-given.js';
 import type { GithubAppMode } from '../types/github-app/github-app-urls.js';
 
 // The modes start accepts.
@@ -13,11 +14,11 @@ export const GITHUB_APP_MODES: GithubAppMode[] = ['install', 'connect'];
  * (400 `VALIDATION_FAILED`).
  */
 export class StartGithubAppDto {
-  @IsOptional()
+  @ValidateIf(isGiven)
   @IsIntegrationLabel()
     label?: string;
 
-  @IsOptional()
+  @ValidateIf(isGiven)
   @IsUUID()
     integrationId?: string;
 

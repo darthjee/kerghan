@@ -181,6 +181,8 @@ describe('OauthAppController (e2e), type enabled', () => {
     it.each([
       ['a blank label', { label: '   ' }],
       ['a malformed integrationId', { integrationId: 'nope' }],
+      ['a null label', { label: null }],
+      ['a null integrationId', { integrationId: null }],
     ])('answers 400 on %s', async (_label, body) => {
       expectValidationErrorBody(await start(ctx, ctx.owner, body));
     });

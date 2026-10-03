@@ -207,6 +207,8 @@ describe('GithubAppController (e2e), type enabled', () => {
       ['neither of label and integrationId', {}],
       ['an unknown mode', { label: 'Work', mode: 'steal' }],
       ['a non-uuid integrationId', { integrationId: 'nope' }],
+      ['a null label', { label: null }],
+      ['a null integrationId', { integrationId: null }],
     ])('answers 400 VALIDATION_FAILED on start with %s', async (_label, body) => {
       const response = await post(ctx, START, ctx.owner, body);
 

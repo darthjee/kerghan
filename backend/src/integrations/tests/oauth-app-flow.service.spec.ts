@@ -176,6 +176,7 @@ describe('OauthAppFlowService', () => {
     it.each([
       ['both', { label: 'Work', integrationId: MISSING_UUID }],
       ['neither', {}],
+      ['null for both', { label: null, integrationId: null }],
     ])('rejects %s of label and integrationId', async (_label, body) => {
       expectHttp(await rejection(h.flow.start(OWNER, body)), 400, ErrorCodes.VALIDATION_FAILED);
       expect(h.states.rows).toHaveLength(0);
