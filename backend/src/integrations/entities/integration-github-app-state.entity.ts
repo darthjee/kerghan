@@ -11,8 +11,9 @@ export type GithubAppStatePurpose = 'create' | 'replace';
  * `docs/agents/specs/integrations/types/github-app.md#state`). Owns table
  * `integrations_github_app_states`. `userId` is a logical foreign key (no
  * physical FK, no cross-module JOIN) into `auth_users`. Only the SHA-256 of
- * the `state` secret is stored. A `select` row also records the verified
- * candidate installation ids.
+ * the `state` secret is stored. A `select` row also records the result of
+ * the ownership check: the candidate installation ids and the verifying
+ * GitHub login (`verified_by`, stored as `metadata.verifiedBy` on select).
  */
 @Entity('integrations_github_app_states')
 export class IntegrationGithubAppState {
@@ -44,6 +45,9 @@ export class IntegrationGithubAppState {
 
   @Column({ name: 'candidate_installation_ids', type: 'json', nullable: true })
     candidateInstallationIds!: number[] | null;
+
+  @Column({ name: 'verified_by', type: 'varchar', length: 39, nullable: true })
+    verifiedBy!: string | null;
 
   @Index('idx_integrations_github_app_states_expires_at')
   @Column({ name: 'expires_at', type: 'datetime' })

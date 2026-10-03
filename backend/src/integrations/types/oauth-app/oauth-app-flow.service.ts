@@ -253,10 +253,12 @@ export class OauthAppFlowService {
 
 /**
  * Enforces exactly one of `label` and `integrationId`.
- * @param {StartOauthAppDto} dto - The validated body.
+ * @param {{ label?: string, integrationId?: string }} dto - The validated start body.
  * @returns {{ label: string } | { integrationUuid: string }} The flow's target.
  */
-function exactlyOneTarget(dto: StartOauthAppDto): { label: string } | { integrationUuid: string } {
+export function exactlyOneTarget(
+  dto: { label?: string; integrationId?: string },
+): { label: string } | { integrationUuid: string } {
   const hasLabel = dto.label !== undefined;
 
   if (hasLabel === (dto.integrationId !== undefined)) {

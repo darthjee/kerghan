@@ -2,6 +2,7 @@ import { randomBytes, randomUUID } from 'node:crypto';
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, LessThanOrEqual, Repository } from 'typeorm';
+import { isGithubLogin } from './github-app-metadata.js';
 import {
   GithubAppStateStage,
   IntegrationGithubAppState,
@@ -21,6 +22,12 @@ const RANDOM_BYTES = 32;
 // Shape of a `state` value: `<uuid>.<43 base64url characters>` (same as the OAuth App's).
 export const GITHUB_APP_STATE_PATTERN = OAUTH_STATE_PATTERN;
 
+/** What a `select` row records of the ownership check (`null`s on a `redirect` row). */
+interface SelectResult {
+  candidates: number[] | null;
+  verifiedBy: string | null;
+}
+
 /** What a flow targets: a new integration (with its label), or an existing one's credential. */
 export type GithubAppStateTarget =
   | { purpose: 'create'; label: string }
@@ -28,11 +35,13 @@ export type GithubAppStateTarget =
 
 /**
  * A consumed flow step: what it was started for and, for a `select` row,
- * the verified candidate installation ids (empty for a `redirect` row).
+ * the ownership check's result: the verified candidate installation ids
+ * and the verifying login (empty / `null` for a `redirect` row).
  */
 export interface ConsumedGithubAppState {
   target: GithubAppStateTarget;
   candidates: number[];
+  verifiedBy: string | null;
 }
 
 /**
@@ -66,14 +75,15 @@ export class GithubAppStateService {
    * @returns {Promise<string>} The `state` value (`<uuid>.<secret>`).
    */
   async issueRedirect(userId: number, target: GithubAppStateTarget, now: Date = new Date()): Promise<string> {
-    return this.issue(userId, 'redirect', target, null, now);
+    return this.issue(userId, 'redirect', target, { candidates: null, verifiedBy: null }, now);
   }
 
   /**
-   * Issues a `select` row carrying the consumed row's target and the verified candidates.
+   * Issues a `select` row carrying the consumed row's target and the ownership check's result.
    * @param {number} userId - The user.
    * @param {GithubAppStateTarget} target - The consumed `redirect` row's target.
    * @param {number[]} candidates - The verified installation ids (at most 100 are kept).
+   * @param {string} verifiedBy - The GitHub login that proved access.
    * @param {Date} [now] - The current time.
    * @returns {Promise<string>} The `state` value (`<uuid>.<secret>`).
    */
@@ -81,9 +91,13 @@ export class GithubAppStateService {
     userId: number,
     target: GithubAppStateTarget,
     candidates: number[],
+    verifiedBy: string,
     now: Date = new Date(),
   ): Promise<string> {
-    return this.issue(userId, 'select', target, candidates.slice(0, GITHUB_APP_MAX_CANDIDATES), now);
+    return this.issue(userId, 'select', target, {
+      candidates: candidates.slice(0, GITHUB_APP_MAX_CANDIDATES),
+      verifiedBy,
+    }, now);
   }
 
   /**
@@ -130,7 +144,7 @@ export class GithubAppStateService {
    * @param {number} userId - The user.
    * @param {GithubAppStateStage} stage - The new row's stage.
    * @param {GithubAppStateTarget} target - The flow's target.
-   * @param {number[] | null} candidates - The candidates (`select` only).
+   * @param {SelectResult} result - The candidates and verifying login (`select` only, else `null`s).
    * @param {Date} now - The current time.
    * @returns {Promise<string>} The `state` value.
    */
@@ -138,7 +152,7 @@ export class GithubAppStateService {
     userId: number,
     stage: GithubAppStateStage,
     target: GithubAppStateTarget,
-    candidates: number[] | null,
+    result: SelectResult,
     now: Date,
   ): Promise<string> {
     await this.repository.delete({ expiresAt: LessThanOrEqual(now) });
@@ -155,7 +169,8 @@ export class GithubAppStateService {
       purpose: target.purpose,
       label: target.purpose === 'create' ? target.label : null,
       integrationUuid: target.purpose === 'replace' ? target.integrationUuid : null,
-      candidateInstallationIds: candidates,
+      candidateInstallationIds: result.candidates,
+      verifiedBy: result.verifiedBy,
       expiresAt: new Date(now.getTime() + GITHUB_APP_STATE_TTL_MS),
     }));
 
@@ -216,12 +231,12 @@ function toConsumed(row: IntegrationGithubAppState): ConsumedGithubAppState {
   const target = targetOf(row);
 
   if (row.stage === 'redirect') {
-    return { target, candidates: [] };
+    return { target, candidates: [], verifiedBy: null };
   }
 
-  if (!isCandidateList(row.candidateInstallationIds)) {
+  if (!isCandidateList(row.candidateInstallationIds) || !isGithubLogin(row.verifiedBy)) {
     throw invalidRedirectState();
   }
 
-  return { target, candidates: row.candidateInstallationIds };
+  return { target, candidates: row.candidateInstallationIds, verifiedBy: row.verifiedBy };
 }

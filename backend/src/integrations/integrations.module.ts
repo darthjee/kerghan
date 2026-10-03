@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { IntegrationCredentialLockout } from './entities/integration-credential-lockout.entity.js';
+import { IntegrationGithubAppState } from './entities/integration-github-app-state.entity.js';
 import { IntegrationOauthState } from './entities/integration-oauth-state.entity.js';
 import { Integration } from './entities/integration.entity.js';
 import { GithubAppClientService } from './github-app-client.service.js';
@@ -16,8 +17,12 @@ import { buildIntegrationsKey, INTEGRATIONS_KEY } from './integrations-key.js';
 import { IntegrationsController } from './integrations.controller.js';
 import { IntegrationsService } from './integrations.service.js';
 import { buildGithubAppConfig, GITHUB_APP_CONFIG } from './types/github-app/github-app-config.js';
+import { GithubAppFlowService } from './types/github-app/github-app-flow.service.js';
 import { GithubAppInstallationService } from './types/github-app/github-app-installation.service.js';
 import { GithubAppRevocationService } from './types/github-app/github-app-revocation.service.js';
+import { GithubAppSelectionService } from './types/github-app/github-app-selection.service.js';
+import { GithubAppStateService } from './types/github-app/github-app-state.service.js';
+import { GithubAppStore } from './types/github-app/github-app-store.js';
 import { GithubAppUserVerificationService } from './types/github-app/github-app-user-verification.service.js';
 import { GithubAppStrategy } from './types/github-app/github-app.strategy.js';
 import { IntegrationTypeRegistry } from './types/integration-type-registry.js';
@@ -36,17 +41,24 @@ import { PatStrategy } from './types/pat/pat.strategy.js';
  * The Integrations module — always-on (imported directly into `AppModule`):
  * labelled, encrypted GitHub credentials owned by one user each (see
  * `docs/agents/specs/integrations/`). Owns tables `integrations`,
- * `integrations_credential_lockouts` and `integrations_oauth_states`;
+ * `integrations_credential_lockouts`, `integrations_oauth_states` and
+ * `integrations_github_app_states`;
  * `integrations.user_id` carries the project's only physical cross-module FK (`ON DELETE CASCADE` to
  * `auth_users`), declared in its migration only. Exports nothing yet.
  *
  * `KERGHAN_INTEGRATIONS_KEY` is validated once, in the `INTEGRATIONS_KEY`
  * factory, so a missing or malformed key fails Nest's boot. The optional
- * OAuth App config is validated once, in the `OAUTH_APP_CONFIG` factory. Strategies are
+ * OAuth App and GitHub App configs are validated once, in the
+ * `OAUTH_APP_CONFIG` and `GITHUB_APP_CONFIG` factories. Strategies are
  * registered, in registry order, in `INTEGRATION_TYPE_STRATEGIES`.
  */
 @Module({
-  imports: [TypeOrmModule.forFeature([Integration, IntegrationCredentialLockout, IntegrationOauthState])],
+  imports: [TypeOrmModule.forFeature([
+    Integration,
+    IntegrationCredentialLockout,
+    IntegrationOauthState,
+    IntegrationGithubAppState,
+  ])],
   controllers: [OauthAppController, IntegrationsController],
   providers: [
     {
@@ -91,6 +103,10 @@ import { PatStrategy } from './types/pat/pat.strategy.js';
     OauthStateService,
     OauthAppEnabledGuard,
     OauthAppFlowService,
+    GithubAppStateService,
+    GithubAppStore,
+    GithubAppSelectionService,
+    GithubAppFlowService,
   ],
 })
 // NestJS module classes are intentionally empty; all behavior lives in @Module().

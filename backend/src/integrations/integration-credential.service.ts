@@ -84,31 +84,47 @@ export class IntegrationCredentialService {
   }
 
   /**
-   * Validates the credential against GitHub. An attempt is atomically
-   * reserved in the cool-off first (423 when refused, so parallel requests
-   * can't exceed the limit); a counted failure keeps it, a success resets
-   * the cool-off, and anything else releases it. Domain errors become HTTP
-   * errors.
+   * Validates the credential against GitHub, as one cool-off `attempt`.
    * @param {number} userId - The caller's id.
    * @param {ParsedCredential} parsed - The strategy and the secret.
    * @returns {Promise<ValidatedCredential>} The validated credential.
    */
   async validate(userId: number, { strategy, secret }: ParsedCredential): Promise<ValidatedCredential> {
+    return this.attempt(userId, () => strategy.validate(secret));
+  }
+
+  /**
+   * Runs one GitHub validation under the failure cool-off. An attempt is
+   * atomically reserved first (423 when refused, so parallel requests can't
+   * exceed the limit); a counted domain failure keeps it, a success resets
+   * the cool-off (or, when `resetsCoolOff` says the result isn't a stored
+   * credential — e.g. a GitHub App selection — only gives the attempt back),
+   * and anything else releases it. Domain errors become HTTP errors.
+   * @param {number} userId - The caller's id.
+   * @param {() => Promise<T>} run - The validation.
+   * @param {(result: T) => boolean} [resetsCoolOff] - Whether a result resets the cool-off (default: always).
+   * @returns {Promise<T>} The validation's result.
+   */
+  async attempt<T>(userId: number, run: () => Promise<T>, resetsCoolOff: (result: T) => boolean = () => true): Promise<T> {
     if (!(await this.abuseGuard.reserveAttempt(userId))) {
       throw credentialLocked();
     }
 
-    let validated: ValidatedCredential;
+    let result: T;
 
     try {
-      validated = await strategy.validate(secret);
+      result = await run();
     } catch (error) {
       throw await this.settleFailure(userId, error);
     }
 
-    await this.abuseGuard.reset(userId);
+    if (resetsCoolOff(result)) {
+      await this.abuseGuard.reset(userId);
+    } else {
+      await this.abuseGuard.releaseAttempt(userId);
+    }
 
-    return validated;
+    return result;
   }
 
   /**

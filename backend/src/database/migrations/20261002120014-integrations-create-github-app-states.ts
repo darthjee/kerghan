@@ -26,6 +26,7 @@ export class IntegrationsCreateGithubAppStates20261002120014 implements Migratio
           { name: 'label', type: 'varchar', length: '100', isNullable: true },
           { name: 'integration_uuid', type: 'char', length: '36', isNullable: true },
           { name: 'candidate_installation_ids', type: 'json', isNullable: true },
+          { name: 'verified_by', type: 'varchar', length: '39', isNullable: true },
           { name: 'expires_at', type: 'datetime' },
           createdAtColumn(),
         ],

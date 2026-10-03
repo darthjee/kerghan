@@ -71,6 +71,7 @@ describe('GithubAppStateService', () => {
         label: 'Work',
         integrationUuid: null,
         candidateInstallationIds: null,
+        verifiedBy: null,
       });
       expect(JSON.stringify(repo.rows)).not.toContain(secret);
     });
@@ -110,10 +111,12 @@ describe('GithubAppStateService', () => {
       const now = new Date('2026-10-02T12:00:00Z');
       const candidates = Array.from({ length: 120 }, (_, index) => index + 1);
 
-      const state = await service.issueSelect(OWNER, REPLACE, candidates, now);
+      const state = await service.issueSelect(OWNER, REPLACE, candidates, 'octocat', now);
 
       expect(state).toMatch(GITHUB_APP_STATE_PATTERN);
-      expect(repo.rows[0]).toMatchObject({ stage: 'select', purpose: 'replace', integrationUuid: TARGET_UUID });
+      expect(repo.rows[0]).toMatchObject({
+        stage: 'select', purpose: 'replace', integrationUuid: TARGET_UUID, verifiedBy: 'octocat',
+      });
       expect(repo.rows[0].candidateInstallationIds).toEqual(candidates.slice(0, 100));
       expect(repo.rows[0].expiresAt.getTime()).toBe(now.getTime() + GITHUB_APP_STATE_TTL_MS);
     });
@@ -123,7 +126,7 @@ describe('GithubAppStateService', () => {
         await service.issueRedirect(OWNER, { purpose: 'create', label });
       }
 
-      await service.issueSelect(OWNER, CREATE, [1, 2]);
+      await service.issueSelect(OWNER, CREATE, [1, 2], 'octocat');
 
       expect(repo.rows).toHaveLength(5);
       expect(repo.rows.map((row) => row.label)).not.toContain('a');
@@ -134,20 +137,20 @@ describe('GithubAppStateService', () => {
     it('round-trips a redirect create flow and deletes the row', async () => {
       const state = await service.issueRedirect(OWNER, CREATE);
 
-      expect(await service.consume(OWNER, state, 'redirect')).toEqual({ target: CREATE, candidates: [] });
+      expect(await service.consume(OWNER, state, 'redirect')).toEqual({ target: CREATE, candidates: [], verifiedBy: null });
       expect(repo.rows).toHaveLength(0);
     });
 
     it('round-trips a redirect replace flow', async () => {
       const state = await service.issueRedirect(OWNER, REPLACE);
 
-      expect(await service.consume(OWNER, state, 'redirect')).toEqual({ target: REPLACE, candidates: [] });
+      expect(await service.consume(OWNER, state, 'redirect')).toEqual({ target: REPLACE, candidates: [], verifiedBy: null });
     });
 
     it('round-trips a select row with its candidates', async () => {
-      const state = await service.issueSelect(OWNER, CREATE, [11, 22]);
+      const state = await service.issueSelect(OWNER, CREATE, [11, 22], 'octocat');
 
-      expect(await service.consume(OWNER, state, 'select')).toEqual({ target: CREATE, candidates: [11, 22] });
+      expect(await service.consume(OWNER, state, 'select')).toEqual({ target: CREATE, candidates: [11, 22], verifiedBy: 'octocat' });
     });
 
     it('rejects a replay', async () => {
@@ -190,7 +193,7 @@ describe('GithubAppStateService', () => {
     });
 
     it('rejects a select row on the callback, and deletes it', async () => {
-      const state = await service.issueSelect(OWNER, CREATE, [1]);
+      const state = await service.issueSelect(OWNER, CREATE, [1], 'octocat');
 
       expectInvalidState(await rejection(service.consume(OWNER, state, 'redirect')));
       expect(repo.rows).toHaveLength(0);
@@ -240,8 +243,15 @@ describe('GithubAppStateService', () => {
       ['a negative candidate', [-1]],
       ['a non-array', { id: 1 }],
     ])('rejects a select row with %s', async (_label, candidates) => {
-      const state = await service.issueSelect(OWNER, CREATE, [1]);
+      const state = await service.issueSelect(OWNER, CREATE, [1], 'octocat');
       repo.rows[0].candidateInstallationIds = candidates as never;
+
+      expectInvalidState(await rejection(service.consume(OWNER, state, 'select')));
+    });
+
+    it('rejects a select row without a usable verifying login', async () => {
+      const state = await service.issueSelect(OWNER, CREATE, [1], 'octocat');
+      repo.rows[0].verifiedBy = null;
 
       expectInvalidState(await rejection(service.consume(OWNER, state, 'select')));
     });

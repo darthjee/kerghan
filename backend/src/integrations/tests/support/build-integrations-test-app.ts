@@ -9,7 +9,10 @@ import { Test } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import cookieParser from 'cookie-parser';
 import request from 'supertest';
-import { FakeGithubClient } from './fake-github-client.js';
+import { FakeGithubClient, githubAppExchangeResponse } from './fake-github-client.js';
+import { CANARY_APP_CLIENT_SECRET, TEST_APP_CLIENT_ID, TEST_APP_SLUG } from './github-app-test-config.js';
+import { githubAppTestKey } from './github-app-test-key.js';
+import { createInMemoryGithubAppStateRepo, InMemoryGithubAppStateRepo } from './in-memory-github-app-states.js';
 import {
   createInMemoryIntegrationRepo,
   InMemoryCredentialAbuseGuard,
@@ -34,8 +37,10 @@ import { LoggingModule } from '../../../core/logging.module.js';
 import { OriginGuard } from '../../../core/origin.guard.js';
 import { createConsoleSpies, ConsoleSpies } from '../../../core/tests/console-spies.test-support.js';
 import { IntegrationCredentialLockout } from '../../entities/integration-credential-lockout.entity.js';
+import { IntegrationGithubAppState } from '../../entities/integration-github-app-state.entity.js';
 import { IntegrationOauthState } from '../../entities/integration-oauth-state.entity.js';
 import { Integration } from '../../entities/integration.entity.js';
+import { GithubAppClientService } from '../../github-app-client.service.js';
 import { GithubClientService } from '../../github-client.service.js';
 import { IntegrationCredentialAbuseGuardService } from '../../integration-credential-abuse-guard.service.js';
 import { IntegrationTestCooldownService } from '../../integration-test-cooldown.service.js';
@@ -57,6 +62,8 @@ export const TEST_OAUTH_CALLBACK_URL = 'https://kerghan.example.com/integrations
 export interface IntegrationsTestAppOptions {
   /** Enables the `oauth_app` type (fake client id and secret, `FRONTEND_BASE_URL`). */
   oauthApp?: boolean;
+  /** Enables the `github_app` type (fake app, test-only RSA key, `FRONTEND_BASE_URL`). */
+  githubApp?: boolean;
 }
 
 /** The running app and the doubles behind it. */
@@ -64,6 +71,7 @@ export interface IntegrationsTestContext {
   app: INestApplication;
   repo: InMemoryIntegrationRepo;
   oauthStates: InMemoryOauthStateRepo;
+  githubAppStates: InMemoryGithubAppStateRepo;
   github: FakeGithubClient;
   guard: InMemoryCredentialAbuseGuard;
   userRepo: ReturnType<typeof createInMemoryRepo<User>>;
@@ -93,10 +101,24 @@ export async function buildIntegrationsTestApp(options: IntegrationsTestAppOptio
       KERGHAN_GITHUB_OAUTH_APP_CLIENT_SECRET: CANARY_OAUTH_CLIENT_SECRET,
       FRONTEND_BASE_URL: TEST_FRONTEND_BASE_URL,
     } : {}),
+    ...(options.githubApp ? {
+      KERGHAN_GITHUB_APP_ID: '123456',
+      KERGHAN_GITHUB_APP_SLUG: TEST_APP_SLUG,
+      KERGHAN_GITHUB_APP_PRIVATE_KEY: githubAppTestKey().base64Pem,
+      KERGHAN_GITHUB_APP_CLIENT_ID: TEST_APP_CLIENT_ID,
+      KERGHAN_GITHUB_APP_CLIENT_SECRET: CANARY_APP_CLIENT_SECRET,
+      FRONTEND_BASE_URL: TEST_FRONTEND_BASE_URL,
+    } : {}),
   };
   const repo = createInMemoryIntegrationRepo();
   const oauthStates = createInMemoryOauthStateRepo();
+  const githubAppStates = createInMemoryGithubAppStateRepo();
   const github = new FakeGithubClient();
+
+  if (options.githubApp) {
+    github.exchangeRespondByDefault(githubAppExchangeResponse());
+  }
+
   const guard = new InMemoryCredentialAbuseGuard(TEST_MAX_ATTEMPTS);
   const userRepo = createInMemoryRepo<User>();
 
@@ -127,7 +149,9 @@ export async function buildIntegrationsTestApp(options: IntegrationsTestAppOptio
     .overrideProvider(getRepositoryToken(Integration)).useValue(repo)
     .overrideProvider(getRepositoryToken(IntegrationCredentialLockout)).useValue({})
     .overrideProvider(getRepositoryToken(IntegrationOauthState)).useValue(oauthStates)
+    .overrideProvider(getRepositoryToken(IntegrationGithubAppState)).useValue(githubAppStates)
     .overrideProvider(GithubClientService).useValue(github)
+    .overrideProvider(GithubAppClientService).useValue(github)
     .overrideProvider(IntegrationCredentialAbuseGuardService).useValue(guard)
     .overrideProvider(IntegrationTestCooldownService).useValue(new InMemoryTestCooldown(repo, TEST_COOLDOWN_MS))
     .compile();
@@ -149,7 +173,7 @@ export async function buildIntegrationsTestApp(options: IntegrationsTestAppOptio
     }),
   );
 
-  return { app, repo, oauthStates, github, guard, userRepo, owner, intruder, admin };
+  return { app, repo, oauthStates, githubAppStates, github, guard, userRepo, owner, intruder, admin };
 }
 
 /**

@@ -246,6 +246,7 @@ describe('IntegrationsCreateGithubAppStates20261002120014', () => {
         label: { type: 'varchar', length: '100', isNullable: true },
         integration_uuid: { type: 'char', length: '36', isNullable: true },
         candidate_installation_ids: { type: 'json', length: '', isNullable: true },
+        verified_by: { type: 'varchar', length: '39', isNullable: true },
         expires_at: { type: 'datetime', length: '', isNullable: false },
         created_at: { type: 'datetime', length: '', isNullable: false },
       });
