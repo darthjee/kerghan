@@ -27,16 +27,16 @@ export interface IntegrationResponse {
 
 /**
  * The status reported to the owner:
- * - `undecryptable` when the row's key id doesn't match the configured key;
+ * - `undecryptable` when the row's key id matches no configured key (current or previous);
  * - `expired` when the stored status is `active` and `expiresAt` is past;
  * - otherwise the stored status.
  * @param {Integration} row - The stored row.
- * @param {boolean} keyIsCurrent - Whether the row's key id matches the configured key.
+ * @param {boolean} keyIsDecryptable - Whether the row's key id matches a configured key (current or previous).
  * @param {Date} now - The current time.
  * @returns {IntegrationStatus} The reported status.
  */
-export function reportedStatus(row: Integration, keyIsCurrent: boolean, now: Date): IntegrationStatus {
-  if (!keyIsCurrent) {
+export function reportedStatus(row: Integration, keyIsDecryptable: boolean, now: Date): IntegrationStatus {
+  if (!keyIsDecryptable) {
     return 'undecryptable';
   }
 
@@ -50,18 +50,18 @@ export function reportedStatus(row: Integration, keyIsCurrent: boolean, now: Dat
 /**
  * Serialises a row for the owner, without decrypting anything.
  * @param {Integration} row - The stored row.
- * @param {boolean} keyIsCurrent - Whether the row's key id matches the configured key.
+ * @param {boolean} keyIsDecryptable - Whether the row's key id matches a configured key (current or previous).
  * @param {Date | null} nextTestAt - When the test-connection cooldown ends (`null` if never tested).
  * @param {Date} [now] - The current time.
  * @returns {IntegrationResponse} The response body.
  */
 export function toIntegrationResponse(
   row: Integration,
-  keyIsCurrent: boolean,
+  keyIsDecryptable: boolean,
   nextTestAt: Date | null,
   now: Date = new Date(),
 ): IntegrationResponse {
-  const status = reportedStatus(row, keyIsCurrent, now);
+  const status = reportedStatus(row, keyIsDecryptable, now);
 
   return {
     id: row.uuid,

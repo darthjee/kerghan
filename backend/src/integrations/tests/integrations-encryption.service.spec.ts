@@ -109,4 +109,93 @@ describe('IntegrationsEncryptionService', () => {
     expect(service.isDecryptableKeyId(service.keyId)).toBe(true);
     expect(service.isDecryptableKeyId('deadbeef')).toBe(false);
   });
+
+  it('answers that the current key id is current and not previous', () => {
+    expect(service.isCurrentKeyId(service.keyId)).toBe(true);
+    expect(service.isPreviousKeyId(service.keyId)).toBe(false);
+    expect(service.currentKeyId).toBe(service.keyId);
+    expect(service.previousKeyIds).toEqual([]);
+  });
+});
+
+describe('IntegrationsEncryptionService with previous keys', () => {
+  const oldKey = crypto.randomBytes(32);
+  const olderKey = crypto.randomBytes(32);
+  const currentKey = crypto.randomBytes(32);
+  const before = new IntegrationsEncryptionService(integrationsKeySetOf(oldKey));
+  const rotated = new IntegrationsEncryptionService(integrationsKeySetOf(currentKey, [oldKey, olderKey]));
+  let stored: EncryptedSecret;
+
+  beforeEach(() => {
+    stored = before.encrypt(new Secret({ token: CANARY }), BINDING);
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  it('decrypts a row stored under the current key', () => {
+    const fresh = rotated.encrypt(new Secret({ token: CANARY }), BINDING);
+
+    expect(rotated.decrypt({ ...fresh, ...BINDING })?.reveal()).toEqual({ token: CANARY });
+  });
+
+  it('decrypts a row stored under a previous key', () => {
+    expect(rotated.decrypt({ ...stored, ...BINDING })?.reveal()).toEqual({ token: CANARY });
+  });
+
+  it('encrypts new secrets under the current key only', () => {
+    expect(rotated.encrypt(new Secret({ token: CANARY }), BINDING).keyId).toBe(integrationsKeySetOf(currentKey).current.keyId);
+  });
+
+  it('answers null for an unknown key id without attempting any crypto', () => {
+    const spy = jest.spyOn(crypto, 'createDecipheriv');
+
+    expect(rotated.decrypt({ ...stored, keyId: 'deadbeef', ...BINDING })).toBeNull();
+    expect(rotated.reencrypt({ ...stored, keyId: 'deadbeef', ...BINDING })).toBeNull();
+    expect(spy).not.toHaveBeenCalled();
+  });
+
+  it('answers null for a tampered ciphertext under a previous key', () => {
+    expect(rotated.decrypt({ ...stored, ciphertext: flipped(stored.ciphertext), ...BINDING })).toBeNull();
+  });
+
+  it('classifies key ids as current, previous or unknown', () => {
+    const [oldId, olderId] = rotated.previousKeyIds;
+
+    expect(rotated.previousKeyIds).toEqual([before.keyId, integrationsKeySetOf(olderKey).current.keyId]);
+    expect(rotated.isPreviousKeyId(oldId)).toBe(true);
+    expect(rotated.isPreviousKeyId(olderId)).toBe(true);
+    expect(rotated.isCurrentKeyId(oldId)).toBe(false);
+    expect(rotated.isDecryptableKeyId(oldId)).toBe(true);
+    expect(rotated.isCurrentKeyId(rotated.currentKeyId)).toBe(true);
+    expect(rotated.isPreviousKeyId('deadbeef')).toBe(false);
+    expect(rotated.isDecryptableKeyId('deadbeef')).toBe(false);
+  });
+
+  describe('reencrypt', () => {
+    it('re-encrypts under the current key with a new IV, decrypting to the same payload', () => {
+      const result = rotated.reencrypt({ ...stored, ...BINDING });
+
+      expect(result).not.toBeNull();
+      expect(result?.keyId).toBe(rotated.currentKeyId);
+      expect(result?.iv.equals(stored.iv)).toBe(false);
+      expect(result?.ciphertext.toString('utf8')).not.toContain(CANARY);
+      expect(rotated.decrypt({ ...(result as EncryptedSecret), ...BINDING })?.reveal()).toEqual({ token: CANARY });
+    });
+
+    it('keeps the row binding (AAD)', () => {
+      const result = rotated.reencrypt({ ...stored, ...BINDING }) as EncryptedSecret;
+
+      expect(rotated.decrypt({ ...result, uuid: '22222222-2222-4222-8222-222222222222', type: 'pat' })).toBeNull();
+    });
+
+    it('answers null for an undecryptable row', () => {
+      expect(rotated.reencrypt({ ...stored, authTag: flipped(stored.authTag), ...BINDING })).toBeNull();
+    });
+
+    it('answers null for a row moved to another binding', () => {
+      expect(rotated.reencrypt({ ...stored, uuid: '22222222-2222-4222-8222-222222222222', type: 'pat' })).toBeNull();
+    });
+  });
 });
