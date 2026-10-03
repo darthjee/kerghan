@@ -1,7 +1,7 @@
 import * as crypto from 'node:crypto';
 import { inspect } from 'node:util';
 import { EncryptedSecret, IntegrationsEncryptionService } from '../integrations-encryption.service.js';
-import { integrationsKeyIdFor } from '../integrations-key.js';
+import { integrationsKeySetOf } from '../integrations-key.js';
 import { Secret } from '../secret.js';
 
 const CANARY = 'ghp_CANARYcanary0000000000000000000000';
@@ -14,7 +14,7 @@ const BINDING = { uuid: '11111111-1111-4111-8111-111111111111', type: 'pat' };
 function buildService(): IntegrationsEncryptionService {
   const key = crypto.randomBytes(32);
 
-  return new IntegrationsEncryptionService({ key, keyId: integrationsKeyIdFor(key) });
+  return new IntegrationsEncryptionService(integrationsKeySetOf(key));
 }
 
 /**
@@ -95,7 +95,7 @@ describe('IntegrationsEncryptionService', () => {
 
   it('answers null when the plaintext is not JSON', () => {
     const key = crypto.randomBytes(32);
-    const local = new IntegrationsEncryptionService({ key, keyId: integrationsKeyIdFor(key) });
+    const local = new IntegrationsEncryptionService(integrationsKeySetOf(key));
     const iv = crypto.randomBytes(12);
     const cipher = crypto.createCipheriv('aes-256-gcm', key, iv, { authTagLength: 16 });
     cipher.setAAD(Buffer.from(`${BINDING.uuid}:${BINDING.type}`, 'utf8'));

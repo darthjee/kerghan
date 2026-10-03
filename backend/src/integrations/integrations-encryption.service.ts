@@ -38,7 +38,7 @@ export class IntegrationsEncryptionService {
   private readonly integrationsKey: IntegrationsKey;
 
   /**
-   * @param {IntegrationsKey} integrationsKey - The validated key and its id, built at boot.
+   * @param {IntegrationsKey} integrationsKey - The validated key set, built at boot.
    */
   constructor(@Inject(INTEGRATIONS_KEY) integrationsKey: IntegrationsKey) {
     this.integrationsKey = integrationsKey;
@@ -49,7 +49,7 @@ export class IntegrationsEncryptionService {
    * @returns {string} The 8-character key id.
    */
   get keyId(): string {
-    return this.integrationsKey.keyId;
+    return this.integrationsKey.current.keyId;
   }
 
   /**
@@ -60,7 +60,7 @@ export class IntegrationsEncryptionService {
    */
   encrypt(secret: Secret, binding: SecretBinding): EncryptedSecret {
     const iv = randomBytes(IV_BYTES);
-    const cipher = createCipheriv(ALGORITHM, this.integrationsKey.key, iv, { authTagLength: AUTH_TAG_BYTES });
+    const cipher = createCipheriv(ALGORITHM, this.integrationsKey.current.key, iv, { authTagLength: AUTH_TAG_BYTES });
     cipher.setAAD(aadFor(binding));
     const ciphertext = Buffer.concat([cipher.update(JSON.stringify(secret.reveal()), 'utf8'), cipher.final()]);
 
@@ -80,7 +80,7 @@ export class IntegrationsEncryptionService {
     }
 
     try {
-      const decipher = createDecipheriv(ALGORITHM, this.integrationsKey.key, row.iv, { authTagLength: AUTH_TAG_BYTES });
+      const decipher = createDecipheriv(ALGORITHM, this.integrationsKey.current.key, row.iv, { authTagLength: AUTH_TAG_BYTES });
       decipher.setAAD(aadFor(row));
       decipher.setAuthTag(row.authTag);
       const plaintext = Buffer.concat([decipher.update(row.ciphertext), decipher.final()]).toString('utf8');
@@ -97,7 +97,7 @@ export class IntegrationsEncryptionService {
    * @returns {boolean} `true` when the configured key produced it.
    */
   isDecryptableKeyId(keyId: string): boolean {
-    return keyId === this.integrationsKey.keyId;
+    return keyId === this.integrationsKey.current.keyId;
   }
 }
 
