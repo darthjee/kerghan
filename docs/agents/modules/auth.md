@@ -131,6 +131,18 @@ rather than an edit to the seed migration's `INSERT`, since the seed migration r
   clears the `access_token` cookie. The access token itself stays valid (stateless JWT, not
   tracked server-side) until its own expiry — logout guarantees the *refresh* path is closed,
   not instant access-token revocation.
+- **Password change**: every successful password change revokes refresh tokens through
+  `TokenService#revokeUserTokens`:
+  - A password-recovery reset (`POST /auth/reset-password.json`) revokes all of the user's
+    refresh tokens.
+  - A My Account password change (`PATCH /auth/account.json` with `newPassword`, plus an
+    optional `refreshToken` in the body) revokes all of the caller's *other* tokens. The
+    presented token is kept only if it is one of the caller's own active tokens. When it is
+    missing, unknown, revoked or belongs to someone else, all of the caller's tokens are revoked
+    (fail safe). Username/email-only changes and failed attempts revoke nothing.
+  - An admin password edit (`AdminService#editUser` with `newPassword`) revokes all of the target
+    user's tokens, including the admin's own when they edit their own account.
+  - Same caveat as logout: access tokens that were already issued stay valid until they expire.
 - **Registration also logs in**: `POST /auth/register.json` issues a token pair immediately on
   success, same as login/refresh (per the issue's "issued on login/register/refresh" flow) —
   there's no separate "register, then log in" round trip.
