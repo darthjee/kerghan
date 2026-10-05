@@ -51,7 +51,7 @@ function renderRequestsTable(state, handlers) {
  * the controller is currently holding for it.
  *
  * @param {{uuid: string, requestIp: string, requestUserAgent: string,
- *   createdAt: string}} request - The row's authorization request.
+ *   createdAt: string, keepSignedIn: boolean}} request - The row's authorization request.
  * @param {Map} rowState - The per-request row UI state map, keyed by request uuid.
  * @param {{onToggleAuthorize: Function, onPasswordChange: Function,
  *   onConfirmAuthorize: Function, onDeny: Function}} handlers - Event handlers.
@@ -64,13 +64,30 @@ function renderRow(request, rowState, handlers) {
     <tr key={request.uuid}>
       <td>{request.requestIp}</td>
       <td>{request.requestUserAgent}</td>
-      <td>{formatAge(request.createdAt)}</td>
+      <td>
+        {formatAge(request.createdAt)}
+        {renderKeepSignedInBadge(request)}
+      </td>
       <td>
         {renderActions(request, row, handlers)}
         {renderRowError(row)}
       </td>
     </tr>
   );
+}
+
+/**
+ * Render the "Keep signed in" badge for a request that asked for a long-lived session.
+ *
+ * @param {{keepSignedIn: boolean}} request - The row's authorization request.
+ * @returns {React.ReactElement|null} The badge, or `null` unless `keepSignedIn` is `true`.
+ */
+function renderKeepSignedInBadge(request) {
+  if (request.keepSignedIn !== true) {
+    return null;
+  }
+
+  return <span className="badge text-bg-info ms-2">Keep signed in</span>;
 }
 
 /**

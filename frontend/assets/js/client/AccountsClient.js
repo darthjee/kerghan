@@ -182,8 +182,8 @@ const AccountsClient = {
    * `AuthSession` — this flow never issues a refresh token.
    *
    * @returns {Promise<{requests: Array<{uuid: string, requestIp: string,
-   *   requestUserAgent: string, createdAt: string, expiresAt: string}>}>} The caller's open
-   *   authorization requests.
+   *   requestUserAgent: string, createdAt: string, expiresAt: string,
+   *   keepSignedIn: boolean}>}>} The caller's open authorization requests.
    */
   async listAuthorizationRequests() {
     return ApiClient.postJson('/auth/authorization-requests/mine.json', {});
