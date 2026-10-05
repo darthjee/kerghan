@@ -76,7 +76,14 @@ table, the accepted residual risks and the rules future changes must keep.
 - `auth_refresh_tokens` (`entities/refresh-token.entity.ts`) — `id`, `tokenHash` (SHA-256 of the
   token, unique — the plaintext value is returned to the client once and never stored),
   `userId` (logical FK), `issuedAt`, `expiresAt`, `revokedAt`, `keepSignedIn` (`keep_signed_in`,
-  boolean, default `false` — whether the token is a persistent "keep me signed in" one).
+  boolean, default `false` — whether the token is a persistent "keep me signed in" one),
+  `sessionUuid` (`session_uuid`, `varchar(36)`, non-unique index) and `startedAt` (`started_at`)
+  — the session identity: a fresh UUID and the login time are minted by
+  `TokenService#issueTokens` on every new login (password, device-authorization, register) and
+  copied onto the replacement token on every rotation, the same way `keepSignedIn` is. So one
+  session is one chain of rotated tokens, with at most one unrevoked row at a time. Rows that
+  predate the column were backfilled as one session each, with `started_at = issued_at`
+  (`database/migrations/20261005120017-auth-add-refresh-tokens-session.ts`).
 - `auth_sessions` (`entities/session.entity.ts`) — `id`, `userId` (logical FK), `createdAt`,
   `lastSeenAt`. Bookkeeping only (touched on every token issuance) — not itself an
   authorization gate; see "JWT/refresh-token flow" below for what actually invalidates access.
@@ -143,6 +150,14 @@ rather than an edit to the seed migration's `INSERT`, since the seed migration r
   - An admin password edit (`AdminService#editUser` with `newPassword`) revokes all of the target
     user's tokens, including the admin's own when they edit their own account.
   - Same caveat as logout: access tokens that were already issued stay valid until they expire.
+- **Sessions**: `SessionService` (`session.service.ts`) and the thin `SessionController`
+  (`session.controller.ts`, default `JwtGuard`, `@CachePolicy(CacheClass.Never)`) let a user
+  list their active sessions (`POST /auth/sessions/mine.json`), revoke one by its
+  `sessionUuid` (`POST /auth/sessions/:uuid/revoke.json`, `404` for an unknown or foreign id)
+  or revoke every session but the current one (`POST /auth/sessions/revoke-others.json`, `401`
+  and nothing revoked when the presented `refreshToken` is not one of the caller's active
+  tokens). Every query is scoped to the caller's `userId`. `auth_sessions` is unrelated
+  bookkeeping and is untouched. See [Auth routes](../backend/routes/auth.md#sessions).
 - **Registration also logs in**: `POST /auth/register.json` issues a token pair immediately on
   success, same as login/refresh (per the issue's "issued on login/register/refresh" flow) —
   there's no separate "register, then log in" round trip.
