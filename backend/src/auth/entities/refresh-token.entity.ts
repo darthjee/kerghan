@@ -1,4 +1,4 @@
-import { Column, CreateDateColumn, Entity } from 'typeorm';
+import { Column, CreateDateColumn, Entity, Index } from 'typeorm';
 import { HashedTokenBase } from './hashed-token.base.js';
 
 /**
@@ -16,6 +16,11 @@ import { HashedTokenBase } from './hashed-token.base.js';
  * `keepSignedIn` marks a persistent ("keep me signed in") session: the token
  * is minted with the persistent TTL instead of the regular one, and the flag
  * is copied to the replacement token on every rotation.
+ *
+ * `sessionUuid` identifies a session: one chain of rotated tokens, minted at
+ * login and copied (with `startedAt`, the login time) to every replacement
+ * token. Since rotation revokes the presented token, at most one row per
+ * session is unrevoked at a time.
  */
 @Entity('auth_refresh_tokens')
 export class RefreshToken extends HashedTokenBase {
@@ -27,4 +32,11 @@ export class RefreshToken extends HashedTokenBase {
 
   @Column({ name: 'keep_signed_in', default: false })
     keepSignedIn!: boolean;
+
+  @Index()
+  @Column({ name: 'session_uuid', length: 36 })
+    sessionUuid!: string;
+
+  @Column({ name: 'started_at', type: 'datetime' })
+    startedAt!: Date;
 }
