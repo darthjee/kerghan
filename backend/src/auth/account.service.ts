@@ -7,6 +7,7 @@ import { assertAnyFieldPresent } from './assert-any-field-present.js';
 import { AuthService } from './auth.service.js';
 import { UpdateAccountDto } from './dto/update-account.dto.js';
 import { User } from './entities/user.entity.js';
+import { TokenService } from './token.service.js';
 import { AccountSummary, UserUpdateService } from './user-update.service.js';
 import { LockedException } from '../core/locked.exception.js';
 
@@ -22,6 +23,7 @@ export class AccountService {
   private readonly authService: AuthService;
   private readonly userUpdateService: UserUpdateService;
   private readonly accountEditAbuseGuardService: AccountEditAbuseGuardService;
+  private readonly tokenService: TokenService;
 
   /**
    * @param {Repository<User>} userRepository - The Auth module's user repository.
@@ -31,24 +33,31 @@ export class AccountService {
    *   the requested changes, shared with `AdminService#editUser`.
    * @param {AccountEditAbuseGuardService} accountEditAbuseGuardService - Tracks and enforces
    *   the per-user brute-force cool-off lockout for this endpoint.
+   * @param {TokenService} tokenService - Revokes the caller's other refresh
+   *   tokens after a successful password change.
    */
   constructor(
     @InjectRepository(User) userRepository: Repository<User>,
       authService: AuthService,
       userUpdateService: UserUpdateService,
       accountEditAbuseGuardService: AccountEditAbuseGuardService,
+      tokenService: TokenService,
   ) {
     this.userRepository = userRepository;
     this.authService = authService;
     this.userUpdateService = userUpdateService;
     this.accountEditAbuseGuardService = accountEditAbuseGuardService;
+    this.tokenService = tokenService;
   }
 
   /**
    * Updates the caller's own username, email, and/or password, always
-   * confirmed by their current password. Leaves other active sessions
-   * (refresh tokens) untouched — deliberately, per the issue's Expected
-   * Behavior — unlike the password-recovery reset flow. Any failed
+   * confirmed by their current password. A successful password change
+   * revokes the caller's other refresh tokens, keeping the presented
+   * `dto.refreshToken` only when it is one of the caller's active tokens —
+   * otherwise (missing, unknown, foreign) all of them are revoked (fail
+   * safe). Username/email-only changes revoke nothing, and a failed attempt
+   * never revokes anything. Any failed
    * validation (wrong current password, duplicate username/email) counts
    * toward a per-user cool-off lockout, checked before any other validation
    * runs and reset on success (see `AccountEditAbuseGuardService`).
@@ -70,6 +79,10 @@ export class AccountService {
 
     const result = await this.userUpdateService.applyUserUpdate(user, dto);
     await this.accountEditAbuseGuardService.reset(userId);
+
+    if (dto.newPassword) {
+      await this.tokenService.revokeUserTokens(userId, dto.refreshToken);
+    }
 
     return result;
   }

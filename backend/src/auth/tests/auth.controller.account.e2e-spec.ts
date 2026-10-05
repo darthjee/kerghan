@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import request from 'supertest';
 import { loginAs, loginCookie, registerUser, useTestApp } from './auth.controller.e2e-test-support.js';
 import { expectErrorBody, expectValidationErrorBody } from './support/error-body.js';
@@ -92,19 +93,104 @@ describe('AuthController (e2e)', () => {
       });
     });
 
-    it('does not revoke the caller\'s other refresh tokens on a successful password change', async () => {
-      const login = await loginAs(ctx.app);
-      const accessTokenCookie = login.headers['set-cookie'][0].split(';')[0];
+    describe('session revocation', () => {
+      const refreshTokenOf = async (username = 'darthjee'): Promise<string> =>
+        (await loginAs(ctx.app, username)).body.refreshToken;
 
-      await patchAccount(accessTokenCookie, {
-        currentPassword: 'my-password',
-        newPassword: 'brand-new-password',
-      }).expect(200);
+      // Reads revocation state straight from the fake repository: replaying a
+      // revoked token through `/auth/refresh.json` would itself revoke the
+      // whole family (the compromise signal), masking what is being tested.
+      const isRevoked = (refreshToken: string): boolean => {
+        const tokenHash = createHash('sha256').update(refreshToken).digest('hex');
+        return ctx.refreshTokenRepo.rows.find((row) => row.tokenHash === tokenHash)?.revokedAt !== null;
+      };
 
-      await request(ctx.app.getHttpServer())
-        .post('/auth/refresh.json')
-        .send({ refreshToken: login.body.refreshToken })
-        .expect(201);
+      it('keeps the presented session and revokes the caller\'s others on a password change', async () => {
+        const current = await refreshTokenOf();
+        const other = await refreshTokenOf();
+        const cookie = await loginCookie(ctx.app);
+
+        await patchAccount(cookie, {
+          currentPassword: 'my-password',
+          newPassword: 'brand-new-password',
+          refreshToken: current,
+        }).expect(200);
+
+        expect(isRevoked(current)).toBe(false);
+        expect(isRevoked(other)).toBe(true);
+        await request(ctx.app.getHttpServer())
+          .post('/auth/refresh.json')
+          .send({ refreshToken: current })
+          .expect(201);
+      }, 15000);
+
+      it('revokes every session of the caller when no refresh token is sent', async () => {
+        const current = await refreshTokenOf();
+        const cookie = await loginCookie(ctx.app);
+
+        await patchAccount(cookie, {
+          currentPassword: 'my-password',
+          newPassword: 'brand-new-password',
+        }).expect(200);
+
+        expect(isRevoked(current)).toBe(true);
+      });
+
+      it('revokes every session of the caller, and nobody else\'s, when a foreign token is sent', async () => {
+        await registerUser(ctx.app, { username: 'obi-wan', email: 'obi-wan@example.com' });
+        const current = await refreshTokenOf();
+        const foreign = await refreshTokenOf('obi-wan');
+        const cookie = await loginCookie(ctx.app);
+
+        await patchAccount(cookie, {
+          currentPassword: 'my-password',
+          newPassword: 'brand-new-password',
+          refreshToken: foreign,
+        }).expect(200);
+
+        expect(isRevoked(current)).toBe(true);
+        expect(isRevoked(foreign)).toBe(false);
+      }, 15000);
+
+      it('revokes every session of the caller when an unknown token is sent', async () => {
+        const current = await refreshTokenOf();
+        const cookie = await loginCookie(ctx.app);
+
+        await patchAccount(cookie, {
+          currentPassword: 'my-password',
+          newPassword: 'brand-new-password',
+          refreshToken: 'not-a-real-token',
+        }).expect(200);
+
+        expect(isRevoked(current)).toBe(true);
+      });
+
+      it('revokes nothing on a username-only change, even with a refresh token sent', async () => {
+        const current = await refreshTokenOf();
+        const other = await refreshTokenOf();
+        const cookie = await loginCookie(ctx.app);
+
+        await patchAccount(cookie, {
+          currentPassword: 'my-password',
+          username: 'new-username',
+          refreshToken: current,
+        }).expect(200);
+
+        expect(isRevoked(current)).toBe(false);
+        expect(isRevoked(other)).toBe(false);
+      }, 15000);
+
+      it('revokes nothing when the password change fails validation', async () => {
+        const other = await refreshTokenOf();
+        const cookie = await loginCookie(ctx.app);
+
+        await patchAccount(cookie, {
+          currentPassword: 'wrong-password',
+          newPassword: 'brand-new-password',
+        }).expect(400);
+
+        expect(isRevoked(other)).toBe(false);
+      });
     });
 
     it(

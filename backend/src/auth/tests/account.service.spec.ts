@@ -5,6 +5,7 @@ import { AccountEditAbuseGuardService } from '../account-edit-abuse-guard.servic
 import { AccountService } from '../account.service.js';
 import { AuthService } from '../auth.service.js';
 import { User } from '../entities/user.entity.js';
+import { TokenService } from '../token.service.js';
 import { UserUpdateService } from '../user-update.service.js';
 
 type RepoMock<T extends object> = {
@@ -27,6 +28,7 @@ describe('AccountService', () => {
     registerFailure: jest.Mock;
     reset: jest.Mock;
   };
+  let tokenService: { revokeUserTokens: jest.Mock };
   let service: AccountService;
   let user: User;
 
@@ -48,6 +50,8 @@ describe('AccountService', () => {
       reset: jest.fn().mockResolvedValue(undefined),
     };
 
+    tokenService = { revokeUserTokens: jest.fn().mockResolvedValue(undefined) };
+
     const userUpdateService = new UserUpdateService(userRepository as never);
 
     service = new AccountService(
@@ -55,6 +59,7 @@ describe('AccountService', () => {
       authService as unknown as AuthService,
       userUpdateService,
       accountEditAbuseGuardService as unknown as AccountEditAbuseGuardService,
+      tokenService as unknown as TokenService,
     );
   });
 
@@ -77,6 +82,16 @@ describe('AccountService', () => {
 
         expect(accountEditAbuseGuardService.reset).toHaveBeenCalledWith(1);
       });
+
+      it('revokes no sessions, even when a refreshToken is sent', async () => {
+        await service.updateAccount(1, {
+          currentPassword: 'current-password',
+          username: 'new-username',
+          refreshToken: 'current-refresh-token',
+        });
+
+        expect(tokenService.revokeUserTokens).not.toHaveBeenCalled();
+      });
     });
 
     describe('when only the email is provided', () => {
@@ -87,6 +102,16 @@ describe('AccountService', () => {
         });
 
         expect(result).toEqual({ username: 'darthjee', email: 'new-email@example.com' });
+      });
+
+      it('revokes no sessions, even when a refreshToken is sent', async () => {
+        await service.updateAccount(1, {
+          currentPassword: 'current-password',
+          email: 'new-email@example.com',
+          refreshToken: 'current-refresh-token',
+        });
+
+        expect(tokenService.revokeUserTokens).not.toHaveBeenCalled();
       });
     });
 
@@ -112,6 +137,36 @@ describe('AccountService', () => {
         });
 
         expect(result).toEqual({ username: 'darthjee', email: 'darthjee@example.com' });
+      });
+
+      it('revokes the caller\'s other sessions, keeping the presented refresh token', async () => {
+        await service.updateAccount(1, {
+          currentPassword: 'current-password',
+          newPassword: 'brand-new-password',
+          refreshToken: 'current-refresh-token',
+        });
+
+        expect(tokenService.revokeUserTokens).toHaveBeenCalledWith(1, 'current-refresh-token');
+      });
+
+      it('revokes all of the caller\'s sessions when no refresh token is sent', async () => {
+        await service.updateAccount(1, {
+          currentPassword: 'current-password',
+          newPassword: 'brand-new-password',
+        });
+
+        expect(tokenService.revokeUserTokens).toHaveBeenCalledWith(1, undefined);
+      });
+
+      it('revokes only after the new password is saved', async () => {
+        await service.updateAccount(1, {
+          currentPassword: 'current-password',
+          newPassword: 'brand-new-password',
+        });
+
+        expect(userRepository.save.mock.invocationCallOrder[0]).toBeLessThan(
+          tokenService.revokeUserTokens.mock.invocationCallOrder[0],
+        );
       });
     });
 
@@ -147,6 +202,18 @@ describe('AccountService', () => {
 
         expect(accountEditAbuseGuardService.registerFailure).toHaveBeenCalledWith(1);
       });
+
+      it('revokes no sessions, even for a password change', async () => {
+        await expect(
+          service.updateAccount(1, {
+            currentPassword: 'wrong-password',
+            newPassword: 'brand-new-password',
+            refreshToken: 'current-refresh-token',
+          }),
+        ).rejects.toThrow(BadRequestException);
+
+        expect(tokenService.revokeUserTokens).not.toHaveBeenCalled();
+      });
     });
 
     describe('when the new username is already taken by another user', () => {
@@ -170,6 +237,18 @@ describe('AccountService', () => {
         ).rejects.toThrow(ConflictException);
 
         expect(accountEditAbuseGuardService.registerFailure).toHaveBeenCalledWith(1);
+      });
+
+      it('revokes no sessions, even for a password change', async () => {
+        await expect(
+          service.updateAccount(1, {
+            currentPassword: 'current-password',
+            username: 'taken-username',
+            newPassword: 'brand-new-password',
+          }),
+        ).rejects.toThrow(ConflictException);
+
+        expect(tokenService.revokeUserTokens).not.toHaveBeenCalled();
       });
     });
 

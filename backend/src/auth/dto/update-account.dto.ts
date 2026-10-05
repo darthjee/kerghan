@@ -1,4 +1,4 @@
-import { IsNotEmpty, IsString } from 'class-validator';
+import { IsNotEmpty, IsOptional, IsString } from 'class-validator';
 import { UserFieldChangesDto } from './user-field-changes.dto.js';
 
 /**
@@ -12,4 +12,15 @@ export class UpdateAccountDto extends UserFieldChangesDto {
   @IsString()
   @IsNotEmpty()
     currentPassword!: string;
+
+  /**
+   * The caller's current refresh token, identifying the session to keep when
+   * `newPassword` is set — every other session of the caller is revoked. If
+   * it is missing or is not one of the caller's active tokens, all of the
+   * caller's sessions are revoked (fail safe). Ignored when the password is
+   * not being changed.
+   */
+  @IsOptional()
+  @IsString()
+    refreshToken?: string;
 }
