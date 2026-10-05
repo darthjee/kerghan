@@ -1,4 +1,4 @@
-import { randomBytes } from 'node:crypto';
+import { randomBytes, randomUUID } from 'node:crypto';
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
@@ -22,6 +22,15 @@ const DEFAULT_PERSISTENT_REFRESH_TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 
 const REFRESH_TOKEN_TTL_KEY = 'KERGHAN_REFRESH_TOKEN_TTL_MS';
 const PERSISTENT_REFRESH_TOKEN_TTL_KEY = 'KERGHAN_PERSISTENT_REFRESH_TOKEN_TTL_MS';
+
+/**
+ * The identity of a session (one chain of rotated refresh tokens): its UUID
+ * and the time its login happened. Copied onto every replacement token.
+ */
+export interface SessionIdentity {
+  sessionUuid: string;
+  startedAt: Date;
+}
 
 export interface AuthResult {
   user: User;
@@ -86,14 +95,22 @@ export class TokenService {
    * persistent TTL when `keepSignedIn` is `true` and the regular TTL
    * otherwise), and writes an `auth_sessions` bookkeeping row. Shared by the
    * password-login (`AuthService`) and device-authorization paths so both
-   * mint sessions identically.
+   * mint sessions identically. With no `session`, a new session identity is
+   * minted (fresh UUID, `startedAt` = now); on rotation the presented token's
+   * `session` is passed in and copied over, the same way `keepSignedIn` is.
    * @param {User} user - The user to mint a session for.
    * @param {boolean} [keepSignedIn] - Whether this is a persistent ("keep me
    *   signed in") session; defaults to `false`.
+   * @param {SessionIdentity} [session] - The existing session to carry over
+   *   on rotation; omitted for a new login.
    * @returns {Promise<AuthResult>} The user plus the freshly issued
    *   access/refresh token pair.
    */
-  async issueTokens(user: User, keepSignedIn = false): Promise<AuthResult> {
+  async issueTokens(
+    user: User,
+    keepSignedIn = false,
+    session?: SessionIdentity,
+  ): Promise<AuthResult> {
     const accessToken = this.jwtService.sign({
       sub: user.id,
       username: user.username,
@@ -108,6 +125,8 @@ export class TokenService {
         expiresAt: new Date(Date.now() + this.#refreshTokenTtlMs(keepSignedIn)),
         revokedAt: null,
         keepSignedIn,
+        sessionUuid: session?.sessionUuid ?? randomUUID(),
+        startedAt: session?.startedAt ?? new Date(),
       }),
     );
 

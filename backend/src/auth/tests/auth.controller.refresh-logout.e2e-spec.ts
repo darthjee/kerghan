@@ -22,6 +22,22 @@ describe('AuthController (e2e)', () => {
         .expect(401);
     });
 
+    it('keeps the session identity (session_uuid, started_at) on the rotated row', async () => {
+      const login = await loginAs(ctx.app);
+      const original = ctx.refreshTokenRepo.rows[ctx.refreshTokenRepo.rows.length - 1];
+
+      await request(ctx.app.getHttpServer())
+        .post('/auth/refresh.json')
+        .send({ refreshToken: login.body.refreshToken })
+        .expect(201);
+
+      const rotated = ctx.refreshTokenRepo.rows[ctx.refreshTokenRepo.rows.length - 1];
+
+      expect(rotated).not.toBe(original);
+      expect(rotated.sessionUuid).toBe(original.sessionUuid);
+      expect(rotated.startedAt).toEqual(original.startedAt);
+    });
+
     it('rejects an expired refresh token', async () => {
       const login = await loginAs(ctx.app);
 

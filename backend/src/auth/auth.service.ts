@@ -123,7 +123,8 @@ export class AuthService {
    * refresh-token-rotation guidance: it means someone is replaying a token
    * whose rotated successor already exists, so every other currently-active
    * refresh token belonging to that user is revoked too, forcing re-login,
-   * before the 401 is thrown. The presented token's `keepSignedIn` flag carries over to its successor.
+   * before the 401 is thrown. The presented token's `keepSignedIn` flag and
+   * session identity (`sessionUuid`, `startedAt`) carry over to its successor.
    * @param {string} refreshToken - The refresh token presented by the client.
    * @returns {Promise<AuthResult>} The user plus the newly issued token pair.
    * @throws {UnauthorizedException} When the token is unknown, expired, or already revoked.
@@ -138,7 +139,10 @@ export class AuthService {
 
     await this.refreshTokenRepository.update(tokenRow.id, { revokedAt: new Date() });
 
-    return this.tokenService.issueTokens(user, tokenRow.keepSignedIn);
+    return this.tokenService.issueTokens(user, tokenRow.keepSignedIn, {
+      sessionUuid: tokenRow.sessionUuid,
+      startedAt: tokenRow.startedAt,
+    });
   }
 
   /**

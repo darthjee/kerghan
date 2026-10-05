@@ -23,7 +23,10 @@ describe('AuthService', () => {
     revokedAt: null,
     expiresAt: new Date(Date.now() + 60_000),
     keepSignedIn: false,
+    sessionUuid: 'session-uuid-1',
+    startedAt: new Date('2026-10-01T00:00:00Z'),
   };
+  const activeSession = { sessionUuid: activeToken.sessionUuid, startedAt: activeToken.startedAt };
 
   function stubExpiredRefreshToken(): void {
     refreshTokenRepository.findOneBy.mockResolvedValue({
@@ -311,7 +314,16 @@ describe('AuthService', () => {
       it('delegates session minting to TokenService with the reloaded user, staying regular', async () => {
         await service.refresh('a-refresh-token');
 
-        expect(tokenService.issueTokens).toHaveBeenCalledWith(user, false);
+        expect(tokenService.issueTokens).toHaveBeenCalledWith(user, false, activeSession);
+      });
+
+      it('carries the presented token session identity over to the rotated token', async () => {
+        await service.refresh('a-refresh-token');
+
+        expect(tokenService.issueTokens.mock.calls[0][2]).toEqual({
+          sessionUuid: 'session-uuid-1',
+          startedAt: new Date('2026-10-01T00:00:00Z'),
+        });
       });
     });
 
@@ -324,7 +336,7 @@ describe('AuthService', () => {
       it('carries keepSignedIn: true over to the rotated token', async () => {
         await service.refresh('a-refresh-token');
 
-        expect(tokenService.issueTokens).toHaveBeenCalledWith(user, true);
+        expect(tokenService.issueTokens).toHaveBeenCalledWith(user, true, activeSession);
       });
     });
 

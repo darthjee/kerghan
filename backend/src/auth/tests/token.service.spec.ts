@@ -126,6 +126,38 @@ describe('TokenService', () => {
       expect(refreshTokenRepository.save.mock.calls[0][0].keepSignedIn).toBe(true);
     });
 
+    it('mints a fresh session UUID and startedAt when no session is given', async () => {
+      const before = Date.now();
+
+      await service.issueTokens(user);
+
+      const row = refreshTokenRepository.save.mock.calls[0][0];
+
+      expect(row.sessionUuid).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+      expect(row.startedAt).toBeInstanceOf(Date);
+      expect(row.startedAt.getTime()).toBeGreaterThanOrEqual(before);
+    });
+
+    it('mints a distinct session UUID for every new login', async () => {
+      await service.issueTokens(user);
+      await service.issueTokens(user);
+
+      const [first, second] = refreshTokenRepository.save.mock.calls.map(([row]) => row.sessionUuid);
+
+      expect(first).not.toBe(second);
+    });
+
+    it('copies the given session identity onto the new row', async () => {
+      const startedAt = new Date('2026-10-01T00:00:00Z');
+
+      await service.issueTokens(user, true, { sessionUuid: 'existing-session', startedAt });
+
+      const row = refreshTokenRepository.save.mock.calls[0][0];
+
+      expect(row.sessionUuid).toBe('existing-session');
+      expect(row.startedAt).toBe(startedAt);
+    });
+
     describe('with configured TTLs', () => {
       const configured = {
         KERGHAN_REFRESH_TOKEN_TTL_MS: '60000',
