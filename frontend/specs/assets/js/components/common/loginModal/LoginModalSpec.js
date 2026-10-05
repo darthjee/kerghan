@@ -28,6 +28,7 @@ describe('LoginModal', () => {
       email: '',
       password: '',
       passwordConfirmation: '',
+      keepSignedIn: false,
       open: false,
       mode: 'password',
       fieldErrors: {},
@@ -49,6 +50,7 @@ describe('LoginModal', () => {
       onEmailChange: jasmine.any(Function),
       onPasswordChange: jasmine.any(Function),
       onPasswordConfirmationChange: jasmine.any(Function),
+      onKeepSignedInChange: jasmine.any(Function),
     }));
   });
 
@@ -61,8 +63,17 @@ describe('LoginModal', () => {
 
     expect(event.preventDefault).toHaveBeenCalled();
     expect(LoginModalController.prototype.handleSubmit).toHaveBeenCalledWith('password', {
-      username: '', email: '', password: '', passwordConfirmation: '',
+      username: '', email: '', password: '', passwordConfirmation: '', keepSignedIn: false,
     }, '');
+  });
+
+  it('records the keep-signed-in checkbox from the event\'s checked flag', () => {
+    spyOn(LoginModalController.prototype, 'setKeepSignedIn');
+    render();
+
+    lastHandlers.onKeepSignedInChange({ target: { checked: true, value: 'on' } });
+
+    expect(LoginModalController.prototype.setKeepSignedIn).toHaveBeenCalledWith(true);
   });
 
   it('switches mode through the controller', () => {

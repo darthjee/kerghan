@@ -6,7 +6,7 @@ import useDeviceCountdown from './hooks/useDeviceCountdown.js';
 import LoginModalEvents from '../../../client/LoginModalEvents.js';
 
 const INITIAL_FIELDS = {
-  username: '', email: '', password: '', passwordConfirmation: '',
+  username: '', email: '', password: '', passwordConfirmation: '', keepSignedIn: false,
 };
 
 /**
@@ -70,6 +70,7 @@ export default function LoginModal() {
       onEmailChange: handleFieldChange('email'),
       onPasswordChange: handleFieldChange('password'),
       onPasswordConfirmationChange: handleFieldChange('passwordConfirmation'),
+      onKeepSignedInChange: (event) => controller.setKeepSignedIn(event.target.checked),
     },
   );
 }

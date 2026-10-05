@@ -52,7 +52,7 @@ describe('LoginModalController', () => {
 
       expect(setMode).toHaveBeenCalledWith('register');
       expect(setFields).toHaveBeenCalledWith({
-        username: '', email: '', password: '', passwordConfirmation: '',
+        username: '', email: '', password: '', passwordConfirmation: '', keepSignedIn: false,
       });
       expect(setFieldErrors).toHaveBeenCalledWith({});
       expect(setSubmitError).toHaveBeenCalledWith(null);
@@ -227,7 +227,7 @@ describe('LoginModalController', () => {
       await controller.handleSubmit('device', deviceFields);
 
       expect(setSubmitError).toHaveBeenCalledWith(null);
-      expect(client.createAuthorizationRequest).toHaveBeenCalledWith('foo');
+      expect(client.createAuthorizationRequest).toHaveBeenCalledWith('foo', false);
       expect(setDeviceExpiresAt).toHaveBeenCalledWith(request.expiresAt);
       expect(setResultPanel).toHaveBeenCalledWith('device:waiting');
       expect(controller.poller).toBeInstanceOf(AuthorizationRequestPoller);

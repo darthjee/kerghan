@@ -31,11 +31,12 @@ const LoginModalHelper = {
    * Render the login modal. Renders nothing visible while `state.open` is false.
    *
    * @param {{open: boolean, mode: string, username: string, email: string, password: string,
-   *   passwordConfirmation: string, fieldErrors: object, submitError: (string|null),
-   *   resultPanel: (string|null)}} state - Modal state.
+   *   passwordConfirmation: string, keepSignedIn: boolean, fieldErrors: object,
+   *   submitError: (string|null), resultPanel: (string|null)}} state - Modal state.
    * @param {{onClose: Function, onSelectMode: Function, onSubmit: Function,
    *   onUsernameChange: Function, onEmailChange: Function, onPasswordChange: Function,
-   *   onPasswordConfirmationChange: Function}} handlers - Event handlers.
+   *   onPasswordConfirmationChange: Function, onKeepSignedInChange: Function}} handlers - Event
+   *   handlers, forwarded as-is to {@link LoginModalFormsHelper}.
    * @returns {React.ReactElement} The rendered modal.
    */
   render(state, handlers) {
