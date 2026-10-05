@@ -5,6 +5,7 @@ import { AdminService } from '../admin.service.js';
 import { AuthService } from '../auth.service.js';
 import { User } from '../entities/user.entity.js';
 import { PasswordResetService } from '../password-reset.service.js';
+import { TokenService } from '../token.service.js';
 import { UserUpdateService } from '../user-update.service.js';
 
 type UserRepoMock = {
@@ -25,6 +26,7 @@ describe('AdminService', () => {
   let passwordResetService: { issueToken: jest.Mock };
   let mailService: { sendEmailTemplate: jest.Mock };
   let userUpdateService: { applyUserUpdate: jest.Mock };
+  let tokenService: { revokeUserTokens: jest.Mock };
   let service: AdminService;
 
   beforeEach(() => {
@@ -33,6 +35,7 @@ describe('AdminService', () => {
     passwordResetService = { issueToken: jest.fn() };
     mailService = { sendEmailTemplate: jest.fn() };
     userUpdateService = { applyUserUpdate: jest.fn().mockResolvedValue(undefined) };
+    tokenService = { revokeUserTokens: jest.fn().mockResolvedValue(undefined) };
 
     service = new AdminService(
       userRepository as never,
@@ -40,6 +43,7 @@ describe('AdminService', () => {
       passwordResetService as unknown as PasswordResetService,
       mailService as unknown as MailService,
       userUpdateService as unknown as UserUpdateService,
+      tokenService as unknown as TokenService,
     );
   });
 
@@ -224,6 +228,39 @@ describe('AdminService', () => {
 
         expect(result).toBe(user);
       });
+
+      it('revokes all of the target user\'s refresh tokens on a password change', async () => {
+        await service.editUser(1, { newPassword: 'brand-new-password' });
+
+        expect(tokenService.revokeUserTokens).toHaveBeenCalledWith(1);
+      });
+
+      it('revokes only after the password change is applied', async () => {
+        await service.editUser(1, { newPassword: 'brand-new-password' });
+
+        expect(userUpdateService.applyUserUpdate.mock.invocationCallOrder[0]).toBeLessThan(
+          tokenService.revokeUserTokens.mock.invocationCallOrder[0],
+        );
+      });
+
+      it('revokes all tokens, keeping none, when the admin edits their own password', async () => {
+        await service.editUser(1, { username: 'new-username', newPassword: 'brand-new-password' });
+
+        expect(tokenService.revokeUserTokens).toHaveBeenCalledTimes(1);
+        expect(tokenService.revokeUserTokens).toHaveBeenCalledWith(1);
+      });
+
+      it('revokes nothing on a username-only change', async () => {
+        await service.editUser(1, { username: 'new-username' });
+
+        expect(tokenService.revokeUserTokens).not.toHaveBeenCalled();
+      });
+
+      it('revokes nothing on an email-only change', async () => {
+        await service.editUser(1, { email: 'new-email@example.com' });
+
+        expect(tokenService.revokeUserTokens).not.toHaveBeenCalled();
+      });
     });
 
     describe('when the new username is already taken by another user', () => {
@@ -240,6 +277,14 @@ describe('AdminService', () => {
         ).rejects.toThrow(new ConflictException('Username already in use'));
 
         expect(userUpdateService.applyUserUpdate).not.toHaveBeenCalled();
+      });
+
+      it('revokes nothing, even for a password change', async () => {
+        await expect(
+          service.editUser(1, { username: 'taken-username', newPassword: 'brand-new-password' }),
+        ).rejects.toThrow(ConflictException);
+
+        expect(tokenService.revokeUserTokens).not.toHaveBeenCalled();
       });
     });
 
