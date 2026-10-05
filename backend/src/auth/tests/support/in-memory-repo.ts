@@ -100,7 +100,11 @@ export function createInMemoryRepo<T extends { id?: number }>() {
       }
       return entity;
     },
-    update: async (criteria: number | Partial<T>, partial: Partial<T>): Promise<void> => {
+    // Resolves `{ affected }` like TypeORM's `UpdateResult`, for callers that
+    // check whether anything matched (e.g. `SessionService#revoke`'s 404).
+    update: async (criteria: number | Partial<T>, partial: Partial<T>): Promise<{ affected: number }> => {
+      let affected = 0;
+
       rows.forEach((row) => {
         const matches =
           typeof criteria === 'object'
@@ -109,8 +113,11 @@ export function createInMemoryRepo<T extends { id?: number }>() {
 
         if (matches) {
           Object.assign(row, partial);
+          affected += 1;
         }
       });
+
+      return { affected };
     },
     createQueryBuilder: () => {
       let setPayload: Record<string, unknown> = {};

@@ -18,6 +18,7 @@ import { Session } from './entities/session.entity.js';
 import { User } from './entities/user.entity.js';
 import { PasswordRecoveryRequestedListener } from './events/password-recovery-requested.listener.js';
 import { PasswordResetService } from './password-reset.service.js';
+import { SessionController } from './session.controller.js';
 import { SessionService } from './session.service.js';
 import { TokenService } from './token.service.js';
 import { UserUpdateService } from './user-update.service.js';
@@ -41,7 +42,7 @@ import { UserUpdateService } from './user-update.service.js';
     ]),
     MailModule,
   ],
-  controllers: [AuthController, AdminController, AuthorizationRequestController],
+  controllers: [AuthController, AdminController, AuthorizationRequestController, SessionController],
   providers: [
     AuthService,
     AccountService,
