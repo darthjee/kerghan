@@ -7,23 +7,36 @@ import { TokenService } from '../token.service.js';
 import { repoMock, RepoMock } from './repo-mock.test-support.js';
 
 const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
+const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
+
+type Logger = { debug: jest.Mock; info: jest.Mock; warn: jest.Mock; error: jest.Mock };
+
+function buildConfigService(values: Record<string, unknown> = {}): { get: jest.Mock } {
+  return { get: jest.fn((key: string) => values[key]) };
+}
 
 describe('TokenService', () => {
   let refreshTokenRepository: RepoMock<RefreshToken>;
   let sessionRepository: RepoMock<Session>;
   let jwtService: { sign: jest.Mock };
+  let logger: Logger;
   let service: TokenService;
+
+  const buildService = (configValues: Record<string, unknown> = {}): TokenService => new TokenService(
+    refreshTokenRepository as never,
+    sessionRepository as never,
+    jwtService as unknown as JwtService,
+    buildConfigService(configValues) as never,
+    logger as never,
+  );
 
   beforeEach(() => {
     refreshTokenRepository = repoMock<RefreshToken>();
     sessionRepository = repoMock<Session>();
     jwtService = { sign: jest.fn().mockReturnValue('signed-access-token') };
+    logger = { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn() };
 
-    service = new TokenService(
-      refreshTokenRepository as never,
-      sessionRepository as never,
-      jwtService as unknown as JwtService,
-    );
+    service = buildService();
   });
 
   describe('issueTokens', () => {
@@ -69,16 +82,134 @@ describe('TokenService', () => {
       expect(saved.tokenHash).toBe(service.hashToken(result.refreshToken));
     });
 
-    it('gives the refresh token a 7-day TTL', async () => {
+    const expectTtl = async (
+      subject: TokenService,
+      keepSignedIn: boolean | undefined,
+      ttlMs: number,
+    ): Promise<void> => {
       const before = Date.now();
 
-      await service.issueTokens(user);
+      await (keepSignedIn === undefined
+        ? subject.issueTokens(user)
+        : subject.issueTokens(user, keepSignedIn));
 
-      const { expiresAt } = refreshTokenRepository.save.mock.calls[0][0];
+      const calls = refreshTokenRepository.save.mock.calls;
+      const { expiresAt } = calls[calls.length - 1][0];
       const after = Date.now();
 
-      expect(expiresAt.getTime()).toBeGreaterThanOrEqual(before + SEVEN_DAYS_MS);
-      expect(expiresAt.getTime()).toBeLessThanOrEqual(after + SEVEN_DAYS_MS);
+      expect(expiresAt.getTime()).toBeGreaterThanOrEqual(before + ttlMs);
+      expect(expiresAt.getTime()).toBeLessThanOrEqual(after + ttlMs);
+    };
+
+    it('gives the refresh token a 7-day TTL by default', async () => {
+      await expectTtl(service, undefined, SEVEN_DAYS_MS);
+    });
+
+    it('gives a regular (keepSignedIn: false) refresh token a 7-day TTL', async () => {
+      await expectTtl(service, false, SEVEN_DAYS_MS);
+    });
+
+    it('gives a persistent (keepSignedIn: true) refresh token a 30-day TTL', async () => {
+      await expectTtl(service, true, THIRTY_DAYS_MS);
+    });
+
+    it('stores keepSignedIn: false on the row when omitted', async () => {
+      await service.issueTokens(user);
+
+      expect(refreshTokenRepository.save.mock.calls[0][0].keepSignedIn).toBe(false);
+    });
+
+    it('stores keepSignedIn: true on the row for a persistent session', async () => {
+      await service.issueTokens(user, true);
+
+      expect(refreshTokenRepository.save.mock.calls[0][0].keepSignedIn).toBe(true);
+    });
+
+    describe('with configured TTLs', () => {
+      const configured = {
+        KERGHAN_REFRESH_TOKEN_TTL_MS: '60000',
+        KERGHAN_PERSISTENT_REFRESH_TOKEN_TTL_MS: '120000',
+      };
+
+      it('honors KERGHAN_REFRESH_TOKEN_TTL_MS for a regular session', async () => {
+        await expectTtl(buildService(configured), false, 60000);
+      });
+
+      it('honors KERGHAN_PERSISTENT_REFRESH_TOKEN_TTL_MS for a persistent session', async () => {
+        await expectTtl(buildService(configured), true, 120000);
+      });
+    });
+
+    describe('with non-numeric TTLs', () => {
+      const configured = {
+        KERGHAN_REFRESH_TOKEN_TTL_MS: 'abc',
+        KERGHAN_PERSISTENT_REFRESH_TOKEN_TTL_MS: 'xyz',
+      };
+
+      it('falls back to the defaults without warning', async () => {
+        const subject = buildService(configured);
+
+        await expectTtl(subject, false, SEVEN_DAYS_MS);
+        await expectTtl(subject, true, THIRTY_DAYS_MS);
+
+        expect(logger.warn).not.toHaveBeenCalled();
+      });
+    });
+
+    describe('with a zero regular TTL', () => {
+      it('falls back to the default and warns exactly once across repeated mints', async () => {
+        const subject = buildService({ KERGHAN_REFRESH_TOKEN_TTL_MS: '0' });
+
+        await expectTtl(subject, false, SEVEN_DAYS_MS);
+        await expectTtl(subject, false, SEVEN_DAYS_MS);
+        await expectTtl(subject, false, SEVEN_DAYS_MS);
+
+        expect(logger.warn).toHaveBeenCalledTimes(1);
+        expect(logger.warn).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({
+          key: 'KERGHAN_REFRESH_TOKEN_TTL_MS',
+          fallback: SEVEN_DAYS_MS,
+        }));
+      });
+    });
+
+    describe('with a negative persistent TTL', () => {
+      it('falls back to the default and warns exactly once across repeated mints', async () => {
+        const subject = buildService({ KERGHAN_PERSISTENT_REFRESH_TOKEN_TTL_MS: '-5' });
+
+        await expectTtl(subject, true, THIRTY_DAYS_MS);
+        await expectTtl(subject, true, THIRTY_DAYS_MS);
+
+        expect(logger.warn).toHaveBeenCalledTimes(1);
+        expect(logger.warn).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({
+          key: 'KERGHAN_PERSISTENT_REFRESH_TOKEN_TTL_MS',
+          fallback: THIRTY_DAYS_MS,
+        }));
+      });
+
+      it('never logs token material in the warning', async () => {
+        const subject = buildService({ KERGHAN_PERSISTENT_REFRESH_TOKEN_TTL_MS: '-5' });
+        const result = await subject.issueTokens(user, true);
+        const logged = JSON.stringify(logger.warn.mock.calls);
+
+        expect(logged).not.toContain(result.refreshToken);
+        expect(logged).not.toContain(result.accessToken);
+      });
+    });
+
+    describe('with both TTLs non-positive', () => {
+      it('warns once per key', async () => {
+        const subject = buildService({
+          KERGHAN_REFRESH_TOKEN_TTL_MS: '0',
+          KERGHAN_PERSISTENT_REFRESH_TOKEN_TTL_MS: '0',
+        });
+
+        await subject.issueTokens(user, false);
+        await subject.issueTokens(user, true);
+        await subject.issueTokens(user, false);
+        await subject.issueTokens(user, true);
+
+        expect(logger.warn).toHaveBeenCalledTimes(2);
+      });
     });
 
     it('writes an auth_sessions bookkeeping row for the user', async () => {

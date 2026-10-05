@@ -46,7 +46,8 @@ export class AuthorizationRequestController {
    * `POST /auth/authorization-requests.json`. Creates a new device-authorization
    * request for `dto.username`. Responds identically whether or not the
    * username matches a real user, per the enumeration-safety contract.
-   * @param {CreateAuthorizationRequestDto} dto - Carries the username to request authorization for.
+   * @param {CreateAuthorizationRequestDto} dto - Carries the username to request authorization for
+   *   and the optional `keepSignedIn` flag (defaults to `false`).
    * @param {Request} req - Used to capture the requesting IP and User-Agent.
    * @returns {Promise<object>} `{ uuid, pollToken, expiresAt }`.
    */
@@ -55,7 +56,7 @@ export class AuthorizationRequestController {
   async create(@Body() dto: CreateAuthorizationRequestDto, @Req() req: Request): Promise<object> {
     const { ip, userAgent } = extractClientRequestInfo(req, this.#trustedProxyHops());
 
-    return this.authorizationRequestService.create(dto.username, ip, userAgent);
+    return this.authorizationRequestService.create(dto.username, ip, userAgent, dto.keepSignedIn ?? false);
   }
 
   /**
@@ -92,7 +93,8 @@ export class AuthorizationRequestController {
    * `JwtGuard`, no `@Public()`). Lists the caller's own `open`, non-expired
    * authorization requests, newest first.
    * @param {AccessTokenPayload} user - The caller's own authenticated user, supplying the user ID.
-   * @returns {Promise<object>} `{ requests: [{ uuid, requestIp, requestUserAgent, createdAt, expiresAt }] }`.
+   * @returns {Promise<object>} `{ requests: [{ uuid, requestIp, requestUserAgent, createdAt, expiresAt,
+   *   keepSignedIn }] }`.
    */
   @Post('authorization-requests/mine.json')
   async mine(@CurrentUser() user: AccessTokenPayload): Promise<object> {

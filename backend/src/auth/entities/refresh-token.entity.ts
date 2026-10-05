@@ -12,6 +12,10 @@ import { HashedTokenBase } from './hashed-token.base.js';
  * `revokedAt` is set the moment a token is rotated (used to mint a new one)
  * or a user logs out, so a stolen/replayed token is rejected instead of
  * silently accepted.
+ *
+ * `keepSignedIn` marks a persistent ("keep me signed in") session: the token
+ * is minted with the persistent TTL instead of the regular one, and the flag
+ * is copied to the replacement token on every rotation.
  */
 @Entity('auth_refresh_tokens')
 export class RefreshToken extends HashedTokenBase {
@@ -20,4 +24,7 @@ export class RefreshToken extends HashedTokenBase {
 
   @Column({ name: 'revoked_at', type: 'datetime', nullable: true })
     revokedAt!: Date | null;
+
+  @Column({ name: 'keep_signed_in', default: false })
+    keepSignedIn!: boolean;
 }

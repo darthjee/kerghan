@@ -86,19 +86,20 @@ export class AuthService {
       new UserRegisteredEvent(user.id, user.username, user.email),
     );
 
-    return this.tokenService.issueTokens(user);
+    return this.tokenService.issueTokens(user, false);
   }
 
   /**
-   * Verifies a username/password pair and issues a fresh token pair.
-   * @param {LoginDto} dto - The login credentials.
+   * Verifies a username/password pair and issues a fresh token pair,
+   * persistent (longer refresh TTL) only when `dto.keepSignedIn` is `true`.
+   * @param {LoginDto} dto - The login credentials and optional `keepSignedIn` flag.
    * @returns {Promise<AuthResult>} The authenticated user plus access/refresh tokens.
    * @throws {UnauthorizedException} When the username is unknown or the password is wrong.
    */
   async login(dto: LoginDto): Promise<AuthResult> {
     const user = await this.#validateCredentials(dto.username, dto.password);
 
-    return this.tokenService.issueTokens(user);
+    return this.tokenService.issueTokens(user, dto.keepSignedIn ?? false);
   }
 
   /**
@@ -122,7 +123,7 @@ export class AuthService {
    * refresh-token-rotation guidance: it means someone is replaying a token
    * whose rotated successor already exists, so every other currently-active
    * refresh token belonging to that user is revoked too, forcing re-login,
-   * before the 401 is thrown.
+   * before the 401 is thrown. The presented token's `keepSignedIn` flag carries over to its successor.
    * @param {string} refreshToken - The refresh token presented by the client.
    * @returns {Promise<AuthResult>} The user plus the newly issued token pair.
    * @throws {UnauthorizedException} When the token is unknown, expired, or already revoked.
@@ -137,7 +138,7 @@ export class AuthService {
 
     await this.refreshTokenRepository.update(tokenRow.id, { revokedAt: new Date() });
 
-    return this.tokenService.issueTokens(user);
+    return this.tokenService.issueTokens(user, tokenRow.keepSignedIn);
   }
 
   /**

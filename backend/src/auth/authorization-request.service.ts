@@ -76,13 +76,15 @@ export class AuthorizationRequestService {
    * throwaway response with the same shape is returned — no row is persisted, no event fires. When
    * `username` resolves to a user already at/over the concurrent-`open` cap, the oldest one is
    * transparently evicted (set to `expired`) first — `create` never rejects because of the cap.
+   * `keepSignedIn` is stored on the row and later decides the minted session's refresh-token TTL.
    * @param {string} username - The username the requesting device asks another device to vouch for.
    * @param {string} ip - The requesting device's IP address.
    * @param {string} userAgent - The requesting device's User-Agent string.
+   * @param {boolean} [keepSignedIn] - Whether a persistent session was requested; defaults to `false`.
    * @returns {Promise<CreatedAuthorizationRequest>} The new request's UUID, plaintext poll token
    *   (only its hash is persisted), and expiry.
    */
-  async create(username: string, ip: string, userAgent: string): Promise<CreatedAuthorizationRequest> {
+  async create(username: string, ip: string, userAgent: string, keepSignedIn = false): Promise<CreatedAuthorizationRequest> {
     const user = await this.userRepository.findOneBy({ username });
     const overLimit = await this.abuseGuard.isOverCreateLimit(ip, username);
     const pollToken = randomBytes(48).toString('hex');
@@ -112,6 +114,7 @@ export class AuthorizationRequestService {
         loggedAt: null,
         authorizeFailedAttempts: 0,
         authorizeLockedUntil: null,
+        keepSignedIn,
       }),
     );
 
@@ -170,6 +173,7 @@ export class AuthorizationRequestService {
       requestUserAgent: request.requestUserAgent,
       createdAt: request.createdAt,
       expiresAt: request.expiresAt,
+      keepSignedIn: request.keepSignedIn,
     }));
   }
 
@@ -262,7 +266,7 @@ export class AuthorizationRequestService {
       return { status: 'logged' };
     }
 
-    const authResult = await this.tokenService.issueTokens(user);
+    const authResult = await this.tokenService.issueTokens(user, request.keepSignedIn);
 
     this.eventEmitter.emit('authorization-request.logged', new AuthorizationRequestLoggedEvent(request.uuid, user.id));
 

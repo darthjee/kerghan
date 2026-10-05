@@ -40,9 +40,18 @@ describe('AuthorizationRequestController (e2e)', () => {
               requestUserAgent: expect.any(String),
               createdAt: expect.any(String),
               expiresAt: expect.any(String),
+              keepSignedIn: false,
             },
           ],
         });
+      });
+
+      it('exposes the requesting device\'s keepSignedIn choice', async () => {
+        const { uuid } = await createAuthorizationRequest(ctx.app, 'darthjee', { keepSignedIn: true });
+
+        const response = await postMine(ctx.app, ownerCookie);
+
+        expect(response.body.requests).toEqual([expect.objectContaining({ uuid, keepSignedIn: true })]);
       });
 
       it("never returns a request raised against another user's username", async () => {

@@ -20,6 +20,10 @@ export type AuthorizationRequestStatus = 'open' | 'approved' | 'denied' | 'logge
  *
  * Only the SHA-256 hash of the poll token is persisted — the plaintext value
  * is returned once, in the `create` response, and never stored.
+ *
+ * `keepSignedIn` records whether the requesting device asked for a
+ * persistent ("keep me signed in") session; the winning poll mints the
+ * session's refresh token with the matching TTL.
  */
 @Entity('auth_authorization_requests')
 export class AuthorizationRequest {
@@ -69,4 +73,7 @@ export class AuthorizationRequest {
 
   @Column({ name: 'authorize_locked_until', type: 'datetime', nullable: true })
     authorizeLockedUntil!: Date | null;
+
+  @Column({ name: 'keep_signed_in', default: false })
+    keepSignedIn!: boolean;
 }

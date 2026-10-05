@@ -102,10 +102,22 @@ describe('AuthorizationRequestService', () => {
           ctx.authorizationRequestRepository.createQueryBuilder.mockReturnValue(builder);
         });
 
-        it('mints a session for the row\'s user', async () => {
+        it('mints a regular session for the row\'s user when the row did not ask to keep signed in', async () => {
           await ctx.service.poll('uuid-1', 'poll-token');
 
-          expect(ctx.tokenService.issueTokens).toHaveBeenCalledWith(user);
+          expect(ctx.tokenService.issueTokens).toHaveBeenCalledWith(user, false);
+        });
+
+        it('passes the row\'s stored keepSignedIn: true to issueTokens', async () => {
+          ctx.authorizationRequestRepository.findOneBy.mockResolvedValue({
+            ...baseRow,
+            status: 'approved',
+            keepSignedIn: true,
+          });
+
+          await ctx.service.poll('uuid-1', 'poll-token');
+
+          expect(ctx.tokenService.issueTokens).toHaveBeenCalledWith(user, true);
         });
 
         it('never writes resolvedAt as part of the claim UPDATE', async () => {

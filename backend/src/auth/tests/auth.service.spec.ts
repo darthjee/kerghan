@@ -18,7 +18,13 @@ describe('AuthService', () => {
   let passwordResetService: { recover: jest.Mock; resetPassword: jest.Mock };
   let service: AuthService;
 
-  const activeToken = { id: 10, userId: 1, revokedAt: null, expiresAt: new Date(Date.now() + 60_000) };
+  const activeToken = {
+    id: 10,
+    userId: 1,
+    revokedAt: null,
+    expiresAt: new Date(Date.now() + 60_000),
+    keepSignedIn: false,
+  };
 
   function stubExpiredRefreshToken(): void {
     refreshTokenRepository.findOneBy.mockResolvedValue({
@@ -85,10 +91,22 @@ describe('AuthService', () => {
         expect(userRepository.findOneBy).toHaveBeenCalledWith({ username: 'darthjee' });
       });
 
-      it('delegates session minting to TokenService with the authenticated user', async () => {
+      it('delegates session minting to TokenService as a regular session when keepSignedIn is omitted', async () => {
         await service.login({ username: 'darthjee', password: 'correct-password' });
 
-        expect(tokenService.issueTokens).toHaveBeenCalledWith(user);
+        expect(tokenService.issueTokens).toHaveBeenCalledWith(user, false);
+      });
+
+      it('mints a regular session when keepSignedIn is false', async () => {
+        await service.login({ username: 'darthjee', password: 'correct-password', keepSignedIn: false });
+
+        expect(tokenService.issueTokens).toHaveBeenCalledWith(user, false);
+      });
+
+      it('mints a persistent session when keepSignedIn is true', async () => {
+        await service.login({ username: 'darthjee', password: 'correct-password', keepSignedIn: true });
+
+        expect(tokenService.issueTokens).toHaveBeenCalledWith(user, true);
       });
     });
 
@@ -166,6 +184,7 @@ describe('AuthService', () => {
 
         expect(tokenService.issueTokens).toHaveBeenCalledWith(
           expect.objectContaining({ username: 'darthjee', isAdmin: false }),
+          false,
         );
       });
 
@@ -289,10 +308,23 @@ describe('AuthService', () => {
         expect(result.refreshToken).not.toBe('a-refresh-token');
       });
 
-      it('delegates session minting to TokenService with the reloaded user', async () => {
+      it('delegates session minting to TokenService with the reloaded user, staying regular', async () => {
         await service.refresh('a-refresh-token');
 
-        expect(tokenService.issueTokens).toHaveBeenCalledWith(user);
+        expect(tokenService.issueTokens).toHaveBeenCalledWith(user, false);
+      });
+    });
+
+    describe('when the presented refresh token belongs to a persistent session', () => {
+      beforeEach(() => {
+        refreshTokenRepository.findOneBy.mockResolvedValue({ ...activeToken, keepSignedIn: true });
+        userRepository.findOneBy.mockResolvedValue(user);
+      });
+
+      it('carries keepSignedIn: true over to the rotated token', async () => {
+        await service.refresh('a-refresh-token');
+
+        expect(tokenService.issueTokens).toHaveBeenCalledWith(user, true);
       });
     });
 

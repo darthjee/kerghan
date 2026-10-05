@@ -53,6 +53,45 @@ describe('AuthController (e2e)', () => {
     });
   });
 
+  describe('keepSignedIn', () => {
+    const login = (body: Record<string, unknown>): request.Test => request(ctx.app.getHttpServer())
+      .post('/auth/login.json')
+      .send({ username: 'darthjee', password: 'my-password', ...body });
+
+    const lastRefreshToken = (): { keepSignedIn: boolean; expiresAt: Date } => {
+      const { rows } = ctx.refreshTokenRepo;
+
+      return rows[rows.length - 1] as never;
+    };
+
+    it('accepts keepSignedIn: true, minting a persistent session with an unchanged body', async () => {
+      const response = await login({ keepSignedIn: true }).expect(201);
+
+      expect(Object.keys(response.body).sort()).toEqual(['refreshToken', 'user']);
+      expect(lastRefreshToken().keepSignedIn).toBe(true);
+    });
+
+    it('accepts an omitted keepSignedIn, minting a regular session', async () => {
+      const response = await login({}).expect(201);
+
+      expect(Object.keys(response.body).sort()).toEqual(['refreshToken', 'user']);
+      expect(lastRefreshToken().keepSignedIn).toBe(false);
+    });
+
+    it('accepts keepSignedIn: false, minting a regular session', async () => {
+      await login({ keepSignedIn: false }).expect(201);
+
+      expect(lastRefreshToken().keepSignedIn).toBe(false);
+    });
+
+    it.each([['the string "true"', 'true'], ['the number 1', 1]])(
+      'rejects %s with 400',
+      async (_label, value) => {
+        await login({ keepSignedIn: value }).expect(400);
+      },
+    );
+  });
+
   describe('oversized request body', () => {
     it('answers 413 with the standard body, not a 500', async () => {
       // Nest's default JSON body-parser limit is 100kb.

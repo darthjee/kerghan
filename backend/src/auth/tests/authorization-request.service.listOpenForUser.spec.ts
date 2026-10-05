@@ -34,8 +34,19 @@ describe('AuthorizationRequestService', () => {
           requestUserAgent: 'curl/8.0',
           createdAt: openRow.createdAt,
           expiresAt: openRow.expiresAt,
+          keepSignedIn: false,
         },
       ]);
+    });
+
+    it('maps the row\'s keepSignedIn flag', async () => {
+      ctx.authorizationRequestRepository.find.mockResolvedValue([
+        buildFakeAuthorizationRequest({ uuid: 'uuid-persistent', keepSignedIn: true }),
+      ]);
+
+      const [result] = await ctx.service.listOpenForUser(1);
+
+      expect(result.keepSignedIn).toBe(true);
     });
 
     it('returns an empty array when nothing matches (userId: null / other users / expired / non-open excluded by the WHERE clause)', async () => {

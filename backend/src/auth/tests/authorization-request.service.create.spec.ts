@@ -30,6 +30,28 @@ describe('AuthorizationRequestService', () => {
         );
       });
 
+      it('stores keepSignedIn: false when omitted', async () => {
+        await ctx.service.create('darthjee', '203.0.113.1', 'curl/8.0');
+
+        expect(ctx.authorizationRequestRepository.save).toHaveBeenCalledWith(
+          expect.objectContaining({ keepSignedIn: false }),
+        );
+      });
+
+      it('stores keepSignedIn: true when requested', async () => {
+        await ctx.service.create('darthjee', '203.0.113.1', 'curl/8.0', true);
+
+        expect(ctx.authorizationRequestRepository.save).toHaveBeenCalledWith(
+          expect.objectContaining({ keepSignedIn: true }),
+        );
+      });
+
+      it('keeps the { uuid, pollToken, expiresAt } response shape when keepSignedIn is true', async () => {
+        const result = await ctx.service.create('darthjee', '203.0.113.1', 'curl/8.0', true);
+
+        expect(Object.keys(result).sort()).toEqual(['expiresAt', 'pollToken', 'uuid']);
+      });
+
       it('only persists the SHA-256 hash of the poll token', async () => {
         const result = await ctx.service.create('darthjee', '203.0.113.1', 'curl/8.0');
 
