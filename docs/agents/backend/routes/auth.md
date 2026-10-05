@@ -20,11 +20,15 @@ device-authorization routes; both controllers are thin delegation layers.
 | --- | --- |
 | Controller | `AuthController` |
 | Auth | `@Public()` |
-| Request body | `LoginDto` — `{ username: string, password: string }` |
+| Request body | `LoginDto` — `{ username: string, password: string, keepSignedIn?: boolean }` |
 | Success response | `{ user, refreshToken }` + sets `access_token` cookie |
 | HTTP status | `200` (default) |
 
 `user` is `{ id, username, email }` — `passwordDigest` is never serialized.
+
+`keepSignedIn` is a strict optional boolean (omitted → `false`; any non-boolean such as `"true"`
+or `1` → `400`). `true` mints a persistent refresh token (`KERGHAN_PERSISTENT_REFRESH_TOKEN_TTL_MS`,
+default 30 days) whose flag is carried over on every refresh; see `docs/agents/modules/auth.md`.
 
 ### `POST /auth/register.json`
 
@@ -69,14 +73,16 @@ Revokes the refresh token server-side and clears the `access_token` cookie.
 | --- | --- |
 | Controller | `AuthorizationRequestController` |
 | Auth | `@Public()` |
-| Request body | `CreateAuthorizationRequestDto` — `{ username: string }` |
+| Request body | `CreateAuthorizationRequestDto` — `{ username: string, keepSignedIn?: boolean }` |
 | Success response | `{ uuid, pollToken, expiresAt }` |
 | HTTP status | `200` (default) |
 
 Creates a device-authorization request. Responds identically whether or not `username` matches a
 real account (enumeration safety) — see `docs/agents/modules/auth.md`'s "Device-authorization
 flow" for the full enumeration-safety and rate-limit contract. `pollToken` is returned once here
-and never stored (only its SHA-256 hash is persisted).
+and never stored (only its SHA-256 hash is persisted). `keepSignedIn` follows the same strict
+optional-boolean rule as on `POST /auth/login.json`; it is stored on the request and applied to the
+session minted by the winning `approved` poll.
 
 ### `POST /auth/authorization-requests/:uuid/poll.json`
 
@@ -101,7 +107,7 @@ login/register/refresh. Every other poll of an already-claimed request gets `{ s
 | Controller | `AuthorizationRequestController` |
 | Auth | Default `JwtGuard` (authenticated, no `@AdminOnly()`) |
 | Request body | — |
-| Success response | `{ requests: [{ uuid, requestIp, requestUserAgent, createdAt, expiresAt }] }` |
+| Success response | `{ requests: [{ uuid, requestIp, requestUserAgent, createdAt, expiresAt, keepSignedIn }] }` |
 | HTTP status | `200` (default) |
 
 Lists the caller's own `open`, non-expired authorization requests, newest first. The caller's id

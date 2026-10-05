@@ -16,7 +16,7 @@ routing convention (`docs/agents/architecture/backend.md`):
 
 | Route | Body | Response |
 |---|---|---|
-| `POST /auth/login.json` | `{ username, password }` | `{ user, refreshToken }` + `access_token` cookie |
+| `POST /auth/login.json` | `{ username, password, keepSignedIn? }` | `{ user, refreshToken }` + `access_token` cookie |
 | `POST /auth/register.json` | `{ username, email, password }` | `{ user, refreshToken }` + `access_token` cookie |
 | `POST /auth/refresh.json` | `{ refreshToken }` | `{ user, refreshToken }` + `access_token` cookie |
 | `DELETE /auth/logoff.json` | `{ refreshToken }` | `204 No Content`, clears the `access_token` cookie |
@@ -75,7 +75,8 @@ table, the accepted residual risks and the rules future changes must keep.
   `passwordDigest`, `isAdmin` (boolean, default `false`), `createdAt`, `updatedAt`.
 - `auth_refresh_tokens` (`entities/refresh-token.entity.ts`) — `id`, `tokenHash` (SHA-256 of the
   token, unique — the plaintext value is returned to the client once and never stored),
-  `userId` (logical FK), `issuedAt`, `expiresAt`, `revokedAt`.
+  `userId` (logical FK), `issuedAt`, `expiresAt`, `revokedAt`, `keepSignedIn` (`keep_signed_in`,
+  boolean, default `false` — whether the token is a persistent "keep me signed in" one).
 - `auth_sessions` (`entities/session.entity.ts`) — `id`, `userId` (logical FK), `createdAt`,
   `lastSeenAt`. Bookkeeping only (touched on every token issuance) — not itself an
   authorization gate; see "JWT/refresh-token flow" below for what actually invalidates access.
@@ -111,8 +112,16 @@ rather than an edit to the seed migration's `INSERT`, since the seed migration r
   authorization" below. It is (re)issued on every login/register/refresh, so a role change (an
   admin demotion, in particular) takes effect on that user's next refresh — and immediately for
   anything that re-logs in — rather than instantly.
-- **Refresh token**: a random 48-byte hex string, 7 day expiry, returned in the response body
-  and persisted only as a SHA-256 hash. **Rotated on every use**: `POST /auth/refresh.json`
+- **Refresh token**: a random 48-byte hex string, returned in the response body and persisted
+  only as a SHA-256 hash. Its expiry depends on the session's `keepSignedIn` choice (optional
+  strict boolean on `POST /auth/login.json` and `POST /auth/authorization-requests.json`,
+  default `false`; register always mints a regular token): regular tokens use
+  `KERGHAN_REFRESH_TOKEN_TTL_MS` (default 7 days), `keepSignedIn` tokens use
+  `KERGHAN_PERSISTENT_REFRESH_TOKEN_TTL_MS` (default 30 days). Both are read on every mint (see
+  `docs/agents/environment-variables.md`). Rotation carries the presented token's `keepSignedIn`
+  over to the new one with a fresh TTL, so an active persistent session renews indefinitely (no
+  absolute cap); a regular session cannot be upgraded in place. Accepted risk: the client keeps
+  the token in `localStorage` (#324). **Rotated on every use**: `POST /auth/refresh.json`
   marks the presented token's `revokedAt` and issues a brand new pair — replaying an
   already-rotated (or logged-out) refresh token is rejected with `401`, verified end-to-end in
   `auth/tests/auth.controller.e2e-spec.ts`. Replaying a token that's specifically
@@ -143,7 +152,9 @@ into `auth_users`, `NULL` when `username` didn't resolve to a real user — such
 approved), `status` (the state machine below), `pollTokenHash` (unique, SHA-256 of the poll
 token), `requestIp`/`requestUserAgent` (captured at creation), `approvedByUserId`, `createdAt`/
 `expiresAt`/`resolvedAt`/`loggedAt`, and the hardening columns `authorizeFailedAttempts`/
-`authorizeLockedUntil` (see "Hardening limits" below).
+`authorizeLockedUntil` (see "Hardening limits" below), and `keepSignedIn` (`keep_signed_in`,
+boolean, default `false` — the requesting device's "keep me signed in" choice, applied to the
+token minted by the winning poll; the approver sees it but cannot change it).
 
 ### Device-authorization routes
 
@@ -154,9 +165,9 @@ authenticated routes in the codebase), with the caller's own user id read from `
 
 | Route | Auth | Body | Response |
 |---|---|---|---|
-| `POST /auth/authorization-requests.json` | `@Public()` | `{ username }` | `{ uuid, pollToken, expiresAt }` |
+| `POST /auth/authorization-requests.json` | `@Public()` | `{ username, keepSignedIn? }` | `{ uuid, pollToken, expiresAt }` |
 | `POST /auth/authorization-requests/:uuid/poll.json` | `@Public()` | `{ pollToken }` | `{ status }`, plus `user`/`refreshToken` + the `access_token` cookie on the winning `approved` poll |
-| `POST /auth/authorization-requests/mine.json` | `JwtGuard` | — | `{ requests: [{ uuid, requestIp, requestUserAgent, createdAt, expiresAt }] }` |
+| `POST /auth/authorization-requests/mine.json` | `JwtGuard` | — | `{ requests: [{ uuid, requestIp, requestUserAgent, createdAt, expiresAt, keepSignedIn }] }` |
 | `POST /auth/authorization-requests/:uuid/authorize.json` | `JwtGuard` | `{ password }` | `{ authorized: true }` |
 | `POST /auth/authorization-requests/:uuid/deny.json` | `JwtGuard` | — | `{ denied: true }` |
 
