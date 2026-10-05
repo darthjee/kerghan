@@ -33,14 +33,20 @@ const AccountsClient = {
   },
 
   /**
-   * Log in with a username and password.
+   * Log in with a username and password. `keepSignedIn` is always sent as a strict boolean
+   * (`undefined` becomes `false`), since the backend rejects non-boolean values.
    *
-   * @param {{username: string, password: string}} credentials - Login credentials.
+   * @param {{username: string, password: string, keepSignedIn?: boolean}} credentials - Login
+   *   credentials, plus whether the session should outlive the default TTL.
    * @returns {Promise<{user: object, refreshToken: string}>} The logged-in user and its
    *   refresh token.
    */
-  async login({ username, password }) {
-    const result = await ApiClient.postJson('/auth/login.json', { username, password });
+  async login({ username, password, keepSignedIn }) {
+    const result = await ApiClient.postJson('/auth/login.json', {
+      username,
+      password,
+      keepSignedIn: Boolean(keepSignedIn),
+    });
 
     AuthSession.set(result.refreshToken);
 
@@ -127,14 +133,20 @@ const AccountsClient = {
    * Open an authorization request so an already-logged-in device can approve this login.
    * Unlike {@link AccountsClient.login}/{@link AccountsClient.register}, this never touches
    * `AuthSession` — this flow never issues a refresh token. The response shape is identical
-   * for an unknown username (enumeration-safety).
+   * for an unknown username (enumeration-safety). `keepSignedIn` is always sent as a strict
+   * boolean, since the backend rejects non-boolean values.
    *
    * @param {string} username - The username attempting to log in.
+   * @param {boolean} [keepSignedIn=false] - Whether the approved session should be a
+   *   long-lived "keep me signed in" session.
    * @returns {Promise<{uuid: string, pollToken: string, expiresAt: string}>} The request
    *   identifier, the token used to poll it, and its ISO-8601 expiry timestamp.
    */
-  async createAuthorizationRequest(username) {
-    return ApiClient.postJson('/auth/authorization-requests.json', { username });
+  async createAuthorizationRequest(username, keepSignedIn = false) {
+    return ApiClient.postJson('/auth/authorization-requests.json', {
+      username,
+      keepSignedIn: Boolean(keepSignedIn),
+    });
   },
 
   /**
@@ -170,8 +182,8 @@ const AccountsClient = {
    * `AuthSession` — this flow never issues a refresh token.
    *
    * @returns {Promise<{requests: Array<{uuid: string, requestIp: string,
-   *   requestUserAgent: string, createdAt: string, expiresAt: string}>}>} The caller's open
-   *   authorization requests.
+   *   requestUserAgent: string, createdAt: string, expiresAt: string,
+   *   keepSignedIn: boolean}>}>} The caller's open authorization requests.
    */
   async listAuthorizationRequests() {
     return ApiClient.postJson('/auth/authorization-requests/mine.json', {});

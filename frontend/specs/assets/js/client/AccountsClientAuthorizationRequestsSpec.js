@@ -17,8 +17,20 @@ describe('AccountsClient authorization requests', () => {
 
       expect(ApiClient.postJson).toHaveBeenCalledWith('/auth/authorization-requests.json', {
         username: 'foo',
+        keepSignedIn: false,
       });
       expect(response).toEqual(request);
+    });
+
+    it('posts keepSignedIn: true when it is requested', async () => {
+      spyOn(ApiClient, 'postJson').and.resolveTo(request);
+
+      await AccountsClient.createAuthorizationRequest('foo', true);
+
+      expect(ApiClient.postJson).toHaveBeenCalledWith('/auth/authorization-requests.json', {
+        username: 'foo',
+        keepSignedIn: true,
+      });
     });
 
     it('does not touch the stored refresh token', async () => {

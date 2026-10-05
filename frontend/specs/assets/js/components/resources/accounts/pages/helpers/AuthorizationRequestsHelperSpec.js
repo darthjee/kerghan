@@ -45,6 +45,33 @@ describe('AuthorizationRequestsHelper', () => {
       expect(page.contains('No pending authorization requests.')).toBeTrue();
     });
 
+    describe('keep-signed-in badge', () => {
+      const buildRequest = (overrides) => ({
+        uuid: 'req-uuid',
+        requestIp: '127.0.0.1',
+        requestUserAgent: 'Mozilla/5.0',
+        createdAt: new Date().toISOString(),
+        ...overrides,
+      });
+
+      it('renders the badge for a request with keepSignedIn true', () => {
+        const page = renderPage(buildState({ requests: [buildRequest({ keepSignedIn: true })] }));
+
+        expect(page.containsElement('span', 'Keep signed in')).toBeTrue();
+      });
+
+      [
+        ['false', { keepSignedIn: false }],
+        ['missing', {}],
+      ].forEach(([label, overrides]) => {
+        it(`does not render the badge when keepSignedIn is ${label}`, () => {
+          const page = renderPage(buildState({ requests: [buildRequest(overrides)] }));
+
+          expect(page.contains('Keep signed in')).toBeFalse();
+        });
+      });
+    });
+
     describe('with open requests', () => {
       const requests = [{
         uuid: 'req-uuid',

@@ -7,7 +7,7 @@ import { redirectHome } from '../../../../utils/routing/redirects.js';
 
 /** Every field any mode can hold; switching modes resets to exactly this. */
 const INITIAL_FIELDS = {
-  username: '', email: '', password: '', passwordConfirmation: '',
+  username: '', email: '', password: '', passwordConfirmation: '', keepSignedIn: false,
 };
 
 /** The modes the modal can be in. */
@@ -88,6 +88,16 @@ export default class LoginModalController {
   }
 
   /**
+   * Record the "Keep me signed in" checkbox state, keeping every other field untouched.
+   *
+   * @param {boolean} checked - Whether the checkbox is checked.
+   * @returns {void} Nothing.
+   */
+  setKeepSignedIn(checked) {
+    this.setFields((current) => ({ ...current, keepSignedIn: checked }));
+  }
+
+  /**
    * Stop and drop the active authorization-request poller, if any. Null-safe and idempotent —
    * safe to call when no poll is in progress.
    *
@@ -122,7 +132,8 @@ export default class LoginModalController {
    * Password-mode submit: authenticate against the backend, converging on the shared success
    * handler, or set a submit-error message on failure — same shape as today's `LoginController`.
    *
-   * @param {{username: string, password: string}} fields - Current form field values.
+   * @param {{username: string, password: string, keepSignedIn: boolean}} fields - Current form
+   *   field values; `keepSignedIn` is forwarded to the login request.
    * @returns {Promise<void>} Resolves once submission handling finishes.
    */
   async #submitPassword(fields) {
@@ -139,7 +150,7 @@ export default class LoginModalController {
    * Register-mode submit: run the shared registration validation and skip the API call when it
    * fails; on a clean form, register (which also logs in) and converge on the shared success
    * handler, or set a submit-error message on failure — same shape as today's
-   * `RegisterController`.
+   * `RegisterController`. `keepSignedIn` is never sent: `register` picks only its own fields.
    *
    * @param {{username: string, email: string, password: string,
    *   passwordConfirmation: string}} fields - Current form field values.
@@ -218,15 +229,16 @@ export default class LoginModalController {
    * success handler; any other terminal status routes through {@link #handleDeviceRejection}. A
    * failed request keeps the user on the form with a submit-error message and starts no poller.
    *
-   * @param {{username: string}} fields - Current form field values.
+   * @param {{username: string, keepSignedIn: boolean}} fields - Current form field values;
+   *   `keepSignedIn` is forwarded to the authorization request.
    * @returns {Promise<void>} Resolves once the request is opened and polling has started.
    */
-  async #submitDevice({ username }) {
+  async #submitDevice({ username, keepSignedIn = false }) {
     this.setSubmitError(null);
 
     let request;
     try {
-      request = await this.client.createAuthorizationRequest(username);
+      request = await this.client.createAuthorizationRequest(username, keepSignedIn);
     } catch (error) {
       this.setSubmitError(error.message);
       return;
