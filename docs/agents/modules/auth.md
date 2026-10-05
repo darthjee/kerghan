@@ -139,7 +139,11 @@ rather than an edit to the seed migration's `INSERT`, since the seed migration r
   forcing re-login. Expiry is checked first, and a token revoked for any other reason gets a
   plain `401` with no side effects, so an intentionally revoked device (or an attacker holding
   its stolen token) can't force-logout the user's other sessions. The replay response still
-  revokes every token of the user, not just the replayed session's chain.
+  revokes every token of the user, not just the replayed session's chain. The rotation write is
+  conditional (`UPDATE ... WHERE id = ? AND revoked_at IS NULL`): if a concurrent logout,
+  session revoke, password change or second refresh revoked the token after it was read, the
+  update affects no row and the refresh answers a plain `401` without issuing tokens, so the
+  other revocation's reason is never overwritten and two racing refreshes can't both succeed.
 - **Revocation reasons** (`RevokedReason` in `entities/refresh-token.entity.ts`), set by every
   revocation path: `rotated` (`AuthService#refresh`), `logout` (`AuthService#logout`),
   `user_revoked` (`SessionService#revoke`/`#revokeOthers`), `password_change` (My Account),
@@ -149,8 +153,11 @@ rather than an edit to the seed migration's `INSERT`, since the seed migration r
   explicitly. Rows already revoked when the column was added were backfilled as `rotated`
   (`database/migrations/20261005120018-auth-add-refresh-tokens-revoked-reason.ts`): rotation
   and logout can't be told apart retroactively, so this keeps the replay detection they had
-  before, bounded by their (now first-checked) expiry; a revoked row with a `NULL` reason is
-  treated like any non-rotation revocation (plain `401`).
+  before, bounded by their (now first-checked) expiry. Deploy-time trade-off: a token logged
+  out (or otherwise revoked) before this migration is indistinguishable from a rotated one, so
+  presenting it still triggers replay detection (revoking all of the user's sessions) until it
+  expires — up to 7 days after issue, or 30 for keep-signed-in tokens (the default TTLs). A
+  revoked row with a `NULL` reason is treated like any non-rotation revocation (plain `401`).
 - **Logout**: `DELETE /auth/logoff.json` sets `revokedAt` (reason `logout`) on the matching
   refresh token — only if it is still unrevoked, so logging out with an already-rotated token
   never overwrites its `rotated` reason — and clears the `access_token` cookie. The access token itself stays valid (stateless JWT, not
