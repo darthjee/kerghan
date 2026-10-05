@@ -18,6 +18,8 @@ export interface OpenAuthorizationRequest {
   requestUserAgent: string;
   createdAt: Date;
   expiresAt: Date;
+  /** Whether the requesting device asked for a persistent ("keep me signed in") session. */
+  keepSignedIn: boolean;
 }
 
 /**

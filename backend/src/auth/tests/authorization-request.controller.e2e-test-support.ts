@@ -88,13 +88,15 @@ export async function fillCreateLimit(
 }
 
 // Raises an authorization request for `username` against `app` and returns its `uuid`/`pollToken`.
+// `extra` is merged into the request body (e.g. `{ keepSignedIn: true }`).
 export async function createAuthorizationRequest(
   app: INestApplication,
   username = 'darthjee',
+  extra: Record<string, unknown> = {},
 ): Promise<{ uuid: string; pollToken: string }> {
   const response = await request(app.getHttpServer())
     .post('/auth/authorization-requests.json')
-    .send({ username })
+    .send({ username, ...extra })
     .expect(201);
 
   return response.body;

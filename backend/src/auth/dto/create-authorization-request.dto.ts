@@ -1,4 +1,4 @@
-import { IsNotEmpty, IsString, MaxLength } from 'class-validator';
+import { IsBoolean, IsNotEmpty, IsOptional, IsString, MaxLength } from 'class-validator';
 
 // Comfortably fits any real username (matches `User#username`'s default `varchar(255)` column)
 // while rejecting oversized values before they ever reach `create`'s DB/rate-limit checks.
@@ -10,4 +10,12 @@ export class CreateAuthorizationRequestDto {
   @IsNotEmpty()
   @MaxLength(MAX_USERNAME_LENGTH)
     username!: string;
+
+  /**
+   * Requests a persistent ("keep me signed in") session once approved.
+   * Strictly a JSON boolean — `"true"`/`1` are rejected with `400`.
+   */
+  @IsOptional()
+  @IsBoolean()
+    keepSignedIn?: boolean;
 }

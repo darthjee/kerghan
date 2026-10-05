@@ -95,6 +95,7 @@ export function buildFakeAuthorizationRequest(overrides: Partial<AuthorizationRe
     loggedAt: null,
     authorizeFailedAttempts: 0,
     authorizeLockedUntil: null,
+    keepSignedIn: false,
     ...overrides,
   };
 }
