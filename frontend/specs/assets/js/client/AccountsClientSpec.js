@@ -26,7 +26,14 @@ describe('AccountsClient', () => {
       name: '.login',
       call: () => AccountsClient.login({ username: 'foo', password: 'secret' }),
       endpoint: '/auth/login.json',
-      payload: { username: 'foo', password: 'secret' },
+      payload: { username: 'foo', password: 'secret', keepSignedIn: false },
+      refreshToken: 'refresh-token',
+    },
+    {
+      name: '.login with keepSignedIn',
+      call: () => AccountsClient.login({ username: 'foo', password: 'secret', keepSignedIn: true }),
+      endpoint: '/auth/login.json',
+      payload: { username: 'foo', password: 'secret', keepSignedIn: true },
       refreshToken: 'refresh-token',
     },
     {
