@@ -1,12 +1,12 @@
 import { NotFoundException, UnauthorizedException } from '@nestjs/common';
-import { IsNull, MoreThan } from 'typeorm';
+import { IsNull, MoreThan, Not } from 'typeorm';
 import { RefreshToken } from '../entities/refresh-token.entity.js';
 import { SessionService } from '../session.service.js';
 import { repoMock, RepoMock } from './repo-mock.test-support.js';
 
 describe('SessionService', () => {
   let refreshTokenRepository: RepoMock<RefreshToken> & { find: jest.Mock };
-  let tokenService: { hashToken: jest.Mock; revokeUserTokens: jest.Mock };
+  let tokenService: { hashToken: jest.Mock };
   let service: SessionService;
 
   const startedAt = new Date('2026-10-01T00:00:00Z');
@@ -29,7 +29,6 @@ describe('SessionService', () => {
     refreshTokenRepository = { ...repoMock<RefreshToken>(), find: jest.fn() };
     tokenService = {
       hashToken: jest.fn((token: string) => `hashed:${token}`),
-      revokeUserTokens: jest.fn(),
     };
 
     service = new SessionService(refreshTokenRepository as never, tokenService as never);
@@ -104,13 +103,17 @@ describe('SessionService', () => {
   });
 
   describe('revokeOthers', () => {
-    it('revokes every other token of the user, keeping the presented one', async () => {
-      refreshTokenRepository.findOneBy.mockResolvedValue(buildRow());
+    it('revokes every other session of the user, keeping the current one by its sessionUuid', async () => {
+      const row = buildRow();
+      refreshTokenRepository.findOneBy.mockResolvedValue(row);
 
       await service.revokeOthers(7, 'current-token');
 
       expect(refreshTokenRepository.findOneBy).toHaveBeenCalledWith({ tokenHash: 'hashed:current-token' });
-      expect(tokenService.revokeUserTokens).toHaveBeenCalledWith(7, 'user_revoked', 'current-token');
+      expect(refreshTokenRepository.update).toHaveBeenCalledWith(
+        { userId: 7, sessionUuid: Not(row.sessionUuid), revokedAt: IsNull() },
+        { revokedAt: expect.any(Date), revokedReason: 'user_revoked' },
+      );
     });
 
     const invalidCases: [string, RefreshToken | null][] = [
@@ -125,7 +128,6 @@ describe('SessionService', () => {
 
       await expect(service.revokeOthers(7, 'current-token')).rejects.toThrow(UnauthorizedException);
 
-      expect(tokenService.revokeUserTokens).not.toHaveBeenCalled();
       expect(refreshTokenRepository.update).not.toHaveBeenCalled();
     });
   });

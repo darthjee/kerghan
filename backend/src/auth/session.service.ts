@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException, UnauthorizedException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { IsNull, MoreThan, Repository } from 'typeorm';
+import { IsNull, MoreThan, Not, Repository } from 'typeorm';
 import { RefreshToken, RevokedReason } from './entities/refresh-token.entity.js';
 import { TokenService } from './token.service.js';
 
@@ -33,8 +33,7 @@ export class SessionService {
 
   /**
    * @param {Repository<RefreshToken>} refreshTokenRepository - The refresh-token repository.
-   * @param {TokenService} tokenService - Hashes presented tokens and revokes
-   *   a user's other tokens.
+   * @param {TokenService} tokenService - Hashes presented tokens.
    */
   constructor(
     @InjectRepository(RefreshToken) refreshTokenRepository: Repository<RefreshToken>,
@@ -95,7 +94,10 @@ export class SessionService {
    * Revokes every session of the user except the current one (reason
    * `user_revoked`). The presented token must be one of the user's active
    * tokens; otherwise nothing is revoked, so this never falls back to
-   * revoking every session.
+   * revoking every session. The current session is kept by its
+   * `sessionUuid`, not by the presented token's hash, so a concurrent
+   * rotation of the current session (whose new token has a different hash)
+   * is never revoked by mistake.
    * @param {number} userId - The caller's own user ID.
    * @param {string} refreshToken - The caller's refresh token, identifying
    *   the session to keep.
@@ -112,10 +114,13 @@ export class SessionService {
       throw new UnauthorizedException('Invalid or expired refresh token');
     }
 
-    await this.tokenService.revokeUserTokens(userId, RevokedReason.USER_REVOKED, refreshToken);
+    await this.refreshTokenRepository.update(
+      { userId, sessionUuid: Not(row.sessionUuid), revokedAt: IsNull() },
+      { revokedAt: new Date(), revokedReason: RevokedReason.USER_REVOKED },
+    );
   }
 
-  #isActiveOwnToken(row: RefreshToken | null, userId: number): boolean {
+  #isActiveOwnToken(row: RefreshToken | null, userId: number): row is RefreshToken {
     return !!row && row.userId === userId && !row.revokedAt && row.expiresAt > new Date();
   }
 }

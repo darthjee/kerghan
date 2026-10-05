@@ -174,6 +174,19 @@ describe('SessionController (e2e)', () => {
       await refreshWith(ctx.app, refreshed.body.refreshToken).expect(201);
     });
 
+    it('keeps the current session, identified by its rotated token', async () => {
+      const id = await sessionIdOf(first);
+      const rotated = await refreshWith(ctx.app, first.refreshToken).expect(201);
+      const current = { ...first, refreshToken: rotated.body.refreshToken };
+
+      await post(ctx.app, '/auth/sessions/revoke-others.json', first, { refreshToken: current.refreshToken })
+        .expect(201);
+
+      const { sessions } = (await listSessions(ctx.app, current)).body;
+
+      expect(sessions).toEqual([expect.objectContaining({ id, current: true })]);
+    });
+
     it.each([
       ['an unknown', (): string => 'not-a-real-token'],
       ['another user\'s', (): string => other.refreshToken],
