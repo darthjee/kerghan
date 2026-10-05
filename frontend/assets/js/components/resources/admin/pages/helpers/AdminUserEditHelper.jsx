@@ -1,13 +1,16 @@
 import AccountEditFormHelper from '../../../../common/forms/helpers/AccountEditFormHelper.jsx';
 
+const PASSWORD_HINT = 'Changing the password signs the user out of all sessions.';
+
 /**
  * Rendering helper for the Admin User Edit page.
  */
 const AdminUserEditHelper = {
   /**
    * Render the Admin User Edit page: editable username/email fields, a change-password
-   * section, a save action, and inline error/success display. Unlike `MyAccountHelper`, there is
-   * no current-password field — this page is admin-only and ungated. The shared markup is
+   * section (with a hint that a password change signs the user out of all sessions), a save
+   * action, and inline error/success display. Unlike `MyAccountHelper`, there is no
+   * current-password field — this page is admin-only and ungated. The shared markup is
    * rendered by {@link AccountEditFormHelper}.
    *
    * @param {{username: string, email: string, newPassword: string,
@@ -20,6 +23,7 @@ const AdminUserEditHelper = {
     return AccountEditFormHelper.render(state, handlers, {
       heading: 'Edit User',
       successMessage: 'User updated.',
+      passwordHint: PASSWORD_HINT,
       idPrefix: 'admin-user-edit-',
     });
   },

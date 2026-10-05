@@ -18,4 +18,13 @@ describe('AdminUserEditHelper', () => {
       expect(page.contains('Current password')).withContext('current-password label').toBeFalse();
     });
   });
+
+  describe('.render (password hint)', () => {
+    it('renders the admin password hint', () => {
+      const page = renderPage(buildState(), buildHandlers());
+
+      expect(page.containsElement('p', 'Changing the password signs the user out of all sessions.'))
+        .withContext('password hint').toBeTrue();
+    });
+  });
 });
