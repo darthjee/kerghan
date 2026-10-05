@@ -75,8 +75,17 @@ table, the accepted residual risks and the rules future changes must keep.
   `passwordDigest`, `isAdmin` (boolean, default `false`), `createdAt`, `updatedAt`.
 - `auth_refresh_tokens` (`entities/refresh-token.entity.ts`) — `id`, `tokenHash` (SHA-256 of the
   token, unique — the plaintext value is returned to the client once and never stored),
-  `userId` (logical FK), `issuedAt`, `expiresAt`, `revokedAt`, `keepSignedIn` (`keep_signed_in`,
-  boolean, default `false` — whether the token is a persistent "keep me signed in" one).
+  `userId` (logical FK), `issuedAt`, `expiresAt`, `revokedAt`, `revokedReason` (`revoked_reason`,
+  nullable `varchar(32)` — why the token was revoked, `NULL` while unrevoked; see "Revocation
+  reasons" below), `keepSignedIn` (`keep_signed_in`,
+  boolean, default `false` — whether the token is a persistent "keep me signed in" one),
+  `sessionUuid` (`session_uuid`, `varchar(36)`, non-unique index) and `startedAt` (`started_at`)
+  — the session identity: a fresh UUID and the login time are minted by
+  `TokenService#issueTokens` on every new login (password, device-authorization, register) and
+  copied onto the replacement token on every rotation, the same way `keepSignedIn` is. So one
+  session is one chain of rotated tokens, with at most one unrevoked row at a time. Rows that
+  predate the column were backfilled as one session each, with `started_at = issued_at`
+  (`database/migrations/20261005120017-auth-add-refresh-tokens-session.ts`).
 - `auth_sessions` (`entities/session.entity.ts`) — `id`, `userId` (logical FK), `createdAt`,
   `lastSeenAt`. Bookkeeping only (touched on every token issuance) — not itself an
   authorization gate; see "JWT/refresh-token flow" below for what actually invalidates access.
@@ -122,13 +131,36 @@ rather than an edit to the seed migration's `INSERT`, since the seed migration r
   over to the new one with a fresh TTL, so an active persistent session renews indefinitely (no
   absolute cap); a regular session cannot be upgraded in place. Accepted risk: the client keeps
   the token in `localStorage` (#324). **Rotated on every use**: `POST /auth/refresh.json`
-  marks the presented token's `revokedAt` and issues a brand new pair — replaying an
-  already-rotated (or logged-out) refresh token is rejected with `401`, verified end-to-end in
-  `auth/tests/auth.controller.e2e-spec.ts`. Replaying a token that's specifically
-  already-*revoked* (not merely expired) is treated as a compromise signal: every other
-  currently-active refresh token for that user is revoked too, forcing re-login.
-- **Logout**: `DELETE /auth/logoff.json` sets `revokedAt` on the matching refresh token and
-  clears the `access_token` cookie. The access token itself stays valid (stateless JWT, not
+  marks the presented token's `revokedAt` (reason `rotated`) and issues a brand new pair —
+  replaying an already-rotated (or logged-out) refresh token is rejected with `401`, verified
+  end-to-end in `auth/tests/auth.controller.refresh-logout.e2e-spec.ts`. Only replaying an
+  *unexpired* token revoked **by rotation** is treated as a compromise signal: every
+  currently-active refresh token for that user is revoked too (reason `replay_detected`),
+  forcing re-login. Expiry is checked first, and a token revoked for any other reason gets a
+  plain `401` with no side effects, so an intentionally revoked device (or an attacker holding
+  its stolen token) can't force-logout the user's other sessions. The replay response still
+  revokes every token of the user, not just the replayed session's chain. The rotation write is
+  conditional (`UPDATE ... WHERE id = ? AND revoked_at IS NULL`): if a concurrent logout,
+  session revoke, password change or second refresh revoked the token after it was read, the
+  update affects no row and the refresh answers a plain `401` without issuing tokens, so the
+  other revocation's reason is never overwritten and two racing refreshes can't both succeed.
+- **Revocation reasons** (`RevokedReason` in `entities/refresh-token.entity.ts`), set by every
+  revocation path: `rotated` (`AuthService#refresh`), `logout` (`AuthService#logout`),
+  `user_revoked` (`SessionService#revoke`/`#revokeOthers`), `password_change` (My Account),
+  `password_reset` (recovery reset), `admin_password_change` (`AdminService#editUser`) and
+  `replay_detected` (the replay response above). Only `rotated` triggers replay detection.
+  `TokenService#revokeUserTokens(userId, reason, keepRefreshToken?)` takes the reason
+  explicitly. Rows already revoked when the column was added were backfilled as `rotated`
+  (`database/migrations/20261005120018-auth-add-refresh-tokens-revoked-reason.ts`): rotation
+  and logout can't be told apart retroactively, so this keeps the replay detection they had
+  before, bounded by their (now first-checked) expiry. Deploy-time trade-off: a token logged
+  out (or otherwise revoked) before this migration is indistinguishable from a rotated one, so
+  presenting it still triggers replay detection (revoking all of the user's sessions) until it
+  expires — up to 7 days after issue, or 30 for keep-signed-in tokens (the default TTLs). A
+  revoked row with a `NULL` reason is treated like any non-rotation revocation (plain `401`).
+- **Logout**: `DELETE /auth/logoff.json` sets `revokedAt` (reason `logout`) on the matching
+  refresh token — only if it is still unrevoked, so logging out with an already-rotated token
+  never overwrites its `rotated` reason — and clears the `access_token` cookie. The access token itself stays valid (stateless JWT, not
   tracked server-side) until its own expiry — logout guarantees the *refresh* path is closed,
   not instant access-token revocation.
 - **Password change**: every successful password change revokes refresh tokens through
@@ -143,6 +175,19 @@ rather than an edit to the seed migration's `INSERT`, since the seed migration r
   - An admin password edit (`AdminService#editUser` with `newPassword`) revokes all of the target
     user's tokens, including the admin's own when they edit their own account.
   - Same caveat as logout: access tokens that were already issued stay valid until they expire.
+- **Sessions**: `SessionService` (`session.service.ts`) and the thin `SessionController`
+  (`session.controller.ts`, default `JwtGuard`, `@CachePolicy(CacheClass.Never)`) let a user
+  list their active sessions (`POST /auth/sessions/mine.json`), revoke one by its
+  `sessionUuid` (`POST /auth/sessions/:uuid/revoke.json`, `404` for an unknown or foreign id)
+  or revoke every session but the current one (`POST /auth/sessions/revoke-others.json`, `401`
+  and nothing revoked when the presented `refreshToken` is not one of the caller's active
+  tokens; the current session is kept by `sessionUuid`, not token hash, so a concurrent
+  rotation isn't revoked). `:uuid` is validated with `ParseUUIDPipe` (any version; `400` when
+  malformed). Revoked tokens get reason `user_revoked`, so their later refresh is a plain `401`
+  without replay detection. Revoking a session stops its refresh token only: its access-token
+  JWT stays valid until it expires (`KERGHAN_ACCESS_TOKEN_TTL_MS`, 15 minutes by default).
+  Every query is scoped to the caller's `userId`. `auth_sessions` is unrelated bookkeeping and
+  is untouched. See [Auth routes](../backend/routes/auth.md#sessions).
 - **Registration also logs in**: `POST /auth/register.json` issues a token pair immediately on
   success, same as login/refresh (per the issue's "issued on login/register/refresh" flow) —
   there's no separate "register, then log in" round trip.

@@ -6,11 +6,14 @@ register, refresh, logoff — all `@Public()`, since they exist to establish or 
 and must be reachable without an already-valid access token) and
 `AuthorizationRequestController` (`auth/authorization-request.controller.ts`, the five
 device-authorization routes below — `create`/`poll` are `@Public()` for the same reason,
-`mine`/`authorize`/`deny` require the default `JwtGuard`).
+`mine`/`authorize`/`deny` require the default `JwtGuard`), and `SessionController`
+(`auth/session.controller.ts`, the three session-management routes below, all requiring the
+default `JwtGuard`).
 
-Business logic lives in `AuthService` (`auth/auth.service.ts`) for the four classic routes, and
+Business logic lives in `AuthService` (`auth/auth.service.ts`) for the four classic routes,
 `AuthorizationRequestService` (`auth/authorization-request.service.ts`) for the five
-device-authorization routes; both controllers are thin delegation layers.
+device-authorization routes, and `SessionService` (`auth/session.service.ts`) for the three
+session routes; all three controllers are thin delegation layers.
 
 ## Endpoints
 
@@ -52,8 +55,14 @@ Creates a new `auth_users` record, then issues tokens identically to login.
 | Success response | `{ user, refreshToken }` + sets new `access_token` cookie |
 | HTTP status | `200` (default) |
 
-Rotates the refresh token server-side (old token's `revokedAt` is set).
-Replay of a revoked or expired token is rejected with `401`.
+Rotates the refresh token server-side (old token's `revokedAt` is set, `revokedReason`
+`rotated`). An unknown, expired or revoked token is rejected with `401`. Only an *unexpired*
+token revoked by rotation triggers replay detection (every active token of the user is revoked,
+reason `replay_detected`, forcing re-login everywhere); a token revoked for any other reason
+(logout, session revoke, password change) or already expired gets a plain `401` with no side
+effects — so a revoked device's routine refresh (or an attacker replaying its stolen token)
+can't log the user out of their other sessions. See `revoked_reason` in
+[the Auth module](../../modules/auth.md#entities-auth_-table-prefix).
 
 ### `DELETE /auth/logoff.json`
 
@@ -140,9 +149,80 @@ so `ApiClient`'s refresh-and-retry logic is never triggered by a business reject
 
 Same ownership/status rejection shape as `authorize`, but no password is required.
 
+### Sessions
+
+A *session* is one chain of rotated refresh tokens: every token minted on login (password,
+device-authorization or register) gets a fresh `session_uuid` and `started_at`, and every
+`POST /auth/refresh.json` copies both onto the replacement token. Since rotation revokes the
+presented token, an active session is exactly one non-revoked, unexpired `auth_refresh_tokens`
+row. The *current* session is the one whose refresh token matches the body's `refreshToken`
+(the same convention as `logoff`/`status`). No user agent or IP is captured or shown.
+
+### `POST /auth/sessions/mine.json`
+
+| Property | Value |
+| --- | --- |
+| Controller | `SessionController` |
+| Auth | Default `JwtGuard` (authenticated, no `@AdminOnly()`) |
+| Request body | `RefreshTokenDto` — `{ refreshToken: string }` (required, non-empty) |
+| Success response | `{ sessions: [{ id, startedAt, lastUsedAt, keepSignedIn, current }] }` |
+| HTTP status | `201` (Nest's `POST` default); `400` when `refreshToken` is missing/empty |
+
+Lists the caller's own active (non-revoked, unexpired) sessions, most recently used first. `id`
+is the session UUID; `startedAt` is the login time; `lastUsedAt` is the active token's
+`issuedAt` (the latest login or rotation); `current` is `true` for the session matching
+`refreshToken`. An unknown, revoked, expired or foreign `refreshToken` is not an error: the list
+is still returned, with no entry marked `current`.
+
+### `POST /auth/sessions/:uuid/revoke.json`
+
+| Property | Value |
+| --- | --- |
+| Controller | `SessionController` |
+| Auth | Default `JwtGuard` (authenticated, no `@AdminOnly()`) |
+| Request body | Ignored (clients may send `{ refreshToken }` for consistency) |
+| Success response | `{ revoked: true }` |
+| HTTP status | `201`; `400 Bad Request` for a malformed `:uuid`; `404 Not Found` for an unknown, already-revoked or another user's session |
+
+Revokes one of the caller's sessions (its unrevoked token, `revokedReason` `user_revoked`).
+`:uuid` is validated by `ParseUUIDPipe` accepting any UUID version (sessions backfilled by the
+migration carry MySQL `UUID()` v1 IDs); a malformed value answers `400`. An unknown session and
+another user's session both answer the same `404`, so existence never leaks. Revoking the
+current session is allowed and behaves like a logoff (the access-token cookie is left alone and
+expires on its own; the client should drop its refresh token). The revoked session's later
+refresh attempts get a plain `401` without triggering replay detection.
+
+**Revocation stops the refresh token only.** Access tokens are stateless JWTs not tracked
+server-side, so a revoked session's already-issued access token stays valid until it expires —
+`KERGHAN_ACCESS_TOKEN_TTL_MS`, 15 minutes by default. This applies to both session-revoke
+routes.
+
+### `POST /auth/sessions/revoke-others.json`
+
+| Property | Value |
+| --- | --- |
+| Controller | `SessionController` |
+| Auth | Default `JwtGuard` (authenticated, no `@AdminOnly()`) |
+| Request body | `RefreshTokenDto` — `{ refreshToken: string }` (required, non-empty) |
+| Success response | `{ revoked: true }` |
+| HTTP status | `201`; `400` when `refreshToken` is missing/empty; `401 Unauthorized` when it is invalid |
+
+Revokes every session of the caller except the current one (`revokedReason` `user_revoked`).
+The current session is kept by its `sessionUuid` (resolved from `refreshToken`), not by the
+token's hash, so a concurrent rotation of the current session is never revoked by mistake.
+When `refreshToken` is unknown, revoked, expired or another user's, it answers `401` and
+revokes nothing — it never falls back to revoking every session. The revoked sessions' later
+refresh attempts get a plain `401` without triggering replay detection.
+
+Note for the frontend: a `401` here can trigger `ApiClient`'s refresh-and-retry. That is
+intentional: it only happens when the client's stored refresh token is already invalid, so the
+refresh fails too and the client logs out (unlike `authorize.json`, which uses `400` for its
+business rejections precisely to avoid that path).
+
 ## Shared behavior
 
-All nine routes above (the four classic ones plus the five device-authorization ones) are
+All twelve routes above (the four classic ones, the five device-authorization ones and the
+three session ones) are
 declared `@CachePolicy(CacheClass.Never)` at controller level, so they send
 `X-Skip-Cache: true` and `Cache-Control: no-store` on the response. Tent's
 `default_proxy` rule caches any 2xx `*.json` response keyed only by query
@@ -186,3 +266,5 @@ is, as it must be stored client-side to call `/auth/refresh.json` and
 | `auth/dto/create-authorization-request.dto.ts` | `CreateAuthorizationRequestDto` validation |
 | `auth/dto/poll-authorization-request.dto.ts` | `PollAuthorizationRequestDto` validation |
 | `auth/dto/authorize-authorization-request.dto.ts` | `AuthorizeAuthorizationRequestDto` validation |
+| `auth/session.controller.ts` | Session-management route definitions |
+| `auth/session.service.ts` | Session business logic (listActive, revoke, revokeOthers) |

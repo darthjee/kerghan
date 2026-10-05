@@ -97,9 +97,8 @@ describe('AuthController (e2e)', () => {
       const refreshTokenOf = async (username = 'darthjee'): Promise<string> =>
         (await loginAs(ctx.app, username)).body.refreshToken;
 
-      // Reads revocation state straight from the fake repository: replaying a
-      // revoked token through `/auth/refresh.json` would itself revoke the
-      // whole family (the compromise signal), masking what is being tested.
+      // Reads revocation state straight from the fake repository, so the
+      // assertions don't depend on `/auth/refresh.json`'s own semantics.
       const isRevoked = (refreshToken: string): boolean => {
         const tokenHash = createHash('sha256').update(refreshToken).digest('hex');
         return ctx.refreshTokenRepo.rows.find((row) => row.tokenHash === tokenHash)?.revokedAt !== null;

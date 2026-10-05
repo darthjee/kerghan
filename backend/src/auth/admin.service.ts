@@ -4,6 +4,7 @@ import { ILike, Repository } from 'typeorm';
 import { assertAnyFieldPresent } from './assert-any-field-present.js';
 import { AuthService } from './auth.service.js';
 import { AdminUpdateUserDto } from './dto/admin-update-user.dto.js';
+import { RevokedReason } from './entities/refresh-token.entity.js';
 import { User } from './entities/user.entity.js';
 import { PasswordResetService } from './password-reset.service.js';
 import { TokenService } from './token.service.js';
@@ -145,7 +146,7 @@ export class AdminService {
     await this.userUpdateService.applyUserUpdate(user, dto);
 
     if (dto.newPassword) {
-      await this.tokenService.revokeUserTokens(user.id);
+      await this.tokenService.revokeUserTokens(user.id, RevokedReason.ADMIN_PASSWORD_CHANGE);
     }
 
     return this.#findUserOrThrow(userId);

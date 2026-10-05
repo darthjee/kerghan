@@ -6,6 +6,7 @@ import { AccountEditAbuseGuardService } from './account-edit-abuse-guard.service
 import { assertAnyFieldPresent } from './assert-any-field-present.js';
 import { AuthService } from './auth.service.js';
 import { UpdateAccountDto } from './dto/update-account.dto.js';
+import { RevokedReason } from './entities/refresh-token.entity.js';
 import { User } from './entities/user.entity.js';
 import { TokenService } from './token.service.js';
 import { AccountSummary, UserUpdateService } from './user-update.service.js';
@@ -81,7 +82,7 @@ export class AccountService {
     await this.accountEditAbuseGuardService.reset(userId);
 
     if (dto.newPassword) {
-      await this.tokenService.revokeUserTokens(userId, dto.refreshToken);
+      await this.tokenService.revokeUserTokens(userId, RevokedReason.PASSWORD_CHANGE, dto.refreshToken);
     }
 
     return result;

@@ -2,14 +2,14 @@ import { ConflictException, Injectable, UnauthorizedException } from '@nestjs/co
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { InjectRepository } from '@nestjs/typeorm';
 import bcrypt from 'bcryptjs';
-import { Not, Repository } from 'typeorm';
+import { IsNull, Not, Repository } from 'typeorm';
 import { ErrorCodes } from '../core/error-codes.js';
 import { LoginDto } from './dto/login.dto.js';
 import { RecoverDto } from './dto/recover.dto.js';
 import { RegisterDto } from './dto/register.dto.js';
 import { ResetPasswordDto } from './dto/reset-password.dto.js';
 import { compareOrDummy } from './dummy-digest.js';
-import { RefreshToken } from './entities/refresh-token.entity.js';
+import { RefreshToken, RevokedReason } from './entities/refresh-token.entity.js';
 import { User } from './entities/user.entity.js';
 import { UserRegisteredEvent } from './events/user-registered.event.js';
 import { PasswordResetService } from './password-reset.service.js';
@@ -39,13 +39,9 @@ export class AuthService {
   /**
    * @param {Repository<User>} userRepository - The Auth module's user repository.
    * @param {Repository<RefreshToken>} refreshTokenRepository - The refresh-token repository.
-   * @param {TokenService} tokenService - Mints login sessions (access-token
-   *   JWT, rotating refresh token, `auth_sessions` row) and hashes refresh
-   *   tokens for the read paths.
+   * @param {TokenService} tokenService - Mints login sessions and hashes refresh tokens.
    * @param {EventEmitter2} eventEmitter - Fires the `user.registered` event.
-   * @param {PasswordResetService} passwordResetService - The password
-   *   recovery/reset flow's business logic, delegated to for `recover`/
-   *   `resetPassword`.
+   * @param {PasswordResetService} passwordResetService - Recovery/reset logic (`recover`/`resetPassword`).
    */
   constructor(
     @InjectRepository(User) userRepository: Repository<User>,
@@ -115,15 +111,17 @@ export class AuthService {
   }
 
   /**
-   * Rotates a refresh token: the presented token is revoked and a new
-   * access/refresh pair is issued, preventing replay of the old one.
+   * Rotates a refresh token: the presented token is revoked (`rotated`) and a
+   * new pair is issued, carrying over `keepSignedIn` and the session identity.
    *
-   * Presenting a token that is specifically already-revoked (as opposed to
-   * merely expired) is treated as a compromise signal per standard
-   * refresh-token-rotation guidance: it means someone is replaying a token
-   * whose rotated successor already exists, so every other currently-active
-   * refresh token belonging to that user is revoked too, forcing re-login,
-   * before the 401 is thrown. The presented token's `keepSignedIn` flag carries over to its successor.
+   * Presenting an unexpired token revoked *by rotation* is a compromise
+   * signal (its successor already exists), so every active token of the user
+   * is revoked too (`replay_detected`) before the 401. A token revoked for
+   * any other reason (logout, session revoke, password change) or already
+   * expired gets a plain 401 with no side effects, so a revoked device's
+   * token can't force-logout the user's other sessions. The rotation write
+   * only matches a still-unrevoked row, so losing a race to a concurrent
+   * revocation or refresh is a plain 401 with no tokens issued.
    * @param {string} refreshToken - The refresh token presented by the client.
    * @returns {Promise<AuthResult>} The user plus the newly issued token pair.
    * @throws {UnauthorizedException} When the token is unknown, expired, or already revoked.
@@ -136,21 +134,34 @@ export class AuthService {
       throw new UnauthorizedException('Invalid refresh token');
     }
 
-    await this.refreshTokenRepository.update(tokenRow.id, { revokedAt: new Date() });
+    const { affected } = await this.refreshTokenRepository.update(
+      { id: tokenRow.id, revokedAt: IsNull() },
+      { revokedAt: new Date(), revokedReason: RevokedReason.ROTATED },
+    );
 
-    return this.tokenService.issueTokens(user, tokenRow.keepSignedIn);
+    if (affected !== 1) {
+      throw new UnauthorizedException('Invalid or expired refresh token');
+    }
+
+    return this.tokenService.issueTokens(user, tokenRow.keepSignedIn, {
+      sessionUuid: tokenRow.sessionUuid,
+      startedAt: tokenRow.startedAt,
+    });
   }
 
   /**
-   * Invalidates a refresh token server-side, ending the session it
-   * belongs to.
+   * Invalidates a refresh token server-side (reason `logout`), ending its
+   * session. An already-revoked token is left untouched.
    * @param {string} refreshToken - The refresh token to invalidate.
    * @returns {Promise<void>} Resolves once the token has been revoked.
    */
   async logout(refreshToken: string): Promise<void> {
     const tokenHash = this.tokenService.hashToken(refreshToken);
 
-    await this.refreshTokenRepository.update({ tokenHash }, { revokedAt: new Date() });
+    await this.refreshTokenRepository.update(
+      { tokenHash, revokedAt: IsNull() },
+      { revokedAt: new Date(), revokedReason: RevokedReason.LOGOUT },
+    );
   }
 
   /**
@@ -166,19 +177,16 @@ export class AuthService {
   async resetPassword(dto: ResetPasswordDto): Promise<void> {
     const userId = await this.passwordResetService.resetPassword(dto);
 
-    await this.tokenService.revokeUserTokens(userId);
+    await this.tokenService.revokeUserTokens(userId, RevokedReason.PASSWORD_RESET);
   }
 
   /**
    * Reports whether a refresh token currently identifies an active
    * session, without mutating anything. Deliberately distinct from
-   * `#findActiveRefreshToken` (used by `refresh()`), which revokes the
-   * user's entire token family and throws when it finds an
-   * already-revoked token — the correct replay-detection behavior for a
-   * token-consuming flow, but unsafe to reuse here: a passive status check
-   * must never revoke or rotate anything, or a second tab's routine
-   * mount-time confirmation could log every tab out after the first tab's
-   * legitimate refresh.
+   * `#findActiveRefreshToken` (used by `refresh()`), whose replay detection
+   * revokes the user's tokens: a passive status check must never revoke
+   * anything, or a second tab's mount-time check could log every tab out
+   * after the first tab's legitimate refresh.
    * @param {string} refreshToken - The refresh token presented by the client.
    * @returns {Promise<{ loggedIn: boolean; isAdmin: boolean }>} `{ loggedIn:
    *   true, isAdmin }` (resolved from the token's user) when active; `{
@@ -254,16 +262,15 @@ export class AuthService {
     const tokenHash = this.tokenService.hashToken(refreshToken);
     const tokenRow = await this.refreshTokenRepository.findOneBy({ tokenHash });
 
-    if (!tokenRow) {
+    if (!tokenRow || tokenRow.expiresAt < new Date()) {
       throw new UnauthorizedException('Invalid or expired refresh token');
     }
 
     if (tokenRow.revokedAt) {
-      await this.tokenService.revokeUserTokens(tokenRow.userId);
-      throw new UnauthorizedException('Invalid or expired refresh token');
-    }
+      if (tokenRow.revokedReason === RevokedReason.ROTATED) {
+        await this.tokenService.revokeUserTokens(tokenRow.userId, RevokedReason.REPLAY_DETECTED);
+      }
 
-    if (tokenRow.expiresAt < new Date()) {
       throw new UnauthorizedException('Invalid or expired refresh token');
     }
 
