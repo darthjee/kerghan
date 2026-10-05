@@ -116,6 +116,18 @@ describe('SessionController (e2e)', () => {
       await refreshWith(ctx.app, first.refreshToken).expect(201);
     });
 
+    it('accepts a v1 UUID session id (migration-backfilled sessions)', async () => {
+      await post(ctx.app, '/auth/sessions/6ba7b810-9dad-11d1-80b4-00c04fd430c8/revoke.json', first, {})
+        .expect(404);
+    });
+
+    it('answers 400 for a malformed session id, revoking nothing', async () => {
+      await post(ctx.app, '/auth/sessions/not-a-uuid/revoke.json', first, {}).expect(400);
+
+      await refreshWith(ctx.app, first.refreshToken).expect(201);
+      await refreshWith(ctx.app, second.refreshToken).expect(201);
+    });
+
     it('allows revoking the current session', async () => {
       const id = await sessionIdOf(first);
 
@@ -194,7 +206,7 @@ describe('SessionController (e2e)', () => {
     it.each([
       ['/auth/sessions/mine.json', 201],
       ['/auth/sessions/revoke-others.json', 201],
-      ['/auth/sessions/some-uuid/revoke.json', 404],
+      ['/auth/sessions/00000000-0000-4000-8000-000000000000/revoke.json', 404],
     ])('marks %s as never cached', async (path, status) => {
       const response = await post(ctx.app, path, first, { refreshToken: first.refreshToken }).expect(status);
 

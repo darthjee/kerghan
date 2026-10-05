@@ -1,4 +1,4 @@
-import { Body, Controller, Param, Post } from '@nestjs/common';
+import { Body, Controller, Param, ParseUUIDPipe, Post } from '@nestjs/common';
 import { RefreshTokenDto } from './dto/refresh-token.dto.js';
 import { SessionService } from './session.service.js';
 import type { AccessTokenPayload } from '../core/access-token-payload.js';
@@ -58,14 +58,18 @@ export class SessionController {
   /**
    * `POST /auth/sessions/:uuid/revoke.json`. Revokes one of the caller's
    * sessions (the current one included, which behaves like a logoff). An
-   * unknown session, or another user's, answers `404`. The request body is
-   * accepted for consistency with the other routes but ignored.
+   * unknown session, or another user's, answers `404`; a malformed ID
+   * answers `400` (any UUID version is accepted, since migration-backfilled
+   * sessions carry MySQL `UUID()` v1 IDs). Only the session's refresh token
+   * is revoked — its access-token JWT stays valid until it expires. The
+   * request body is accepted for consistency with the other routes but
+   * ignored.
    * @param {string} uuid - The session ID to revoke.
    * @param {AccessTokenPayload} user - The caller's own authenticated user, supplying the user ID.
    * @returns {Promise<object>} `{ revoked: true }`.
    */
   @Post('sessions/:uuid/revoke.json')
-  async revoke(@Param('uuid') uuid: string, @CurrentUser() user: AccessTokenPayload): Promise<object> {
+  async revoke(@Param('uuid', ParseUUIDPipe) uuid: string, @CurrentUser() user: AccessTokenPayload): Promise<object> {
     await this.sessionService.revoke(user.sub, uuid);
 
     return { revoked: true };
