@@ -63,8 +63,7 @@ export class AuthService {
 
   /**
    * Registers a new user and immediately logs them in (issues tokens),
-   * per the issue's JWT flow ("issued on login/register/refresh"). A
-   * freshly registered session is always regular (`keepSignedIn: false`).
+   * per the issue's JWT flow ("issued on login/register/refresh").
    * @param {RegisterDto} dto - The registration payload.
    * @returns {Promise<AuthResult>} The created user plus access/refresh tokens.
    * @throws {ConflictException} When the username/email are already taken (`USERNAME_TAKEN`/`EMAIL_TAKEN`).
@@ -91,9 +90,8 @@ export class AuthService {
   }
 
   /**
-   * Verifies a username/password pair and issues a fresh token pair. When
-   * `dto.keepSignedIn` is `true` the session is persistent (longer refresh
-   * TTL); otherwise it is regular.
+   * Verifies a username/password pair and issues a fresh token pair,
+   * persistent (longer refresh TTL) only when `dto.keepSignedIn` is `true`.
    * @param {LoginDto} dto - The login credentials and optional `keepSignedIn` flag.
    * @returns {Promise<AuthResult>} The authenticated user plus access/refresh tokens.
    * @throws {UnauthorizedException} When the username is unknown or the password is wrong.
@@ -125,11 +123,7 @@ export class AuthService {
    * refresh-token-rotation guidance: it means someone is replaying a token
    * whose rotated successor already exists, so every other currently-active
    * refresh token belonging to that user is revoked too, forcing re-login,
-   * before the 401 is thrown.
-   *
-   * The presented token's `keepSignedIn` flag carries over to its rotated
-   * successor, so a persistent session keeps renewing with the persistent
-   * TTL and a regular one stays regular.
+   * before the 401 is thrown. The presented token's `keepSignedIn` flag carries over to its successor.
    * @param {string} refreshToken - The refresh token presented by the client.
    * @returns {Promise<AuthResult>} The user plus the newly issued token pair.
    * @throws {UnauthorizedException} When the token is unknown, expired, or already revoked.
