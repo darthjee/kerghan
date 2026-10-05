@@ -43,6 +43,7 @@ describe('AuthService', () => {
   beforeEach(() => {
     userRepository = repoMock<User>();
     refreshTokenRepository = repoMock<RefreshToken>();
+    refreshTokenRepository.update.mockResolvedValue({ affected: 1 });
     tokenService = {
       issueTokens: jest.fn(async (user: User) => ({
         user,
@@ -306,10 +307,10 @@ describe('AuthService', () => {
       it('revokes the presented token before issuing a new pair', async () => {
         const result = await service.refresh('a-refresh-token');
 
-        expect(refreshTokenRepository.update).toHaveBeenCalledWith(10, {
-          revokedAt: expect.any(Date),
-          revokedReason: 'rotated',
-        });
+        expect(refreshTokenRepository.update).toHaveBeenCalledWith(
+          { id: 10, revokedAt: IsNull() },
+          { revokedAt: expect.any(Date), revokedReason: 'rotated' },
+        );
         expect(result.user).toBe(user);
         expect(result.accessToken).toBe('signed-access-token');
         expect(result.refreshToken).not.toBe('a-refresh-token');
@@ -328,6 +329,32 @@ describe('AuthService', () => {
           sessionUuid: 'session-uuid-1',
           startedAt: new Date('2026-10-01T00:00:00Z'),
         });
+      });
+    });
+
+    describe('when the token is revoked concurrently before the rotation write', () => {
+      beforeEach(() => {
+        refreshTokenRepository.findOneBy.mockResolvedValue(activeToken);
+        userRepository.findOneBy.mockResolvedValue(user);
+        refreshTokenRepository.update.mockResolvedValue({ affected: 0 });
+      });
+
+      it('rejects with UnauthorizedException', async () => {
+        await expect(service.refresh('a-refresh-token')).rejects.toThrow(
+          new UnauthorizedException('Invalid or expired refresh token'),
+        );
+      });
+
+      it('does not issue a new token pair', async () => {
+        await expect(service.refresh('a-refresh-token')).rejects.toThrow(UnauthorizedException);
+
+        expect(tokenService.issueTokens).not.toHaveBeenCalled();
+      });
+
+      it('does not trigger replay detection', async () => {
+        await expect(service.refresh('a-refresh-token')).rejects.toThrow(UnauthorizedException);
+
+        expect(tokenService.revokeUserTokens).not.toHaveBeenCalled();
       });
     });
 

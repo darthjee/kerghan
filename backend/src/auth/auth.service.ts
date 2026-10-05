@@ -39,13 +39,9 @@ export class AuthService {
   /**
    * @param {Repository<User>} userRepository - The Auth module's user repository.
    * @param {Repository<RefreshToken>} refreshTokenRepository - The refresh-token repository.
-   * @param {TokenService} tokenService - Mints login sessions (access-token
-   *   JWT, rotating refresh token, `auth_sessions` row) and hashes refresh
-   *   tokens for the read paths.
+   * @param {TokenService} tokenService - Mints login sessions and hashes refresh tokens.
    * @param {EventEmitter2} eventEmitter - Fires the `user.registered` event.
-   * @param {PasswordResetService} passwordResetService - The password
-   *   recovery/reset flow's business logic, delegated to for `recover`/
-   *   `resetPassword`.
+   * @param {PasswordResetService} passwordResetService - Recovery/reset logic (`recover`/`resetPassword`).
    */
   constructor(
     @InjectRepository(User) userRepository: Repository<User>,
@@ -123,7 +119,9 @@ export class AuthService {
    * is revoked too (`replay_detected`) before the 401. A token revoked for
    * any other reason (logout, session revoke, password change) or already
    * expired gets a plain 401 with no side effects, so a revoked device's
-   * token can't force-logout the user's other sessions.
+   * token can't force-logout the user's other sessions. The rotation write
+   * only matches a still-unrevoked row, so losing a race to a concurrent
+   * revocation or refresh is a plain 401 with no tokens issued.
    * @param {string} refreshToken - The refresh token presented by the client.
    * @returns {Promise<AuthResult>} The user plus the newly issued token pair.
    * @throws {UnauthorizedException} When the token is unknown, expired, or already revoked.
@@ -136,10 +134,14 @@ export class AuthService {
       throw new UnauthorizedException('Invalid refresh token');
     }
 
-    await this.refreshTokenRepository.update(tokenRow.id, {
-      revokedAt: new Date(),
-      revokedReason: RevokedReason.ROTATED,
-    });
+    const { affected } = await this.refreshTokenRepository.update(
+      { id: tokenRow.id, revokedAt: IsNull() },
+      { revokedAt: new Date(), revokedReason: RevokedReason.ROTATED },
+    );
+
+    if (affected !== 1) {
+      throw new UnauthorizedException('Invalid or expired refresh token');
+    }
 
     return this.tokenService.issueTokens(user, tokenRow.keepSignedIn, {
       sessionUuid: tokenRow.sessionUuid,
@@ -260,11 +262,7 @@ export class AuthService {
     const tokenHash = this.tokenService.hashToken(refreshToken);
     const tokenRow = await this.refreshTokenRepository.findOneBy({ tokenHash });
 
-    if (!tokenRow) {
-      throw new UnauthorizedException('Invalid or expired refresh token');
-    }
-
-    if (tokenRow.expiresAt < new Date()) {
+    if (!tokenRow || tokenRow.expiresAt < new Date()) {
       throw new UnauthorizedException('Invalid or expired refresh token');
     }
 

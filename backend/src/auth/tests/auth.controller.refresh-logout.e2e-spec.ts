@@ -76,6 +76,17 @@ describe('AuthController (e2e)', () => {
       await refresh(kept.body.refreshToken).expect(201);
     });
 
+    it('lets only one of two concurrent refreshes of the same token succeed', async () => {
+      const login = await loginAs(ctx.app);
+
+      const responses = await Promise.all([
+        refresh(login.body.refreshToken),
+        refresh(login.body.refreshToken),
+      ]);
+
+      expect(responses.map((response) => response.status).sort()).toEqual([201, 401]);
+    });
+
     it('rejects an expired refresh token', async () => {
       const login = await loginAs(ctx.app);
 
