@@ -218,6 +218,29 @@ describe('AccountsClient', () => {
       });
     });
 
+    it('sends the stored refresh token when one exists', async () => {
+      AuthSession.set('refresh-token');
+      spyOn(ApiClient, 'patchJson').and.resolveTo({ username: 'foo', email: 'foo@example.com' });
+
+      await AccountsClient.updateAccount({ currentPassword: 'secret', newPassword: 'longenough' });
+
+      expect(ApiClient.patchJson).toHaveBeenCalledWith('/auth/account.json', {
+        currentPassword: 'secret',
+        newPassword: 'longenough',
+        refreshToken: 'refresh-token',
+      });
+    });
+
+    it('omits refreshToken when no token is stored', async () => {
+      spyOn(ApiClient, 'patchJson').and.resolveTo({ username: 'foo', email: 'foo@example.com' });
+
+      await AccountsClient.updateAccount({ currentPassword: 'secret', newPassword: 'longenough' });
+
+      const [, body] = ApiClient.patchJson.calls.mostRecent().args;
+
+      expect(Object.keys(body)).not.toContain('refreshToken');
+    });
+
     it('resolves with the updated username and email', async () => {
       const result = { username: 'newname', email: 'foo@example.com' };
       spyOn(ApiClient, 'patchJson').and.resolveTo(result);

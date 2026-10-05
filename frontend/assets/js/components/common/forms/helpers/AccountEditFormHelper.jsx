@@ -11,6 +11,20 @@ const PASSWORD_FIELDS = [
 ];
 
 /**
+ * Render the optional muted help text shown under the "Change password" heading.
+ *
+ * @param {(string|undefined)} passwordHint - The hint text, if any.
+ * @returns {(React.ReactElement|null)} The hint paragraph, or `null` when no hint is given.
+ */
+function renderPasswordHint(passwordHint) {
+  if (!passwordHint) {
+    return null;
+  }
+
+  return <p className="form-text">{passwordHint}</p>;
+}
+
+/**
  * Shared rendering helper for the account-edit pages (My Account and Admin User Edit): the
  * page container, heading, form with submit-error / success alerts, the username/email fields,
  * the change-password section and the save action. Page-specific copy, input-id prefix and any
@@ -27,14 +41,17 @@ const AccountEditFormHelper = {
    * @param {{onSubmit: Function, onChange: Function}} handlers - Event handlers; `onChange` is
    *   curried by field name.
    * @param {{heading: string, successMessage: string, idPrefix: string,
-   *   leadingPasswordFields: (Array<Array<string>>|undefined)}} options - Page-specific
-   *   heading, success message, input-id prefix (used verbatim, so it includes any trailing
-   *   `-`) and optional `[name, type, label]` fields rendered in the "Change password" section
-   *   before the new-password fields.
+   *   leadingPasswordFields: (Array<Array<string>>|undefined),
+   *   passwordHint: (string|undefined)}} options - Page-specific heading, success message,
+   *   input-id prefix (used verbatim, so it includes any trailing `-`), optional
+   *   `[name, type, label]` fields rendered in the "Change password" section before the
+   *   new-password fields, and optional help text rendered under the "Change password" heading.
    * @returns {React.ReactElement} The rendered account-edit page.
    */
   render(state, handlers, options) {
-    const { heading, successMessage, idPrefix, leadingPasswordFields = [] } = options;
+    const {
+      heading, successMessage, idPrefix, leadingPasswordFields = [], passwordHint,
+    } = options;
     const renderField = ([name, type, label]) => FormFieldsHelper.renderField(
       name, type, label, state, handlers.onChange(name), idPrefix,
     );
@@ -48,6 +65,7 @@ const AccountEditFormHelper = {
           {PROFILE_FIELDS.map(renderField)}
           <hr />
           <h2 className="h5">Change password</h2>
+          {renderPasswordHint(passwordHint)}
           {leadingPasswordFields.map(renderField)}
           {PASSWORD_FIELDS.map(renderField)}
           <button type="submit" className="btn btn-primary">Save</button>

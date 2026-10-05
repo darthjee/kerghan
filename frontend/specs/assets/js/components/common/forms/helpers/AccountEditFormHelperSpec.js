@@ -44,6 +44,31 @@ describe('AccountEditFormHelper', () => {
       ]);
     });
 
+    describe('without passwordHint', () => {
+      it('renders no password hint', () => {
+        expect(render().contains('form-text')).withContext('password hint').toBeFalse();
+      });
+    });
+
+    describe('with passwordHint', () => {
+      const renderWithHint = () => render(
+        buildState(), buildHandlers(), buildOptions({ passwordHint: 'Some hint.' }),
+      );
+
+      it('renders the hint as muted help text', () => {
+        expect(renderWithHint().containsElement('p', 'Some hint.'))
+          .withContext('password hint').toBeTrue();
+        expect(renderWithHint().containsAttribute('class', 'form-text'))
+          .withContext('hint class').toBeTrue();
+      });
+
+      it('renders the hint under the change-password heading, before the fields', () => {
+        expect(renderWithHint().containsInOrder(
+          'Change password', 'Some hint.', 'some-prefix-newPassword',
+        )).withContext('hint order').toBeTrue();
+      });
+    });
+
     describe('without leadingPasswordFields', () => {
       it('renders no current-password field', () => {
         expect(render().contains('some-prefix-currentPassword'))

@@ -3,7 +3,7 @@ import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { IsNull, Not, Repository } from 'typeorm';
 import { LoggerService } from '../core/logger.service.js';
 import { getNumberConfig } from '../core/numeric-config.js';
 import { hashToken } from '../core/token-hash.js';
@@ -126,6 +126,30 @@ export class TokenService {
    */
   hashToken(token: string): string {
     return hashToken(token);
+  }
+
+  /**
+   * Revokes (sets `revokedAt` to now) every unrevoked refresh token of the
+   * given user, optionally keeping one presented token alive. The kept token
+   * is excluded by its SHA-256 hash *within this user's own rows*, so it
+   * survives only if it is one of the user's unrevoked tokens: a foreign or
+   * unknown token matches none of the user's rows and excludes nothing, so
+   * every token is revoked (fail safe); an already-revoked token stays
+   * revoked; an expired-but-unrevoked kept row is harmless because
+   * `AuthService#refresh` already rejects it as expired. Shared by the
+   * replay/compromise path, password reset, My Account password change and
+   * admin password edit, so the "revoke a user's tokens" paths cannot drift.
+   * @param {number} userId - The user whose refresh tokens are revoked.
+   * @param {string} [keepRefreshToken] - The plaintext refresh token of the
+   *   current session to keep alive, if any.
+   * @returns {Promise<void>} Resolves once the tokens are revoked.
+   */
+  async revokeUserTokens(userId: number, keepRefreshToken?: string): Promise<void> {
+    const criteria = keepRefreshToken
+      ? { userId, revokedAt: IsNull(), tokenHash: Not(this.hashToken(keepRefreshToken)) }
+      : { userId, revokedAt: IsNull() };
+
+    await this.refreshTokenRepository.update(criteria, { revokedAt: new Date() });
   }
 
   #refreshTokenTtlMs(keepSignedIn: boolean): number {

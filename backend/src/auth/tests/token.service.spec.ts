@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { JwtService } from '@nestjs/jwt';
+import { IsNull, Not } from 'typeorm';
 import { RefreshToken } from '../entities/refresh-token.entity.js';
 import { Session } from '../entities/session.entity.js';
 import { User } from '../entities/user.entity.js';
@@ -233,6 +234,39 @@ describe('TokenService', () => {
 
       expect(service.hashToken(value)).toBe(
         createHash('sha256').update(value).digest('hex'),
+      );
+    });
+  });
+
+  describe('revokeUserTokens', () => {
+    it('revokes every unrevoked token of the user when no keep token is given', async () => {
+      await service.revokeUserTokens(7);
+
+      expect(refreshTokenRepository.update).toHaveBeenCalledWith(
+        { userId: 7, revokedAt: IsNull() },
+        { revokedAt: expect.any(Date) },
+      );
+    });
+
+    it('excludes the kept token by its hash when a keep token is given', async () => {
+      await service.revokeUserTokens(7, 'current-token');
+
+      expect(refreshTokenRepository.update).toHaveBeenCalledWith(
+        {
+          userId: 7,
+          revokedAt: IsNull(),
+          tokenHash: Not(createHash('sha256').update('current-token').digest('hex')),
+        },
+        { revokedAt: expect.any(Date) },
+      );
+    });
+
+    it('treats an empty keep token as no keep token', async () => {
+      await service.revokeUserTokens(7, '');
+
+      expect(refreshTokenRepository.update).toHaveBeenCalledWith(
+        { userId: 7, revokedAt: IsNull() },
+        { revokedAt: expect.any(Date) },
       );
     });
   });

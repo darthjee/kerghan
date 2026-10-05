@@ -6,6 +6,7 @@ import { AuthService } from './auth.service.js';
 import { AdminUpdateUserDto } from './dto/admin-update-user.dto.js';
 import { User } from './entities/user.entity.js';
 import { PasswordResetService } from './password-reset.service.js';
+import { TokenService } from './token.service.js';
 import { UserUpdateService } from './user-update.service.js';
 import { MailService } from '../mail/mail.service.js';
 
@@ -25,6 +26,7 @@ export class AdminService {
   private readonly passwordResetService: PasswordResetService;
   private readonly mailService: MailService;
   private readonly userUpdateService: UserUpdateService;
+  private readonly tokenService: TokenService;
 
   /**
    * @param {Repository<User>} userRepository - The Auth module's user repository.
@@ -35,6 +37,8 @@ export class AdminService {
    * @param {MailService} mailService - The Mail module's send pipe (direct DI).
    * @param {UserUpdateService} userUpdateService - Applies/hashes/persists
    *   the requested changes for `editUser`, shared with `AccountService`.
+   * @param {TokenService} tokenService - Revokes the target user's refresh
+   *   tokens after a password edit.
    */
   constructor(
     @InjectRepository(User) userRepository: Repository<User>,
@@ -42,12 +46,14 @@ export class AdminService {
       passwordResetService: PasswordResetService,
       mailService: MailService,
       userUpdateService: UserUpdateService,
+      tokenService: TokenService,
   ) {
     this.userRepository = userRepository;
     this.authService = authService;
     this.passwordResetService = passwordResetService;
     this.mailService = mailService;
     this.userUpdateService = userUpdateService;
+    this.tokenService = tokenService;
   }
 
   /**
@@ -117,7 +123,10 @@ export class AdminService {
    * confirming their own already-authenticated session, not the target
    * user's credentials. Works identically when `userId` is the calling
    * admin's own id — no special-casing needed, since there is no
-   * current-password check to skip in the first place.
+   * current-password check to skip in the first place. A password edit
+   * revokes every one of the target user's refresh tokens (signing them out
+   * everywhere) — including the admin's own sessions when editing their own
+   * account; username/email-only edits revoke nothing.
    * @param {number} userId - The id of the user to update.
    * @param {AdminUpdateUserDto} dto - The requested changes.
    * @returns {Promise<User>} The user's resulting row.
@@ -134,6 +143,10 @@ export class AdminService {
 
     await this.authService.assertAvailableForUpdate(user.id, username, email);
     await this.userUpdateService.applyUserUpdate(user, dto);
+
+    if (dto.newPassword) {
+      await this.tokenService.revokeUserTokens(user.id);
+    }
 
     return this.#findUserOrThrow(userId);
   }

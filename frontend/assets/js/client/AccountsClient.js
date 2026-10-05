@@ -221,12 +221,14 @@ const AccountsClient = {
   },
 
   /**
-   * Update the caller's own account, confirming with the current password. Unlike
-   * {@link AccountsClient.login}/{@link AccountsClient.register}, this never touches
-   * `AuthSession` — no token refresh or re-login is triggered on success. `username`, `email`,
-   * and `newPassword` are only included in the request body when defined, so callers may update
-   * any subset of them; a `newPasswordConfirmation` field is never sent — that check is
-   * client-side only.
+   * Update the caller's own account, confirming with the current password. The stored refresh
+   * token (read from `AuthSession`) is sent as `refreshToken` so the backend can keep this
+   * session alive while revoking the caller's other sessions on a password change; it is omitted
+   * when no token is stored. Unlike {@link AccountsClient.login}/{@link AccountsClient.register},
+   * this never writes or clears `AuthSession` — no token refresh or re-login is triggered on
+   * success. `username`, `email`, and `newPassword` are only included in the request body when
+   * defined, so callers may update any subset of them; a `newPasswordConfirmation` field is never
+   * sent — that check is client-side only.
    *
    * @param {{currentPassword: string, username?: string, email?: string,
    *   newPassword?: string}} fields - The current password (always required) plus any fields
@@ -239,7 +241,9 @@ const AccountsClient = {
   }) {
     return ApiClient.patchJson('/auth/account.json', {
       currentPassword,
-      ...pickDefined({ username, email, newPassword }),
+      ...pickDefined({
+        username, email, newPassword, refreshToken: AuthSession.get() ?? undefined,
+      }),
     });
   },
 };

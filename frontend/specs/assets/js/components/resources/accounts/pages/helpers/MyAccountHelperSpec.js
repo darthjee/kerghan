@@ -29,4 +29,13 @@ describe('MyAccountHelper', () => {
       expect(handlers.onChange).toHaveBeenCalledWith('currentPassword');
     });
   });
+
+  describe('.render (password hint)', () => {
+    it('renders the My Account password hint', () => {
+      const page = renderPage(buildState(), buildHandlers());
+
+      expect(page.containsElement('p', 'Changing the password signs out your other sessions.'))
+        .withContext('password hint').toBeTrue();
+    });
+  });
 });
