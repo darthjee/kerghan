@@ -2,7 +2,7 @@ import { ConflictException, Injectable, UnauthorizedException } from '@nestjs/co
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { InjectRepository } from '@nestjs/typeorm';
 import bcrypt from 'bcryptjs';
-import { IsNull, Not, Repository } from 'typeorm';
+import { Not, Repository } from 'typeorm';
 import { ErrorCodes } from '../core/error-codes.js';
 import { LoginDto } from './dto/login.dto.js';
 import { RecoverDto } from './dto/recover.dto.js';
@@ -166,7 +166,7 @@ export class AuthService {
   async resetPassword(dto: ResetPasswordDto): Promise<void> {
     const userId = await this.passwordResetService.resetPassword(dto);
 
-    await this.#revokeTokenFamily(userId);
+    await this.tokenService.revokeUserTokens(userId);
   }
 
   /**
@@ -259,7 +259,7 @@ export class AuthService {
     }
 
     if (tokenRow.revokedAt) {
-      await this.#revokeTokenFamily(tokenRow.userId);
+      await this.tokenService.revokeUserTokens(tokenRow.userId);
       throw new UnauthorizedException('Invalid or expired refresh token');
     }
 
@@ -276,13 +276,6 @@ export class AuthService {
     const isActive = !!tokenRow && !tokenRow.revokedAt && tokenRow.expiresAt > new Date();
 
     return isActive ? tokenRow : null;
-  }
-
-  async #revokeTokenFamily(userId: number): Promise<void> {
-    await this.refreshTokenRepository.update(
-      { userId, revokedAt: IsNull() },
-      { revokedAt: new Date() },
-    );
   }
 
   async #validateCredentials(username: string, password: string): Promise<User> {
