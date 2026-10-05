@@ -1,14 +1,27 @@
 import { randomBytes } from 'node:crypto';
 import { Injectable } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { LoggerService } from '../core/logger.service.js';
+import { getNumberConfig } from '../core/numeric-config.js';
 import { hashToken } from '../core/token-hash.js';
 import { RefreshToken } from './entities/refresh-token.entity.js';
 import { Session } from './entities/session.entity.js';
 import { User } from './entities/user.entity.js';
 
-const REFRESH_TOKEN_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+// Default regular refresh-token lifetime (7 days, in milliseconds) used when
+// `KERGHAN_REFRESH_TOKEN_TTL_MS` is unset, non-numeric or not positive.
+const DEFAULT_REFRESH_TOKEN_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+
+// Default persistent ("keep me signed in") refresh-token lifetime (30 days,
+// in milliseconds) used when `KERGHAN_PERSISTENT_REFRESH_TOKEN_TTL_MS` is
+// unset, non-numeric or not positive.
+const DEFAULT_PERSISTENT_REFRESH_TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+
+const REFRESH_TOKEN_TTL_KEY = 'KERGHAN_REFRESH_TOKEN_TTL_MS';
+const PERSISTENT_REFRESH_TOKEN_TTL_KEY = 'KERGHAN_PERSISTENT_REFRESH_TOKEN_TTL_MS';
 
 export interface AuthResult {
   user: User;
@@ -26,40 +39,61 @@ export interface AuthResult {
  * same as `PasswordResetService`. Depends only on injected repositories and
  * services — never reads env vars or global state directly (per
  * `docs/agents/contributing.md`'s DI rule).
+ *
+ * Refresh tokens get one of two TTLs, read from config on every mint (so a
+ * change applies only to newly minted tokens): the regular TTL
+ * (`KERGHAN_REFRESH_TOKEN_TTL_MS`, default 7 days) or, for a "keep me signed
+ * in" session, the persistent TTL (`KERGHAN_PERSISTENT_REFRESH_TOKEN_TTL_MS`,
+ * default 30 days). An unset/non-numeric value falls back to the default; a
+ * value `<= 0` also falls back, logging a warning once per key.
  */
 @Injectable()
 export class TokenService {
   private readonly refreshTokenRepository: Repository<RefreshToken>;
   private readonly sessionRepository: Repository<Session>;
   private readonly jwtService: JwtService;
+  private readonly configService: ConfigService;
+  private readonly logger: LoggerService;
+  readonly #warnedTtlKeys = new Set<string>();
 
   /**
    * @param {Repository<RefreshToken>} refreshTokenRepository - The refresh-token repository.
    * @param {Repository<Session>} sessionRepository - The session repository.
    * @param {JwtService} jwtService - Signs the access token.
+   * @param {ConfigService} configService - Supplies the regular and
+   *   persistent refresh-token TTLs.
+   * @param {LoggerService} logger - The injected Core logger, used to warn
+   *   about a non-positive configured TTL.
    */
   constructor(
     @InjectRepository(RefreshToken) refreshTokenRepository: Repository<RefreshToken>,
     @InjectRepository(Session) sessionRepository: Repository<Session>,
       jwtService: JwtService,
+      configService: ConfigService,
+      logger: LoggerService,
   ) {
     this.refreshTokenRepository = refreshTokenRepository;
     this.sessionRepository = sessionRepository;
     this.jwtService = jwtService;
+    this.configService = configService;
+    this.logger = logger;
   }
 
   /**
    * Mints a fresh login session for the given user: signs the access-token
    * JWT (`{ sub, username, isAdmin }`), persists a new SHA-256-hashed
-   * `RefreshToken` row (7-day TTL, `revokedAt: null`), and writes an
-   * `auth_sessions` bookkeeping row. Shared by the password-login
-   * (`AuthService`) and device-authorization paths so both mint sessions
-   * identically.
+   * `RefreshToken` row (`revokedAt: null`, carrying `keepSignedIn`, with the
+   * persistent TTL when `keepSignedIn` is `true` and the regular TTL
+   * otherwise), and writes an `auth_sessions` bookkeeping row. Shared by the
+   * password-login (`AuthService`) and device-authorization paths so both
+   * mint sessions identically.
    * @param {User} user - The user to mint a session for.
+   * @param {boolean} [keepSignedIn] - Whether this is a persistent ("keep me
+   *   signed in") session; defaults to `false`.
    * @returns {Promise<AuthResult>} The user plus the freshly issued
    *   access/refresh token pair.
    */
-  async issueTokens(user: User): Promise<AuthResult> {
+  async issueTokens(user: User, keepSignedIn = false): Promise<AuthResult> {
     const accessToken = this.jwtService.sign({
       sub: user.id,
       username: user.username,
@@ -71,8 +105,9 @@ export class TokenService {
       this.refreshTokenRepository.create({
         tokenHash: this.hashToken(refreshToken),
         userId: user.id,
-        expiresAt: new Date(Date.now() + REFRESH_TOKEN_TTL_MS),
+        expiresAt: new Date(Date.now() + this.#refreshTokenTtlMs(keepSignedIn)),
         revokedAt: null,
+        keepSignedIn,
       }),
     );
 
@@ -91,6 +126,31 @@ export class TokenService {
    */
   hashToken(token: string): string {
     return hashToken(token);
+  }
+
+  #refreshTokenTtlMs(keepSignedIn: boolean): number {
+    return keepSignedIn
+      ? this.#resolveTtl(PERSISTENT_REFRESH_TOKEN_TTL_KEY, DEFAULT_PERSISTENT_REFRESH_TOKEN_TTL_MS)
+      : this.#resolveTtl(REFRESH_TOKEN_TTL_KEY, DEFAULT_REFRESH_TOKEN_TTL_MS);
+  }
+
+  #resolveTtl(key: string, fallback: number): number {
+    const ttl = getNumberConfig(this.configService, key, fallback);
+
+    if (ttl > 0) {
+      return ttl;
+    }
+
+    if (!this.#warnedTtlKeys.has(key)) {
+      this.#warnedTtlKeys.add(key);
+      this.logger.warn('non-positive refresh-token TTL configured, using default', {
+        context: 'TokenService',
+        key,
+        fallback,
+      });
+    }
+
+    return fallback;
   }
 
   async #touchSession(userId: number): Promise<void> {
