@@ -10,6 +10,7 @@ describe('LoginModalFormsHelper', () => {
     onEmailChange: jasmine.createSpy('onEmailChange'),
     onPasswordChange: jasmine.createSpy('onPasswordChange'),
     onPasswordConfirmationChange: jasmine.createSpy('onPasswordConfirmationChange'),
+    onKeepSignedInChange: jasmine.createSpy('onKeepSignedInChange'),
   });
 
   const buildState = (overrides = {}) => ({

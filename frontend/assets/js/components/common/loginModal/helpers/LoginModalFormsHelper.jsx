@@ -38,6 +38,9 @@ const SUBMIT_LABELS = new Map([
   ['device', 'Send request'],
 ]);
 
+/** Modes that offer the "Keep me signed in" checkbox. */
+const KEEP_SIGNED_IN_MODES = new Set(['password', 'device']);
+
 /** Terminal device-panel copy, keyed by the `device:*` result-panel value. */
 const DEVICE_PANEL_MESSAGES = new Map([
   ['device:denied', 'The request was denied on the other device.'],
@@ -159,8 +162,36 @@ function renderModeSelector(state, handlers) {
 }
 
 /**
- * Render the active mode's sub-form: its submit-time error, its fields, and its submit
- * button.
+ * Render the "Keep me signed in" checkbox for the modes that offer it (Password and
+ * Authorize-with-logged-device), or nothing for every other mode.
+ *
+ * @param {string} mode - The resolved active mode.
+ * @param {{keepSignedIn: (boolean|undefined)}} state - Modal state.
+ * @param {{onKeepSignedInChange: Function}} handlers - Event handlers.
+ * @returns {(React.ReactElement|null)} The rendered checkbox, or `null`.
+ */
+function renderKeepSignedIn(mode, state, handlers) {
+  if (!KEEP_SIGNED_IN_MODES.has(mode)) {
+    return null;
+  }
+
+  return (
+    <div className="form-check mb-3">
+      <input
+        id="login-modal-keepSignedIn"
+        type="checkbox"
+        className="form-check-input"
+        checked={Boolean(state.keepSignedIn)}
+        onChange={handlers.onKeepSignedInChange}
+      />
+      <label className="form-check-label" htmlFor="login-modal-keepSignedIn">Keep me signed in</label>
+    </div>
+  );
+}
+
+/**
+ * Render the active mode's sub-form: its submit-time error, its fields, the "Keep me signed
+ * in" checkbox (Password and device modes only), and its submit button.
  *
  * @param {object} state - Modal state.
  * @param {object} handlers - Event handlers.
@@ -181,6 +212,7 @@ function renderForm(state, handlers) {
       {FIELDS_BY_MODE.get(mode).map(([name, type, label]) => FormFieldsHelper.renderField(
         name, type, label, state, onChangeByField.get(name), 'login-modal-',
       ))}
+      {renderKeepSignedIn(mode, state, handlers)}
       <button type="submit" className="btn btn-primary">{SUBMIT_LABELS.get(mode)}</button>
     </form>
   );
@@ -202,12 +234,13 @@ const LoginModalFormsHelper = {
    * the active mode's sub-form.
    *
    * @param {{mode: string, username: string, email: string, password: string,
-   *   passwordConfirmation: string, fieldErrors: object, submitError: (string|null),
-   *   resultPanel: (string|null), deviceExpiresAt: (string|null), now: (number|undefined)}}
-   *   state - Modal state.
+   *   passwordConfirmation: string, keepSignedIn: boolean, fieldErrors: object,
+   *   submitError: (string|null), resultPanel: (string|null), deviceExpiresAt: (string|null),
+   *   now: (number|undefined)}} state - Modal state.
    * @param {{onSelectMode: Function, onSubmit: Function, onUsernameChange: Function,
    *   onEmailChange: Function, onPasswordChange: Function,
-   *   onPasswordConfirmationChange: Function}} handlers - Event handlers.
+   *   onPasswordConfirmationChange: Function, onKeepSignedInChange: Function}} handlers - Event
+   *   handlers.
    * @returns {React.ReactElement} The rendered modal body.
    */
   render(state, handlers) {
