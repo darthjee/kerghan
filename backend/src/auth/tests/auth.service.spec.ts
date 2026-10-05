@@ -1,6 +1,7 @@
 import { BadRequestException, ConflictException, HttpException, UnauthorizedException } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import bcrypt from 'bcryptjs';
+import { IsNull } from 'typeorm';
 import { ErrorCodes } from '../../core/error-codes.js';
 import { AuthService } from '../auth.service.js';
 import { RefreshToken } from '../entities/refresh-token.entity.js';
@@ -35,8 +36,8 @@ describe('AuthService', () => {
     });
   }
 
-  function stubRevokedRefreshToken(): void {
-    refreshTokenRepository.findOneBy.mockResolvedValue({ ...activeToken, revokedAt: new Date() });
+  function stubRevokedRefreshToken(revokedReason = 'rotated', expiresAt = activeToken.expiresAt): void {
+    refreshTokenRepository.findOneBy.mockResolvedValue({ ...activeToken, revokedAt: new Date(), revokedReason, expiresAt });
   }
 
   beforeEach(() => {
@@ -305,7 +306,10 @@ describe('AuthService', () => {
       it('revokes the presented token before issuing a new pair', async () => {
         const result = await service.refresh('a-refresh-token');
 
-        expect(refreshTokenRepository.update).toHaveBeenCalledWith(10, { revokedAt: expect.any(Date) });
+        expect(refreshTokenRepository.update).toHaveBeenCalledWith(10, {
+          revokedAt: expect.any(Date),
+          revokedReason: 'rotated',
+        });
         expect(result.user).toBe(user);
         expect(result.accessToken).toBe('signed-access-token');
         expect(result.refreshToken).not.toBe('a-refresh-token');
@@ -352,7 +356,7 @@ describe('AuthService', () => {
       });
     });
 
-    describe('when the refresh token was already revoked', () => {
+    describe('when the refresh token was already rotated', () => {
       beforeEach(() => {
         stubRevokedRefreshToken();
       });
@@ -366,7 +370,39 @@ describe('AuthService', () => {
       it('treats the replay as a compromise signal, revoking the rest of the token family', async () => {
         await expect(service.refresh('reused-token')).rejects.toThrow(UnauthorizedException);
 
-        expect(tokenService.revokeUserTokens).toHaveBeenCalledWith(activeToken.userId);
+        expect(tokenService.revokeUserTokens).toHaveBeenCalledWith(activeToken.userId, 'replay_detected');
+      });
+    });
+
+    describe('when the refresh token was rotated and has since expired', () => {
+      beforeEach(() => {
+        stubRevokedRefreshToken('rotated', new Date(Date.now() - 1000));
+      });
+
+      it('rejects with a plain UnauthorizedException, revoking nothing', async () => {
+        await expect(service.refresh('old-token')).rejects.toThrow(
+          new UnauthorizedException('Invalid or expired refresh token'),
+        );
+
+        expect(refreshTokenRepository.update).not.toHaveBeenCalled();
+        expect(tokenService.revokeUserTokens).not.toHaveBeenCalled();
+      });
+    });
+
+    describe.each([
+      'logout', 'user_revoked', 'password_change', 'password_reset', 'admin_password_change', 'replay_detected', null,
+    ])('when the refresh token was revoked with reason %p', (reason) => {
+      beforeEach(() => {
+        stubRevokedRefreshToken(reason as unknown as string);
+      });
+
+      it('rejects with a plain UnauthorizedException, revoking nothing', async () => {
+        await expect(service.refresh('revoked-token')).rejects.toThrow(
+          new UnauthorizedException('Invalid or expired refresh token'),
+        );
+
+        expect(refreshTokenRepository.update).not.toHaveBeenCalled();
+        expect(tokenService.revokeUserTokens).not.toHaveBeenCalled();
       });
     });
 
@@ -391,13 +427,13 @@ describe('AuthService', () => {
   });
 
   describe('logout', () => {
-    it('revokes the matching refresh token by its hash', async () => {
+    it('revokes the matching unrevoked refresh token by its hash, with reason logout', async () => {
       await service.logout('a-refresh-token');
 
       expect(tokenService.hashToken).toHaveBeenCalledWith('a-refresh-token');
       expect(refreshTokenRepository.update).toHaveBeenCalledWith(
-        { tokenHash: 'hashed:a-refresh-token' },
-        { revokedAt: expect.any(Date) },
+        { tokenHash: 'hashed:a-refresh-token', revokedAt: IsNull() },
+        { revokedAt: expect.any(Date), revokedReason: 'logout' },
       );
     });
   });
@@ -415,7 +451,7 @@ describe('AuthService', () => {
       it('revokes every other refresh token belonging to that user', async () => {
         await service.resetPassword({ token: 'a-token', password: 'new-password' });
 
-        expect(tokenService.revokeUserTokens).toHaveBeenCalledWith(1);
+        expect(tokenService.revokeUserTokens).toHaveBeenCalledWith(1, 'password_reset');
       });
     });
 

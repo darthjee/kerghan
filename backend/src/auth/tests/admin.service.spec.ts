@@ -232,7 +232,7 @@ describe('AdminService', () => {
       it('revokes all of the target user\'s refresh tokens on a password change', async () => {
         await service.editUser(1, { newPassword: 'brand-new-password' });
 
-        expect(tokenService.revokeUserTokens).toHaveBeenCalledWith(1);
+        expect(tokenService.revokeUserTokens).toHaveBeenCalledWith(1, 'admin_password_change');
       });
 
       it('revokes only after the password change is applied', async () => {
@@ -247,7 +247,7 @@ describe('AdminService', () => {
         await service.editUser(1, { username: 'new-username', newPassword: 'brand-new-password' });
 
         expect(tokenService.revokeUserTokens).toHaveBeenCalledTimes(1);
-        expect(tokenService.revokeUserTokens).toHaveBeenCalledWith(1);
+        expect(tokenService.revokeUserTokens).toHaveBeenCalledWith(1, 'admin_password_change');
       });
 
       it('revokes nothing on a username-only change', async () => {

@@ -4,6 +4,10 @@ import { loginAs, useTestApp } from './auth.controller.e2e-test-support.js';
 describe('AuthController (e2e)', () => {
   const ctx = useTestApp();
 
+  function refresh(refreshToken: string): request.Test {
+    return request(ctx.app.getHttpServer()).post('/auth/refresh.json').send({ refreshToken });
+  }
+
   describe('refresh token rotation', () => {
     it('issues a new token pair and invalidates the old refresh token', async () => {
       const login = await loginAs(ctx.app);
@@ -36,6 +40,40 @@ describe('AuthController (e2e)', () => {
       expect(rotated).not.toBe(original);
       expect(rotated.sessionUuid).toBe(original.sessionUuid);
       expect(rotated.startedAt).toEqual(original.startedAt);
+    });
+
+    it('treats a replayed rotated token as theft, revoking every token of the user', async () => {
+      const login = await loginAs(ctx.app);
+      const refreshed = await refresh(login.body.refreshToken).expect(201);
+
+      await refresh(login.body.refreshToken).expect(401);
+
+      await refresh(refreshed.body.refreshToken).expect(401);
+      expect(ctx.refreshTokenRepo.rows.map((row) => row.revokedReason)).toContain('replay_detected');
+    });
+
+    it('answers a plain 401 for an expired rotated token, revoking nothing else', async () => {
+      const login = await loginAs(ctx.app);
+      const presented = ctx.refreshTokenRepo.rows[ctx.refreshTokenRepo.rows.length - 1];
+      const refreshed = await refresh(login.body.refreshToken).expect(201);
+
+      presented.expiresAt = new Date(Date.now() - 1000);
+
+      await refresh(login.body.refreshToken).expect(401);
+      await refresh(refreshed.body.refreshToken).expect(201);
+    });
+
+    it('answers a plain 401 for a logged-out token, revoking nothing else', async () => {
+      const kept = await loginAs(ctx.app);
+      const loggedOut = await loginAs(ctx.app);
+
+      await request(ctx.app.getHttpServer())
+        .delete('/auth/logoff.json')
+        .send({ refreshToken: loggedOut.body.refreshToken })
+        .expect(204);
+
+      await refresh(loggedOut.body.refreshToken).expect(401);
+      await refresh(kept.body.refreshToken).expect(201);
     });
 
     it('rejects an expired refresh token', async () => {

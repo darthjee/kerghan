@@ -92,7 +92,7 @@ describe('SessionService', () => {
 
       expect(refreshTokenRepository.update).toHaveBeenCalledWith(
         { userId: 7, sessionUuid: 'session-a', revokedAt: IsNull() },
-        { revokedAt: expect.any(Date) },
+        { revokedAt: expect.any(Date), revokedReason: 'user_revoked' },
       );
     });
 
@@ -110,7 +110,7 @@ describe('SessionService', () => {
       await service.revokeOthers(7, 'current-token');
 
       expect(refreshTokenRepository.findOneBy).toHaveBeenCalledWith({ tokenHash: 'hashed:current-token' });
-      expect(tokenService.revokeUserTokens).toHaveBeenCalledWith(7, 'current-token');
+      expect(tokenService.revokeUserTokens).toHaveBeenCalledWith(7, 'user_revoked', 'current-token');
     });
 
     const invalidCases: [string, RefreshToken | null][] = [

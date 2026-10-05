@@ -7,7 +7,7 @@ import { IsNull, Not, Repository } from 'typeorm';
 import { LoggerService } from '../core/logger.service.js';
 import { getNumberConfig } from '../core/numeric-config.js';
 import { hashToken } from '../core/token-hash.js';
-import { RefreshToken } from './entities/refresh-token.entity.js';
+import { RefreshToken, RevokedReason } from './entities/refresh-token.entity.js';
 import { Session } from './entities/session.entity.js';
 import { User } from './entities/user.entity.js';
 
@@ -124,6 +124,7 @@ export class TokenService {
         userId: user.id,
         expiresAt: new Date(Date.now() + this.#refreshTokenTtlMs(keepSignedIn)),
         revokedAt: null,
+        revokedReason: null,
         keepSignedIn,
         sessionUuid: session?.sessionUuid ?? randomUUID(),
         startedAt: session?.startedAt ?? new Date(),
@@ -148,8 +149,8 @@ export class TokenService {
   }
 
   /**
-   * Revokes (sets `revokedAt` to now) every unrevoked refresh token of the
-   * given user, optionally keeping one presented token alive. The kept token
+   * Revokes (sets `revokedAt` to now and `revokedReason` to `reason`) every
+   * unrevoked refresh token of the given user, optionally keeping one presented token alive. The kept token
    * is excluded by its SHA-256 hash *within this user's own rows*, so it
    * survives only if it is one of the user's unrevoked tokens: a foreign or
    * unknown token matches none of the user's rows and excludes nothing, so
@@ -159,16 +160,18 @@ export class TokenService {
    * replay/compromise path, password reset, My Account password change and
    * admin password edit, so the "revoke a user's tokens" paths cannot drift.
    * @param {number} userId - The user whose refresh tokens are revoked.
+   * @param {RevokedReason} reason - Why the tokens are revoked, recorded on
+   *   every revoked row.
    * @param {string} [keepRefreshToken] - The plaintext refresh token of the
    *   current session to keep alive, if any.
    * @returns {Promise<void>} Resolves once the tokens are revoked.
    */
-  async revokeUserTokens(userId: number, keepRefreshToken?: string): Promise<void> {
+  async revokeUserTokens(userId: number, reason: RevokedReason, keepRefreshToken?: string): Promise<void> {
     const criteria = keepRefreshToken
       ? { userId, revokedAt: IsNull(), tokenHash: Not(this.hashToken(keepRefreshToken)) }
       : { userId, revokedAt: IsNull() };
 
-    await this.refreshTokenRepository.update(criteria, { revokedAt: new Date() });
+    await this.refreshTokenRepository.update(criteria, { revokedAt: new Date(), revokedReason: reason });
   }
 
   #refreshTokenTtlMs(keepSignedIn: boolean): number {

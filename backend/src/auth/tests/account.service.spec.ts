@@ -146,7 +146,7 @@ describe('AccountService', () => {
           refreshToken: 'current-refresh-token',
         });
 
-        expect(tokenService.revokeUserTokens).toHaveBeenCalledWith(1, 'current-refresh-token');
+        expect(tokenService.revokeUserTokens).toHaveBeenCalledWith(1, 'password_change', 'current-refresh-token');
       });
 
       it('revokes all of the caller\'s sessions when no refresh token is sent', async () => {
@@ -155,7 +155,7 @@ describe('AccountService', () => {
           newPassword: 'brand-new-password',
         });
 
-        expect(tokenService.revokeUserTokens).toHaveBeenCalledWith(1, undefined);
+        expect(tokenService.revokeUserTokens).toHaveBeenCalledWith(1, 'password_change', undefined);
       });
 
       it('revokes only after the new password is saved', async () => {

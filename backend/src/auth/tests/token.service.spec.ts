@@ -272,16 +272,16 @@ describe('TokenService', () => {
 
   describe('revokeUserTokens', () => {
     it('revokes every unrevoked token of the user when no keep token is given', async () => {
-      await service.revokeUserTokens(7);
+      await service.revokeUserTokens(7, 'logout');
 
       expect(refreshTokenRepository.update).toHaveBeenCalledWith(
         { userId: 7, revokedAt: IsNull() },
-        { revokedAt: expect.any(Date) },
+        { revokedAt: expect.any(Date), revokedReason: 'logout' },
       );
     });
 
     it('excludes the kept token by its hash when a keep token is given', async () => {
-      await service.revokeUserTokens(7, 'current-token');
+      await service.revokeUserTokens(7, 'password_change', 'current-token');
 
       expect(refreshTokenRepository.update).toHaveBeenCalledWith(
         {
@@ -289,16 +289,16 @@ describe('TokenService', () => {
           revokedAt: IsNull(),
           tokenHash: Not(createHash('sha256').update('current-token').digest('hex')),
         },
-        { revokedAt: expect.any(Date) },
+        { revokedAt: expect.any(Date), revokedReason: expect.any(String) },
       );
     });
 
     it('treats an empty keep token as no keep token', async () => {
-      await service.revokeUserTokens(7, '');
+      await service.revokeUserTokens(7, 'password_change', '');
 
       expect(refreshTokenRepository.update).toHaveBeenCalledWith(
         { userId: 7, revokedAt: IsNull() },
-        { revokedAt: expect.any(Date) },
+        { revokedAt: expect.any(Date), revokedReason: expect.any(String) },
       );
     });
   });

@@ -106,6 +106,16 @@ describe('SessionController (e2e)', () => {
       await refreshWith(ctx.app, second.refreshToken).expect(401);
     });
 
+    it('rejects the revoked session\'s token without logging the revoker out', async () => {
+      const id = await sessionIdOf(second);
+
+      await post(ctx.app, `/auth/sessions/${id}/revoke.json`, first, {}).expect(201);
+
+      await refreshWith(ctx.app, second.refreshToken).expect(401);
+      await refreshWith(ctx.app, second.refreshToken).expect(401);
+      await refreshWith(ctx.app, first.refreshToken).expect(201);
+    });
+
     it('allows revoking the current session', async () => {
       const id = await sessionIdOf(first);
 
@@ -138,9 +148,18 @@ describe('SessionController (e2e)', () => {
 
       expect(sessions).toEqual([expect.objectContaining({ current: true })]);
       await refreshWith(ctx.app, other.refreshToken).expect(201);
-      await refreshWith(ctx.app, first.refreshToken).expect(201);
-      // Last, since presenting a revoked token revokes the whole token family (replay detection).
+    });
+
+    it('rejects a revoked session\'s token without logging the current session out', async () => {
+      await post(ctx.app, '/auth/sessions/revoke-others.json', first, { refreshToken: first.refreshToken })
+        .expect(201);
+
       await refreshWith(ctx.app, second.refreshToken).expect(401);
+      await refreshWith(ctx.app, second.refreshToken).expect(401);
+
+      const refreshed = await refreshWith(ctx.app, first.refreshToken).expect(201);
+
+      await refreshWith(ctx.app, refreshed.body.refreshToken).expect(201);
     });
 
     it.each([
