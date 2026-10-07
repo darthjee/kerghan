@@ -9,13 +9,9 @@ describe('HeaderController', () => {
   let controller;
 
   beforeEach(() => {
-    client = jasmine.createSpyObj('client', ['logout', 'status']);
+    client = jasmine.createSpyObj('client', ['logout', 'status', 'migrateLegacyToken']);
     controller = new HeaderController(client);
     spyOn(AuthEvents, 'emit');
-  });
-
-  afterEach(() => {
-    AuthSession.clear();
   });
 
   describe('#handleLogout', () => {
@@ -29,13 +25,12 @@ describe('HeaderController', () => {
       uninstallFakeWindow();
     });
 
-    it('logs out with the currently stored refresh token', async () => {
-      AuthSession.set('refresh-token');
+    it('logs out without passing any token', async () => {
       client.logout.and.resolveTo();
 
       await controller.handleLogout();
 
-      expect(client.logout).toHaveBeenCalledWith('refresh-token');
+      expect(client.logout).toHaveBeenCalledWith();
     });
 
     it('redirects home on success', async () => {
@@ -81,33 +76,81 @@ describe('HeaderController', () => {
     });
   });
 
+  describe('#migrateIfNeeded', () => {
+    it('does not call the backend when there is no legacy token', async () => {
+      spyOn(AuthSession, 'takeLegacyToken').and.returnValue(null);
+
+      await controller.migrateIfNeeded();
+
+      expect(client.migrateLegacyToken).not.toHaveBeenCalled();
+    });
+
+    it('migrates the legacy token when one is present', async () => {
+      spyOn(AuthSession, 'takeLegacyToken').and.returnValue('legacy-token');
+      client.migrateLegacyToken.and.resolveTo(true);
+
+      await controller.migrateIfNeeded();
+
+      expect(client.migrateLegacyToken).toHaveBeenCalledWith('legacy-token');
+    });
+
+    it('runs at most once, since the legacy token is removed when taken', async () => {
+      AuthSession.storage().setItem('kerghan_refresh_token', 'legacy-token');
+      client.migrateLegacyToken.and.resolveTo(false);
+
+      await controller.migrateIfNeeded();
+      await controller.migrateIfNeeded();
+
+      expect(client.migrateLegacyToken).toHaveBeenCalledTimes(1);
+    });
+  });
+
   describe('#checkStatus', () => {
-    it('emits false/false without calling the backend when there is no stored token', async () => {
+    beforeEach(() => {
+      spyOn(AuthSession, 'takeLegacyToken').and.returnValue(null);
+    });
+
+    it('emits false/false without calling the backend when the hint cookie is absent', async () => {
+      spyOn(AuthSession, 'isLoggedIn').and.returnValue(false);
+
       await controller.checkStatus();
 
       expect(client.status).not.toHaveBeenCalled();
       expect(AuthEvents.emit).toHaveBeenCalledWith(false, false);
     });
 
-    it('emits true and the admin flag, leaving the stored token untouched, when it is still active', async () => {
-      AuthSession.set('refresh-token');
+    it('emits the backend-confirmed state and admin flag when the hint cookie is present', async () => {
+      spyOn(AuthSession, 'isLoggedIn').and.returnValue(true);
       client.status.and.resolveTo({ loggedIn: true, isAdmin: true });
 
       await controller.checkStatus();
 
-      expect(client.status).toHaveBeenCalledWith('refresh-token');
-      expect(AuthSession.get()).toBe('refresh-token');
+      expect(client.status).toHaveBeenCalledWith();
       expect(AuthEvents.emit).toHaveBeenCalledWith(true, true);
     });
 
-    it('clears the stored token and emits false when it is no longer active', async () => {
-      AuthSession.set('refresh-token');
+    it('emits false when the backend reports the session is no longer active', async () => {
+      spyOn(AuthSession, 'isLoggedIn').and.returnValue(true);
       client.status.and.resolveTo({ loggedIn: false, isAdmin: false });
 
       await controller.checkStatus();
 
-      expect(AuthSession.get()).toBeNull();
       expect(AuthEvents.emit).toHaveBeenCalledWith(false, false);
+    });
+
+    it('runs the migration before reading the hint cookie', async () => {
+      const order = [];
+      spyOn(controller, 'migrateIfNeeded').and.callFake(async () => order.push('migrate'));
+      spyOn(AuthSession, 'isLoggedIn').and.callFake(() => {
+        order.push('isLoggedIn');
+        return true;
+      });
+      client.status.and.resolveTo({ loggedIn: true, isAdmin: false });
+
+      await controller.checkStatus();
+
+      expect(order).toEqual(['migrate', 'isLoggedIn']);
+      expect(AuthEvents.emit).toHaveBeenCalledWith(true, false);
     });
   });
 });

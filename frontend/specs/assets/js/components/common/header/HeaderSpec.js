@@ -6,10 +6,6 @@ import HeaderController from '../../../../../../assets/js/components/common/head
 import AuthSession from '../../../../../../assets/js/client/AuthSession.js';
 
 describe('Header', () => {
-  afterEach(() => {
-    AuthSession.clear();
-  });
-
   it('renders the navigation bar', () => {
     const markup = renderToStaticMarkup(React.createElement(Header, null));
 
@@ -25,6 +21,7 @@ describe('Header', () => {
   });
 
   it('passes the logged-out state to HeaderHelper by default', () => {
+    spyOn(AuthSession, 'isLoggedIn').and.returnValue(false);
     spyOn(HeaderHelper, 'render').and.callThrough();
 
     renderToStaticMarkup(React.createElement(Header, null));
@@ -32,8 +29,8 @@ describe('Header', () => {
     expect(HeaderHelper.render).toHaveBeenCalledWith(false, false, jasmine.any(Function), jasmine.any(Function));
   });
 
-  it('passes the logged-in state to HeaderHelper when a refresh token is stored', () => {
-    AuthSession.set('token');
+  it('passes the logged-in state to HeaderHelper when the logged_in hint cookie is present', () => {
+    spyOn(AuthSession, 'isLoggedIn').and.returnValue(true);
     spyOn(HeaderHelper, 'render').and.callThrough();
 
     renderToStaticMarkup(React.createElement(Header, null));

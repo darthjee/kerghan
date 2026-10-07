@@ -64,30 +64,46 @@ GitHub's API rather than the backend at all.
 
 - `register(fields)` — `POST /auth/register.json`
 - `login({ username, password })` — `POST /auth/login.json`
-- `refresh(refreshToken)` — `POST /auth/refresh.json`
-- `logout(refreshToken)` — `DELETE /auth/logoff.json`
-- `status(refreshToken)` — `POST /auth/status.json`
+- `refresh()` — `POST /auth/refresh.json`
+- `logout()` — `DELETE /auth/logoff.json`
+- `status()` — `POST /auth/status.json`
+- `migrateLegacyToken(token)` — one-time `POST /auth/refresh.json` with `{ refreshToken }`
+  (`TODO(#324-migration)`, see below)
 - `recover(email)` / `resetPassword(fields)` — `POST /auth/recover.json` / `POST /auth/reset-password.json`
 - `createAuthorizationRequest(username)`, `pollAuthorizationRequest(uuid, pollToken)`,
   `listAuthorizationRequests()`, `authorizeAuthorizationRequest(uuid, password)`,
   `denyAuthorizationRequest(uuid)` — the device-authorization flow's five endpoints (see
   `docs/agents/modules/auth.md`'s "Device-authorization flow" section)
 
-`register`/`login`/`refresh` and a winning `pollAuthorizationRequest` all persist the response's
-`refreshToken` via `client/AuthSession.js` before resolving; `logout` clears it unconditionally,
-even when the request itself fails, so the client-side session always ends. `AuthSession` is a
-thin `localStorage` wrapper (`get`/`set`/`clear`/`isLoggedIn`) around a single key — the access
-token itself is never touched by the frontend at all, since the backend sets it as an `httpOnly`
-cookie (see `docs/agents/modules/auth.md`'s JWT/refresh-token flow).
+The frontend never reads, stores or sends the refresh token. The backend sets it as an
+`httpOnly` `refresh_token` cookie (`Path=/auth`), alongside the `httpOnly` access-token cookie,
+on every session-minting response (`register`/`login`/`refresh` and a winning
+`pollAuthorizationRequest`), and clears both on logoff, on a failed refresh, and on a `status`
+that answers `loggedIn: false` (see `docs/agents/modules/auth.md`). No request body carries a
+`refreshToken`; the browser sends the cookie on its own (`credentials: 'same-origin'`).
 
-`client/ApiClient.js` reacts to a `401` transparently rather than surfacing it to callers: it
-reads the stored refresh token, calls `POST /auth/refresh.json` directly (a plain internal
-request, not through `AccountsClient`, to avoid a circular import), persists the renewed
-`refreshToken`, and retries the original request exactly once. If there is no stored refresh
-token, or the refresh call itself fails (invalid/expired/already-revoked refresh token) or the
-retried request comes back `401` again, `ApiClient` treats the session as expired: it clears
-`AuthSession` and opens the login modal in Password mode via `client/LoginModalEvents.js`,
-instead of resolving/rejecting the original call normally or redirecting to a dedicated route.
+The only auth state JavaScript can see is the readable `logged_in=1` hint cookie (`Path=/`), set
+and cleared by the backend together with the `refresh_token` cookie. `client/AuthSession.js`
+reads it: `isLoggedIn()` means "probably logged in" (the mount-time `status` call confirms).
+`AuthSession` also exposes `takeLegacyToken()`, which returns the refresh token older builds left
+in `localStorage` under `kerghan_refresh_token` and removes the key.
+
+**Legacy-token migration (`TODO(#324-migration)`).** Before its mount-time status check,
+`HeaderController#checkStatus` runs `migrateIfNeeded()`: it takes the legacy `localStorage`
+token (if any) and posts it once via `AccountsClient.migrateLegacyToken` (through
+`ApiClient.postJsonOnce`, i.e. without the `401`-retry loop, swallowing failures) so the backend
+sets the cookies. The key is removed whatever the outcome, so the migration runs at most once per
+browser. Remove this branch together with the backend's body-carried refresh fallback.
+
+`client/ApiClient.js` reacts to a `401` transparently rather than surfacing it to callers: when
+the `logged_in` hint cookie is present it calls `POST /auth/refresh.json` with an empty body
+directly (a plain internal request, not through `AccountsClient`, to avoid a circular import; the
+`refresh_token` cookie rides along) and retries the original request exactly once. If the hint
+cookie is absent, or the refresh call itself fails (invalid/expired/already-revoked refresh
+token) or the retried request comes back `401` again, `ApiClient` treats the session as expired:
+it opens the login modal in Password mode via `client/LoginModalEvents.js` (the backend has
+already cleared the cookies), instead of resolving/rejecting the original call normally or
+redirecting to a dedicated route.
 
 ### Login modal
 
@@ -119,12 +135,12 @@ all of this.
 
 `components/common/header/Header.jsx` keeps `loggedIn`/`isAdmin` state in sync with the shared
 `client/AuthEvents.js` bus (via `useAuthEffect`, confirmed at mount time through
-`HeaderController#checkStatus`, which calls `AccountsClient.status`) rather than only reading
-`AuthSession.isLoggedIn()` once at render time, so it reacts to any auth-state change (login,
+`HeaderController#checkStatus`, which runs the legacy-token migration and then calls
+`AccountsClient.status`) rather than only reading `AuthSession.isLoggedIn()` once at render time, so it reacts to any auth-state change (login,
 logout, or a winning device-authorization poll) independently of a page redirect. It shows a
 Login nav link when logged out, or a Logout action when logged in. Logging out calls
-`AccountsClient.logout` and redirects home regardless of whether the request succeeded, since
-`AccountsClient.logout` already clears `AuthSession` unconditionally.
+`AccountsClient.logout` (the backend clears the session cookies) and redirects home regardless of
+whether the request succeeded.
 
 ## API errors
 

@@ -69,26 +69,16 @@ describe('fetchSequence support', () => {
   });
 
   describe('stubRefreshFlow', () => {
-    it('defaults the refresh token to old-refresh-token', () => {
+    it('defaults the hint cookie state to logged in', () => {
       stubRefreshFlow([]);
 
-      expect(AuthSession.get()).toBe('old-refresh-token');
+      expect(AuthSession.isLoggedIn()).toBe(true);
     });
 
-    it('returns the given refresh token, including null', () => {
-      stubRefreshFlow([], { refreshToken: null });
+    it('returns the given hint cookie state', () => {
+      stubRefreshFlow([], { loggedIn: false });
 
-      expect(AuthSession.get()).toBeNull();
-    });
-
-    it('spies on AuthSession.set and AuthSession.clear', () => {
-      stubRefreshFlow([]);
-
-      AuthSession.set('token');
-      AuthSession.clear();
-
-      expect(AuthSession.set).toHaveBeenCalledWith('token');
-      expect(AuthSession.clear).toHaveBeenCalled();
+      expect(AuthSession.isLoggedIn()).toBe(false);
     });
 
     it('installs a fetch that serves the given responses', async () => {
@@ -103,7 +93,6 @@ describe('fetchSequence support', () => {
   describe('expectSessionExpired', () => {
     beforeEach(() => {
       installFakeWindow({ location: { hash: '' } });
-      spyOn(AuthSession, 'clear');
       spyOn(LoginModalEvents, 'open');
     });
 
@@ -111,8 +100,7 @@ describe('fetchSequence support', () => {
       uninstallFakeWindow();
     });
 
-    it('passes when the session was cleared and the password modal opened', () => {
-      AuthSession.clear();
+    it('passes when the password modal opened', () => {
       LoginModalEvents.open('password');
 
       expectSessionExpired();

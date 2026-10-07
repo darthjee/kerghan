@@ -1,7 +1,6 @@
 import LoginModalController from '../../../../../../../assets/js/components/common/loginModal/controllers/LoginModalController.js';
 import AccountsClient from '../../../../../../../assets/js/client/AccountsClient.js';
 import ApiClient from '../../../../../../../assets/js/client/ApiClient.js';
-import AuthSession from '../../../../../../../assets/js/client/AuthSession.js';
 import AuthEvents from '../../../../../../../assets/js/client/AuthEvents.js';
 import LoginModalEvents from '../../../../../../../assets/js/client/LoginModalEvents.js';
 import { installFakeWindow, uninstallFakeWindow } from '../../../../../../support/fakeWindow.js';
@@ -30,7 +29,6 @@ describe('LoginModalController keepSignedIn', () => {
 
   afterEach(() => {
     uninstallFakeWindow();
-    AuthSession.clear();
   });
 
   describe('#setKeepSignedIn', () => {
@@ -71,7 +69,7 @@ describe('LoginModalController keepSignedIn', () => {
     });
 
     it('never sends keepSignedIn when registering', async () => {
-      spyOn(ApiClient, 'postJson').and.resolveTo({ user: { isAdmin: false }, refreshToken: 't' });
+      spyOn(ApiClient, 'postJson').and.resolveTo({ user: { isAdmin: false } });
 
       await build(AccountsClient).handleSubmit('register', {
         username: 'foo',

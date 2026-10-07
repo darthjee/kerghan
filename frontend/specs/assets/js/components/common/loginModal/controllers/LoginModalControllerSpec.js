@@ -94,7 +94,7 @@ describe('LoginModalController', () => {
 
   describe('#handleSubmit password mode', () => {
     it('clears the submit error, logs in, and runs the shared success path once', async () => {
-      client.login.and.resolveTo({ user: { id: 1, username: 'foo', isAdmin: true }, refreshToken: 't' });
+      client.login.and.resolveTo({ user: { id: 1, username: 'foo', isAdmin: true } });
 
       await build().handleSubmit('password', passwordFields);
 
@@ -134,7 +134,7 @@ describe('LoginModalController', () => {
     });
 
     it('registers and runs the shared success path once on a clean form', async () => {
-      client.register.and.resolveTo({ user: { id: 1, username: 'foo', isAdmin: false }, refreshToken: 't' });
+      client.register.and.resolveTo({ user: { id: 1, username: 'foo', isAdmin: false } });
 
       await build().handleSubmit('register', registerFields);
 
@@ -254,7 +254,7 @@ describe('LoginModalController', () => {
     it('runs the shared success path once when the device approves', async () => {
       client.createAuthorizationRequest.and.resolveTo(request);
       client.pollAuthorizationRequest.and.resolveTo({
-        status: 'approved', user: { id: 1, username: 'foo', isAdmin: true }, refreshToken: 't',
+        status: 'approved', user: { id: 1, username: 'foo', isAdmin: true },
       });
       const controller = build();
 
