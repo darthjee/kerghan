@@ -1,8 +1,13 @@
-import { Body, Controller, Delete, HttpCode, HttpStatus, Patch, Post, Res } from '@nestjs/common';
+import { Body, Controller, Delete, HttpCode, HttpStatus, Patch, Post, Req, Res } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import type { Response } from 'express';
+import type { Request, Response } from 'express';
 import { AccountService } from './account.service.js';
-import { ACCESS_TOKEN_COOKIE } from './auth-cookies.js';
+import {
+  clearSessionCookies,
+  clearSessionCookiesOnUnauthorized,
+  readRefreshToken,
+  resolveRefreshToken,
+} from './auth-cookies.js';
 import { respondWithSession } from './auth-response.js';
 import { AuthService } from './auth.service.js';
 import type { AccessTokenPayload } from '../core/access-token-payload.js';
@@ -12,7 +17,7 @@ import { CurrentUser } from '../core/current-user.decorator.js';
 import { Public } from '../core/public.decorator.js';
 import { LoginDto } from './dto/login.dto.js';
 import { RecoverDto } from './dto/recover.dto.js';
-import { RefreshTokenDto } from './dto/refresh-token.dto.js';
+import { RefreshFallbackDto } from './dto/refresh-fallback.dto.js';
 import { RegisterDto } from './dto/register.dto.js';
 import { ResetPasswordDto } from './dto/reset-password.dto.js';
 import { UpdateAccountDto } from './dto/update-account.dto.js';
@@ -64,8 +69,8 @@ export class AuthController {
   /**
    * `POST /auth/login.json`.
    * @param {LoginDto} dto - The login credentials.
-   * @param {Response} res - Used to set the httpOnly access-token cookie.
-   * @returns {Promise<object>} The public user view plus the refresh token.
+   * @param {Response} res - Used to set the session cookies.
+   * @returns {Promise<object>} `{ user }`, the public user view.
    */
   @Public()
   @Post('login.json')
@@ -74,18 +79,23 @@ export class AuthController {
   }
 
   /**
-   * `DELETE /auth/logoff.json`. Invalidates the given refresh token
-   * server-side and clears the access-token cookie.
-   * @param {RefreshTokenDto} dto - Carries the refresh token to invalidate.
-   * @param {Response} res - Used to clear the access-token cookie.
+   * `DELETE /auth/logoff.json`. Invalidates the `refresh_token` cookie's
+   * token server-side (when present) and always clears the session cookies.
+   * @param {Request} req - Carries the `refresh_token` cookie.
+   * @param {Response} res - Used to clear the session cookies.
    * @returns {Promise<void>} Resolves once the token has been revoked.
    */
   @Public()
   @Delete('logoff.json')
   @HttpCode(HttpStatus.NO_CONTENT)
-  async logout(@Body() dto: RefreshTokenDto, @Res({ passthrough: true }) res: Response): Promise<void> {
-    await this.authService.logout(dto.refreshToken);
-    res.clearCookie(ACCESS_TOKEN_COOKIE);
+  async logout(@Req() req: Request, @Res({ passthrough: true }) res: Response): Promise<void> {
+    const refreshToken = readRefreshToken(req);
+
+    if (refreshToken) {
+      await this.authService.logout(refreshToken);
+    }
+
+    clearSessionCookies(res);
   }
 
   /**
@@ -106,25 +116,36 @@ export class AuthController {
   }
 
   /**
-   * `POST /auth/refresh.json`. Rotates the given refresh token.
-   * @param {RefreshTokenDto} dto - Carries the refresh token to rotate.
-   * @param {Response} res - Used to set the renewed access-token cookie.
-   * @returns {Promise<object>} The public user view plus the new refresh token.
+   * `POST /auth/refresh.json`. Rotates the `refresh_token` cookie's token
+   * (or, only when the cookie is absent, the body's migration-fallback
+   * token — `TODO(#324-migration)`) and sets the renewed session cookies. A
+   * missing or rejected token answers `401` and clears the session cookies.
+   * @param {Request} req - Carries the `refresh_token` cookie.
+   * @param {RefreshFallbackDto} dto - The optional migration-fallback token.
+   * @param {Response} res - Used to set (or clear) the session cookies.
+   * @returns {Promise<object>} `{ user }`, the public user view.
    */
   @Public()
   @Post('refresh.json')
   async refresh(
-    @Body() dto: RefreshTokenDto,
+    @Req() req: Request,
+    @Body() dto: RefreshFallbackDto,
     @Res({ passthrough: true }) res: Response,
   ): Promise<object> {
-    return respondWithSession(await this.authService.refresh(dto.refreshToken), res, this.configService);
+    const result = await clearSessionCookiesOnUnauthorized(
+      res,
+      resolveRefreshToken(req, dto.refreshToken),
+      (token) => this.authService.refresh(token),
+    );
+
+    return respondWithSession(result, res, this.configService);
   }
 
   /**
    * `POST /auth/register.json`.
    * @param {RegisterDto} dto - The registration payload.
-   * @param {Response} res - Used to set the httpOnly access-token cookie.
-   * @returns {Promise<object>} The public user view plus the refresh token.
+   * @param {Response} res - Used to set the session cookies.
+   * @returns {Promise<object>} `{ user }`, the public user view.
    */
   @Public()
   @Post('register.json')
@@ -154,17 +175,25 @@ export class AuthController {
   }
 
   /**
-   * `POST /auth/status.json`. Reports whether the given refresh token still
-   * identifies an active session, without setting/clearing the
-   * access-token cookie or mutating anything server-side — used for
-   * mount-time login-state confirmation (e.g. the frontend header), not for
-   * establishing or renewing credentials.
-   * @param {RefreshTokenDto} dto - Carries the refresh token to check.
+   * `POST /auth/status.json`. Reports whether the `refresh_token` cookie
+   * still identifies an active session, without mutating anything
+   * server-side — used for mount-time login-state confirmation (e.g. the
+   * frontend header), not for establishing or renewing credentials. A
+   * `loggedIn: false` answer clears the session cookies so the frontend's
+   * `logged_in` marker can't outlive the session.
+   * @param {Request} req - Carries the `refresh_token` cookie.
+   * @param {Response} res - Used to clear the session cookies when logged out.
    * @returns {Promise<object>} `{ loggedIn: boolean, isAdmin: boolean }`, always `200`.
    */
   @Public()
   @Post('status.json')
-  async status(@Body() dto: RefreshTokenDto): Promise<object> {
-    return this.authService.status(dto.refreshToken);
+  async status(@Req() req: Request, @Res({ passthrough: true }) res: Response): Promise<object> {
+    const result = await this.authService.status(readRefreshToken(req));
+
+    if (!result.loggedIn) {
+      clearSessionCookies(res);
+    }
+
+    return result;
   }
 }

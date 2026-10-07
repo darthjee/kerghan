@@ -187,12 +187,12 @@ export class AuthService {
    * revokes the user's tokens: a passive status check must never revoke
    * anything, or a second tab's mount-time check could log every tab out
    * after the first tab's legitimate refresh.
-   * @param {string} refreshToken - The refresh token presented by the client.
+   * @param {string} [refreshToken] - The refresh token presented by the client (absent: no lookup).
    * @returns {Promise<{ loggedIn: boolean; isAdmin: boolean }>} `{ loggedIn:
    *   true, isAdmin }` (resolved from the token's user) when active; `{
    *   loggedIn: false, isAdmin: false }` otherwise, with no extra query.
    */
-  async status(refreshToken: string): Promise<{ loggedIn: boolean; isAdmin: boolean }> {
+  async status(refreshToken?: string): Promise<{ loggedIn: boolean; isAdmin: boolean }> {
     const tokenRow = await this.#findActiveTokenRow(refreshToken);
 
     if (!tokenRow) {
@@ -277,9 +277,10 @@ export class AuthService {
     return tokenRow;
   }
 
-  async #findActiveTokenRow(refreshToken: string): Promise<RefreshToken | null> {
-    const tokenHash = this.tokenService.hashToken(refreshToken);
-    const tokenRow = await this.refreshTokenRepository.findOneBy({ tokenHash });
+  async #findActiveTokenRow(refreshToken?: string): Promise<RefreshToken | null> {
+    const tokenRow = refreshToken
+      ? await this.refreshTokenRepository.findOneBy({ tokenHash: this.tokenService.hashToken(refreshToken) })
+      : null;
     const isActive = !!tokenRow && !tokenRow.revokedAt && tokenRow.expiresAt > new Date();
 
     return isActive ? tokenRow : null;

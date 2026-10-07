@@ -1,3 +1,4 @@
+import { UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import type { CookieOptions, Request, Response } from 'express';
 import type { AuthResult } from './token.service.js';
@@ -67,4 +68,49 @@ export function readRefreshToken(req: Request): string | undefined {
   const token: unknown = req.cookies?.[REFRESH_TOKEN_COOKIE];
 
   return typeof token === 'string' && token !== '' ? token : undefined;
+}
+
+/**
+ * Resolves the refresh token for `POST /auth/refresh.json`: the
+ * `refresh_token` cookie, or — only when the cookie is absent — the body's
+ * migration-fallback token.
+ * @param {Request} req - The incoming request (parsed by `cookie-parser`).
+ * @param {string} [fallbackToken] - The optional body-carried token.
+ * @returns {string | undefined} The token to rotate, or `undefined` when
+ *   neither source carries one.
+ */
+export function resolveRefreshToken(req: Request, fallbackToken?: string): string | undefined {
+  // TODO(#324-migration): drop the body fallback once legacy localStorage tokens are migrated.
+  return readRefreshToken(req) ?? (fallbackToken || undefined);
+}
+
+/**
+ * Runs a session-renewing action, clearing the session cookies when it
+ * fails with `401` (so a dead session doesn't leave stale cookies behind)
+ * and rethrowing the error. A missing token is rejected with `401` up front,
+ * without running the action.
+ * @param {Response} res - The response to clear the cookies on.
+ * @param {string | undefined} token - The refresh token to renew with.
+ * @param {(token: string) => Promise<T>} action - The renewal to run.
+ * @returns {Promise<T>} The action's result.
+ * @throws {UnauthorizedException} When the token is missing or the action rejects it.
+ */
+export async function clearSessionCookiesOnUnauthorized<T>(
+  res: Response,
+  token: string | undefined,
+  action: (token: string) => Promise<T>,
+): Promise<T> {
+  try {
+    if (!token) {
+      throw new UnauthorizedException('Missing refresh token');
+    }
+
+    return await action(token);
+  } catch (error) {
+    if (error instanceof UnauthorizedException) {
+      clearSessionCookies(res);
+    }
+
+    throw error;
+  }
 }
