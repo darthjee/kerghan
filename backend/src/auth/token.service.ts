@@ -36,6 +36,8 @@ export interface AuthResult {
   user: User;
   accessToken: string;
   refreshToken: string;
+  /** The minted refresh-token row's `expiresAt`, used as the session cookies' expiry. */
+  refreshTokenExpiresAt: Date;
 }
 
 /**
@@ -104,7 +106,7 @@ export class TokenService {
    * @param {SessionIdentity} [session] - The existing session to carry over
    *   on rotation; omitted for a new login.
    * @returns {Promise<AuthResult>} The user plus the freshly issued
-   *   access/refresh token pair.
+   *   access/refresh token pair and the refresh token's expiry.
    */
   async issueTokens(
     user: User,
@@ -117,12 +119,13 @@ export class TokenService {
       isAdmin: user.isAdmin,
     });
     const refreshToken = randomBytes(48).toString('hex');
+    const refreshTokenExpiresAt = new Date(Date.now() + this.#refreshTokenTtlMs(keepSignedIn));
 
     await this.refreshTokenRepository.save(
       this.refreshTokenRepository.create({
         tokenHash: this.hashToken(refreshToken),
         userId: user.id,
-        expiresAt: new Date(Date.now() + this.#refreshTokenTtlMs(keepSignedIn)),
+        expiresAt: refreshTokenExpiresAt,
         revokedAt: null,
         revokedReason: null,
         keepSignedIn,
@@ -133,7 +136,7 @@ export class TokenService {
 
     await this.#touchSession(user.id);
 
-    return { user, accessToken, refreshToken };
+    return { user, accessToken, refreshToken, refreshTokenExpiresAt };
   }
 
   /**

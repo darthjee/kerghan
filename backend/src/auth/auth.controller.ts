@@ -2,6 +2,7 @@ import { Body, Controller, Delete, HttpCode, HttpStatus, Patch, Post, Res } from
 import { ConfigService } from '@nestjs/config';
 import type { Response } from 'express';
 import { AccountService } from './account.service.js';
+import { ACCESS_TOKEN_COOKIE } from './auth-cookies.js';
 import { respondWithSession } from './auth-response.js';
 import { AuthService } from './auth.service.js';
 import type { AccessTokenPayload } from '../core/access-token-payload.js';
@@ -15,8 +16,6 @@ import { RefreshTokenDto } from './dto/refresh-token.dto.js';
 import { RegisterDto } from './dto/register.dto.js';
 import { ResetPasswordDto } from './dto/reset-password.dto.js';
 import { UpdateAccountDto } from './dto/update-account.dto.js';
-
-const ACCESS_TOKEN_COOKIE = 'access_token';
 
 /**
  * Auth module routes — thin, delegating all business logic to
