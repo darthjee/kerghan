@@ -55,7 +55,7 @@ export class AccountService {
    * Updates the caller's own username, email, and/or password, always
    * confirmed by their current password. A successful password change
    * revokes the caller's other refresh tokens, keeping the presented
-   * `dto.refreshToken` only when it is one of the caller's active tokens —
+   * `currentRefreshToken` only when it is one of the caller's active tokens —
    * otherwise (missing, unknown, foreign) all of them are revoked (fail
    * safe). Username/email-only changes revoke nothing, and a failed attempt
    * never revokes anything. Any failed
@@ -64,6 +64,9 @@ export class AccountService {
    * runs and reset on success (see `AccountEditAbuseGuardService`).
    * @param {number} userId - The id of the authenticated user (from the access-token session).
    * @param {UpdateAccountDto} dto - The requested changes plus the current password.
+   * @param {string} [currentRefreshToken] - The caller's refresh token (from
+   *   the `refresh_token` cookie), identifying the session to keep on a
+   *   password change.
    * @returns {Promise<AccountSummary>} The user's resulting username and email.
    * @throws {BadRequestException} When no field is being changed or the
    *   current password is wrong.
@@ -71,7 +74,7 @@ export class AccountService {
    * @throws {LockedException} `423 Locked` when the caller's per-user cool-off
    *   lockout is currently active.
    */
-  async updateAccount(userId: number, dto: UpdateAccountDto): Promise<AccountSummary> {
+  async updateAccount(userId: number, dto: UpdateAccountDto, currentRefreshToken?: string): Promise<AccountSummary> {
     assertAnyFieldPresent(dto);
     await this.#assertNotLockedOut(userId);
 
@@ -82,7 +85,7 @@ export class AccountService {
     await this.accountEditAbuseGuardService.reset(userId);
 
     if (dto.newPassword) {
-      await this.tokenService.revokeUserTokens(userId, RevokedReason.PASSWORD_CHANGE, dto.refreshToken);
+      await this.tokenService.revokeUserTokens(userId, RevokedReason.PASSWORD_CHANGE, currentRefreshToken);
     }
 
     return result;

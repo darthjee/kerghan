@@ -63,14 +63,14 @@ export class AuthorizationRequestController {
    * `POST /auth/authorization-requests/:uuid/poll.json`. Reports the current
    * status of a device-authorization request. On the winning `approved`
    * poll, mints a login session identical to a password login (same
-   * `access_token` cookie + `{ user, refreshToken }` shape, via
+   * session cookies + `{ user }` body, via
    * `auth-response.ts`); every later or losing poll gets `{ status: 'logged' }`
    * with no credentials.
    * @param {string} uuid - The authorization request's UUID.
    * @param {PollAuthorizationRequestDto} dto - Carries the poll token.
-   * @param {Response} res - Used to set the access-token cookie on the
+   * @param {Response} res - Used to set the session cookies on the
    *   winning poll.
-   * @returns {Promise<object>} `{ status }`, plus `user`/`refreshToken` on the winning `approved` poll.
+   * @returns {Promise<object>} `{ status }`, plus `user` on the winning `approved` poll.
    */
   @Public()
   @Post('authorization-requests/:uuid/poll.json')
