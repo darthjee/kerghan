@@ -16,11 +16,22 @@ routing convention (`docs/agents/architecture/backend.md`):
 
 | Route | Body | Response |
 |---|---|---|
-| `POST /auth/login.json` | `{ username, password, keepSignedIn? }` | `{ user, refreshToken }` + `access_token` cookie |
-| `POST /auth/register.json` | `{ username, email, password }` | `{ user, refreshToken }` + `access_token` cookie |
-| `POST /auth/refresh.json` | `{ refreshToken }` | `{ user, refreshToken }` + `access_token` cookie |
-| `DELETE /auth/logoff.json` | `{ refreshToken }` | `204 No Content`, clears the `access_token` cookie |
-| `POST /auth/status.json` | `{ refreshToken }` | `{ loggedIn, isAdmin }` |
+| `POST /auth/login.json` | `{ username, password, keepSignedIn? }` | `{ user }` + session cookies |
+| `POST /auth/register.json` | `{ username, email, password }` | `{ user }` + session cookies |
+| `POST /auth/refresh.json` | — (`refresh_token` cookie; temporary `{ refreshToken? }` fallback, `TODO(#324-migration)`) | `{ user }` + session cookies; `401` clears them |
+| `DELETE /auth/logoff.json` | — (`refresh_token` cookie) | `204 No Content`, clears the session cookies |
+| `POST /auth/status.json` | — (`refresh_token` cookie) | `{ loggedIn, isAdmin }`; `loggedIn: false` clears the session cookies |
+
+The *session cookies* (all `Secure` + `SameSite=Strict`, set/cleared only through
+`auth/auth-cookies.ts`) are the httpOnly `access_token` (`Path=/`, access-token TTL), the
+httpOnly `refresh_token` (`Path=/auth`, expiring with the refresh-token row) and the
+script-readable `logged_in=1` (`Path=/`, same expiry as `refresh_token`) that drives the
+frontend's optimistic login state. No route returns or accepts the refresh token in a body,
+except `refresh.json`'s migration fallback: only when the cookie is absent, it reads an optional
+body `refreshToken` so a client can move a legacy `localStorage` token into the cookie once. The
+cookie always wins. Remove the fallback (`RefreshFallbackDto` and the marked branch in
+`resolveRefreshToken`) once the migration window closes. See
+[Auth routes](../backend/routes/auth.md#session-cookies).
 
 `user` is always `{ id, username, email, isAdmin }` — `passwordDigest` is never serialized. `isAdmin`
 is the only way the frontend can learn whether the logged-in user is an admin, since the
@@ -63,7 +74,7 @@ different caller. See [API Caching](../architecture/caching.md) for the general 
 Every mutating route above (`POST`/`PATCH`/`DELETE`), `@Public()` or not, is covered by the
 global `OriginGuard` (`core/origin.guard.ts`), which runs before `JwtGuard` and rejects
 cross-site requests with `403` based on `Sec-Fetch-Site`/`Origin`. Together with the
-`SameSite=Strict` `access_token` cookie, this also blocks login CSRF on the unauthenticated
+`SameSite=Strict` session cookies, this also blocks login CSRF on the unauthenticated
 routes (`login.json`, `register.json`, `recover.json`, `reset-password.json`, `refresh.json`,
 `status.json`, the device-authorization `create`/`poll`). See
 [`docs/agents/architecture/security.md`](../architecture/security.md#csrf) for the full decision
@@ -121,7 +132,9 @@ rather than an edit to the seed migration's `INSERT`, since the seed migration r
   authorization" below. It is (re)issued on every login/register/refresh, so a role change (an
   admin demotion, in particular) takes effect on that user's next refresh — and immediately for
   anything that re-logs in — rather than instantly.
-- **Refresh token**: a random 48-byte hex string, returned in the response body and persisted
+- **Refresh token**: a random 48-byte hex string, set as the httpOnly `refresh_token` cookie
+  (`Path=/auth`, `maxAge` = the row's `expiresAt - now`, exposed by `TokenService#issueTokens`
+  as `AuthResult.refreshTokenExpiresAt`) — never returned in a response body — and persisted
   only as a SHA-256 hash. Its expiry depends on the session's `keepSignedIn` choice (optional
   strict boolean on `POST /auth/login.json` and `POST /auth/authorization-requests.json`,
   default `false`; register always mints a regular token): regular tokens use
@@ -129,8 +142,8 @@ rather than an edit to the seed migration's `INSERT`, since the seed migration r
   `KERGHAN_PERSISTENT_REFRESH_TOKEN_TTL_MS` (default 30 days). Both are read on every mint (see
   `docs/agents/environment-variables.md`). Rotation carries the presented token's `keepSignedIn`
   over to the new one with a fresh TTL, so an active persistent session renews indefinitely (no
-  absolute cap); a regular session cannot be upgraded in place. Accepted risk: the client keeps
-  the token in `localStorage` (#324). **Rotated on every use**: `POST /auth/refresh.json`
+  absolute cap); a regular session cannot be upgraded in place. Since #324 the token never
+  reaches JavaScript (httpOnly cookie), so an XSS can no longer exfiltrate it. **Rotated on every use**: `POST /auth/refresh.json`
   marks the presented token's `revokedAt` (reason `rotated`) and issues a brand new pair —
   replaying an already-rotated (or logged-out) refresh token is rejected with `401`, verified
   end-to-end in `auth/tests/auth.controller.refresh-logout.e2e-spec.ts`. Only replaying an
@@ -160,15 +173,17 @@ rather than an edit to the seed migration's `INSERT`, since the seed migration r
   revoked row with a `NULL` reason is treated like any non-rotation revocation (plain `401`).
 - **Logout**: `DELETE /auth/logoff.json` sets `revokedAt` (reason `logout`) on the matching
   refresh token — only if it is still unrevoked, so logging out with an already-rotated token
-  never overwrites its `rotated` reason — and clears the `access_token` cookie. The access token itself stays valid (stateless JWT, not
+  never overwrites its `rotated` reason — and clears all three session cookies. It reads the
+  token from the `refresh_token` cookie and answers `204` even without one. The access token itself stays valid (stateless JWT, not
   tracked server-side) until its own expiry — logout guarantees the *refresh* path is closed,
   not instant access-token revocation.
 - **Password change**: every successful password change revokes refresh tokens through
   `TokenService#revokeUserTokens`:
   - A password-recovery reset (`POST /auth/reset-password.json`) revokes all of the user's
     refresh tokens.
-  - A My Account password change (`PATCH /auth/account.json` with `newPassword`, plus an
-    optional `refreshToken` in the body) revokes all of the caller's *other* tokens. The
+  - A My Account password change (`PATCH /auth/account.json` with `newPassword`) revokes all
+    of the caller's *other* tokens, keeping the session identified by the `refresh_token`
+    cookie (the body no longer carries a `refreshToken`). The
     presented token is kept only if it is one of the caller's own active tokens. When it is
     missing, unknown, revoked or belongs to someone else, all of the caller's tokens are revoked
     (fail safe). Username/email-only changes and failed attempts revoke nothing.
@@ -180,8 +195,8 @@ rather than an edit to the seed migration's `INSERT`, since the seed migration r
   list their active sessions (`POST /auth/sessions/mine.json`), revoke one by its
   `sessionUuid` (`POST /auth/sessions/:uuid/revoke.json`, `404` for an unknown or foreign id)
   or revoke every session but the current one (`POST /auth/sessions/revoke-others.json`, `401`
-  and nothing revoked when the presented `refreshToken` is not one of the caller's active
-  tokens; the current session is kept by `sessionUuid`, not token hash, so a concurrent
+  and nothing revoked when the `refresh_token` cookie is missing or not one of the caller's
+  active tokens; every session route reads the current session from that cookie, with no body; the current session is kept by `sessionUuid`, not token hash, so a concurrent
   rotation isn't revoked). `:uuid` is validated with `ParseUUIDPipe` (any version; `400` when
   malformed). Revoked tokens get reason `user_revoked`, so their later refresh is a plain `401`
   without replay detection. Revoking a session stops its refresh token only: its access-token
@@ -223,7 +238,7 @@ authenticated routes in the codebase), with the caller's own user id read from `
 | Route | Auth | Body | Response |
 |---|---|---|---|
 | `POST /auth/authorization-requests.json` | `@Public()` | `{ username, keepSignedIn? }` | `{ uuid, pollToken, expiresAt }` |
-| `POST /auth/authorization-requests/:uuid/poll.json` | `@Public()` | `{ pollToken }` | `{ status }`, plus `user`/`refreshToken` + the `access_token` cookie on the winning `approved` poll |
+| `POST /auth/authorization-requests/:uuid/poll.json` | `@Public()` | `{ pollToken }` | `{ status }`, plus `user` + the session cookies on the winning `approved` poll |
 | `POST /auth/authorization-requests/mine.json` | `JwtGuard` | — | `{ requests: [{ uuid, requestIp, requestUserAgent, createdAt, expiresAt, keepSignedIn }] }` |
 | `POST /auth/authorization-requests/:uuid/authorize.json` | `JwtGuard` | `{ password }` | `{ authorized: true }` |
 | `POST /auth/authorization-requests/:uuid/deny.json` | `JwtGuard` | — | `{ denied: true }` |

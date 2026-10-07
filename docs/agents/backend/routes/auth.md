@@ -24,7 +24,7 @@ session routes; all three controllers are thin delegation layers.
 | Controller | `AuthController` |
 | Auth | `@Public()` |
 | Request body | `LoginDto` — `{ username: string, password: string, keepSignedIn?: boolean }` |
-| Success response | `{ user, refreshToken }` + sets `access_token` cookie |
+| Success response | `{ user }` + sets the session cookies (see "Session cookies" below) |
 | HTTP status | `200` (default) |
 
 `user` is `{ id, username, email }` — `passwordDigest` is never serialized.
@@ -40,7 +40,7 @@ default 30 days) whose flag is carried over on every refresh; see `docs/agents/m
 | Controller | `AuthController` |
 | Auth | `@Public()` |
 | Request body | `RegisterDto` — `{ username, password, email }` |
-| Success response | `{ user, refreshToken }` + sets `access_token` cookie |
+| Success response | `{ user }` + sets the session cookies |
 | HTTP status | `200` (default) |
 
 Creates a new `auth_users` record, then issues tokens identically to login.
@@ -51,11 +51,11 @@ Creates a new `auth_users` record, then issues tokens identically to login.
 | --- | --- |
 | Controller | `AuthController` |
 | Auth | `@Public()` |
-| Request body | `RefreshTokenDto` — `{ refreshToken: string }` |
-| Success response | `{ user, refreshToken }` + sets new `access_token` cookie |
-| HTTP status | `200` (default) |
+| Request | `refresh_token` cookie. Temporary migration fallback (`TODO(#324-migration)`): optional body `RefreshFallbackDto` — `{ refreshToken?: string }`, used **only when the cookie is absent** (the cookie always wins) |
+| Success response | `{ user }` + sets renewed session cookies |
+| HTTP status | `200` (default); `401` (and all three session cookies cleared) when no token is sent or the token is rejected |
 
-Rotates the refresh token server-side (old token's `revokedAt` is set, `revokedReason`
+Rotates the `refresh_token` cookie's token server-side (old token's `revokedAt` is set, `revokedReason`
 `rotated`). An unknown, expired or revoked token is rejected with `401`. Only an *unexpired*
 token revoked by rotation triggers replay detection (every active token of the user is revoked,
 reason `replay_detected`, forcing re-login everywhere); a token revoked for any other reason
@@ -64,17 +64,38 @@ effects — so a revoked device's routine refresh (or an attacker replaying its 
 can't log the user out of their other sessions. See `revoked_reason` in
 [the Auth module](../../modules/auth.md#entities-auth_-table-prefix).
 
+The body fallback exists only so a frontend still holding a pre-#324 token in `localStorage`
+(key `kerghan_refresh_token`) can migrate it into the cookie with one refresh. It lives in one
+marked branch (`resolveRefreshToken` in `auth/auth-cookies.ts` plus `dto/refresh-fallback.dto.ts`)
+and is to be removed once the migration window is over; no other route accepts a body token.
+
 ### `DELETE /auth/logoff.json`
 
 | Property | Value |
 | --- | --- |
 | Controller | `AuthController` |
 | Auth | `@Public()` |
-| Request body | `RefreshTokenDto` — `{ refreshToken: string }` |
+| Request | `refresh_token` cookie (no body) |
 | Success response | No body |
-| HTTP status | `204 No Content` |
+| HTTP status | `204 No Content` (also without a cookie) |
 
-Revokes the refresh token server-side and clears the `access_token` cookie.
+Revokes the cookie's refresh token server-side (when present) and always clears the
+`access_token`, `refresh_token` and `logged_in` cookies.
+
+### `POST /auth/status.json`
+
+| Property | Value |
+| --- | --- |
+| Controller | `AuthController` |
+| Auth | `@Public()` |
+| Request | `refresh_token` cookie (no body) |
+| Success response | `{ loggedIn, isAdmin }` |
+| HTTP status | `201` (Nest's `POST` default), always |
+
+Reports whether the cookie's refresh token identifies an active session, without mutating
+anything server-side. A missing cookie answers `{ loggedIn: false, isAdmin: false }` without a
+database lookup. A `loggedIn: false` answer clears the three session cookies, so the readable
+`logged_in` marker can't outlive the session.
 
 ### `POST /auth/authorization-requests.json`
 
@@ -100,12 +121,12 @@ session minted by the winning `approved` poll.
 | Controller | `AuthorizationRequestController` |
 | Auth | `@Public()` |
 | Request body | `PollAuthorizationRequestDto` — `{ pollToken: string }` |
-| Success response | `{ status }`; on the winning `approved` poll: `{ status: 'approved', user, refreshToken }` + sets `access_token` cookie |
+| Success response | `{ status }`; on the winning `approved` poll: `{ status: 'approved', user }` + sets the session cookies |
 | HTTP status | `200` (default); `404` on an unknown `uuid` or a `pollToken` that doesn't hash-match |
 
 An `open` request past its `expiresAt` is lazily flipped to `expired` on the poll that observes
 it. Only the first poll to claim an `approved` request mints a session — the winning response
-reuses `respondWithSession` (see "Access token cookie" below), the same session shape as
+reuses `respondWithSession` (see "Session cookies" below), the same session shape as
 login/register/refresh. Every other poll of an already-claimed request gets `{ status: 'logged'
 }`, no credentials.
 
@@ -155,8 +176,9 @@ A *session* is one chain of rotated refresh tokens: every token minted on login 
 device-authorization or register) gets a fresh `session_uuid` and `started_at`, and every
 `POST /auth/refresh.json` copies both onto the replacement token. Since rotation revokes the
 presented token, an active session is exactly one non-revoked, unexpired `auth_refresh_tokens`
-row. The *current* session is the one whose refresh token matches the body's `refreshToken`
-(the same convention as `logoff`/`status`). No user agent or IP is captured or shown.
+row. The *current* session is the one whose refresh token matches the `refresh_token` cookie
+(the same convention as `logoff`/`status`). The session routes take no request body; the cookie
+reaches them because they live under its `Path=/auth`. No user agent or IP is captured or shown.
 
 ### `POST /auth/sessions/mine.json`
 
@@ -164,14 +186,14 @@ row. The *current* session is the one whose refresh token matches the body's `re
 | --- | --- |
 | Controller | `SessionController` |
 | Auth | Default `JwtGuard` (authenticated, no `@AdminOnly()`) |
-| Request body | `RefreshTokenDto` — `{ refreshToken: string }` (required, non-empty) |
+| Request | `refresh_token` cookie (no body) |
 | Success response | `{ sessions: [{ id, startedAt, lastUsedAt, keepSignedIn, current }] }` |
-| HTTP status | `201` (Nest's `POST` default); `400` when `refreshToken` is missing/empty |
+| HTTP status | `201` (Nest's `POST` default) |
 
 Lists the caller's own active (non-revoked, unexpired) sessions, most recently used first. `id`
 is the session UUID; `startedAt` is the login time; `lastUsedAt` is the active token's
 `issuedAt` (the latest login or rotation); `current` is `true` for the session matching
-`refreshToken`. An unknown, revoked, expired or foreign `refreshToken` is not an error: the list
+the cookie. A missing, unknown, revoked, expired or foreign token is not an error: the list
 is still returned, with no entry marked `current`.
 
 ### `POST /auth/sessions/:uuid/revoke.json`
@@ -180,7 +202,7 @@ is still returned, with no entry marked `current`.
 | --- | --- |
 | Controller | `SessionController` |
 | Auth | Default `JwtGuard` (authenticated, no `@AdminOnly()`) |
-| Request body | Ignored (clients may send `{ refreshToken }` for consistency) |
+| Request body | None expected (any body is ignored) |
 | Success response | `{ revoked: true }` |
 | HTTP status | `201`; `400 Bad Request` for a malformed `:uuid`; `404 Not Found` for an unknown, already-revoked or another user's session |
 
@@ -189,7 +211,7 @@ Revokes one of the caller's sessions (its unrevoked token, `revokedReason` `user
 migration carry MySQL `UUID()` v1 IDs); a malformed value answers `400`. An unknown session and
 another user's session both answer the same `404`, so existence never leaks. Revoking the
 current session is allowed and behaves like a logoff (the access-token cookie is left alone and
-expires on its own; the client should drop its refresh token). The revoked session's later
+expires on its own; the client's next refresh gets `401`, which clears the session cookies). The revoked session's later
 refresh attempts get a plain `401` without triggering replay detection.
 
 **Revocation stops the refresh token only.** Access tokens are stateless JWTs not tracked
@@ -203,25 +225,25 @@ routes.
 | --- | --- |
 | Controller | `SessionController` |
 | Auth | Default `JwtGuard` (authenticated, no `@AdminOnly()`) |
-| Request body | `RefreshTokenDto` — `{ refreshToken: string }` (required, non-empty) |
+| Request | `refresh_token` cookie (no body) |
 | Success response | `{ revoked: true }` |
-| HTTP status | `201`; `400` when `refreshToken` is missing/empty; `401 Unauthorized` when it is invalid |
+| HTTP status | `201`; `401 Unauthorized` when the cookie is missing or its token is invalid |
 
 Revokes every session of the caller except the current one (`revokedReason` `user_revoked`).
-The current session is kept by its `sessionUuid` (resolved from `refreshToken`), not by the
+The current session is kept by its `sessionUuid` (resolved from the cookie's token), not by the
 token's hash, so a concurrent rotation of the current session is never revoked by mistake.
-When `refreshToken` is unknown, revoked, expired or another user's, it answers `401` and
+When the cookie is missing or its token is unknown, revoked, expired or another user's, it answers `401` and
 revokes nothing — it never falls back to revoking every session. The revoked sessions' later
 refresh attempts get a plain `401` without triggering replay detection.
 
 Note for the frontend: a `401` here can trigger `ApiClient`'s refresh-and-retry. That is
-intentional: it only happens when the client's stored refresh token is already invalid, so the
+intentional: it only happens when the client's refresh-token cookie is already invalid, so the
 refresh fails too and the client logs out (unlike `authorize.json`, which uses `400` for its
 business rejections precisely to avoid that path).
 
 ## Shared behavior
 
-All twelve routes above (the four classic ones, the five device-authorization ones and the
+All thirteen routes above (the five classic ones, the five device-authorization ones and the
 three session ones) are
 declared `@CachePolicy(CacheClass.Never)` at controller level, so they send
 `X-Skip-Cache: true` and `Cache-Control: no-store` on the response. Tent's
@@ -233,22 +255,26 @@ included) to a different caller.
 
 See [API Caching](../../architecture/caching.md) for the general strategy.
 
-## Access token cookie
+## Session cookies
 
-The winning `POST /auth/authorization-requests/:uuid/poll.json` response sets this cookie the
-same way login/register/refresh do — both paths go through the shared `respondWithSession`
-helper (`auth/auth-response.ts`), so the two response bodies/cookies cannot drift apart. It is
-set with:
+Every session-minting response (login, register, refresh and the winning
+`POST /auth/authorization-requests/:uuid/poll.json`) goes through the shared `respondWithSession`
+helper (`auth/auth-response.ts`), which calls `setSessionCookies` (`auth/auth-cookies.ts`), so
+the response bodies/cookies cannot drift apart. All three cookies are `Secure` and
+`SameSite=Strict`:
 
-- `httpOnly: true` — not accessible via JavaScript
-- `secure: true` — only sent over HTTPS
-- `sameSite: 'strict'` — not sent on cross-site requests
-- `maxAge`: `KERGHAN_ACCESS_TOKEN_TTL_MS` (default 15 minutes when unset — matches JWT expiry;
-  see `docs/agents/environment-variables.md`)
+| Name | httpOnly | Path | Value | maxAge |
+| --- | --- | --- | --- | --- |
+| `access_token` | yes | `/` | JWT | `KERGHAN_ACCESS_TOKEN_TTL_MS` (default 15 minutes — matches JWT expiry; see `docs/agents/environment-variables.md`) |
+| `refresh_token` | yes | `/auth` | raw refresh token | `expiresAt - now` of the minted refresh-token row (7 days regular, 30 days persistent by default) |
+| `logged_in` | **no** | `/` | `1` | same as `refresh_token` |
 
-The token is never returned in the response body — only the `refreshToken`
-is, as it must be stored client-side to call `/auth/refresh.json` and
-`/auth/logoff.json`.
+Neither token is ever returned in a response body. `logged_in` carries no secret: it only lets
+the frontend decide, without a request, whether to show the logged-in UI optimistically.
+
+`clearSessionCookies` clears all three, each with the same `path`/`secure`/`sameSite` it was set
+with (browsers ignore a clear on a different path). It runs on `logoff.json`, on a `401` from
+`refresh.json` and on a `status.json` answering `loggedIn: false`.
 
 ## Source files
 
@@ -258,7 +284,8 @@ is, as it must be stored client-side to call `/auth/refresh.json` and
 | `auth/auth.service.ts` | Business logic (login, register, refresh, logout) |
 | `auth/dto/login.dto.ts` | `LoginDto` validation |
 | `auth/dto/register.dto.ts` | `RegisterDto` validation |
-| `auth/dto/refresh-token.dto.ts` | `RefreshTokenDto` validation |
+| `auth/auth-cookies.ts` | Session cookie constants and set/clear/read helpers |
+| `auth/dto/refresh-fallback.dto.ts` | `RefreshFallbackDto` — temporary body fallback for `refresh.json` (`TODO(#324-migration)`) |
 | `auth/authorization-request.controller.ts` | Device-authorization route definitions, cookie/header setup |
 | `auth/authorization-request.service.ts` | Device-authorization business logic (create, poll, listOpenForUser, authorize, deny) |
 | `auth/authorization-request-abuse-guard.service.ts` | Rate-limit/cap/cool-off hardening logic |
