@@ -55,6 +55,12 @@ describe('HashRouteResolver', () => {
     expect(resolver.getPage()).toBe('integrations');
   });
 
+  it('resolves the sessions route', () => {
+    const resolver = new HashRouteResolver(() => '#/account/sessions');
+
+    expect(resolver.getPage()).toBe('sessions');
+  });
+
   it('resolves the home route', () => {
     const resolver = new HashRouteResolver(() => '#/');
 

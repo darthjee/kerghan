@@ -8,6 +8,7 @@ import AdminUserEdit from '../resources/admin/pages/AdminUserEdit.jsx';
 import AuthorizationRequests from '../resources/accounts/pages/AuthorizationRequests.jsx';
 import Integrations from '../resources/accounts/pages/Integrations.jsx';
 import MyAccount from '../resources/accounts/pages/MyAccount.jsx';
+import Sessions from '../resources/accounts/pages/Sessions.jsx';
 
 const PAGES = new Map([
   ['register', <ModalRedirect mode="register" />],
@@ -17,6 +18,7 @@ const PAGES = new Map([
   ['admin-user-edit', <AdminUserEdit />],
   ['authorization-requests', <AuthorizationRequests />],
   ['integrations', <Integrations />],
+  ['sessions', <Sessions />],
   ['my-account', <MyAccount />],
   ['home', <Home />],
 ]);
