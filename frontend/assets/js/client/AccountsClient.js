@@ -3,6 +3,15 @@ import AuthSession from './AuthSession.js';
 import pickDefined from './pickDefined.js';
 
 /**
+ * Build a request body carrying the stored refresh token (`undefined` when none is stored).
+ *
+ * @returns {{refreshToken: (string|undefined)}} The request body.
+ */
+function currentTokenBody() {
+  return { refreshToken: AuthSession.get() ?? undefined };
+}
+
+/**
  * HTTP client for auth-related requests (registration, login, refresh, logout). Every method
  * that receives a fresh refresh token persists it via {@link AuthSession} before resolving,
  * and `logout` clears it regardless of whether the request itself succeeds — the client-side
@@ -245,6 +254,37 @@ const AccountsClient = {
         username, email, newPassword, refreshToken: AuthSession.get() ?? undefined,
       }),
     });
+  },
+
+  /**
+   * List the caller's sessions, most recently used first. The stored refresh token is sent so
+   * the backend can flag the matching session as `current`; an unknown token flags none.
+   *
+   * @returns {Promise<{sessions: Array<{id: string, startedAt: string, lastUsedAt: string,
+   *   keepSignedIn: boolean, current: boolean}>}>} The caller's sessions.
+   */
+  async listSessions() {
+    return ApiClient.postJson('/auth/sessions/mine.json', currentTokenBody());
+  },
+
+  /**
+   * Revoke one of the caller's sessions. A `404` (unknown/foreign id) or `400` (malformed id)
+   * surfaces as a thrown `ApiError`; it is not caught here.
+   *
+   * @param {string} uuid - The session identifier.
+   * @returns {Promise<{revoked: boolean}>} Resolves once the session is revoked.
+   */
+  async revokeSession(uuid) {
+    return ApiClient.postJson(`/auth/sessions/${uuid}/revoke.json`, currentTokenBody());
+  },
+
+  /**
+   * Revoke every session of the caller except the one owning the stored refresh token.
+   *
+   * @returns {Promise<{revoked: boolean}>} Resolves once the other sessions are revoked.
+   */
+  async revokeOtherSessions() {
+    return ApiClient.postJson('/auth/sessions/revoke-others.json', currentTokenBody());
   },
 };
 
