@@ -129,5 +129,12 @@ describe('HeaderHelper', () => {
       expect(markup).toContain('href="#/account/integrations"');
       expect(markup).toContain('>Integrations<');
     });
+
+    it('renders the My account dropdown with a Sessions item', () => {
+      const markup = markupOf(true, false);
+
+      expect(markup).toContain('href="#/account/sessions"');
+      expect(markup).toContain('>Sessions<');
+    });
   });
 });

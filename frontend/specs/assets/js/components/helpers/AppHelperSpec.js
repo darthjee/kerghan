@@ -4,6 +4,7 @@ import AppHelper from '../../../../../assets/js/components/helpers/AppHelper.jsx
 import LoginModal from '../../../../../assets/js/components/common/loginModal/LoginModal.jsx';
 import ModalRedirect from '../../../../../assets/js/components/common/ModalRedirect.jsx';
 import Integrations from '../../../../../assets/js/components/resources/accounts/pages/Integrations.jsx';
+import Sessions from '../../../../../assets/js/components/resources/accounts/pages/Sessions.jsx';
 import ResetPasswordLanding from '../../../../../assets/js/components/resources/accounts/pages/ResetPasswordLanding.jsx';
 
 describe('AppHelper', () => {
@@ -53,6 +54,10 @@ describe('AppHelper', () => {
 
   it('renders the integrations page for the integrations key', () => {
     expect(partsOf('integrations').page.type).toBe(Integrations);
+  });
+
+  it('renders the sessions page for the sessions key', () => {
+    expect(partsOf('sessions').page.type).toBe(Sessions);
   });
 
   it('renders the home page for the home key', () => {

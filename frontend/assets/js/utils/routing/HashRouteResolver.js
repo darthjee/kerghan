@@ -13,6 +13,7 @@ const ROUTES = [
   ['/admin/users', 'admin-users'],
   ['/account/authorization-requests', 'authorization-requests'],
   ['/account/integrations', 'integrations'],
+  ['/account/sessions', 'sessions'],
   ['/account/my-account', 'my-account'],
   ['/', 'home'],
 ];
