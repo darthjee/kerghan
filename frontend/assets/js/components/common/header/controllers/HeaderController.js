@@ -50,7 +50,26 @@ export default class HeaderController {
   }
 
   /**
+   * One-time migration of a refresh token left in `localStorage` by older builds: takes it
+   * (removing the key, so this runs at most once whatever its outcome) and, when present, posts
+   * it via {@link AccountsClient.migrateLegacyToken} so the backend sets the session cookies.
+   *
+   * TODO(#324-migration): remove together with the backend's body-carried refresh fallback.
+   *
+   * @returns {Promise<void>} Resolves once the migration (if any) finishes.
+   */
+  async migrateIfNeeded() {
+    const legacyToken = AuthSession.takeLegacyToken();
+
+    if (legacyToken) {
+      await this.client.migrateLegacyToken(legacyToken);
+    }
+  }
+
+  /**
    * Confirm the current auth state against the backend and announce it via {@link AuthEvents}.
+   * Runs {@link HeaderController#migrateIfNeeded} first, so a migrated legacy token is reflected
+   * in the `logged_in` hint cookie before it is read.
    * Skips the network call entirely when the `logged_in` hint cookie is absent — that is
    * unambiguously "logged out". When the backend reports the session is no longer active, it
    * clears the cookies itself, so no client-side clearing is needed.
@@ -58,6 +77,8 @@ export default class HeaderController {
    * @returns {Promise<void>} Resolves once the status check finishes.
    */
   async checkStatus() {
+    await this.migrateIfNeeded(); // TODO(#324-migration): drop with migrateIfNeeded.
+
     if (!AuthSession.isLoggedIn()) {
       AuthEvents.emit(false, false);
       return;
