@@ -142,7 +142,7 @@ describe('AuthorizationRequestService', () => {
 
           expect(result).toEqual({
             status: 'approved',
-            authResult: { user, accessToken: 'jwt', refreshToken: 'rt' },
+            authResult: { user, accessToken: 'jwt', refreshToken: 'rt', refreshTokenExpiresAt: new Date() },
           });
         });
       });

@@ -1,5 +1,6 @@
 import request from 'supertest';
 import { createAuthorizationRequest, useTestApp } from './authorization-request.controller.e2e-test-support.js';
+import { findSetCookie } from './support/auth-requests.js';
 import { expectErrorBody } from './support/error-body.js';
 import { ErrorCodes } from '../../core/error-codes.js';
 
@@ -15,7 +16,7 @@ describe('AuthorizationRequestController (e2e)', () => {
   }
 
   describe('full poll flow', () => {
-    it('goes open -> approved (Set-Cookie + refreshToken) -> logged (no credentials)', async () => {
+    it('goes open -> approved (session cookies + user) -> logged (no credentials)', async () => {
       const { uuid, pollToken } = await createAuthorizationRequest(ctx.app);
 
       const openResponse = await request(ctx.app.getHttpServer())
@@ -35,9 +36,10 @@ describe('AuthorizationRequestController (e2e)', () => {
       expect(approvedResponse.body).toEqual({
         status: 'approved',
         user: { id: expect.any(Number), username: 'darthjee', email: 'darthjee@example.com', isAdmin: false },
-        refreshToken: expect.any(String),
       });
-      expect(approvedResponse.headers['set-cookie'][0]).toMatch(/^access_token=/);
+      expect(findSetCookie(approvedResponse, 'access_token')).toMatch(/^access_token=[^;]+;/);
+      expect(findSetCookie(approvedResponse, 'refresh_token')).toMatch(/^refresh_token=[^;]+;.*Path=\/auth;.*HttpOnly/);
+      expect(findSetCookie(approvedResponse, 'logged_in')).toMatch(/^logged_in=1;/);
 
       const loggedResponse = await request(ctx.app.getHttpServer())
         .post(`/auth/authorization-requests/${uuid}/poll.json`)

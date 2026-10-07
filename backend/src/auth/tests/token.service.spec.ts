@@ -56,6 +56,14 @@ describe('TokenService', () => {
       expect(result.refreshToken).toEqual(expect.any(String));
     });
 
+    it('exposes the persisted row\'s expiresAt as refreshTokenExpiresAt', async () => {
+      const result = await service.issueTokens(user);
+      const saved = refreshTokenRepository.save.mock.calls[0][0];
+
+      expect(result.refreshTokenExpiresAt).toBeInstanceOf(Date);
+      expect(result.refreshTokenExpiresAt).toBe(saved.expiresAt);
+    });
+
     it('signs the access token with the user sub, username and isAdmin claims', async () => {
       await service.issueTokens(user);
 

@@ -120,7 +120,6 @@ describe('AuthorizationRequestController (e2e)', () => {
         expect(approvedPoll.body).toEqual({
           status: 'approved',
           user: { id: expect.any(Number), username: 'darthjee', email: 'darthjee@example.com', isAdmin: false },
-          refreshToken: expect.any(String),
         });
 
         const secondPoll = await request(ctx.app.getHttpServer())

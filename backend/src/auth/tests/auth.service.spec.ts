@@ -559,6 +559,15 @@ describe('AuthService', () => {
       });
     });
 
+    describe('when no refresh token is presented', () => {
+      it('resolves with loggedIn: false and isAdmin: false without any lookup', async () => {
+        await expect(service.status(undefined)).resolves.toEqual({ loggedIn: false, isAdmin: false });
+
+        expect(refreshTokenRepository.findOneBy).not.toHaveBeenCalled();
+        expect(userRepository.findOneBy).not.toHaveBeenCalled();
+      });
+    });
+
     describe('when the refresh token has expired', () => {
       beforeEach(() => {
         stubExpiredRefreshToken();

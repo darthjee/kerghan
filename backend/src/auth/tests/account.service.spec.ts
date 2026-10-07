@@ -83,12 +83,12 @@ describe('AccountService', () => {
         expect(accountEditAbuseGuardService.reset).toHaveBeenCalledWith(1);
       });
 
-      it('revokes no sessions, even when a refreshToken is sent', async () => {
+      it('revokes no sessions, even when a current refresh token is presented', async () => {
         await service.updateAccount(1, {
           currentPassword: 'current-password',
           username: 'new-username',
-          refreshToken: 'current-refresh-token',
-        });
+
+        }, 'current-refresh-token');
 
         expect(tokenService.revokeUserTokens).not.toHaveBeenCalled();
       });
@@ -104,12 +104,12 @@ describe('AccountService', () => {
         expect(result).toEqual({ username: 'darthjee', email: 'new-email@example.com' });
       });
 
-      it('revokes no sessions, even when a refreshToken is sent', async () => {
+      it('revokes no sessions, even when a current refresh token is presented', async () => {
         await service.updateAccount(1, {
           currentPassword: 'current-password',
           email: 'new-email@example.com',
-          refreshToken: 'current-refresh-token',
-        });
+
+        }, 'current-refresh-token');
 
         expect(tokenService.revokeUserTokens).not.toHaveBeenCalled();
       });
@@ -143,13 +143,13 @@ describe('AccountService', () => {
         await service.updateAccount(1, {
           currentPassword: 'current-password',
           newPassword: 'brand-new-password',
-          refreshToken: 'current-refresh-token',
-        });
+
+        }, 'current-refresh-token');
 
         expect(tokenService.revokeUserTokens).toHaveBeenCalledWith(1, 'password_change', 'current-refresh-token');
       });
 
-      it('revokes all of the caller\'s sessions when no refresh token is sent', async () => {
+      it('revokes all of the caller\'s sessions when no current refresh token is presented', async () => {
         await service.updateAccount(1, {
           currentPassword: 'current-password',
           newPassword: 'brand-new-password',
@@ -208,8 +208,8 @@ describe('AccountService', () => {
           service.updateAccount(1, {
             currentPassword: 'wrong-password',
             newPassword: 'brand-new-password',
-            refreshToken: 'current-refresh-token',
-          }),
+
+          }, 'current-refresh-token'),
         ).rejects.toThrow(BadRequestException);
 
         expect(tokenService.revokeUserTokens).not.toHaveBeenCalled();

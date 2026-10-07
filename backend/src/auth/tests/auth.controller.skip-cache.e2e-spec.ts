@@ -1,5 +1,6 @@
 import request from 'supertest';
 import { loginAs, registerUser, useTestApp } from './auth.controller.e2e-test-support.js';
+import { refreshCookie } from './support/auth-requests.js';
 
 describe('AuthController (e2e)', () => {
   const ctx = useTestApp();
@@ -28,7 +29,7 @@ describe('AuthController (e2e)', () => {
 
       const response = await request(ctx.app.getHttpServer())
         .post('/auth/refresh.json')
-        .send({ refreshToken: login.body.refreshToken })
+        .set('Cookie', [refreshCookie(login)])
         .expect(201);
 
       expect(response.headers['x-skip-cache']).toBe('true');
@@ -40,7 +41,7 @@ describe('AuthController (e2e)', () => {
 
       const response = await request(ctx.app.getHttpServer())
         .delete('/auth/logoff.json')
-        .send({ refreshToken: login.body.refreshToken })
+        .set('Cookie', [refreshCookie(login)])
         .expect(204);
 
       expect(response.headers['x-skip-cache']).toBe('true');
