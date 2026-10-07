@@ -7,7 +7,7 @@ import { redirectHome } from '../../../../utils/routing/redirects.js';
 /**
  * Controller for the Header's logout action and mount-time auth-status confirmation. Logout ends
  * the session via {@link AccountsClient.logout} and redirects home regardless of whether the
- * request succeeded — `AccountsClient.logout` already clears `AuthSession` unconditionally.
+ * request succeeded — the backend clears the session cookies.
  */
 export default class HeaderController {
   /**
@@ -21,17 +21,17 @@ export default class HeaderController {
 
   /**
    * Log out the current session and redirect home. Always redirects and emits the new
-   * `false` auth state, even when the logout request itself fails, since `AccountsClient.logout`
-   * already clears `AuthSession` client-side unconditionally.
+   * `false` auth state, even when the logout request itself fails, so the client-side state
+   * always ends logged out.
    *
    * @returns {Promise<void>} Resolves once logout handling finishes.
    */
   async handleLogout() {
     try {
-      await this.client.logout(AuthSession.get());
+      await this.client.logout();
     } catch {
-      // Ignored: the client-side session is already cleared by AccountsClient.logout,
-      // regardless of whether the network request itself succeeded.
+      // Ignored: the client-side state still ends logged out, regardless of whether the
+      // network request itself succeeded.
     } finally {
       AuthEvents.emit(false, false);
       redirectHome();
@@ -51,26 +51,19 @@ export default class HeaderController {
 
   /**
    * Confirm the current auth state against the backend and announce it via {@link AuthEvents}.
-   * Skips the network call entirely when there is no stored refresh token — a missing token is
-   * unambiguously "logged out". When the backend reports the stored token is no longer active,
-   * the stale token is cleared from `AuthSession` before emitting, so `ApiClient`'s 401-retry
-   * logic does not keep attempting to refresh with a token already known to be dead.
+   * Skips the network call entirely when the `logged_in` hint cookie is absent — that is
+   * unambiguously "logged out". When the backend reports the session is no longer active, it
+   * clears the cookies itself, so no client-side clearing is needed.
    *
    * @returns {Promise<void>} Resolves once the status check finishes.
    */
   async checkStatus() {
-    const token = AuthSession.get();
-
-    if (!token) {
+    if (!AuthSession.isLoggedIn()) {
       AuthEvents.emit(false, false);
       return;
     }
 
-    const { loggedIn, isAdmin } = await this.client.status(token);
-
-    if (!loggedIn) {
-      AuthSession.clear();
-    }
+    const { loggedIn, isAdmin } = await this.client.status();
 
     AuthEvents.emit(loggedIn, isAdmin);
   }

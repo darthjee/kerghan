@@ -103,16 +103,15 @@ async function request(method, path, body) {
 }
 
 /**
- * End the client-side session: clear the stored refresh token and open the login modal in
- * Password mode via the shared {@link LoginModalEvents} bus — a pure client-side state
- * transition, with no API call of its own. SSR/spec-safe — a no-op when `window` is not
- * defined, the same way the shared `redirectHome` helper guards it.
+ * End the client-side session: open the login modal in Password mode via the shared
+ * {@link LoginModalEvents} bus — a pure client-side state transition, with no API call of its
+ * own. The backend already cleared the session cookies on the failed refresh, so there is no
+ * client-side storage to clear. SSR/spec-safe — a no-op when `window` is not defined, the same
+ * way the shared `redirectHome` helper guards it.
  *
  * @returns {undefined} Always `undefined`, so callers can `return` it directly.
  */
 function sessionExpired() {
-  AuthSession.clear();
-
   if (typeof window !== 'undefined') {
     LoginModalEvents.open('password');
   }
@@ -150,9 +149,10 @@ async function sendJson(method, path, body, isRetry = false) {
 }
 
 /**
- * Recover from a `401` on the original request: refresh the access token using the stored
- * refresh token and retry the original request once. Falls back to session-expired handling
- * when there is no stored refresh token, or when the refresh call itself fails.
+ * Recover from a `401` on the original request: refresh the access token (the httpOnly
+ * `refresh_token` cookie rides along automatically) and retry the original request once. Falls
+ * back to session-expired handling when the `logged_in` hint cookie is absent, or when the
+ * refresh call itself fails.
  *
  * @param {string} method - Original request's HTTP method.
  * @param {string} path - Original request's path.
@@ -161,28 +161,24 @@ async function sendJson(method, path, body, isRetry = false) {
  *   when the session turned out to be expired.
  */
 async function handleUnauthorized(method, path, body) {
-  const refreshToken = AuthSession.get();
-
-  if (!refreshToken) {
+  if (!AuthSession.isLoggedIn()) {
     return sessionExpired();
   }
 
-  const refreshResponse = await request('POST', REFRESH_PATH, { refreshToken });
+  const refreshResponse = await request('POST', REFRESH_PATH, {});
 
   if (!refreshResponse.response.ok) {
     return sessionExpired();
   }
-
-  AuthSession.set(refreshResponse.data.refreshToken);
 
   return sendJson(method, path, body, true);
 }
 
 /**
  * Generic JSON HTTP client used by resource-specific clients. Transparently recovers from an
- * expired access token: on a `401`, it refreshes the session once (via the stored refresh
- * token) and retries the original request; if there is no refresh token to use, or the
- * refresh itself fails, the session is treated as expired.
+ * expired access token: on a `401`, it refreshes the session once (via the httpOnly
+ * `refresh_token` cookie) and retries the original request; if the `logged_in` hint cookie is
+ * absent, or the refresh itself fails, the session is treated as expired.
  */
 const ApiClient = {
   /**
@@ -222,6 +218,25 @@ const ApiClient = {
    */
   async patchJson(path, body) {
     return sendJson('PATCH', path, body);
+  },
+
+  /**
+   * Submit a POST request with a JSON body through the raw path: no `401`-refresh-and-retry
+   * loop and no session-expired handling.
+   *
+   * @param {string} path - Request path.
+   * @param {object} body - Fields to serialize as the JSON request body.
+   * @returns {Promise<object>} The parsed JSON response body, on success.
+   * @throws {ApiError} When the response is not successful.
+   */
+  async postJsonOnce(path, body) {
+    const { response, data } = await request('POST', path, body);
+
+    if (!response.ok) {
+      throw buildApiError(response, data);
+    }
+
+    return data;
   },
 };
 

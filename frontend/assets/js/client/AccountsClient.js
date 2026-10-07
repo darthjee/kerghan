@@ -1,21 +1,10 @@
 import ApiClient from './ApiClient.js';
-import AuthSession from './AuthSession.js';
 import pickDefined from './pickDefined.js';
 
 /**
- * Build a request body carrying the stored refresh token (`undefined` when none is stored).
- *
- * @returns {{refreshToken: (string|undefined)}} The request body.
- */
-function currentTokenBody() {
-  return { refreshToken: AuthSession.get() ?? undefined };
-}
-
-/**
- * HTTP client for auth-related requests (registration, login, refresh, logout). Every method
- * that receives a fresh refresh token persists it via {@link AuthSession} before resolving,
- * and `logout` clears it regardless of whether the request itself succeeds — the client-side
- * session should still end.
+ * HTTP client for auth-related requests (registration, login, refresh, logout). The refresh
+ * token lives in an httpOnly `refresh_token` cookie the backend sets, reads and clears; this
+ * client never reads, stores or sends it.
  */
 const AccountsClient = {
   /**
@@ -23,22 +12,17 @@ const AccountsClient = {
    *
    * @param {{username: string, email: string, password: string,
    *   passwordConfirmation: string}} fields - Registration form fields.
-   * @returns {Promise<{user: object, refreshToken: string}>} The created account and its
-   *   refresh token.
+   * @returns {Promise<{user: object}>} The created account.
    */
   async register({
     username, email, password, passwordConfirmation,
   }) {
-    const result = await ApiClient.postJson('/auth/register.json', {
+    return ApiClient.postJson('/auth/register.json', {
       username,
       email,
       password,
       password_confirmation: passwordConfirmation,
     });
-
-    AuthSession.set(result.refreshToken);
-
-    return result;
   },
 
   /**
@@ -47,70 +31,72 @@ const AccountsClient = {
    *
    * @param {{username: string, password: string, keepSignedIn?: boolean}} credentials - Login
    *   credentials, plus whether the session should outlive the default TTL.
-   * @returns {Promise<{user: object, refreshToken: string}>} The logged-in user and its
-   *   refresh token.
+   * @returns {Promise<{user: object}>} The logged-in user.
    */
   async login({ username, password, keepSignedIn }) {
-    const result = await ApiClient.postJson('/auth/login.json', {
+    return ApiClient.postJson('/auth/login.json', {
       username,
       password,
       keepSignedIn: Boolean(keepSignedIn),
     });
-
-    AuthSession.set(result.refreshToken);
-
-    return result;
   },
 
   /**
-   * Rotate a refresh token for a fresh access token.
+   * Rotate the session's refresh token (carried by the httpOnly cookie) for a fresh access
+   * token.
    *
-   * @param {string} refreshToken - The current refresh token.
-   * @returns {Promise<{user: object, refreshToken: string}>} The user and the renewed
-   *   refresh token.
+   * @returns {Promise<{user: object}>} The user.
    */
-  async refresh(refreshToken) {
-    const result = await ApiClient.postJson('/auth/refresh.json', { refreshToken });
-
-    AuthSession.set(result.refreshToken);
-
-    return result;
+  async refresh() {
+    return ApiClient.postJson('/auth/refresh.json', {});
   },
 
   /**
-   * Log out, invalidating the given refresh token server-side. The stored refresh token is
-   * cleared even when the request fails, so the client-side session always ends.
+   * One-time migration of a refresh token left in `localStorage` by older builds: posts it as
+   * `{ refreshToken }` to `/auth/refresh.json` so the backend sets the cookies. Goes through the
+   * raw path (no `401`-retry loop) and swallows any failure.
    *
-   * @param {string} refreshToken - The refresh token to invalidate.
-   * @returns {Promise<void>} Resolves once logout handling finishes.
+   * TODO(#324-migration): remove once the migration window is over.
+   *
+   * @param {string} token - The legacy refresh token.
+   * @returns {Promise<boolean>} `true` when the backend accepted the token, `false` otherwise.
    */
-  async logout(refreshToken) {
+  async migrateLegacyToken(token) {
     try {
-      await ApiClient.deleteJson('/auth/logoff.json', { refreshToken });
-    } finally {
-      AuthSession.clear();
+      await ApiClient.postJsonOnce('/auth/refresh.json', { refreshToken: token });
+
+      return true;
+    } catch {
+      return false;
     }
   },
 
   /**
-   * Check whether a refresh token is still active, without consuming or rotating it. Unlike
-   * {@link AccountsClient.login}/{@link AccountsClient.refresh}, this does not touch
-   * `AuthSession` itself — a `false` result means clearing a now-known-stale token, not setting
-   * a new one, which is the caller's responsibility.
+   * Log out, invalidating the current session server-side; the backend clears the session
+   * cookies.
    *
-   * @param {string} refreshToken - The refresh token to check.
-   * @returns {Promise<{loggedIn: boolean, isAdmin: boolean}>} Whether the token is still active,
-   *   and whether that session belongs to an admin user (always `false` when `loggedIn` is
+   * @returns {Promise<void>} Resolves once logout handling finishes.
+   */
+  async logout() {
+    await ApiClient.deleteJson('/auth/logoff.json', {});
+  },
+
+  /**
+   * Check whether the current session (identified by the `refresh_token` cookie) is still
+   * active, without consuming or rotating it. On `loggedIn: false` the backend clears the
+   * session cookies.
+   *
+   * @returns {Promise<{loggedIn: boolean, isAdmin: boolean}>} Whether the session is still
+   *   active, and whether it belongs to an admin user (always `false` when `loggedIn` is
    *   `false`).
    */
-  async status(refreshToken) {
-    return ApiClient.postJson('/auth/status.json', { refreshToken });
+  async status() {
+    return ApiClient.postJson('/auth/status.json', {});
   },
 
   /**
    * Request a password recovery email. Unlike {@link AccountsClient.login}/
-   * {@link AccountsClient.register}, this never touches `AuthSession` — this flow never issues
-   * a refresh token.
+   * {@link AccountsClient.register}, this flow never issues a session.
    *
    * @param {string} email - The account email to send a recovery link to.
    * @returns {Promise<{sent: boolean}>} Always resolves; the backend never reveals whether the
@@ -122,8 +108,8 @@ const AccountsClient = {
 
   /**
    * Complete a password recovery flow using the token from the recovery link. Unlike
-   * {@link AccountsClient.login}/{@link AccountsClient.register}, this never touches
-   * `AuthSession` — this flow never issues a refresh token.
+   * {@link AccountsClient.login}/{@link AccountsClient.register}, this flow never issues a
+   * session.
    *
    * @param {{token: string, password: string, passwordConfirmation: string}} fields - The
    *   recovery token and new password fields.
@@ -140,10 +126,10 @@ const AccountsClient = {
 
   /**
    * Open an authorization request so an already-logged-in device can approve this login.
-   * Unlike {@link AccountsClient.login}/{@link AccountsClient.register}, this never touches
-   * `AuthSession` — this flow never issues a refresh token. The response shape is identical
-   * for an unknown username (enumeration-safety). `keepSignedIn` is always sent as a strict
-   * boolean, since the backend rejects non-boolean values.
+   * Unlike {@link AccountsClient.login}/{@link AccountsClient.register}, this flow never issues
+   * a session. The response shape is identical for an unknown username (enumeration-safety).
+   * `keepSignedIn` is always sent as a strict boolean, since the backend rejects non-boolean
+   * values.
    *
    * @param {string} username - The username attempting to log in.
    * @param {boolean} [keepSignedIn=false] - Whether the approved session should be a
@@ -160,35 +146,29 @@ const AccountsClient = {
 
   /**
    * Poll an authorization request for its current status. When the status is `approved` the
-   * response also carries `user` and `refreshToken`; the token is persisted via
-   * {@link AuthSession} before resolving, so the modal's success path is identical to
-   * {@link AccountsClient.login}. Every other status (`open`, `denied`, `expired`, `logged`)
-   * resolves untouched. An unknown `uuid` or wrong `pollToken` surfaces as an `ApiError` with
-   * `.status === 404` thrown from {@link ApiClient}; it is not caught here.
+   * response also carries `user` and the backend sets the session cookies, so the modal's
+   * success path is identical to {@link AccountsClient.login}. Every other status (`open`,
+   * `denied`, `expired`, `logged`) resolves untouched. An unknown `uuid` or wrong `pollToken`
+   * surfaces as an `ApiError` with `.status === 404` thrown from {@link ApiClient}; it is not
+   * caught here.
    *
    * @param {string} uuid - The authorization request identifier.
    * @param {string} pollToken - The token returned by
    *   {@link AccountsClient.createAuthorizationRequest}.
-   * @returns {Promise<{status: string, user?: object, refreshToken?: string}>} The current
-   *   status, plus credentials on the winning `approved` poll.
+   * @returns {Promise<{status: string, user?: object}>} The current status, plus the user on
+   *   the winning `approved` poll.
    */
   async pollAuthorizationRequest(uuid, pollToken) {
-    const result = await ApiClient.postJson(
+    return ApiClient.postJson(
       `/auth/authorization-requests/${uuid}/poll.json`,
       { pollToken },
     );
-
-    if (result.status === 'approved') {
-      AuthSession.set(result.refreshToken);
-    }
-
-    return result;
   },
 
   /**
    * List the caller's own open authorization requests, for the approving device to review.
-   * Unlike {@link AccountsClient.login}/{@link AccountsClient.register}, this never touches
-   * `AuthSession` — this flow never issues a refresh token.
+   * Unlike {@link AccountsClient.login}/{@link AccountsClient.register}, this flow never issues
+   * a session.
    *
    * @returns {Promise<{requests: Array<{uuid: string, requestIp: string,
    *   requestUserAgent: string, createdAt: string, expiresAt: string,
@@ -200,10 +180,10 @@ const AccountsClient = {
 
   /**
    * Approve an authorization request as the account owner, confirming with the account
-   * password. Unlike {@link AccountsClient.login}/{@link AccountsClient.register}, this never
-   * touches `AuthSession` — this flow never issues a refresh token. A `400` (wrong password,
-   * wrong owner, wrong status, or expired — the backend collapses all of these into one message)
-   * surfaces as a thrown `ApiError`; it is not caught here.
+   * password. Unlike {@link AccountsClient.login}/{@link AccountsClient.register}, this flow
+   * never issues a session. A `400` (wrong password, wrong owner, wrong status, or expired — the
+   * backend collapses all of these into one message) surfaces as a thrown `ApiError`; it is not
+   * caught here.
    *
    * @param {string} uuid - The authorization request identifier.
    * @param {string} password - The account owner's password, confirming the approval.
@@ -218,9 +198,9 @@ const AccountsClient = {
 
   /**
    * Deny an authorization request as the account owner. Unlike
-   * {@link AccountsClient.login}/{@link AccountsClient.register}, this never touches
-   * `AuthSession` — this flow never issues a refresh token. Same `400`-as-thrown-`ApiError`
-   * behavior as {@link AccountsClient.authorizeAuthorizationRequest}, it is not caught here.
+   * {@link AccountsClient.login}/{@link AccountsClient.register}, this flow never issues a
+   * session. Same `400`-as-thrown-`ApiError` behavior as
+   * {@link AccountsClient.authorizeAuthorizationRequest}, it is not caught here.
    *
    * @param {string} uuid - The authorization request identifier.
    * @returns {Promise<{denied: boolean}>} Resolves once the request is denied.
@@ -230,14 +210,12 @@ const AccountsClient = {
   },
 
   /**
-   * Update the caller's own account, confirming with the current password. The stored refresh
-   * token (read from `AuthSession`) is sent as `refreshToken` so the backend can keep this
-   * session alive while revoking the caller's other sessions on a password change; it is omitted
-   * when no token is stored. Unlike {@link AccountsClient.login}/{@link AccountsClient.register},
-   * this never writes or clears `AuthSession` — no token refresh or re-login is triggered on
-   * success. `username`, `email`, and `newPassword` are only included in the request body when
-   * defined, so callers may update any subset of them; a `newPasswordConfirmation` field is never
-   * sent — that check is client-side only.
+   * Update the caller's own account, confirming with the current password. On a password
+   * change the backend keeps the session identified by the `refresh_token` cookie alive while
+   * revoking the caller's other sessions; no token refresh or re-login is triggered on success.
+   * `username`, `email`, and `newPassword` are only included in the request body when defined,
+   * so callers may update any subset of them; a `newPasswordConfirmation` field is never sent —
+   * that check is client-side only.
    *
    * @param {{currentPassword: string, username?: string, email?: string,
    *   newPassword?: string}} fields - The current password (always required) plus any fields
@@ -251,20 +229,20 @@ const AccountsClient = {
     return ApiClient.patchJson('/auth/account.json', {
       currentPassword,
       ...pickDefined({
-        username, email, newPassword, refreshToken: AuthSession.get() ?? undefined,
+        username, email, newPassword,
       }),
     });
   },
 
   /**
-   * List the caller's sessions, most recently used first. The stored refresh token is sent so
-   * the backend can flag the matching session as `current`; an unknown token flags none.
+   * List the caller's sessions, most recently used first. The backend flags the session owning
+   * the `refresh_token` cookie as `current`; a missing or unknown cookie flags none.
    *
    * @returns {Promise<{sessions: Array<{id: string, startedAt: string, lastUsedAt: string,
    *   keepSignedIn: boolean, current: boolean}>}>} The caller's sessions.
    */
   async listSessions() {
-    return ApiClient.postJson('/auth/sessions/mine.json', currentTokenBody());
+    return ApiClient.postJson('/auth/sessions/mine.json', {});
   },
 
   /**
@@ -275,16 +253,17 @@ const AccountsClient = {
    * @returns {Promise<{revoked: boolean}>} Resolves once the session is revoked.
    */
   async revokeSession(uuid) {
-    return ApiClient.postJson(`/auth/sessions/${uuid}/revoke.json`, currentTokenBody());
+    return ApiClient.postJson(`/auth/sessions/${uuid}/revoke.json`, {});
   },
 
   /**
-   * Revoke every session of the caller except the one owning the stored refresh token.
+   * Revoke every session of the caller except the one owning the `refresh_token`
+   * cookie.
    *
    * @returns {Promise<{revoked: boolean}>} Resolves once the other sessions are revoked.
    */
   async revokeOtherSessions() {
-    return ApiClient.postJson('/auth/sessions/revoke-others.json', currentTokenBody());
+    return ApiClient.postJson('/auth/sessions/revoke-others.json', {});
   },
 };
 
