@@ -1,3 +1,5 @@
+type FindOperatorLike = { type: string; value: unknown; child?: unknown };
+
 // Matches a single condition value against a row's field, understanding
 // the TypeORM find operators the auth specs rely on (`IsNull()`, used by
 // `TokenService#revokeUserTokens`; `MoreThan()`; `LessThan()`, used by
@@ -5,36 +7,26 @@
 // admin user search; `Not()`, used by `AuthService#assertAvailableForUpdate`'s
 // self-exclusion, `TokenService#revokeUserTokens`' kept-token exclusion and
 // `PasswordResetService#issueToken`'s `Not(IsNull())` used-row pruning) in
-// addition to plain equality — real TypeORM/MySQL handles them natively, this in-memory stand-in needs to special-case them.
+// addition to plain equality — real TypeORM/MySQL handles them natively,
+// this in-memory stand-in needs to special-case them (one matcher per
+// operator `type`; an unknown operator never matches).
+const OPERATOR_MATCHERS: Record<string, (rowValue: unknown, operator: FindOperatorLike) => boolean> = {
+  isNull: (rowValue) => rowValue === null || rowValue === undefined,
+  moreThan: (rowValue, operator) => (rowValue as Date) > (operator.value as Date),
+  lessThan: (rowValue, operator) => (rowValue as Date) < (operator.value as Date),
+  // `FindOperator#value` unwraps a nested operator (e.g. `Not(IsNull())`)
+  // down to its raw value; `child` keeps the nested operator itself.
+  not: (rowValue, operator) => !matchesCondition(rowValue, operator.child ?? operator.value),
+  ilike: (rowValue, operator) =>
+    String(rowValue).toLowerCase().includes(String(operator.value).replace(/%/g, '').toLowerCase()),
+};
+
 export function matchesCondition(rowValue: unknown, conditionValue: unknown): boolean {
   if (conditionValue && typeof conditionValue === 'object' && 'type' in conditionValue) {
-    const operator = conditionValue as { type: string; value: unknown };
+    const operator = conditionValue as FindOperatorLike;
+    const matcher = OPERATOR_MATCHERS[operator.type];
 
-    if (operator.type === 'isNull') {
-      return rowValue === null || rowValue === undefined;
-    }
-
-    if (operator.type === 'moreThan') {
-      return (rowValue as Date) > (operator.value as Date);
-    }
-
-    if (operator.type === 'lessThan') {
-      return (rowValue as Date) < (operator.value as Date);
-    }
-
-    if (operator.type === 'not') {
-      // `FindOperator#value` unwraps a nested operator (e.g. `Not(IsNull())`)
-      // down to its raw value; `child` keeps the nested operator itself.
-      const inner = (operator as { child?: unknown }).child ?? operator.value;
-
-      return !matchesCondition(rowValue, inner);
-    }
-
-    if (operator.type === 'ilike') {
-      return String(rowValue).toLowerCase().includes(String(operator.value).replace(/%/g, '').toLowerCase());
-    }
-
-    return false;
+    return matcher ? matcher(rowValue, operator) : false;
   }
 
   return rowValue === conditionValue;
