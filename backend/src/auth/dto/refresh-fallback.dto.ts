@@ -1,4 +1,11 @@
-import { IsOptional, IsString } from 'class-validator';
+import { IsOptional, IsString, MaxLength } from 'class-validator';
+
+/**
+ * Upper bound on a body-carried refresh token. Real tokens are
+ * `randomBytes(48).toString('hex')` (96 chars, see `TokenService`), so 128
+ * leaves headroom while rejecting oversized payloads before any lookup.
+ */
+const MAX_REFRESH_TOKEN_LENGTH = 128;
 
 /**
  * Optional request body for `POST /auth/refresh.json`.
@@ -13,5 +20,6 @@ import { IsOptional, IsString } from 'class-validator';
 export class RefreshFallbackDto {
   @IsOptional()
   @IsString()
+  @MaxLength(MAX_REFRESH_TOKEN_LENGTH)
     refreshToken?: string;
 }

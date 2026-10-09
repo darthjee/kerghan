@@ -129,6 +129,17 @@ describe('AuthController (e2e)', () => {
       expect(refreshTokenOf(response)).not.toBe(token);
     });
 
+    it('rejects an over-long body-carried token with 400, without touching the token store', async () => {
+      const rowsBefore = ctx.refreshTokenRepo.rows.length;
+
+      await request(ctx.app.getHttpServer())
+        .post('/auth/refresh.json')
+        .send({ refreshToken: 'a'.repeat(129) })
+        .expect(400);
+
+      expect(ctx.refreshTokenRepo.rows).toHaveLength(rowsBefore);
+    });
+
     it('lets the cookie win over a body token when both are present', async () => {
       const cookieToken = refreshTokenOf(await loginAs(ctx.app));
       const bodyToken = refreshTokenOf(await loginAs(ctx.app));
