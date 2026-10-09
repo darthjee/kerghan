@@ -3,8 +3,9 @@
 // `TokenService#revokeUserTokens`; `MoreThan()`; `LessThan()`, used by
 // `TokenService#issueTokens`' expired-row pruning; `ILike()`, used by the
 // admin user search; `Not()`, used by `AuthService#assertAvailableForUpdate`'s
-// self-exclusion and `TokenService#revokeUserTokens`' kept-token exclusion) in addition to plain equality — real TypeORM/MySQL
-// handles them natively, this in-memory stand-in needs to special-case them.
+// self-exclusion, `TokenService#revokeUserTokens`' kept-token exclusion and
+// `PasswordResetService#issueToken`'s `Not(IsNull())` used-row pruning) in
+// addition to plain equality — real TypeORM/MySQL handles them natively, this in-memory stand-in needs to special-case them.
 export function matchesCondition(rowValue: unknown, conditionValue: unknown): boolean {
   if (conditionValue && typeof conditionValue === 'object' && 'type' in conditionValue) {
     const operator = conditionValue as { type: string; value: unknown };
@@ -22,7 +23,11 @@ export function matchesCondition(rowValue: unknown, conditionValue: unknown): bo
     }
 
     if (operator.type === 'not') {
-      return !matchesCondition(rowValue, operator.value);
+      // `FindOperator#value` unwraps a nested operator (e.g. `Not(IsNull())`)
+      // down to its raw value; `child` keeps the nested operator itself.
+      const inner = (operator as { child?: unknown }).child ?? operator.value;
+
+      return !matchesCondition(rowValue, inner);
     }
 
     if (operator.type === 'ilike') {

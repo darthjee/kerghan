@@ -4,7 +4,7 @@ import { ConfigService } from '@nestjs/config';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { InjectRepository } from '@nestjs/typeorm';
 import bcrypt from 'bcryptjs';
-import { Repository } from 'typeorm';
+import { IsNull, LessThan, Not, Repository } from 'typeorm';
 import { RecoverDto } from './dto/recover.dto.js';
 import { ResetPasswordDto } from './dto/reset-password.dto.js';
 import { PasswordResetToken } from './entities/password-reset-token.entity.js';
@@ -100,7 +100,10 @@ export class PasswordResetService {
    * assuming a self-service caller — shared by `recover()` (self-service)
    * and the admin recovery-link/send-recovery-email flows, so both mint
    * tokens the exact same way (same TTL config key, same hashing, same
-   * `resetUrl` format).
+   * `resetUrl` format). Before saving, the user's reset-token rows that are
+   * already expired or used are deleted (opportunistic, per-user cleanup —
+   * no scheduler); their still-active tokens stay valid and other users'
+   * rows are never touched.
    * @param {User} user - The user to mint a password-reset token for.
    * @returns {Promise<{ token: string; resetUrl: string }>} The plaintext
    *   token (never persisted — only its hash is stored) and the URL built
@@ -112,6 +115,8 @@ export class PasswordResetService {
       'KERGHAN_PASSWORD_RESET_TOKEN_TTL_MS',
       DEFAULT_PASSWORD_RESET_TOKEN_TTL_MS,
     );
+
+    await this.#pruneSpentTokens(user.id);
 
     await this.passwordResetTokenRepository.save(
       this.passwordResetTokenRepository.create({
@@ -146,6 +151,12 @@ export class PasswordResetService {
     await this.passwordResetTokenRepository.update(tokenRow.id, { usedAt: new Date() });
 
     return tokenRow.userId;
+  }
+
+  // `Repository#delete` doesn't OR an array of where objects, hence two deletes.
+  async #pruneSpentTokens(userId: number): Promise<void> {
+    await this.passwordResetTokenRepository.delete({ userId, expiresAt: LessThan(new Date()) });
+    await this.passwordResetTokenRepository.delete({ userId, usedAt: Not(IsNull()) });
   }
 
   async #findActiveToken(token: string): Promise<PasswordResetToken> {
