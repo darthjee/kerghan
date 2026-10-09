@@ -109,14 +109,14 @@ workflow at all — nothing downstream depends on it being fresh.
 | `backend_checks` | `darthjee/circleci_kerghan-base:0.1.0` | every push | `yarn_project` instance (`dir: backend`, `script: lint`): backend ESLint |
 | `jasmine` | `darthjee/circleci_node:0.2.1` | every push | `yarn_project` instance (`dir: frontend`, `script: coverage`, `upload_coverage: true`): frontend test suite + coverage; uploads a partial Codacy coverage report afterward (best-effort, non-blocking) |
 | `frontend-checks` | `darthjee/circleci_node:0.2.1` | every push | `yarn_project` instance (`dir: frontend`, `script: lint`): frontend ESLint |
-| `proxy_extension_tests` | `darthjee/tent-test:0.10.4` | every push | PHPUnit tests for `proxy/extension/` |
+| `proxy_extension_tests` | `darthjee/tent-test:1.0.3` | every push | PHPUnit tests for `proxy/extension/` |
 | `coverage-final` | `darthjee/circleci_kerghan-base:0.1.0` | every push | Finalizes the aggregated Codacy coverage report once `backend_tests`/`jasmine`'s partial uploads land (best-effort, non-blocking) |
 | `release-image` | machine (multi-arch: amd64 + arm64) | every push (no-op unless tag) | Publishes one of the 4 base images to Docker Hub via `bin/image.sh`; instantiated through a single workflow `matrix` (4 images × 2 archs = 8 jobs) — see below |
 | `build-and-release` | machine | tag only | Triggers the Render deploy of the backend (`scripts/deploy.sh`), blocks until it reports "live" |
-| `upload_proxy_files` | `darthjee/tent:0.10.4` | tag only | Uploads Tent proxy runtime to the SSH deploy host's staging dir |
+| `upload_proxy_files` | `darthjee/tent:1.0.3` | tag only | Uploads Tent proxy runtime to the SSH deploy host's staging dir |
 | `upload_fe_files` | `darthjee/vite_kerghan-base:0.1.0` | tag only | Builds the Vite frontend, uploads the static output to the staging dir |
-| `upload_extension` | `darthjee/tent:0.10.4` | tag only | Uploads the proxy PHP extension (test files stripped) |
-| `copy_proxy_configuration` | `darthjee/tent:0.10.4` | tag only | Uploads prod proxy config + restores host-only state (`locals.php`, `.htaccess`) |
+| `upload_extension` | `darthjee/tent:1.0.3` | tag only | Uploads the proxy PHP extension (test files stripped) |
+| `copy_proxy_configuration` | `darthjee/tent:1.0.3` | tag only | Uploads prod proxy config + restores host-only state (`locals.php`, `.htaccess`) |
 | `release` | `darthjee/vite_kerghan-base:0.1.0` | tag only | Atomic swap: only runs once every upload/build job above has succeeded |
 
 ### `release-image` instances
