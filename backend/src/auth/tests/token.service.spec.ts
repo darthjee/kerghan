@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { JwtService } from '@nestjs/jwt';
-import { IsNull, Not } from 'typeorm';
+import { IsNull, LessThan, Not } from 'typeorm';
 import { RefreshToken } from '../entities/refresh-token.entity.js';
 import { User } from '../entities/user.entity.js';
 import { TokenService } from '../token.service.js';
@@ -43,6 +43,22 @@ describe('TokenService', () => {
       email: 'darthjee@example.com',
       isAdmin: false,
     } as User;
+
+    it('prunes the user\'s expired refresh-token rows', async () => {
+      await service.issueTokens(user);
+
+      expect(refreshTokenRepository.delete).toHaveBeenCalledWith({
+        userId: 7,
+        expiresAt: LessThan(expect.any(Date)),
+      });
+    });
+
+    it('prunes before saving the new row', async () => {
+      await service.issueTokens(user);
+
+      expect(refreshTokenRepository.delete.mock.invocationCallOrder[0])
+        .toBeLessThan(refreshTokenRepository.save.mock.invocationCallOrder[0]);
+    });
 
     it('resolves with the user and the freshly issued token pair', async () => {
       const result = await service.issueTokens(user);

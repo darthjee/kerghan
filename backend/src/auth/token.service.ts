@@ -3,7 +3,7 @@ import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { InjectRepository } from '@nestjs/typeorm';
-import { IsNull, Not, Repository } from 'typeorm';
+import { IsNull, LessThan, Not, Repository } from 'typeorm';
 import { LoggerService } from '../core/logger.service.js';
 import { getNumberConfig } from '../core/numeric-config.js';
 import { hashToken } from '../core/token-hash.js';
@@ -55,6 +55,13 @@ export interface AuthResult {
  * in" session, the persistent TTL (`KERGHAN_PERSISTENT_REFRESH_TOKEN_TTL_MS`,
  * default 30 days). An unset/non-numeric value falls back to the default; a
  * value `<= 0` also falls back, logging a warning once per key.
+ *
+ * Every mint also prunes the minting user's expired refresh-token rows
+ * (opportunistic, per-user cleanup — no scheduler), keeping
+ * `auth_refresh_tokens` bounded. This cannot weaken replay detection:
+ * `AuthService#findActiveRefreshToken` rejects an expired token before it
+ * looks at `revokedAt`/`revokedReason`, so only unexpired revoked rows matter
+ * for detection, and those are kept.
  */
 @Injectable()
 export class TokenService {
@@ -94,6 +101,9 @@ export class TokenService {
    * mint sessions identically. With no `session`, a new session identity is
    * minted (fresh UUID, `startedAt` = now); on rotation the presented token's
    * `session` is passed in and copied over, the same way `keepSignedIn` is.
+   * Before saving, the user's rows whose `expiresAt` is already in the past
+   * are deleted; revoked-but-unexpired rows are kept (replay detection needs
+   * them) and other users' rows are never touched.
    * @param {User} user - The user to mint a session for.
    * @param {boolean} [keepSignedIn] - Whether this is a persistent ("keep me
    *   signed in") session; defaults to `false`.
@@ -114,6 +124,8 @@ export class TokenService {
     });
     const refreshToken = randomBytes(48).toString('hex');
     const refreshTokenExpiresAt = new Date(Date.now() + this.#refreshTokenTtlMs(keepSignedIn));
+
+    await this.refreshTokenRepository.delete({ userId: user.id, expiresAt: LessThan(new Date()) });
 
     await this.refreshTokenRepository.save(
       this.refreshTokenRepository.create({

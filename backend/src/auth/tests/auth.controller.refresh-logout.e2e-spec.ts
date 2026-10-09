@@ -1,6 +1,12 @@
 import request from 'supertest';
 import { loginAs, useTestApp } from './auth.controller.e2e-test-support.js';
-import { findSetCookie, refreshCookieFor, refreshTokenOf, setCookieHeaders } from './support/auth-requests.js';
+import {
+  findSetCookie,
+  refreshCookieFor,
+  refreshTokenOf,
+  registerUser,
+  setCookieHeaders,
+} from './support/auth-requests.js';
 
 describe('AuthController (e2e)', () => {
   const ctx = useTestApp();
@@ -113,6 +119,62 @@ describe('AuthController (e2e)', () => {
 
       expectSessionCookiesCleared(response);
       expect(ctx.refreshTokenRepo.rows).toHaveLength(rowsBefore);
+    });
+  });
+
+  describe('expired refresh-token pruning on mint', () => {
+    const expire = (row: { expiresAt: Date }): void => {
+      row.expiresAt = new Date(Date.now() - 1000);
+    };
+
+    it('deletes the user\'s expired rows on login', async () => {
+      const registered = ctx.refreshTokenRepo.rows[0];
+      expire(registered);
+
+      await loginAs(ctx.app).expect(201);
+
+      expect(ctx.refreshTokenRepo.rows).not.toContain(registered);
+    });
+
+    it('deletes the user\'s expired rows on refresh', async () => {
+      const token = refreshTokenOf(await loginAs(ctx.app));
+      const registered = ctx.refreshTokenRepo.rows[0];
+      expire(registered);
+
+      await refresh(token).expect(201);
+
+      expect(ctx.refreshTokenRepo.rows).not.toContain(registered);
+    });
+
+    it('keeps the user\'s revoked but unexpired rows', async () => {
+      const token = refreshTokenOf(await loginAs(ctx.app));
+      const loggedOut = ctx.refreshTokenRepo.rows[ctx.refreshTokenRepo.rows.length - 1];
+
+      await logoff(token).expect(204);
+      await loginAs(ctx.app).expect(201);
+
+      expect(loggedOut.revokedAt).not.toBeNull();
+      expect(ctx.refreshTokenRepo.rows).toContain(loggedOut);
+    });
+
+    it('leaves other users\' expired rows untouched', async () => {
+      await registerUser(ctx.app, { username: 'leia', email: 'leia@example.com' }).expect(201);
+      const othersRow = ctx.refreshTokenRepo.rows[ctx.refreshTokenRepo.rows.length - 1];
+      expire(othersRow);
+
+      await loginAs(ctx.app).expect(201);
+
+      expect(ctx.refreshTokenRepo.rows).toContain(othersRow);
+    });
+
+    it('still detects a rotated token replayed before it expires', async () => {
+      const token = refreshTokenOf(await loginAs(ctx.app));
+      expire(ctx.refreshTokenRepo.rows[0]);
+
+      await refresh(token).expect(201);
+      await refresh(token).expect(401);
+
+      expect(ctx.refreshTokenRepo.rows.map((row) => row.revokedReason)).toContain('replay_detected');
     });
   });
 
