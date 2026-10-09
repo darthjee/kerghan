@@ -74,6 +74,15 @@ describe('SessionService', () => {
       expect(sessions.map((session) => session.current)).toEqual([false]);
     });
 
+    it('marks nothing as current, without hashing, when no token is presented', async () => {
+      refreshTokenRepository.find.mockResolvedValue([buildRow()]);
+
+      const sessions = await service.listActive(7);
+
+      expect(sessions.map((session) => session.current)).toEqual([false]);
+      expect(tokenService.hashToken).not.toHaveBeenCalled();
+    });
+
     it('never exposes token material', async () => {
       refreshTokenRepository.find.mockResolvedValue([buildRow()]);
 
@@ -114,6 +123,13 @@ describe('SessionService', () => {
         { userId: 7, sessionUuid: Not(row.sessionUuid), revokedAt: IsNull() },
         { revokedAt: expect.any(Date), revokedReason: 'user_revoked' },
       );
+    });
+
+    it('throws 401 without a lookup and revokes nothing when no token is presented', async () => {
+      await expect(service.revokeOthers(7)).rejects.toThrow(UnauthorizedException);
+
+      expect(refreshTokenRepository.findOneBy).not.toHaveBeenCalled();
+      expect(refreshTokenRepository.update).not.toHaveBeenCalled();
     });
 
     const invalidCases: [string, RefreshToken | null][] = [

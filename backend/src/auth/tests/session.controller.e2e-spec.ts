@@ -1,6 +1,7 @@
 import { INestApplication } from '@nestjs/common';
 import request from 'supertest';
 import { loginAs, registerUser, useTestApp } from './auth.controller.e2e-test-support.js';
+import { pickCookie, refreshCookieFor, refreshTokenOf } from './support/auth-requests.js';
 
 interface SignedIn {
   cookie: string;
@@ -9,23 +10,34 @@ interface SignedIn {
 
 function signedIn(response: request.Response): SignedIn {
   return {
-    cookie: response.headers['set-cookie'][0].split(';')[0],
-    refreshToken: response.body.refreshToken,
+    cookie: pickCookie(response, 'access_token'),
+    refreshToken: refreshTokenOf(response),
   };
 }
 
-function post(app: INestApplication, path: string, session: SignedIn | null, body: object): request.Test {
+// Posts to `path` as `session`: sends its `access_token` cookie plus a `refresh_token` cookie carrying
+// `refreshToken` (defaulting to the session's own token; `null` sends no refresh-token cookie).
+function post(
+  app: INestApplication,
+  path: string,
+  session: SignedIn | null,
+  refreshToken: string | null = session?.refreshToken ?? null,
+): request.Test {
+  const cookies = [
+    ...(session ? [session.cookie] : []),
+    ...(refreshToken ? [refreshCookieFor(refreshToken)] : []),
+  ];
   const req = request(app.getHttpServer()).post(path);
 
-  return (session ? req.set('Cookie', [session.cookie]) : req).send(body);
+  return cookies.length > 0 ? req.set('Cookie', cookies) : req;
 }
 
 function listSessions(app: INestApplication, session: SignedIn, refreshToken = session.refreshToken): request.Test {
-  return post(app, '/auth/sessions/mine.json', session, { refreshToken });
+  return post(app, '/auth/sessions/mine.json', session, refreshToken);
 }
 
 function refreshWith(app: INestApplication, refreshToken: string): request.Test {
-  return request(app.getHttpServer()).post('/auth/refresh.json').send({ refreshToken });
+  return request(app.getHttpServer()).post('/auth/refresh.json').set('Cookie', [refreshCookieFor(refreshToken)]);
 }
 
 describe('SessionController (e2e)', () => {
@@ -53,7 +65,7 @@ describe('SessionController (e2e)', () => {
       '/auth/sessions/revoke-others.json',
       '/auth/sessions/some-uuid/revoke.json',
     ])('rejects an unauthenticated call to %s with 401', async (path) => {
-      await post(ctx.app, path, null, { refreshToken: first.refreshToken }).expect(401);
+      await post(ctx.app, path, null, first.refreshToken).expect(401);
     });
   });
 
@@ -83,15 +95,25 @@ describe('SessionController (e2e)', () => {
         .find((entry: { current: boolean }) => entry.current);
       const refreshed = await refreshWith(ctx.app, first.refreshToken).expect(201);
 
-      const after = (await listSessions(ctx.app, first, refreshed.body.refreshToken)).body.sessions
+      const after = (await listSessions(ctx.app, first, refreshTokenOf(refreshed))).body.sessions
         .find((entry: { current: boolean }) => entry.current);
 
       expect(after.id).toBe(before.id);
       expect(after.startedAt).toBe(before.startedAt);
     });
 
-    it('rejects a missing refreshToken with 400', async () => {
-      await post(ctx.app, '/auth/sessions/mine.json', first, {}).expect(400);
+    it('marks no session as current without a refresh-token cookie', async () => {
+      const response = await post(ctx.app, '/auth/sessions/mine.json', first, null).expect(201);
+
+      expect(response.body.sessions.map((entry: { current: boolean }) => entry.current)).toEqual([false, false]);
+    });
+
+    it('ignores a body-carried refreshToken', async () => {
+      const response = await post(ctx.app, '/auth/sessions/mine.json', first, null)
+        .send({ refreshToken: first.refreshToken })
+        .expect(201);
+
+      expect(response.body.sessions.map((entry: { current: boolean }) => entry.current)).toEqual([false, false]);
     });
   });
 
@@ -99,7 +121,7 @@ describe('SessionController (e2e)', () => {
     it('revokes one of the caller\'s own sessions', async () => {
       const id = await sessionIdOf(second);
 
-      await post(ctx.app, `/auth/sessions/${id}/revoke.json`, first, {})
+      await post(ctx.app, `/auth/sessions/${id}/revoke.json`, first)
         .expect(201)
         .expect({ revoked: true });
 
@@ -109,7 +131,7 @@ describe('SessionController (e2e)', () => {
     it('rejects the revoked session\'s token without logging the revoker out', async () => {
       const id = await sessionIdOf(second);
 
-      await post(ctx.app, `/auth/sessions/${id}/revoke.json`, first, {}).expect(201);
+      await post(ctx.app, `/auth/sessions/${id}/revoke.json`, first).expect(201);
 
       await refreshWith(ctx.app, second.refreshToken).expect(401);
       await refreshWith(ctx.app, second.refreshToken).expect(401);
@@ -117,12 +139,12 @@ describe('SessionController (e2e)', () => {
     });
 
     it('accepts a v1 UUID session id (migration-backfilled sessions)', async () => {
-      await post(ctx.app, '/auth/sessions/6ba7b810-9dad-11d1-80b4-00c04fd430c8/revoke.json', first, {})
+      await post(ctx.app, '/auth/sessions/6ba7b810-9dad-11d1-80b4-00c04fd430c8/revoke.json', first)
         .expect(404);
     });
 
     it('answers 400 for a malformed session id, revoking nothing', async () => {
-      await post(ctx.app, '/auth/sessions/not-a-uuid/revoke.json', first, {}).expect(400);
+      await post(ctx.app, '/auth/sessions/not-a-uuid/revoke.json', first).expect(400);
 
       await refreshWith(ctx.app, first.refreshToken).expect(201);
       await refreshWith(ctx.app, second.refreshToken).expect(201);
@@ -131,7 +153,7 @@ describe('SessionController (e2e)', () => {
     it('allows revoking the current session', async () => {
       const id = await sessionIdOf(first);
 
-      await post(ctx.app, `/auth/sessions/${id}/revoke.json`, first, {}).expect(201);
+      await post(ctx.app, `/auth/sessions/${id}/revoke.json`, first).expect(201);
 
       await refreshWith(ctx.app, first.refreshToken).expect(401);
     });
@@ -139,20 +161,20 @@ describe('SessionController (e2e)', () => {
     it('answers 404 for another user\'s session, leaving it alive', async () => {
       const id = await sessionIdOf(other);
 
-      await post(ctx.app, `/auth/sessions/${id}/revoke.json`, first, {}).expect(404);
+      await post(ctx.app, `/auth/sessions/${id}/revoke.json`, first).expect(404);
 
       await refreshWith(ctx.app, other.refreshToken).expect(201);
     });
 
     it('answers 404 for an unknown session', async () => {
-      await post(ctx.app, '/auth/sessions/00000000-0000-4000-8000-000000000000/revoke.json', first, {})
+      await post(ctx.app, '/auth/sessions/00000000-0000-4000-8000-000000000000/revoke.json', first)
         .expect(404);
     });
   });
 
   describe('POST /auth/sessions/revoke-others.json', () => {
     it('revokes every session except the current one', async () => {
-      await post(ctx.app, '/auth/sessions/revoke-others.json', first, { refreshToken: first.refreshToken })
+      await post(ctx.app, '/auth/sessions/revoke-others.json', first)
         .expect(201)
         .expect({ revoked: true });
 
@@ -163,7 +185,7 @@ describe('SessionController (e2e)', () => {
     });
 
     it('rejects a revoked session\'s token without logging the current session out', async () => {
-      await post(ctx.app, '/auth/sessions/revoke-others.json', first, { refreshToken: first.refreshToken })
+      await post(ctx.app, '/auth/sessions/revoke-others.json', first)
         .expect(201);
 
       await refreshWith(ctx.app, second.refreshToken).expect(401);
@@ -171,15 +193,15 @@ describe('SessionController (e2e)', () => {
 
       const refreshed = await refreshWith(ctx.app, first.refreshToken).expect(201);
 
-      await refreshWith(ctx.app, refreshed.body.refreshToken).expect(201);
+      await refreshWith(ctx.app, refreshTokenOf(refreshed)).expect(201);
     });
 
     it('keeps the current session, identified by its rotated token', async () => {
       const id = await sessionIdOf(first);
       const rotated = await refreshWith(ctx.app, first.refreshToken).expect(201);
-      const current = { ...first, refreshToken: rotated.body.refreshToken };
+      const current = { ...first, refreshToken: refreshTokenOf(rotated) };
 
-      await post(ctx.app, '/auth/sessions/revoke-others.json', first, { refreshToken: current.refreshToken })
+      await post(ctx.app, '/auth/sessions/revoke-others.json', current)
         .expect(201);
 
       const { sessions } = (await listSessions(ctx.app, current)).body;
@@ -191,7 +213,7 @@ describe('SessionController (e2e)', () => {
       ['an unknown', (): string => 'not-a-real-token'],
       ['another user\'s', (): string => other.refreshToken],
     ])('answers 401 for %s refresh token and revokes nothing', async (_label, token) => {
-      await post(ctx.app, '/auth/sessions/revoke-others.json', first, { refreshToken: token() }).expect(401);
+      await post(ctx.app, '/auth/sessions/revoke-others.json', first, token()).expect(401);
 
       await refreshWith(ctx.app, first.refreshToken).expect(201);
       await refreshWith(ctx.app, second.refreshToken).expect(201);
@@ -201,15 +223,15 @@ describe('SessionController (e2e)', () => {
     it('answers 401 for a revoked refresh token and revokes nothing', async () => {
       const refreshed = await refreshWith(ctx.app, first.refreshToken).expect(201);
 
-      await post(ctx.app, '/auth/sessions/revoke-others.json', first, { refreshToken: first.refreshToken })
+      await post(ctx.app, '/auth/sessions/revoke-others.json', first)
         .expect(401);
 
-      await refreshWith(ctx.app, refreshed.body.refreshToken).expect(201);
+      await refreshWith(ctx.app, refreshTokenOf(refreshed)).expect(201);
       await refreshWith(ctx.app, second.refreshToken).expect(201);
     });
 
-    it('answers 400 for a missing refresh token and revokes nothing', async () => {
-      await post(ctx.app, '/auth/sessions/revoke-others.json', first, {}).expect(400);
+    it('answers 401 without a refresh-token cookie and revokes nothing', async () => {
+      await post(ctx.app, '/auth/sessions/revoke-others.json', first, null).expect(401);
 
       await refreshWith(ctx.app, second.refreshToken).expect(201);
     });
@@ -221,7 +243,7 @@ describe('SessionController (e2e)', () => {
       ['/auth/sessions/revoke-others.json', 201],
       ['/auth/sessions/00000000-0000-4000-8000-000000000000/revoke.json', 404],
     ])('marks %s as never cached', async (path, status) => {
-      const response = await post(ctx.app, path, first, { refreshToken: first.refreshToken }).expect(status);
+      const response = await post(ctx.app, path, first).expect(status);
 
       expect(response.headers['x-skip-cache']).toBe('true');
       expect(response.headers['cache-control']).toBe('no-store');

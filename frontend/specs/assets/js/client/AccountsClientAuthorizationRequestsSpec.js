@@ -1,12 +1,7 @@
 import AccountsClient from '../../../../assets/js/client/AccountsClient.js';
 import ApiClient from '../../../../assets/js/client/ApiClient.js';
-import AuthSession from '../../../../assets/js/client/AuthSession.js';
 
 describe('AccountsClient authorization requests', () => {
-  afterEach(() => {
-    AuthSession.clear();
-  });
-
   describe('.createAuthorizationRequest', () => {
     const request = { uuid: 'req-uuid', pollToken: 'poll-token', expiresAt: '2026-09-09T00:05:00.000Z' };
 
@@ -33,14 +28,6 @@ describe('AccountsClient authorization requests', () => {
       });
     });
 
-    it('does not touch the stored refresh token', async () => {
-      AuthSession.set('refresh-token');
-      spyOn(ApiClient, 'postJson').and.resolveTo(request);
-
-      await AccountsClient.createAuthorizationRequest('foo');
-
-      expect(AuthSession.get()).toBe('refresh-token');
-    });
   });
 
   describe('.pollAuthorizationRequest', () => {
@@ -55,29 +42,25 @@ describe('AccountsClient authorization requests', () => {
       );
     });
 
-    it('resolves with the status and persists the refresh token on approved', async () => {
+    it('resolves with the status and user on approved', async () => {
       const result = {
         status: 'approved',
         user: { id: 1, username: 'foo', email: 'foo@example.com', isAdmin: false },
-        refreshToken: 'refresh-token',
       };
       spyOn(ApiClient, 'postJson').and.resolveTo(result);
 
       const response = await AccountsClient.pollAuthorizationRequest('req-uuid', 'poll-token');
 
       expect(response).toEqual(result);
-      expect(AuthSession.get()).toBe('refresh-token');
     });
 
     ['open', 'denied', 'expired', 'logged'].forEach((status) => {
-      it(`resolves untouched and leaves the session alone for ${status}`, async () => {
-        AuthSession.set('existing-token');
+      it(`resolves untouched for ${status}`, async () => {
         spyOn(ApiClient, 'postJson').and.resolveTo({ status });
 
         const response = await AccountsClient.pollAuthorizationRequest('req-uuid', 'poll-token');
 
         expect(response).toEqual({ status });
-        expect(AuthSession.get()).toBe('existing-token');
       });
     });
 
@@ -115,14 +98,6 @@ describe('AccountsClient authorization requests', () => {
       expect(response).toEqual({ requests });
     });
 
-    it('does not touch the stored refresh token', async () => {
-      AuthSession.set('refresh-token');
-      spyOn(ApiClient, 'postJson').and.resolveTo({ requests });
-
-      await AccountsClient.listAuthorizationRequests();
-
-      expect(AuthSession.get()).toBe('refresh-token');
-    });
   });
 
   describe('.authorizeAuthorizationRequest', () => {
@@ -145,14 +120,6 @@ describe('AccountsClient authorization requests', () => {
       expect(response).toEqual({ authorized: true });
     });
 
-    it('does not touch the stored refresh token', async () => {
-      AuthSession.set('refresh-token');
-      spyOn(ApiClient, 'postJson').and.resolveTo({ authorized: true });
-
-      await AccountsClient.authorizeAuthorizationRequest('req-uuid', 'secret');
-
-      expect(AuthSession.get()).toBe('refresh-token');
-    });
 
     it('propagates an ApiError from a wrong password, owner, status, or expired request', async () => {
       const error = new Error('bad request');
@@ -185,14 +152,6 @@ describe('AccountsClient authorization requests', () => {
       expect(response).toEqual({ denied: true });
     });
 
-    it('does not touch the stored refresh token', async () => {
-      AuthSession.set('refresh-token');
-      spyOn(ApiClient, 'postJson').and.resolveTo({ denied: true });
-
-      await AccountsClient.denyAuthorizationRequest('req-uuid');
-
-      expect(AuthSession.get()).toBe('refresh-token');
-    });
 
     it('propagates an ApiError from a wrong owner, status, or expired request', async () => {
       const error = new Error('bad request');

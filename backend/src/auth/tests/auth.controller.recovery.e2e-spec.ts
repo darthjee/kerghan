@@ -1,6 +1,7 @@
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import request from 'supertest';
 import { loginAs, useTestApp } from './auth.controller.e2e-test-support.js';
+import { refreshCookie } from './support/auth-requests.js';
 import { expectErrorBody } from './support/error-body.js';
 import { ErrorCodes } from '../../core/error-codes.js';
 
@@ -106,7 +107,7 @@ describe('AuthController (e2e)', () => {
 
       await request(ctx.app.getHttpServer())
         .post('/auth/refresh.json')
-        .send({ refreshToken: login.body.refreshToken })
+        .set('Cookie', [refreshCookie(login)])
         .expect(401);
     });
 

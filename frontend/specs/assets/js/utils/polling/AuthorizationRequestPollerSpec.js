@@ -67,7 +67,6 @@ describe('AuthorizationRequestPoller', () => {
     const result = {
       status: 'approved',
       user: { id: 1, username: 'foo', email: 'foo@example.com', isAdmin: false },
-      refreshToken: 'refresh-token',
     };
     client.pollAuthorizationRequest.and.resolveTo(result);
     buildPoller().start();
@@ -237,7 +236,7 @@ describe('buildPollTick', () => {
   });
 
   it('forwards the result to onApproved without rescheduling on approved', async () => {
-    const result = { status: 'approved', refreshToken: 'refresh-token' };
+    const result = { status: 'approved', user: { id: 1 } };
     client.pollAuthorizationRequest.and.resolveTo(result);
 
     await buildTick()();

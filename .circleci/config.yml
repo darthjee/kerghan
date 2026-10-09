@@ -169,7 +169,7 @@ jobs:
 
   proxy_extension_tests:
     docker:
-      - image: darthjee/tent-test:0.10.4
+      - image: darthjee/tent-test:1.0.3
     working_directory: /home/app/app
     steps:
       - checkout:
@@ -226,7 +226,7 @@ jobs:
   # temp dir — staged, not yet swapped live (see the `release` job below).
   upload_proxy_files:
     docker:
-      - image: darthjee/tent:0.10.4
+      - image: darthjee/tent:1.0.3
     working_directory: /home/app/app
     steps:
       - checkout
@@ -242,7 +242,7 @@ jobs:
   # end) so the atomic swap doesn't wipe them.
   copy_proxy_configuration:
     docker:
-      - image: darthjee/tent:0.10.4
+      - image: darthjee/tent:1.0.3
     working_directory: /home/app/app
     steps:
       - checkout
@@ -262,7 +262,7 @@ jobs:
   # Uploads the Tent proxy extension, stripped of its test suite (not needed at runtime).
   upload_extension:
     docker:
-      - image: darthjee/tent:0.10.4
+      - image: darthjee/tent:1.0.3
     working_directory: /home/app/app
     steps:
       - checkout

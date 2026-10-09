@@ -1,6 +1,5 @@
 import ApiClient from '../../../../assets/js/client/ApiClient.js';
 import ApiError from '../../../../assets/js/client/ApiError.js';
-import AuthSession from '../../../../assets/js/client/AuthSession.js';
 import LoginModalEvents from '../../../../assets/js/client/LoginModalEvents.js';
 import { installFakeWindow, uninstallFakeWindow } from '../../../support/fakeWindow.js';
 import { expectSessionExpired, fetchSequence, stubRefreshFlow } from '../../../support/fetchSequence.js';
@@ -151,12 +150,12 @@ describe('ApiClient', () => {
     it('deletes a JSON body with same-origin credentials', async () => {
       globalThis.fetch = fetchSequence([{ ok: true, status: 204 }]);
 
-      await ApiClient.deleteJson('/auth/logoff.json', { refreshToken: 'token' });
+      await ApiClient.deleteJson('/auth/logoff.json', {});
 
       expect(globalThis.fetch).toHaveBeenCalledWith('/auth/logoff.json', jasmine.objectContaining({
         method: 'DELETE',
         credentials: 'same-origin',
-        body: JSON.stringify({ refreshToken: 'token' }),
+        body: JSON.stringify({}),
       }));
     });
 
@@ -164,7 +163,7 @@ describe('ApiClient', () => {
       'real `fetch` behaves for DELETE /auth/logoff.json', async () => {
       globalThis.fetch = fetchSequence([{ ok: true, status: 204 }]);
 
-      const data = await ApiClient.deleteJson('/auth/logoff.json', { refreshToken: 'token' });
+      const data = await ApiClient.deleteJson('/auth/logoff.json', {});
 
       expect(data).toEqual({});
     });
@@ -207,7 +206,7 @@ describe('ApiClient', () => {
     it('refreshes the access token and retries the original request on success', async () => {
       stubRefreshFlow([
         { ok: false, status: 401, json: errorBody(401, 'UNAUTHORIZED', 'Unauthorized') },
-        { ok: true, status: 200, json: { user: { id: 1 }, refreshToken: 'new-refresh-token' } },
+        { ok: true, status: 200, json: { user: { id: 1 } } },
         { ok: true, status: 200, json: { id: 1, username: 'foo' } },
       ]);
 
@@ -216,13 +215,12 @@ describe('ApiClient', () => {
       expect(data).toEqual({ id: 1, username: 'foo' });
       expect(globalThis.fetch).toHaveBeenCalledTimes(3);
       expect(globalThis.fetch.calls.argsFor(1)[0]).toBe('/auth/refresh.json');
-      expect(AuthSession.set).toHaveBeenCalledWith('new-refresh-token');
-      expect(AuthSession.clear).not.toHaveBeenCalled();
+      expect(globalThis.fetch.calls.argsFor(1)[1].body).toBe(JSON.stringify({}));
       expect(globalThis.window.location.hash).toBe('');
       expect(LoginModalEvents.open).not.toHaveBeenCalled();
     });
 
-    it('treats a failed refresh as a session expiry: clears the session and opens the login modal', async () => {
+    it('treats a failed refresh as a session expiry: opens the login modal', async () => {
       stubRefreshFlow([
         { ok: false, status: 401, json: errorBody(401, 'UNAUTHORIZED', 'Unauthorized') },
         { ok: false, status: 401, json: errorBody(401, 'UNAUTHORIZED', 'invalid refresh token') },
@@ -235,10 +233,10 @@ describe('ApiClient', () => {
       expectSessionExpired();
     });
 
-    it('treats a missing refresh token as a session expiry, without attempting a refresh call', async () => {
+    it('treats a missing logged_in hint cookie as a session expiry, without a refresh call', async () => {
       stubRefreshFlow([
         { ok: false, status: 401, json: errorBody(401, 'UNAUTHORIZED', 'Unauthorized') },
-      ], { refreshToken: null });
+      ], { loggedIn: false });
 
       const data = await ApiClient.postJson('/accounts/register.json', { username: 'foo' });
 
@@ -250,7 +248,7 @@ describe('ApiClient', () => {
     it('does not attempt a second refresh when the retried request also returns 401', async () => {
       stubRefreshFlow([
         { ok: false, status: 401, json: errorBody(401, 'UNAUTHORIZED', 'Unauthorized') },
-        { ok: true, status: 200, json: { user: { id: 1 }, refreshToken: 'new-refresh-token' } },
+        { ok: true, status: 200, json: { user: { id: 1 } } },
         { ok: false, status: 401, json: errorBody(401, 'UNAUTHORIZED', 'Unauthorized') },
       ]);
 

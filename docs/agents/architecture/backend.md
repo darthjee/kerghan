@@ -22,7 +22,7 @@ one — must follow. See `docs/agents/modules/auth.md` for the Auth module itsel
 
 ```
 backend/src/
-├── main.ts                    # boots the app: cookie-parser, global ValidationPipe, PORT
+├── main.ts                    # boots the app: cookie-parser (session cookies), global ValidationPipe, PORT
 ├── app.module.ts              # root module: ConfigModule, TypeOrmModule, JwtModule (global),
 │                               #   EventEmitterModule, AuthModule, core providers, global
 │                               #   OriginGuard + JwtGuard + AdminGuard, HttpExceptionFilter
@@ -50,6 +50,8 @@ backend/src/
 │   ├── auth.module.ts
 │   ├── auth.controller.ts
 │   ├── auth.service.ts
+│   ├── auth-cookies.ts        #   session cookies (access_token, refresh_token on /auth, logged_in): set/clear/read
+│   ├── auth-response.ts       #   respondWithSession: sets the session cookies, returns { user }
 │   ├── dto/
 │   ├── entities/
 │   ├── events/

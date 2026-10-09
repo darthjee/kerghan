@@ -1,5 +1,6 @@
-import { Body, Controller, Param, ParseUUIDPipe, Post } from '@nestjs/common';
-import { RefreshTokenDto } from './dto/refresh-token.dto.js';
+import { Controller, Param, ParseUUIDPipe, Post, Req } from '@nestjs/common';
+import type { Request } from 'express';
+import { readRefreshToken } from './auth-cookies.js';
 import { SessionService } from './session.service.js';
 import type { AccessTokenPayload } from '../core/access-token-payload.js';
 import { CacheClass } from '../core/cache-class.js';
@@ -27,30 +28,32 @@ export class SessionController {
 
   /**
    * `POST /auth/sessions/mine.json`. Lists the caller's active sessions, most
-   * recently used first, marking the one matching `dto.refreshToken` as
-   * `current` (an unknown token marks none, without failing).
-   * @param {RefreshTokenDto} dto - Carries the caller's refresh token.
+   * recently used first, marking the one matching the `refresh_token`
+   * cookie as `current` (a missing or unknown token marks none, without
+   * failing). No request body.
+   * @param {Request} req - Carries the caller's `refresh_token` cookie.
    * @param {AccessTokenPayload} user - The caller's own authenticated user, supplying the user ID.
    * @returns {Promise<object>} `{ sessions: [{ id, startedAt, lastUsedAt, keepSignedIn, current }] }`.
    */
   @Post('sessions/mine.json')
-  async mine(@Body() dto: RefreshTokenDto, @CurrentUser() user: AccessTokenPayload): Promise<object> {
-    const sessions = await this.sessionService.listActive(user.sub, dto.refreshToken);
+  async mine(@Req() req: Request, @CurrentUser() user: AccessTokenPayload): Promise<object> {
+    const sessions = await this.sessionService.listActive(user.sub, readRefreshToken(req));
 
     return { sessions };
   }
 
   /**
    * `POST /auth/sessions/revoke-others.json`. Revokes every session of the
-   * caller except the current one. A missing or invalid current token
-   * answers `401` and revokes nothing.
-   * @param {RefreshTokenDto} dto - Carries the caller's refresh token, identifying the session to keep.
+   * caller except the current one, identified by the `refresh_token`
+   * cookie. A missing or invalid current token answers `401` and revokes
+   * nothing. No request body.
+   * @param {Request} req - Carries the caller's `refresh_token` cookie, identifying the session to keep.
    * @param {AccessTokenPayload} user - The caller's own authenticated user, supplying the user ID.
    * @returns {Promise<object>} `{ revoked: true }`.
    */
   @Post('sessions/revoke-others.json')
-  async revokeOthers(@Body() dto: RefreshTokenDto, @CurrentUser() user: AccessTokenPayload): Promise<object> {
-    await this.sessionService.revokeOthers(user.sub, dto.refreshToken);
+  async revokeOthers(@Req() req: Request, @CurrentUser() user: AccessTokenPayload): Promise<object> {
+    await this.sessionService.revokeOthers(user.sub, readRefreshToken(req));
 
     return { revoked: true };
   }
@@ -61,9 +64,8 @@ export class SessionController {
    * unknown session, or another user's, answers `404`; a malformed ID
    * answers `400` (any UUID version is accepted, since migration-backfilled
    * sessions carry MySQL `UUID()` v1 IDs). Only the session's refresh token
-   * is revoked — its access-token JWT stays valid until it expires. The
-   * request body is accepted for consistency with the other routes but
-   * ignored.
+   * is revoked — its access-token JWT stays valid until it expires. No
+   * request body is expected (any body is ignored).
    * @param {string} uuid - The session ID to revoke.
    * @param {AccessTokenPayload} user - The caller's own authenticated user, supplying the user ID.
    * @returns {Promise<object>} `{ revoked: true }`.

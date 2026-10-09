@@ -52,33 +52,31 @@ export function fetchSequence(responses) {
 }
 
 /**
- * Stubs the token-refresh flow: spies on `AuthSession` and replaces `globalThis.fetch`.
+ * Stubs the token-refresh flow: spies on `AuthSession.isLoggedIn` and replaces
+ * `globalThis.fetch`.
  *
- * @description Spies `AuthSession.get` (returning the given refresh token), `AuthSession.set`
- * and `AuthSession.clear`, and assigns `globalThis.fetch` a `fetchSequence` of the responses.
- * The caller is responsible for restoring `globalThis.fetch` (e.g. in an `afterEach`).
+ * @description Spies `AuthSession.isLoggedIn` (returning the given hint-cookie state) and
+ * assigns `globalThis.fetch` a `fetchSequence` of the responses. The caller is responsible for
+ * restoring `globalThis.fetch` (e.g. in an `afterEach`).
  * @param {Array<{ok: boolean, status: number, json: object}>} responses - Ordered responses.
- * @param {{refreshToken: (string|null)}} [options] - Stub options; `refreshToken` is the token
- *   `AuthSession.get` returns (defaults to `'old-refresh-token'`, pass `null` for none).
+ * @param {{loggedIn: boolean}} [options] - Stub options; `loggedIn` is what
+ *   `AuthSession.isLoggedIn` returns (defaults to `true`).
  * @returns {void}
  */
-export function stubRefreshFlow(responses, { refreshToken = 'old-refresh-token' } = {}) {
-  spyOn(AuthSession, 'get').and.returnValue(refreshToken);
-  spyOn(AuthSession, 'set');
-  spyOn(AuthSession, 'clear');
+export function stubRefreshFlow(responses, { loggedIn = true } = {}) {
+  spyOn(AuthSession, 'isLoggedIn').and.returnValue(loggedIn);
   globalThis.fetch = fetchSequence(responses);
 }
 
 /**
  * Asserts that the session was treated as expired.
  *
- * @description Expects `AuthSession.clear` to have been called, `LoginModalEvents.open` to have
- * been called with `'password'` and the window hash to be empty. Requires `AuthSession.clear`
- * and `LoginModalEvents.open` to be spied on, and a fake `window` to be installed.
+ * @description Expects `LoginModalEvents.open` to have been called with `'password'` and the
+ * window hash to be empty. Requires `LoginModalEvents.open` to be spied on, and a fake `window`
+ * to be installed.
  * @returns {void}
  */
 export function expectSessionExpired() {
-  expect(AuthSession.clear).toHaveBeenCalled();
   expect(LoginModalEvents.open).toHaveBeenCalledWith('password');
   expect(globalThis.window.location.hash).toBe('');
 }

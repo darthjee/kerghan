@@ -122,7 +122,7 @@ export interface AuthorizationRequestServiceTestContext {
 export function createAuthorizationRequestServiceTestContext(): AuthorizationRequestServiceTestContext {
   const authorizationRequestRepository = repoMock<AuthorizationRequest>();
   const userRepository = repoMock<User>();
-  const tokenService = { issueTokens: jest.fn(async (user: User) => ({ user, accessToken: 'jwt', refreshToken: 'rt' })) };
+  const tokenService = { issueTokens: jest.fn(async (user: User) => ({ user, accessToken: 'jwt', refreshToken: 'rt', refreshTokenExpiresAt: new Date() })) };
   const eventEmitter = { emit: jest.fn() };
   const configService = { get: jest.fn().mockReturnValue(undefined) };
 

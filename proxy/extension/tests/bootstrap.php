@@ -13,3 +13,4 @@ require_once '/var/www/html/loader.php';
 // Shared test doubles (kept out of the *Test.php files so each file declares
 // a single class, per PSR-1).
 require_once __DIR__ . '/support/DomainHashTestRequest.php';
+require_once __DIR__ . '/support/StubUpstreamServer.php';

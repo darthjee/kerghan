@@ -6,17 +6,20 @@ frontend. Per-module details (JWT, refresh tokens, admin authorization) live in
 
 ## CSRF
 
-Kerghan authenticates browsers with a cookie (`access_token`, read only by `JwtGuard` in
-`backend/src/core/jwt.guard.ts`), and browsers attach cookies automatically. That makes
+Kerghan authenticates browsers with cookies (`access_token`, read only by `JwtGuard` in
+`backend/src/core/jwt.guard.ts`, and `refresh_token`, read only by the `/auth` routes through
+`backend/src/auth/auth-cookies.ts`), and browsers attach cookies automatically. That makes
 Cross-Site Request Forgery a real threat, so Kerghan protects against it on purpose, in layers.
 The proxy's HMAC cache tokens (`core/cache-token.service.ts`) are a per-user cache key. They are
 **not** an anti-CSRF mechanism.
 
 ### Layers
 
-1. **`SameSite=Strict` cookie**: `access_token` is `httpOnly` + `Secure` + `SameSite=Strict`
-   (`backend/src/auth/auth-response.ts`, locked in by the login e2e spec). Browsers never send it
-   on a cross-site request, so a forged request from another site arrives unauthenticated.
+1. **`SameSite=Strict` cookies**: `access_token` (`Path=/`) and `refresh_token`
+   (`Path=/auth`) are `httpOnly` + `Secure` + `SameSite=Strict`, and the readable `logged_in`
+   marker is `Secure` + `SameSite=Strict` too (`backend/src/auth/auth-cookies.ts`, locked in by
+   the login e2e spec). Browsers never send them on a cross-site request, so a forged request
+   from another site arrives unauthenticated and without a refresh token.
 2. **Credentialed CORS allowlist**: CORS is off (same-origin only) unless
    `KERGHAN_ALLOWED_ORIGINS` or, as a fallback, `FRONTEND_BASE_URL` is set
    (`backend/src/core/cors-config.ts`). This stops other sites from *reading* responses. It does
@@ -51,20 +54,33 @@ Edge cases, decided in the implementation (`isCrossSiteRequestAllowed` in the sa
   `Host` comparison includes the port.
 
 The frontend and the API share one origin through Tent (`*.json` goes to the backend), so the
-app's own requests are always `same-origin`. Tent's `default_proxy` handler forwards every
-incoming request header unchanged (`getallheaders()` straight into its curl executor, verified in
-the `darthjee/tent:0.10.4` image's `ProxyRequestHandler`; recheck on a Tent upgrade), so
-`Origin`, `Sec-Fetch-Site` and `Host` reach the backend intact. **Any future proxy rule or
-middleware on `*.json` must keep forwarding those three headers.** If one strips or rewrites
-them, `OriginGuard` either fails closed (`403` on legitimate requests) or open.
+app's own requests are always `same-origin`. Tent's `default_proxy` handler forwards incoming
+request headers (`getallheaders()` straight into its curl executor, verified in the
+`darthjee/tent:1.0.3` image's `ProxyRequestHandler`; recheck on a Tent upgrade), so `Origin` and
+`Sec-Fetch-Site` reach the backend intact. `Host` does **not**: `default_proxy`'s built-in
+middlewares move the client's `Host` to `X-Forwarded-Host` and set `Host` to the upstream host
+(see Tent's `docs/guides/tent/host-header.md`). As a result, `OriginGuard`'s fallback branch
+(no `Sec-Fetch-Site`, `Origin` host equal to `Host`) never matches behind Tent and fails closed —
+only the trusted-origin list admits such requests. **Any future proxy rule or middleware on
+`*.json` must keep forwarding `Origin`, `Sec-Fetch-Site` and `X-Forwarded-Host`.** If one strips
+or rewrites them, `OriginGuard` either fails closed (`403` on legitimate requests) or open.
 
 ### Unauthenticated routes (login CSRF)
 
 `SameSite` can't help routes that need no cookie: `login.json`, `register.json`, `recover.json`,
-`reset-password.json`, `refresh.json`, `status.json` and the device-authorization `create`/`poll`
-routes. On those routes the threat is *login CSRF*: a forged form logs the victim into the
-attacker's account, or triggers recovery emails. `OriginGuard` covers these routes too, because
-it applies to every mutating method regardless of `@Public()`.
+`reset-password.json` and the device-authorization `create`/`poll` routes. On those routes the
+threat is *login CSRF*: a forged form logs the victim into the attacker's account, or triggers
+recovery emails. `OriginGuard` covers these routes too, because it applies to every mutating
+method regardless of `@Public()`.
+
+The `@Public()` routes that act on the `refresh_token` cookie (`refresh.json`, `logoff.json`,
+`status.json`) need no guard change (#324): a cross-site request never carries the
+`SameSite=Strict` cookie, so it can only reach them without a token (a `401`, a no-op logoff or
+`loggedIn: false`), and `OriginGuard` rejects it with `403` before that anyway. The cookie's
+`Path=/auth` also keeps it off every non-`/auth` request. The one exception is the temporary
+`refresh.json` body fallback (`TODO(#324-migration)`), which accepts a body token only when the
+cookie is absent; a forged request can't read the response (CORS) and is blocked by
+`OriginGuard`, so it adds no CSRF exposure.
 
 ### Why requests with neither header are allowed
 
@@ -97,7 +113,9 @@ attack.
 - **No state change over `GET`** (or `HEAD`/`OPTIONS`). Those methods skip `OriginGuard`. Today
   the only `GET` routes are the public `/health.json` and `/ready.json` probes; `/ready.json`
   exposes only per-check `up`/`down` states, never error details.
-- **Don't relax the cookie**: `access_token` stays `httpOnly` + `Secure` + `SameSite=Strict`.
+- **Don't relax the cookies**: `access_token` and `refresh_token` stay `httpOnly` + `Secure` +
+  `SameSite=Strict`, and the refresh token never goes back into a response body. Only
+  `logged_in` (no secret, value `1`) is script-readable.
 - **Don't bypass `OriginGuard`**: new mutating routes get it automatically as a global guard.
   Don't add an opt-out, and don't register another guard ahead of it that short-circuits.
 - **Header-based auth needs its own review**: an `Authorization: Bearer` flow isn't sent

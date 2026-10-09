@@ -10,8 +10,8 @@ is the canonical place for the `product-owner`, `data-access`, and `security` ag
 ## What's already decided (see [Flow](flow.md) for the full context)
 
 - **What Kerghan is**: a GitHub issue monitoring/dashboard app. Users log into Kerghan itself
-  (username/password, a JWT `access_token` cookie, and a rotating refresh token — not GitHub
-  OAuth) via the frontend's login modal, either directly or by having an already-logged-in device
+  (username/password, a JWT `access_token` cookie, and a rotating refresh token kept in an
+  httpOnly cookie — not GitHub OAuth) via the frontend's login modal, either directly or by having an already-logged-in device
   approve the login through the device-authorization flow (see `docs/agents/modules/auth.md`),
   and register the repos/orgs they care about.
 - **Core value**: label-based attention triage — surfacing which tracked repos "need attention"

@@ -5,8 +5,7 @@ import pickDefined from './pickDefined.js';
  * HTTP client for admin-only requests (user lookup, recovery-link generation, and forced
  * recovery emails). Every route this hits requires the caller to be an admin — a `403`
  * `ApiError` means the current session is not an admin, which callers should treat as "hide the
- * UI / redirect away". Unlike {@link module:client/AccountsClient}, none of these touch
- * `AuthSession` — none of them affect the caller's own session.
+ * UI / redirect away". None of them affect the caller's own session.
  */
 const AdminClient = {
   /**

@@ -35,7 +35,6 @@ describe('RegisterController', () => {
       user: {
         id: 1, username: 'foo', email: 'foo@example.com', isAdmin,
       },
-      refreshToken: 'refresh-token',
     });
     const controller = buildController();
     const fakeWindow = installFakeWindow({ location: { hash: '' } });

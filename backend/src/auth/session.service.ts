@@ -46,18 +46,18 @@ export class SessionService {
   /**
    * Lists the user's active (non-revoked, unexpired) sessions, most recently
    * used first. The session whose token matches `refreshToken` is marked
-   * `current`; an unknown or invalid token marks nothing and never throws.
+   * `current`; a missing, unknown or invalid token marks nothing and never throws.
    * @param {number} userId - The caller's own user ID.
-   * @param {string} refreshToken - The caller's refresh token, identifying
-   *   the current session.
+   * @param {string} [refreshToken] - The caller's refresh token (from the
+   *   `refresh_token` cookie), identifying the current session.
    * @returns {Promise<ActiveSession[]>} The caller's active sessions.
    */
-  async listActive(userId: number, refreshToken: string): Promise<ActiveSession[]> {
+  async listActive(userId: number, refreshToken?: string): Promise<ActiveSession[]> {
     const rows = await this.refreshTokenRepository.find({
       where: { userId, revokedAt: IsNull(), expiresAt: MoreThan(new Date()) },
       order: { issuedAt: 'DESC' },
     });
-    const currentHash = this.tokenService.hashToken(refreshToken);
+    const currentHash = refreshToken ? this.tokenService.hashToken(refreshToken) : undefined;
 
     return rows.map((row) => ({
       id: row.sessionUuid,
@@ -99,16 +99,16 @@ export class SessionService {
    * rotation of the current session (whose new token has a different hash)
    * is never revoked by mistake.
    * @param {number} userId - The caller's own user ID.
-   * @param {string} refreshToken - The caller's refresh token, identifying
-   *   the session to keep.
+   * @param {string} [refreshToken] - The caller's refresh token (from the
+   *   `refresh_token` cookie), identifying the session to keep.
    * @returns {Promise<void>} Resolves once the other sessions are revoked.
-   * @throws {UnauthorizedException} When the token is unknown, revoked,
-   *   expired or another user's.
+   * @throws {UnauthorizedException} When the token is missing, unknown,
+   *   revoked, expired or another user's.
    */
-  async revokeOthers(userId: number, refreshToken: string): Promise<void> {
-    const row = await this.refreshTokenRepository.findOneBy({
-      tokenHash: this.tokenService.hashToken(refreshToken),
-    });
+  async revokeOthers(userId: number, refreshToken?: string): Promise<void> {
+    const row = refreshToken
+      ? await this.refreshTokenRepository.findOneBy({ tokenHash: this.tokenService.hashToken(refreshToken) })
+      : null;
 
     if (!this.#isActiveOwnToken(row, userId)) {
       throw new UnauthorizedException('Invalid or expired refresh token');

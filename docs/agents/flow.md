@@ -19,7 +19,8 @@ being scoped to each user's own browser IP instead.
 
 1. **Login.** The user logs into Kerghan itself (a lightweight, backend-owned account — not
    GitHub OAuth): username/password, verified against a bcrypt digest, backed by a JWT
-   `access_token` cookie and a rotating refresh token (see `docs/agents/modules/auth.md`). The
+   `access_token` cookie and a rotating refresh token held in an httpOnly `refresh_token`
+   cookie, never exposed to JavaScript (see `docs/agents/modules/auth.md`). The
    frontend's route-independent login modal (`LoginModal`) is the single entry point for this —
    Password/Register/Recover modes, plus a device-authorization mode: the user can instead ask an
    already-logged-in device to vouch for their username, and poll until that device approves or
