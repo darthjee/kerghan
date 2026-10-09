@@ -26,7 +26,6 @@ import { AccountEditLockout } from '../../../auth/entities/account-edit-lockout.
 import { AuthorizationRequest } from '../../../auth/entities/authorization-request.entity.js';
 import { PasswordResetToken } from '../../../auth/entities/password-reset-token.entity.js';
 import { RefreshToken } from '../../../auth/entities/refresh-token.entity.js';
-import { Session } from '../../../auth/entities/session.entity.js';
 import { User } from '../../../auth/entities/user.entity.js';
 import { createInMemoryRepo } from '../../../auth/tests/support/in-memory-repo.js';
 import { AdminGuard } from '../../../core/admin.guard.js';
@@ -143,7 +142,6 @@ export async function buildIntegrationsTestApp(options: IntegrationsTestAppOptio
     .overrideProvider(ConfigService).useValue({ get: (key: string, fallback?: unknown) => config[key] ?? fallback })
     .overrideProvider(getRepositoryToken(User)).useValue(userRepo)
     .overrideProvider(getRepositoryToken(RefreshToken)).useValue(createInMemoryRepo<RefreshToken>())
-    .overrideProvider(getRepositoryToken(Session)).useValue(createInMemoryRepo<Session>())
     .overrideProvider(getRepositoryToken(PasswordResetToken)).useValue(createInMemoryRepo<PasswordResetToken>())
     .overrideProvider(getRepositoryToken(AuthorizationRequest)).useValue(createInMemoryRepo<AuthorizationRequest>())
     .overrideProvider(getRepositoryToken(AccountEditLockout)).useValue(createInMemoryRepo<AccountEditLockout>())

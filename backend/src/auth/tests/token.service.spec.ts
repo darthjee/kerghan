@@ -2,7 +2,6 @@ import { createHash } from 'node:crypto';
 import { JwtService } from '@nestjs/jwt';
 import { IsNull, Not } from 'typeorm';
 import { RefreshToken } from '../entities/refresh-token.entity.js';
-import { Session } from '../entities/session.entity.js';
 import { User } from '../entities/user.entity.js';
 import { TokenService } from '../token.service.js';
 import { repoMock, RepoMock } from './repo-mock.test-support.js';
@@ -18,14 +17,12 @@ function buildConfigService(values: Record<string, unknown> = {}): { get: jest.M
 
 describe('TokenService', () => {
   let refreshTokenRepository: RepoMock<RefreshToken>;
-  let sessionRepository: RepoMock<Session>;
   let jwtService: { sign: jest.Mock };
   let logger: Logger;
   let service: TokenService;
 
   const buildService = (configValues: Record<string, unknown> = {}): TokenService => new TokenService(
     refreshTokenRepository as never,
-    sessionRepository as never,
     jwtService as unknown as JwtService,
     buildConfigService(configValues) as never,
     logger as never,
@@ -33,7 +30,6 @@ describe('TokenService', () => {
 
   beforeEach(() => {
     refreshTokenRepository = repoMock<RefreshToken>();
-    sessionRepository = repoMock<Session>();
     jwtService = { sign: jest.fn().mockReturnValue('signed-access-token') };
     logger = { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn() };
 
@@ -251,14 +247,6 @@ describe('TokenService', () => {
 
         expect(logger.warn).toHaveBeenCalledTimes(2);
       });
-    });
-
-    it('writes an auth_sessions bookkeeping row for the user', async () => {
-      await service.issueTokens(user);
-
-      expect(sessionRepository.save).toHaveBeenCalledWith(
-        expect.objectContaining({ userId: 7, lastSeenAt: expect.any(Date) }),
-      );
     });
   });
 

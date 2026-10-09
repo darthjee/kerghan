@@ -8,7 +8,6 @@ import { LoggerService } from '../core/logger.service.js';
 import { getNumberConfig } from '../core/numeric-config.js';
 import { hashToken } from '../core/token-hash.js';
 import { RefreshToken, RevokedReason } from './entities/refresh-token.entity.js';
-import { Session } from './entities/session.entity.js';
 import { User } from './entities/user.entity.js';
 
 // Default regular refresh-token lifetime (7 days, in milliseconds) used when
@@ -42,8 +41,7 @@ export interface AuthResult {
 
 /**
  * Session minting for the Auth module: signs the stateless access-token JWT,
- * persists a SHA-256-hashed rotating refresh token, and writes the
- * `auth_sessions` bookkeeping row. Split out of `AuthService` so the
+ * and persists a SHA-256-hashed rotating refresh token. Split out of `AuthService` so the
  * device-authorization flow can mint a login session byte-for-byte identical
  * to a password login without duplicating the logic (the two paths cannot
  * drift). Not exported from `AuthModule` — an internal collaborator only,
@@ -61,7 +59,6 @@ export interface AuthResult {
 @Injectable()
 export class TokenService {
   private readonly refreshTokenRepository: Repository<RefreshToken>;
-  private readonly sessionRepository: Repository<Session>;
   private readonly jwtService: JwtService;
   private readonly configService: ConfigService;
   private readonly logger: LoggerService;
@@ -69,7 +66,6 @@ export class TokenService {
 
   /**
    * @param {Repository<RefreshToken>} refreshTokenRepository - The refresh-token repository.
-   * @param {Repository<Session>} sessionRepository - The session repository.
    * @param {JwtService} jwtService - Signs the access token.
    * @param {ConfigService} configService - Supplies the regular and
    *   persistent refresh-token TTLs.
@@ -78,13 +74,11 @@ export class TokenService {
    */
   constructor(
     @InjectRepository(RefreshToken) refreshTokenRepository: Repository<RefreshToken>,
-    @InjectRepository(Session) sessionRepository: Repository<Session>,
       jwtService: JwtService,
       configService: ConfigService,
       logger: LoggerService,
   ) {
     this.refreshTokenRepository = refreshTokenRepository;
-    this.sessionRepository = sessionRepository;
     this.jwtService = jwtService;
     this.configService = configService;
     this.logger = logger;
@@ -95,7 +89,7 @@ export class TokenService {
    * JWT (`{ sub, username, isAdmin }`), persists a new SHA-256-hashed
    * `RefreshToken` row (`revokedAt: null`, carrying `keepSignedIn`, with the
    * persistent TTL when `keepSignedIn` is `true` and the regular TTL
-   * otherwise), and writes an `auth_sessions` bookkeeping row. Shared by the
+   * otherwise). Shared by the
    * password-login (`AuthService`) and device-authorization paths so both
    * mint sessions identically. With no `session`, a new session identity is
    * minted (fresh UUID, `startedAt` = now); on rotation the presented token's
@@ -133,8 +127,6 @@ export class TokenService {
         startedAt: session?.startedAt ?? new Date(),
       }),
     );
-
-    await this.#touchSession(user.id);
 
     return { user, accessToken, refreshToken, refreshTokenExpiresAt };
   }
@@ -200,11 +192,5 @@ export class TokenService {
     }
 
     return fallback;
-  }
-
-  async #touchSession(userId: number): Promise<void> {
-    await this.sessionRepository.save(
-      this.sessionRepository.create({ userId, lastSeenAt: new Date() }),
-    );
   }
 }
