@@ -2,10 +2,12 @@ import { BadRequestException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import bcrypt from 'bcryptjs';
+import { IsNull, LessThan, Not } from 'typeorm';
 import { PasswordResetToken } from '../entities/password-reset-token.entity.js';
 import { User } from '../entities/user.entity.js';
 import { PasswordResetService } from '../password-reset.service.js';
 import { repoMock, RepoMock } from './repo-mock.test-support.js';
+import { createInMemoryRepo } from './support/in-memory-repo.js';
 
 describe('PasswordResetService', () => {
   let userRepository: RepoMock<User>;
@@ -160,6 +162,90 @@ describe('PasswordResetService', () => {
       await service.issueToken(user);
 
       expect(eventEmitter.emit).not.toHaveBeenCalled();
+    });
+
+    it('prunes the user\'s expired and used rows before saving', async () => {
+      await service.issueToken(user);
+
+      expect(passwordResetTokenRepository.delete).toHaveBeenCalledWith({
+        userId: 1,
+        expiresAt: LessThan(expect.any(Date)),
+      });
+      expect(passwordResetTokenRepository.delete).toHaveBeenCalledWith({ userId: 1, usedAt: Not(IsNull()) });
+      expect(passwordResetTokenRepository.delete.mock.invocationCallOrder[1])
+        .toBeLessThan(passwordResetTokenRepository.save.mock.invocationCallOrder[0]);
+    });
+
+    describe('pruning against a token store', () => {
+      let tokenRepo: ReturnType<typeof createInMemoryRepo<PasswordResetToken>>;
+      let subject: PasswordResetService;
+
+      const seed = (attrs: Partial<PasswordResetToken>): PasswordResetToken => {
+        const row = {
+          userId: 1,
+          tokenHash: `hash-${tokenRepo.rows.length}`,
+          expiresAt: new Date(Date.now() + 60_000),
+          usedAt: null,
+          ...attrs,
+        } as PasswordResetToken;
+
+        tokenRepo.rows.push(row);
+
+        return row;
+      };
+
+      beforeEach(() => {
+        tokenRepo = createInMemoryRepo<PasswordResetToken>();
+        subject = new PasswordResetService(
+          userRepository as never,
+          tokenRepo as never,
+          eventEmitter as unknown as EventEmitter2,
+          configService as unknown as ConfigService,
+          logger as never,
+        );
+      });
+
+      it('removes the user\'s expired row', async () => {
+        const expired = seed({ expiresAt: new Date(Date.now() - 1000) });
+
+        await subject.issueToken(user);
+
+        expect(tokenRepo.rows).not.toContain(expired);
+      });
+
+      it('removes the user\'s used row', async () => {
+        const used = seed({ usedAt: new Date() });
+
+        await subject.issueToken(user);
+
+        expect(tokenRepo.rows).not.toContain(used);
+      });
+
+      it('keeps the user\'s still-active row', async () => {
+        const active = seed({});
+
+        await subject.issueToken(user);
+
+        expect(tokenRepo.rows).toContain(active);
+      });
+
+      it('keeps other users\' expired and used rows', async () => {
+        const othersExpired = seed({ userId: 2, expiresAt: new Date(Date.now() - 1000) });
+        const othersUsed = seed({ userId: 2, usedAt: new Date() });
+
+        await subject.issueToken(user);
+
+        expect(tokenRepo.rows).toEqual(expect.arrayContaining([othersExpired, othersUsed]));
+      });
+
+      it('mints a token that still works for resetPassword', async () => {
+        seed({ expiresAt: new Date(Date.now() - 1000) });
+        seed({ usedAt: new Date() });
+
+        const { token } = await subject.issueToken(user);
+
+        await expect(subject.resetPassword({ token, password: 'new-password' })).resolves.toBe(1);
+      });
     });
   });
 

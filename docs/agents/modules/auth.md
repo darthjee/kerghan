@@ -97,9 +97,17 @@ table, the accepted residual risks and the rules future changes must keep.
   session is one chain of rotated tokens, with at most one unrevoked row at a time. Rows that
   predate the column were backfilled as one session each, with `started_at = issued_at`
   (`database/migrations/20261005120017-auth-add-refresh-tokens-session.ts`).
-- `auth_sessions` (`entities/session.entity.ts`) — `id`, `userId` (logical FK), `createdAt`,
-  `lastSeenAt`. Bookkeeping only (touched on every token issuance) — not itself an
-  authorization gate; see "JWT/refresh-token flow" below for what actually invalidates access.
+  **Pruning:** every mint (`TokenService#issueTokens` — login, register, device authorization,
+  rotation) first deletes that user's rows whose `expiresAt` is already past. Revoked but
+  unexpired rows are kept: replay detection needs them, and since
+  `AuthService#findActiveRefreshToken` rejects an expired token before it checks
+  `revokedAt`/`revokedReason`, deleting expired rows cannot weaken it. There is no scheduler and
+  no retention window, so an inactive user's expired rows stay until that user's next mint.
+- `auth_password_reset_tokens` (`entities/password-reset-token.entity.ts`) — `id`, `tokenHash`
+  (SHA-256, unique), `userId` (logical FK), `expiresAt`, `createdAt`, `usedAt` (set once the
+  token is consumed). **Pruning:** every mint (`PasswordResetService#issueToken` — self-service
+  recover and the admin recovery-link/email routes) first deletes that user's rows that are
+  expired or already used; their still-active tokens stay valid.
 - `auth_authorization_requests` (`entities/authorization-request.entity.ts`) — see
   "Device-authorization flow" below for the full contract.
 
@@ -201,8 +209,7 @@ rather than an edit to the seed migration's `INSERT`, since the seed migration r
   malformed). Revoked tokens get reason `user_revoked`, so their later refresh is a plain `401`
   without replay detection. Revoking a session stops its refresh token only: its access-token
   JWT stays valid until it expires (`KERGHAN_ACCESS_TOKEN_TTL_MS`, 15 minutes by default).
-  Every query is scoped to the caller's `userId`. `auth_sessions` is unrelated bookkeeping and
-  is untouched. See [Auth routes](../backend/routes/auth.md#sessions).
+  Every query is scoped to the caller's `userId`. See [Auth routes](../backend/routes/auth.md#sessions).
 - **Registration also logs in**: `POST /auth/register.json` issues a token pair immediately on
   success, same as login/refresh (per the issue's "issued on login/register/refresh" flow) —
   there's no separate "register, then log in" round trip.

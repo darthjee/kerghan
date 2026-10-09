@@ -4,12 +4,13 @@ export type RepoMock<T extends object> = {
   create: jest.Mock;
   save: jest.Mock;
   update: jest.Mock;
+  delete: jest.Mock;
 } & Partial<T>;
 
 /**
  * Builds a fake TypeORM repository with jest.fn() stubs for the methods
  * shared by the auth service specs (`findOne`, `findOneBy`, `create`,
- * `save` and `update`).
+ * `save`, `update` and `delete`).
  *
  * @returns a repository mock whose `create` echoes its input and whose
  * `save` resolves the entity with a default `id` of 1.
@@ -21,5 +22,6 @@ export function repoMock<T extends object>(): RepoMock<T> {
     create: jest.fn((attrs) => attrs),
     save: jest.fn(async (entity) => ({ id: 1, ...entity })),
     update: jest.fn(),
+    delete: jest.fn(),
   } as RepoMock<T>;
 }

@@ -1,30 +1,32 @@
+type FindOperatorLike = { type: string; value: unknown; child?: unknown };
+
 // Matches a single condition value against a row's field, understanding
 // the TypeORM find operators the auth specs rely on (`IsNull()`, used by
-// `TokenService#revokeUserTokens`; `MoreThan()`; `ILike()`, used by the
+// `TokenService#revokeUserTokens`; `MoreThan()`; `LessThan()`, used by
+// `TokenService#issueTokens`' expired-row pruning; `ILike()`, used by the
 // admin user search; `Not()`, used by `AuthService#assertAvailableForUpdate`'s
-// self-exclusion and `TokenService#revokeUserTokens`' kept-token exclusion) in addition to plain equality — real TypeORM/MySQL
-// handles them natively, this in-memory stand-in needs to special-case them.
+// self-exclusion, `TokenService#revokeUserTokens`' kept-token exclusion and
+// `PasswordResetService#issueToken`'s `Not(IsNull())` used-row pruning) in
+// addition to plain equality — real TypeORM/MySQL handles them natively,
+// this in-memory stand-in needs to special-case them (one matcher per
+// operator `type`; an unknown operator never matches).
+const OPERATOR_MATCHERS: Record<string, (rowValue: unknown, operator: FindOperatorLike) => boolean> = {
+  isNull: (rowValue) => rowValue === null || rowValue === undefined,
+  moreThan: (rowValue, operator) => (rowValue as Date) > (operator.value as Date),
+  lessThan: (rowValue, operator) => (rowValue as Date) < (operator.value as Date),
+  // `FindOperator#value` unwraps a nested operator (e.g. `Not(IsNull())`)
+  // down to its raw value; `child` keeps the nested operator itself.
+  not: (rowValue, operator) => !matchesCondition(rowValue, operator.child ?? operator.value),
+  ilike: (rowValue, operator) =>
+    String(rowValue).toLowerCase().includes(String(operator.value).replace(/%/g, '').toLowerCase()),
+};
+
 export function matchesCondition(rowValue: unknown, conditionValue: unknown): boolean {
   if (conditionValue && typeof conditionValue === 'object' && 'type' in conditionValue) {
-    const operator = conditionValue as { type: string; value: unknown };
+    const operator = conditionValue as FindOperatorLike;
+    const matcher = OPERATOR_MATCHERS[operator.type];
 
-    if (operator.type === 'isNull') {
-      return rowValue === null || rowValue === undefined;
-    }
-
-    if (operator.type === 'moreThan') {
-      return (rowValue as Date) > (operator.value as Date);
-    }
-
-    if (operator.type === 'not') {
-      return !matchesCondition(rowValue, operator.value);
-    }
-
-    if (operator.type === 'ilike') {
-      return String(rowValue).toLowerCase().includes(String(operator.value).replace(/%/g, '').toLowerCase());
-    }
-
-    return false;
+    return matcher ? matcher(rowValue, operator) : false;
   }
 
   return rowValue === conditionValue;
@@ -118,6 +120,22 @@ export function createInMemoryRepo<T extends { id?: number }>() {
       });
 
       return { affected };
+    },
+    // Removes every row matching the criteria (an array is OR-ed, like
+    // TypeORM's), resolving `{ affected }` like TypeORM's `DeleteResult` —
+    // used by the opportunistic expired-row pruning on token mint.
+    delete: async (criteria: Partial<T> | Partial<T>[]): Promise<{ affected: number }> => {
+      const conditions = Array.isArray(criteria) ? criteria : [criteria];
+      const before = rows.length;
+      const kept = rows.filter((row) =>
+        !conditions.some((condition) =>
+          Object.entries(condition).every(([key, value]) => matchesCondition((row as never)[key], value)),
+        ),
+      );
+
+      rows.splice(0, rows.length, ...kept);
+
+      return { affected: before - kept.length };
     },
     createQueryBuilder: () => {
       let setPayload: Record<string, unknown> = {};
