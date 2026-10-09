@@ -52,7 +52,13 @@ describe('Header', () => {
     await capturedHandler(fakeEvent);
 
     expect(fakeEvent.preventDefault).toHaveBeenCalled();
-    expect(HeaderController.prototype.handleLogout).toHaveBeenCalled();
+    expect(HeaderController.prototype.handleLogout).toHaveBeenCalledWith(jasmine.any(Function));
+  });
+
+  it('does not render a sign-out error initially', () => {
+    const markup = renderToStaticMarkup(React.createElement(Header, null));
+
+    expect(markup).not.toContain('Could not sign out');
   });
 
   it('opens the login modal through the controller when the open-login handler fires', () => {

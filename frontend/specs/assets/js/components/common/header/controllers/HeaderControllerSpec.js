@@ -1,4 +1,4 @@
-import HeaderController from '../../../../../../../assets/js/components/common/header/controllers/HeaderController.js';
+import HeaderController, { LOGOUT_ERROR_MESSAGE } from '../../../../../../../assets/js/components/common/header/controllers/HeaderController.js';
 import AuthSession from '../../../../../../../assets/js/client/AuthSession.js';
 import AuthEvents from '../../../../../../../assets/js/client/AuthEvents.js';
 import LoginModalEvents from '../../../../../../../assets/js/client/LoginModalEvents.js';
@@ -41,14 +41,6 @@ describe('HeaderController', () => {
       expect(fakeWindow.location.hash).toBe('/');
     });
 
-    it('redirects home even when the logout request fails', async () => {
-      client.logout.and.rejectWith(new Error('network error'));
-
-      await controller.handleLogout();
-
-      expect(fakeWindow.location.hash).toBe('/');
-    });
-
     it('emits the logged-out auth state', async () => {
       client.logout.and.resolveTo();
 
@@ -57,12 +49,62 @@ describe('HeaderController', () => {
       expect(AuthEvents.emit).toHaveBeenCalledWith(false, false);
     });
 
-    it('emits the logged-out auth state even when the logout request fails', async () => {
-      client.logout.and.rejectWith(new Error('network error'));
+    it('resolves true and clears any previous error on success', async () => {
+      const onError = jasmine.createSpy('onError');
+      client.logout.and.resolveTo();
+
+      const result = await controller.handleLogout(onError);
+
+      expect(result).toBeTrue();
+      expect(onError.calls.allArgs()).toEqual([[null]]);
+    });
+
+    it('removes the legacy localStorage refresh token', async () => {
+      AuthSession.storage().setItem('kerghan_refresh_token', 'legacy-token');
+      client.logout.and.resolveTo();
 
       await controller.handleLogout();
 
-      expect(AuthEvents.emit).toHaveBeenCalledWith(false, false);
+      expect(AuthSession.storage().getItem('kerghan_refresh_token')).toBeNull();
+    });
+
+    describe('when the logout request fails', () => {
+      beforeEach(() => {
+        client.logout.and.rejectWith(new Error('network error'));
+      });
+
+      it('does not redirect home', async () => {
+        await controller.handleLogout();
+
+        expect(fakeWindow.location.hash).toBe('');
+      });
+
+      it('does not emit the logged-out auth state', async () => {
+        await controller.handleLogout();
+
+        expect(AuthEvents.emit).not.toHaveBeenCalled();
+      });
+
+      it('reports the sign-out error so the user can retry', async () => {
+        const onError = jasmine.createSpy('onError');
+
+        await controller.handleLogout(onError);
+
+        expect(onError.calls.allArgs()).toEqual([[null], [LOGOUT_ERROR_MESSAGE]]);
+        expect(LOGOUT_ERROR_MESSAGE).toBe('Could not sign out, please try again.');
+      });
+
+      it('resolves false', async () => {
+        expect(await controller.handleLogout()).toBeFalse();
+      });
+
+      it('still removes the legacy localStorage refresh token', async () => {
+        AuthSession.storage().setItem('kerghan_refresh_token', 'legacy-token');
+
+        await controller.handleLogout();
+
+        expect(AuthSession.storage().getItem('kerghan_refresh_token')).toBeNull();
+      });
     });
   });
 
