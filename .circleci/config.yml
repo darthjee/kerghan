@@ -76,6 +76,9 @@ workflows:
       - release-kerghan-standalone:
           requires: [release-kerghan, standalone_tests]
           filters: *tags_only
+      - release-kerghan-assets:
+          requires: [release-kerghan-standalone]
+          filters: *tags_only
       - upload_proxy_files:
           requires: [backend_tests, backend_checks, jasmine, frontend-checks, proxy_extension_tests]
           filters: *tags_only
@@ -264,6 +267,35 @@ jobs:
       - run:
           name: Release darthjee/kerghan-standalone
           command: bin/release_kerghan_standalone.sh release
+
+  # Publishes the client assets (kerghan, install.sh, config.example, SHA256SUMS) to the GitHub
+  # release of the tag, creating the release when missing (bin/release_kerghan_assets.sh). Requires
+  # release-kerghan-standalone, so the image the client pins already exists when it ships. `gh` is a
+  # pinned release tarball (checksum-verified, no apt repo setup) and reads the GITHUB_TOKEN project
+  # variable (contents: write on darthjee/kerghan) directly.
+  release-kerghan-assets:
+    docker:
+      - image: cimg/base:stable
+    environment:
+      GH_VERSION: 2.65.0
+      GH_SHA256: 762569efe785082b7d1feb06995efece1a9cecce16da8503ac6fdbcbea04085b
+    steps:
+      - checkout
+      - run:
+          name: Install gh
+          command: |
+            tarball="gh_${GH_VERSION}_linux_amd64.tar.gz"
+            curl -fsSL -o "/tmp/$tarball" \
+              "https://github.com/cli/cli/releases/download/v${GH_VERSION}/$tarball"
+            echo "$GH_SHA256  /tmp/$tarball" | sha256sum -c -
+            mkdir -p "$HOME/gh"
+            tar -xzf "/tmp/$tarball" -C "$HOME/gh" --strip-components=1
+            echo "export PATH=\"$HOME/gh/bin:\$PATH\"" >> "$BASH_ENV"
+      - run:
+          name: Release kerghan client assets
+          command: |
+            gh --version
+            bin/release_kerghan_assets.sh release
 
   # Deploys the backend to Render: points the service's branch at the tag that triggered this
   # workflow, triggers a deploy, and blocks (watch_deployment, in scripts/deploy.sh) until it

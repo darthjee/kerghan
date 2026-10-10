@@ -64,8 +64,9 @@ Tent manifest upstream is an optional follow-up, outside this epic.
   3. In parallel, both requiring `release-kerghan`:
      - `release-kerghan-standalone`: pushes both standalone variants.
      - `build-and-release`: the Render deploy (see [render.md](render.md)).
-  4. The release-assets job, requiring `release-kerghan-standalone` (see
-     [installer.md](installer.md)).
+  4. `release-kerghan-assets`: publishes the client assets (`kerghan`, `install.sh`,
+     `config.example`, `SHA256SUMS`) to the GitHub release of the tag. Requires
+     `release-kerghan-standalone` (see [installer.md](installer.md)).
 
 - A failed `release-kerghan` blocks both the standalone release and the Render deploy.
 
