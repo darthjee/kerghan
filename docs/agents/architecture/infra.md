@@ -120,7 +120,7 @@ workflow at all — nothing downstream depends on it being fresh.
 | `release-kerghan-assets` | `cimg/base:stable` | tag only | Requires `release-kerghan-standalone`. Publishes the client assets (`kerghan`, `install.sh`, `config.example`, `SHA256SUMS`) to the GitHub release of the tag via `bin/release_kerghan_assets.sh release` — see below |
 | `standalone_tests` | `bats/bats:1.11.0` | every push | bats suite for the standalone client and installer (`bats standalone/test`) |
 | `scripts_tests` | `bats/bats:1.11.0` | every push | bats suite for the Render deploy scripts (`bats scripts/test`); locally `docker-compose run --rm scripts_tests` |
-| `build-and-release` | machine | tag only | Requires `release-kerghan`. Deploys `darthjee/kerghan:<tag>` to Render by `imageUrl` (`scripts/deploy.sh deploy`), blocks until it reports "live" — see "Render deploy and rollback" |
+| `build-and-release` | machine (`ubuntu-2204:current`, for `curl --fail-with-body`) | tag only | Requires `release-kerghan`. Deploys `darthjee/kerghan:<tag>` to Render by `imageUrl` (`scripts/deploy.sh deploy`), blocks until it reports "live" — see "Render deploy and rollback" |
 | `upload_proxy_files` | `darthjee/tent:1.0.3` | tag only | Uploads Tent proxy runtime to the SSH deploy host's staging dir |
 | `upload_fe_files` | `darthjee/vite_kerghan-base:0.1.0` | tag only | Builds the Vite frontend, uploads the static output to the staging dir |
 | `upload_extension` | `darthjee/tent:1.0.3` | tag only | Uploads the proxy PHP extension (test files stripped) |
