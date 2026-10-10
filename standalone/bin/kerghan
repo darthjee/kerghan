@@ -118,8 +118,7 @@ ensure_env_file() {
 # per line) unless kerghan.env sets FRONTEND_BASE_URL itself.
 frontend_base_url_args() {
   if ! grep -q '^FRONTEND_BASE_URL=' "$ENV_FILE" 2>/dev/null; then
-    echo "-e"
-    echo "FRONTEND_BASE_URL=http://localhost:$1"
+    printf '%s\n' "-e" "FRONTEND_BASE_URL=http://localhost:$1"
   fi
 }
 
