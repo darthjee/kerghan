@@ -7,10 +7,11 @@
 | `backend/` | Node.js/NestJS app, TypeScript + TypeORM/MySQL (the Auth and Mail modules exist — the tracked-repo/label-rule data model is still open, see `docs/agents/product.md`) |
 | `frontend/` | React 19 + Vite app — dashboard/analytics UI; the login modal, device-authorization flow, hash routing, and `client/` HTTP layer already exist, the dashboard/analytics views themselves don't yet |
 | `proxy/` | PHP Tent proxy config (`dev_configuration/`, `prod_configuration/`, `extension/`) |
-| `dockerfiles/` | `base/` (one shared Dockerfile for all four `*-base` images) plus one directory per leaf image |
+| `dockerfiles/` | `base/` (one shared Dockerfile for all four `*-base` images) plus one directory per leaf image, including `kerghan_standalone/` |
+| `standalone/` | Vault-based standalone distribution: inner compose stack, Tent standalone configuration, `kerghan` client, installer, `config.example`, smoke test — see `docs/agents/standalone.md` |
 | `docker_volumes/` | Bind-mount targets for local dev (gitignored contents) |
 | `docs/agents/` | Agent-facing documentation, hub + per-topic pages (this directory) |
-| `bin/` | Language-agnostic CI shell scripts (`image.sh`, `deploy_frontend.sh`) |
+| `bin/` | Language-agnostic CI shell scripts (`image.sh`, `deploy_frontend.sh`, `release_kerghan.sh`, `release_kerghan_standalone.sh`, `release_kerghan_assets.sh`) |
 | `scripts/` | Release shell scripts (`bump_version.sh`, `deploy.sh`, `render.sh`, `wake_navi.sh`, `warm_navi_cache.sh`) |
 | `.circleci/` | CI pipeline config (validate with `docker-compose run --rm circleci config validate`) |
 | `.claude/agents/` | Specialist AI agent definitions |
@@ -54,6 +55,22 @@
 | `extension/lib/` | Custom PHP middleware (`CacheControlMiddleware`, `SetClientIpMiddleware`, `TestHeaderMiddleware`) + `cache/DomainHash.php` — trimmed to backend-agnostic classes only, no upload/admin-staff code |
 | `extension/tests/` | PHPUnit tests, mirrors `extension/lib/` |
 
+## `standalone/` — Standalone Distribution
+
+Owned by the `standalone` agent. See [standalone.md](standalone.md) for how the pieces fit.
+
+| Subdirectory / File | Description |
+|---|---|
+| `vault/docker-compose.yml` | The inner compose stack (`mysql`, `kerghan`, `tent`) and the backend's environment allowlist; copied to `/vault` in the image |
+| `vault/tent/configuration/` | Tent standalone configuration (`configure.php`, `locals.php`, `rules/{frontend,backend,redirects}.php`), mirroring `proxy/prod_configuration/` |
+| `vault/tent/static/`, `vault/tent/extension/`, `vault/.env` | Written by the image build (built frontend, Tent extension from `proxy/extension/`, `TENT_IMAGE`/`KERGHAN_VERSION`); git-ignored |
+| `bin/kerghan` | The `kerghan` client CLI (wraps the `vault` CLI) |
+| `install.sh` | The client installer, shipped as a release asset |
+| `config.example` | Commented example of `~/.kerghan/config`, shipped as a release asset |
+| `scripts/smoke_test.sh` | Boots the image and checks it (`make standalone-smoke`, and the release job) |
+| `test/` | bats suite for the client and installer (`*.bats`, `helpers/`, command `stubs/`) |
+| `images/<arch>/` | `docker save` tarballs for the offline variant, written by `bin/release_kerghan_standalone.sh`; git-ignored |
+
 ## `docker_volumes/` — Mounted Volumes
 
 | Subdirectory | Description |
@@ -76,6 +93,7 @@
 | `security.md` | Read-only security reviewer |
 | `data-access.md` | Read-only access-control reviewer |
 | `product-owner.md` | Read-only product-definitions reference |
+| `standalone.md` | Vault-based standalone distribution (`standalone/`, `dockerfiles/kerghan_standalone/`) |
 
 ## `docs/agents/` — Documentation
 
@@ -85,7 +103,7 @@
 | `modules/` | Per-backend-module documentation (routes, entities, events) — `auth.md` today |
 | `plans/` | Implementation plans, one directory per issue |
 | `issues/` | Detailed specs for open issues, one file per issue |
-| `index.md`, `summary.md`, `folder-structure.md`, `flow.md`, `architecture.md`, `contributing.md`, `cache-warmer.md`, `product.md`, `issue-enhancement.md` | Top-level reference docs |
+| `index.md`, `summary.md`, `folder-structure.md`, `flow.md`, `architecture.md`, `contributing.md`, `cache-warmer.md`, `product.md`, `issue-enhancement.md`, `environment-variables.md`, `standalone.md` | Top-level reference docs |
 
 ## `dockerfiles/` — Service Images
 
@@ -96,7 +114,9 @@ one named target per image (`docker build --target <image>`), with the per-image
 `bin/image.sh`. The leaf images keep their own
 directory under `dockerfiles/`, each `FROM` its published base image; the folder names differ from
 the image tags: `dockerfiles/kerghan/` builds `dev_kerghan`, `dockerfiles/production_kerghan/`
-builds `kerghan` (production) and `dockerfiles/vite_kerghan/` builds `vite_kerghan`. See `ls dockerfiles/` for
+builds `kerghan` (production) and `dockerfiles/vite_kerghan/` builds `vite_kerghan`.
+`dockerfiles/kerghan_standalone/` builds `kerghan-standalone` (targets `standalone` and
+`standalone-offline`, with its own `Dockerfile.dockerignore`; see `docs/agents/standalone.md`). See `ls dockerfiles/` for
 the current list. The backend image family (`kerghan-base`,
 `circleci_kerghan-base`, `production_kerghan-base`) is built but not published to Docker Hub —
 see `docs/agents/architecture/infra.md` for the CircleCI `release-image` jobs that publish each
