@@ -11,7 +11,7 @@ equivalents — Kerghan doesn't warm the Navi cache from CI yet, see `docs/agent
 ## Workflow
 
 All test/lint jobs run on every push. The release chain (`build-and-release`, `release-kerghan`,
-the `upload_*` jobs, and `release`) is gated to **semver tag pushes only**, via the shared `tags_only` filter
+`release-kerghan-standalone`, the `upload_*` jobs, and `release`) is gated to **semver tag pushes only**, via the shared `tags_only` filter
 (`tags: { only: /\d+\.\d+\.\d+/ }`, `branches: { ignore: /.*/ }`). The `release-image` jobs
 (the 4 base-image publishes) have no branch filter at all — CircleCI schedules them on every
 push, but `bin/image.sh`'s `skip_if_not_tag` guard makes them a fast no-op unless the push is a
@@ -37,8 +37,8 @@ jasmine ───────┘
 release-kerghan-base(-arm64)  — published for local/dev use; nothing in this workflow requires it
 
 backend_tests, backend_checks, jasmine, frontend-checks, proxy_extension_tests ─┐
-                              release-production_kerghan-base(-arm64) ──────────┴─ release-kerghan
-                                  (nothing requires it yet — #341 / #343 will)
+                              release-production_kerghan-base(-arm64) ──────────┴─ release-kerghan ─ release-kerghan-standalone
+                                  (build-and-release does not require release-kerghan yet — #341 will)
 ```
 
 The five boxes feeding `build-and-release`/`upload_proxy_files`/`upload_fe_files`
@@ -118,6 +118,7 @@ workflow at all — nothing downstream depends on it being fresh.
 | `coverage-final` | `darthjee/circleci_kerghan-base:0.1.0` | every push | Finalizes the aggregated Codacy coverage report once `backend_tests`/`jasmine`'s partial uploads land (best-effort, non-blocking) |
 | `release-image` | machine (multi-arch: amd64 + arm64) | every push (no-op unless tag) | Publishes one of the 4 base images to Docker Hub via `bin/image.sh`; instantiated through a single workflow `matrix` (4 images × 2 archs = 8 jobs) — see below |
 | `release-kerghan` | machine (`ubuntu-2204:current`, multi-arch: amd64 + arm64) | tag only | Builds and pushes `darthjee/kerghan:<tag>` and `:latest` as one multi-arch manifest via `bin/release_kerghan.sh release` (buildx, `docker-container` builder) — see below |
+| `release-kerghan-standalone` | machine (`ubuntu-2204:current`, multi-arch: amd64 + arm64) | tag only | Requires `release-kerghan`. Publishes `darthjee/kerghan-standalone` online and offline via `bin/release_kerghan_standalone.sh release`; smoke-tests the offline image before moving `latest`/`latest-offline` — see below |
 | `build-and-release` | machine | tag only | Triggers the Render deploy of the backend (`scripts/deploy.sh`), blocks until it reports "live" |
 | `upload_proxy_files` | `darthjee/tent:1.0.3` | tag only | Uploads Tent proxy runtime to the SSH deploy host's staging dir |
 | `upload_fe_files` | `darthjee/vite_kerghan-base:0.1.0` | tag only | Builds the Vite frontend, uploads the static output to the staging dir |
@@ -182,8 +183,47 @@ amd64 and arm64, with no `-arm64` suffix. It is versioned by the **git tag**, no
 file (the `version` file only pins its base image).
 
 It requires the five test/lint jobs and `release-production_kerghan-base(-arm64)`, so the pinned
-base tags exist before the build. Nothing requires `release-kerghan` yet: #341 makes
-`build-and-release` depend on it, and #343 adds the standalone release after it.
+base tags exist before the build. `release-kerghan-standalone` (#343) requires it, because the
+standalone image bundles `darthjee/kerghan:<tag>`. #341 will also make `build-and-release` depend
+on it.
+
+### `release-kerghan-standalone` — the standalone image on Docker Hub
+
+`release-kerghan-standalone` (#343) runs `bin/release_kerghan_standalone.sh release` on semver
+tags, after `release-kerghan`. It uses the same Docker Hub env vars (`DOCKER_ID_USER`,
+`DOCKER_HUB_USERNAME`, `DOCKER_HUB_PASSWORD`) and the same QEMU + `docker-container` buildx setup.
+It publishes four tags of `$DOCKER_ID_USER/kerghan-standalone`, all multi-arch manifests
+(amd64 + arm64):
+
+| Tag | Dockerfile target | Contents |
+|-----|-------------------|----------|
+| `<tag>` | `standalone` | Online: pulls the inner images on first boot |
+| `<tag>-offline` | `standalone-offline` | Offline: inner images preloaded from tarballs |
+| `latest` | — | Points at `<tag>` |
+| `latest-offline` | — | Points at `<tag>-offline` |
+
+Both targets come from `dockerfiles/kerghan_standalone/Dockerfile`, built with
+`KERGHAN_VERSION=<tag>`. The script runs in this order:
+
+1. **Save the inner images.** For each architecture (amd64, then arm64) it clears
+   `standalone/images/<arch>/`, then pulls with `--platform linux/<arch>` and `docker save`s
+   `darthjee/kerghan:<tag>`, `mysql:9.3.0` and the Tent image (`darthjee/tent:1.0.3` for amd64,
+   `darthjee/tent:1.0.3-arm64` for arm64) as `kerghan.tar`, `mysql.tar` and `tent.tar`. It fails if
+   a pulled image's architecture does not match. Each architecture is saved before the next one is
+   pulled, because a new pull of the same tag replaces the local copy. The offline stage copies
+   `standalone/images/${TARGETARCH:-amd64}/`, so each platform gets its own tarballs. The folder is
+   git-ignored.
+2. **Build and push** `<tag>` and `<tag>-offline`. The offline build reuses the cached frontend and
+   online layers.
+3. **Smoke test** the published offline image on the amd64 machine, with `SKIP_BUILD=true` and
+   `SMOKE_EXPECT_OFFLINE=true` (`standalone/scripts/smoke_test.sh`). The arm64 image is checked by
+   hand.
+4. **Promote** `latest` and `latest-offline` with `docker buildx imagetools create`, then
+   `imagetools inspect` all four tags so the log shows both platforms.
+
+The versioned tags are pushed before the smoke test, because a multi-arch manifest must be
+pushed before it can be pulled. If the smoke test fails, `<tag>` and `<tag>-offline` stay
+published and `latest` / `latest-offline` are not moved.
 
 ### Production Dockerfile base selection
 
@@ -257,6 +297,7 @@ docker-compose run --rm circleci config process .circleci/config.yml   # expande
 | `scripts/bump_version.sh` | Bump the version string across the repo |
 | `scripts/wake_navi.sh` / `scripts/warm_navi_cache.sh` | Navi cache-warmer scripts — not yet wired into CircleCI, see `docs/agents/cache-warmer.md` |
 | `bin/release_kerghan.sh` | Multi-arch buildx release of `darthjee/kerghan` (`release` subcommand), used by `release-kerghan` |
+| `bin/release_kerghan_standalone.sh` | Multi-arch release of `darthjee/kerghan-standalone` online and offline (`release` subcommand): saves per-arch inner tarballs, pushes `<tag>`/`<tag>-offline`, smoke-tests, then promotes `latest`/`latest-offline`. Used by `release-kerghan-standalone` |
 | `bin/image.sh` | Builds/pushes a `release-image` instance; `skip_if_not_tag`/`skip_if_unchanged` guards, `qemu`/`push` subcommands |
 | `bin/deploy_frontend.sh` | SSH-based upload/release helpers used by `upload_proxy_files`, `upload_fe_files`, `upload_extension`, `copy_proxy_configuration`, `release` |
 

@@ -71,6 +71,9 @@ workflows:
             - release-production_kerghan-base
             - release-production_kerghan-base-arm64
           filters: *tags_only
+      - release-kerghan-standalone:
+          requires: [release-kerghan]
+          filters: *tags_only
       - upload_proxy_files:
           requires: [backend_tests, backend_checks, jasmine, frontend-checks, proxy_extension_tests]
           filters: *tags_only
@@ -229,6 +232,19 @@ jobs:
       - run:
           name: Release darthjee/kerghan
           command: bin/release_kerghan.sh release
+
+  # Multi-arch (amd64 + arm64) publish of darthjee/kerghan-standalone, online (<tag>) and offline
+  # (<tag>-offline, inner images preloaded from per-arch tarballs). latest / latest-offline move
+  # only after the offline smoke test passes. Requires release-kerghan, whose darthjee/kerghan:<tag>
+  # it bundles.
+  release-kerghan-standalone:
+    machine:
+      image: ubuntu-2204:current
+    steps:
+      - checkout
+      - run:
+          name: Release darthjee/kerghan-standalone
+          command: bin/release_kerghan_standalone.sh release
 
   # Deploys the backend to Render: points the service's branch at the tag that triggered this
   # workflow, triggers a deploy, and blocks (watch_deployment, in scripts/deploy.sh) until it

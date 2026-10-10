@@ -16,6 +16,11 @@
 #   SMOKE_PRELOAD_DIR  host folder of `docker save` tarballs mounted at
 #                    /vault/images (Vault loads them before compose up), e.g.
 #                    to test before the inner images are published
+#   SMOKE_EXPECT_OFFLINE  true to also assert, after the first boot, that
+#                    COMPOSE_UP_ARGS holds `--pull never` and that the inner
+#                    daemon has darthjee/kerghan:$KERGHAN_VERSION, mysql:9.3.0
+#                    and the TENT_IMAGE from /vault/.env, i.e. that the stack
+#                    started from the preloaded tarballs (default false)
 set -euo pipefail
 
 IMAGE="${IMAGE:-darthjee/kerghan-standalone:dev}"
@@ -24,6 +29,7 @@ SMOKE_PORT="${SMOKE_PORT:-3080}"
 SKIP_BUILD="${SKIP_BUILD:-false}"
 SMOKE_TIMEOUT="${SMOKE_TIMEOUT:-300}"
 SMOKE_PRELOAD_DIR="${SMOKE_PRELOAD_DIR:-}"
+SMOKE_EXPECT_OFFLINE="${SMOKE_EXPECT_OFFLINE:-false}"
 
 RUN_ID="$$-$(date +%s)"
 CONTAINER="kerghan-standalone-smoke-$RUN_ID"
@@ -77,6 +83,24 @@ inner_mysql() {
     --batch --skip-column-names -e "$1" 2>/dev/null
 }
 
+# Asserts the offline image started from its preloaded tarballs: compose runs
+# with --pull never and every inner image is already in the inner daemon.
+check_offline() {
+  local compose_args tent_image image
+  log "checking the offline preload"
+  compose_args=$(docker exec "$CONTAINER" printenv COMPOSE_UP_ARGS || true)
+  case " $compose_args " in
+    *" --pull never "*) ;;
+    *) fail "COMPOSE_UP_ARGS is '${compose_args}', expected it to contain '--pull never'" ;;
+  esac
+  tent_image=$(docker exec "$CONTAINER" sh -c 'sed -n "s/^TENT_IMAGE=//p" /vault/.env' || true)
+  [ -n "$tent_image" ] || fail "could not read TENT_IMAGE from /vault/.env"
+  for image in "darthjee/kerghan:$KERGHAN_VERSION" "mysql:9.3.0" "$tent_image"; do
+    docker exec "$CONTAINER" docker image inspect "$image" >/dev/null 2>&1 \
+      || fail "inner image $image is missing from the inner daemon (not preloaded)"
+  done
+}
+
 if [ "$SKIP_BUILD" != "true" ]; then
   log "building $IMAGE (KERGHAN_VERSION=$KERGHAN_VERSION)"
   docker build -f dockerfiles/kerghan_standalone/Dockerfile --target standalone \
@@ -117,6 +141,10 @@ docker run -d --privileged --name "$CONTAINER" ${preload_args[@]+"${preload_args
 
 log "waiting for $BASE_URL/health.json (first boot pulls images and initializes MySQL)"
 wait_for_200 "$BASE_URL/health.json"
+
+if [ "$SMOKE_EXPECT_OFFLINE" = "true" ]; then
+  check_offline
+fi
 
 log "checking the frontend at $BASE_URL/"
 body=$(curl -s -w '\n%{http_code}' "$BASE_URL/")
