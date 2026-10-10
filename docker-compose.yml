@@ -18,7 +18,7 @@ services:
   #################### Base (Node build — Express + Yarn) ####################
 
   base: &base
-    image: darthjee/kerghan   # local tag only — not pushed to Docker Hub
+    image: darthjee/dev_kerghan   # local tag only — not pushed to Docker Hub
     volumes:
       - ./backend:/home/node/app
     links:
@@ -33,7 +33,7 @@ services:
     command: echo done
 
   base_prod: &base_prod
-    image: darthjee/production_kerghan
+    image: darthjee/kerghan
     links:
       - kerghan_mysql:mysql
     env_file: .env.prod
