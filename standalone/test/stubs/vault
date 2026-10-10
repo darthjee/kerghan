@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+# Test stub for the vault CLI: logs its call and the directory it ran from.
+#   STUB_VAULT_UP_EXIT    exit code for `vault up` (default 0)
+#   STUB_VAULT_UP_STDERR  text printed on stderr by a failing `vault up`
+echo "vault $*" >>"$STUB_LOG"
+echo "$PWD" >>"$STUB_LOG.pwd"
+if [ "${1:-}" = "up" ] && [ "${STUB_VAULT_UP_EXIT:-0}" != "0" ]; then
+  if [ -n "${STUB_VAULT_UP_STDERR:-}" ]; then
+    echo "$STUB_VAULT_UP_STDERR" >&2
+  fi
+  exit "$STUB_VAULT_UP_EXIT"
+fi
+exit 0

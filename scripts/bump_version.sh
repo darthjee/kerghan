@@ -6,6 +6,7 @@ ROOT="$(git rev-parse --show-toplevel)"
 README="$ROOT/README.md"
 FE_PACKAGE="$ROOT/frontend/package.json"
 BE_PACKAGE="$ROOT/backend/package.json"
+CLI="$ROOT/standalone/bin/kerghan"
 
 # Extract current Next Release version from README
 current_next=$(grep -oE '\*\*Next Release:\*\* \[[0-9]+\.[0-9]+\.[0-9]+' "$README" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+')
@@ -48,5 +49,12 @@ sed -i '' \
 sed -i '' \
   "s|\"version\": \"[0-9.]*\"|\"version\": \"${new_version}\"|" \
   "$BE_PACKAGE"
+
+# Update the kerghan-standalone image version pinned in the client CLI
+if [ -f "$CLI" ]; then
+  sed -i '' \
+    "s|^KERGHAN_VERSION=\"[0-9.]*\"|KERGHAN_VERSION=\"${new_version}\"|" \
+    "$CLI"
+fi
 
 echo "Done."

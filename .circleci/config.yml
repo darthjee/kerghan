@@ -43,6 +43,8 @@ workflows:
           filters: *all_tags
       - proxy_extension_tests:
           filters: *all_tags
+      - standalone_tests:
+          filters: *all_tags
       - coverage-final:
           requires: [backend_tests, jasmine]
           filters: *all_tags
@@ -72,7 +74,7 @@ workflows:
             - release-production_kerghan-base-arm64
           filters: *tags_only
       - release-kerghan-standalone:
-          requires: [release-kerghan]
+          requires: [release-kerghan, standalone_tests]
           filters: *tags_only
       - upload_proxy_files:
           requires: [backend_tests, backend_checks, jasmine, frontend-checks, proxy_extension_tests]
@@ -194,6 +196,23 @@ jobs:
       - run:
           name: Tests
           command: vendor/bin/phpunit --bootstrap /var/www/html/extension/tests/bootstrap.php /var/www/html/extension/tests
+
+  # bats suite for the standalone client CLI (standalone/bin/kerghan). Runs straight on
+  # bats/bats: CircleCI ignores the image's `bats` ENTRYPOINT for the primary container (no
+  # com.circleci.preserve-entrypoint label), and the image is Alpine running as root without git or
+  # ssh, so they're apk-installed before `checkout` needs them. Cheaper than a cimg/base +
+  # bats install or a setup_remote_docker round trip.
+  standalone_tests:
+    docker:
+      - image: bats/bats:1.11.0
+    steps:
+      - run:
+          name: Install checkout dependencies
+          command: apk add --no-cache git openssh-client
+      - checkout
+      - run:
+          name: Tests
+          command: bats standalone/test
 
   # Multi-arch (amd64 + arm64) publish of Kerghan's 4 base images, mirroring Majora's
   # release-image pattern. Instantiated once via a workflow `matrix` (image x suffix). Runs on
