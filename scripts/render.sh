@@ -18,8 +18,15 @@ function services() {
 
 function deploy() {
   SERVICE_ID=$1
-  request \
-    POST "https://api.render.com/v1/services/$SERVICE_ID/deploys"
+  IMAGE_URL=$2
+  BODY=$(jq -n --arg imageUrl "$IMAGE_URL" '{imageUrl: $imageUrl}')
+
+  curl -sS --fail-with-body --request POST \
+    --url "https://api.render.com/v1/services/$SERVICE_ID/deploys" \
+    --header 'Accept: application/json' \
+    --header 'Content-Type: application/json' \
+    --header "Authorization: Bearer $RENDER_API_KEY" \
+    --data "$BODY"
 }
 
 function get_env_vars() {
@@ -36,6 +43,7 @@ function service_id() {
 }
 
 function last_deployment() {
+  SERVICE_ID=$1
   request \
     GET "https://api.render.com/v1/services/$SERVICE_ID/deploys?limit=1" | jq '.[0]'
 }
@@ -51,15 +59,4 @@ function deployment_status() {
   SERVICE_ID=$1
   DEPLOYMENT_ID=$2
   deployment "$SERVICE_ID" "$DEPLOYMENT_ID" | jq '.status' | sed -e 's/"//g'
-}
-
-function update_service_branch() {
-  SERVICE_ID=$1
-  BRANCH=$2
-  curl --request PATCH \
-    --url "https://api.render.com/v1/services/$SERVICE_ID" \
-    --header 'Accept: application/json' \
-    --header 'Content-Type: application/json' \
-    --header "Authorization: Bearer $RENDER_API_KEY" \
-    --data "{\"branch\": \"$BRANCH\"}"
 }
