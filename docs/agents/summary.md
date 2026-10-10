@@ -31,6 +31,10 @@ full file before loading it. For a bare link-only table of contents instead, see
 - **[Routes](backend/routes.md)** — Per-endpoint backend route reference, one file per domain
   under `backend/routes/` (`auth.md` and `integrations.md` today), complementing the
   entity/event-focused `modules/` pages.
+- **[Standalone Distribution](standalone.md)** — Running all of Kerghan in one Vault
+  (Docker-in-Docker) container, `darthjee/kerghan-standalone` (online and offline variants): the
+  `kerghan` client and its installer, the `~/.kerghan/` configuration, the inner compose stack,
+  image versioning, the caveats (HTTPS, backing up `kerghan.env`, disk growth) and how to test it.
 
 ## Conventions
 

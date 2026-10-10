@@ -11,6 +11,7 @@ For a short abstract of each doc's content, see [summary.md](summary.md) instead
 - [API Caching](architecture/caching.md)
 - [Modules](modules/)
 - [Routes](backend/routes.md)
+- [Standalone Distribution](standalone.md)
 
 ## Conventions
 
