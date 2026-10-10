@@ -14,3 +14,7 @@ before making changes involving that tool.
 - [How to Use navi-hey-client](external/HOW_TO_USE_NAVI-CLIENT.md) — the CLI/library used by the
   `warm-up-cache` CircleCI job to push config into and trigger a warm-up run against a running
   Navi instance.
+- [Vault](external/vault.md) — the Docker-in-Docker image that runs a `docker compose` stack
+  inside a single container, shipping an app and its dependencies as one image exposing one
+  port. Not used by Kerghan yet; planned for upcoming deployment work. Consulted by the `infra`
+  agent for Docker/deployment changes involving Vault.
