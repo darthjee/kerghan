@@ -29,9 +29,21 @@ INSTANCE="kerghan"
 VOLUME="vault-kerghan-data"
 CONTAINER="vault-kerghan"
 DEFAULT_PORT=3000
+DEFAULT_VARIANT=online
+DEFAULT_RUNTIME=auto
+DEFAULT_STOP_TIMEOUT=60
+# The default image tag is KERGHAN_VERSION.
 
 KERGHAN_HOME="${HOME}/.kerghan"
 ENV_FILE="$KERGHAN_HOME/kerghan.env"
+CONFIG_FILE="$KERGHAN_HOME/config"
+
+# Values read from CONFIG_FILE by load_config (empty = unset, default applies).
+CFG_PORT=""
+CFG_VARIANT=""
+CFG_RUNTIME=""
+CFG_STOP_TIMEOUT=""
+CFG_IMAGE_TAG=""
 
 usage() {
   cat <<USAGE
@@ -89,6 +101,122 @@ valid_port() {
   esac
   [ "${#1}" -le 5 ] || return 1
   [ "$1" -ge 1 ] && [ "$1" -le 65535 ]
+}
+
+valid_variant() {
+  case "$1" in
+    online | offline) return 0 ;;
+  esac
+  return 1
+}
+
+valid_runtime() {
+  case "$1" in
+    auto | sysbox | privileged) return 0 ;;
+  esac
+  return 1
+}
+
+valid_stop_timeout() {
+  case "$1" in
+    '' | *[!0-9]*) return 1 ;;
+  esac
+  [ "${#1}" -le 9 ] || return 1
+  [ "$((10#$1))" -ge 1 ]
+}
+
+# valid_image_tag <tag> - a Docker tag (charset [A-Za-z0-9_.-], not starting
+# with . or -, at most 128 chars) that does not end in -offline (the variant
+# adds that suffix).
+valid_image_tag() {
+  case "$1" in
+    '' | .* | -* | *[!A-Za-z0-9_.-]* | *-offline) return 1 ;;
+  esac
+  [ "${#1}" -le 128 ]
+}
+
+# trim <string> - prints the string without surrounding whitespace.
+trim() {
+  local s="$1"
+  s="${s#"${s%%[![:space:]]*}"}"
+  s="${s%"${s##*[![:space:]]}"}"
+  printf '%s' "$s"
+}
+
+# config_invalid <line> <key> <value> <expected> - reports an invalid value and
+# exits.
+config_invalid() {
+  error "$CONFIG_FILE:$1: invalid $2 '$3' (expected $4)"
+  exit 1
+}
+
+# load_config - reads CONFIG_FILE into the CFG_* globals. A missing file is not
+# an error. A malformed line or an invalid value exits 1; an unknown key only
+# warns. Must run before any side effect.
+load_config() {
+  CFG_PORT=""
+  CFG_VARIANT=""
+  CFG_RUNTIME=""
+  CFG_STOP_TIMEOUT=""
+  CFG_IMAGE_TAG=""
+  [ -e "$CONFIG_FILE" ] || return 0
+  if [ ! -r "$CONFIG_FILE" ] || [ -d "$CONFIG_FILE" ]; then
+    error "$CONFIG_FILE: cannot be read"
+    exit 1
+  fi
+
+  local line key value n=0
+  while IFS= read -r line || [ -n "$line" ]; do
+    n=$((n + 1))
+    line="${line%%#*}"
+    line="$(trim "$line")"
+    [ -n "$line" ] || continue
+    case "$line" in
+      *=*) ;;
+      *)
+        error "$CONFIG_FILE:$n: expected key=value"
+        exit 1
+        ;;
+    esac
+    key="$(trim "${line%%=*}")"
+    value="$(trim "${line#*=}")"
+    case "$key" in
+      port)
+        [ -z "$value" ] || valid_port "$value" || config_invalid "$n" "$key" "$value" "1-65535"
+        CFG_PORT="$value"
+        ;;
+      variant)
+        [ -z "$value" ] || valid_variant "$value" || config_invalid "$n" "$key" "$value" "online or offline"
+        CFG_VARIANT="$value"
+        ;;
+      runtime)
+        [ -z "$value" ] || valid_runtime "$value" ||
+          config_invalid "$n" "$key" "$value" "auto, sysbox or privileged"
+        CFG_RUNTIME="$value"
+        ;;
+      stop-timeout)
+        [ -z "$value" ] || valid_stop_timeout "$value" ||
+          config_invalid "$n" "$key" "$value" "a positive number of seconds"
+        CFG_STOP_TIMEOUT="$value"
+        ;;
+      image-tag)
+        [ -z "$value" ] || valid_image_tag "$value" ||
+          config_invalid "$n" "$key" "$value" "a Docker image tag, without the -offline suffix"
+        CFG_IMAGE_TAG="$value"
+        ;;
+      *)
+        warn "$CONFIG_FILE:$n: unknown key '$key' (ignored)"
+        ;;
+    esac
+  done <"$CONFIG_FILE"
+}
+
+effective_runtime() {
+  echo "${CFG_RUNTIME:-$DEFAULT_RUNTIME}"
+}
+
+effective_stop_timeout() {
+  echo "${CFG_STOP_TIMEOUT:-$DEFAULT_STOP_TIMEOUT}"
 }
 
 volume_exists() {
@@ -176,13 +304,14 @@ compare_number() {
 }
 
 cmd_up() {
-  local offline=false port="$DEFAULT_PORT" foreground=false
+  local flag_offline=false flag_port="" flag_port_set=false foreground=false
   while [ "$#" -gt 0 ]; do
     case "$1" in
-      --offline) offline=true ;;
+      --offline) flag_offline=true ;;
       -p | --port)
         [ "$#" -ge 2 ] || usage_error "option '$1' requires a value"
-        port="$2"
+        flag_port="$2"
+        flag_port_set=true
         shift
         ;;
       -f) foreground=true ;;
@@ -190,7 +319,17 @@ cmd_up() {
     esac
     shift
   done
-  valid_port "$port" || usage_error "invalid port '$port' (expected 1-65535)"
+  if [ "$flag_port_set" = "true" ]; then
+    valid_port "$flag_port" || usage_error "invalid port '$flag_port' (expected 1-65535)"
+  fi
+
+  # Resolve: flag > ~/.kerghan/config > default. Before any side effect.
+  load_config
+  local port="${flag_port:-${CFG_PORT:-$DEFAULT_PORT}}"
+  local offline=false
+  if [ "$flag_offline" = "true" ] || [ "${CFG_VARIANT:-$DEFAULT_VARIANT}" = "offline" ]; then
+    offline=true
+  fi
 
   local image
   image="$(image_ref "$offline")"
