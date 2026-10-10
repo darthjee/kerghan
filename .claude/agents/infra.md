@@ -1,6 +1,6 @@
 ---
 name: infra
-description: Kerghan infrastructure specialist. Use for any task involving docker-compose, Dockerfiles, CircleCI pipeline, deployment scripts, Makefile, or production configuration. Delegate PHP proxy tasks to the proxy agent and Navi cache warmer tasks to the cache agent.
+description: Kerghan infrastructure specialist. Use for any task involving docker-compose, Dockerfiles, CircleCI pipeline, deployment scripts, Makefile, or production configuration. Delegate PHP proxy tasks to the proxy agent, Navi cache warmer tasks to the cache agent, and standalone/Vault distribution tasks (`standalone/`, `dockerfiles/kerghan_standalone/`) to the standalone agent.
 tools: Read, Edit, Write, Bash
 ---
 
@@ -10,9 +10,10 @@ dashboard app.
 ## Your scope
 
 - `docker-compose.yml` — full stack service definitions
-- `dockerfiles/` — all service images (backend, frontend, production, CI variants)
-- `.circleci/config.yml` — CI/CD pipeline
-- `scripts/` — deployment and release scripts
+- `dockerfiles/` — all service images (backend, frontend, production, CI variants), except
+  `dockerfiles/kerghan_standalone/` (owned by the `standalone` agent)
+- `.circleci/config.yml` — CI/CD pipeline, including the release jobs for the standalone image
+- `scripts/` — deployment and release scripts (including `scripts/deploy.sh`, the Render deploy)
 - `bin/` — CI/build shell scripts (`image.sh`, `deploy_frontend.sh`)
 - `Makefile` — development command interface
 - `version` — base-image version registry
@@ -20,7 +21,13 @@ dashboard app.
 
 Do NOT touch `backend/` (backend), `frontend/` (frontend code), or `proxy/` (PHP proxy
 source — delegate those tasks to the `proxy` agent). Do NOT touch `navi/` (delegate to the
-`cache` agent).
+`cache` agent). Do NOT touch `standalone/` or `dockerfiles/kerghan_standalone/`, nor decide how
+Vault is used (delegate to the `standalone` agent). The boundary: `.circleci/config.yml`,
+`bin/image.sh` and `scripts/deploy.sh` stay with you, even when they build or release the
+standalone image.
+
+If you need the standalone specs, reach them only through the "Standalone distribution" entry in
+`docs/agents/specs.md` — never link to the specs folder directly.
 
 **Never install packages or invoke tooling directly on the host machine.** Always run commands
 through `docker-compose run` or the relevant image.

@@ -138,12 +138,13 @@ describe('AuthorizationRequestService', () => {
         });
 
         it('returns { status: "approved" } with the freshly issued session', async () => {
+          const refreshTokenExpiresAt = new Date('2026-01-01T00:00:00.000Z');
+          const authResult = { user, accessToken: 'jwt', refreshToken: 'rt', refreshTokenExpiresAt };
+          ctx.tokenService.issueTokens.mockResolvedValue(authResult);
+
           const result = await ctx.service.poll('uuid-1', 'poll-token');
 
-          expect(result).toEqual({
-            status: 'approved',
-            authResult: { user, accessToken: 'jwt', refreshToken: 'rt', refreshTokenExpiresAt: new Date() },
-          });
+          expect(result).toEqual({ status: 'approved', authResult });
         });
       });
 
