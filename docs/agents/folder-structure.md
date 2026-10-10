@@ -93,8 +93,10 @@ The four `*-base` images (`kerghan-base`, `vite_kerghan-base`, `production_kergh
 `circleci_kerghan-base`) are all built from the single parameterised `dockerfiles/base/Dockerfile`:
 one named target per image (`docker build --target <image>`), with the per-image build args
 (base image, user, directories, rsync pin, ...) defined in the `build_args` function of
-`bin/image.sh`. The leaf images (`kerghan`, `production_kerghan`, `vite_kerghan`) keep their own
-directory under `dockerfiles/`, each `FROM` its published base image. See `ls dockerfiles/` for
+`bin/image.sh`. The leaf images keep their own
+directory under `dockerfiles/`, each `FROM` its published base image; the folder names differ from
+the image tags: `dockerfiles/kerghan/` builds `dev_kerghan`, `dockerfiles/production_kerghan/`
+builds `kerghan` (production) and `dockerfiles/vite_kerghan/` builds `vite_kerghan`. See `ls dockerfiles/` for
 the current list. The backend image family (`kerghan-base`,
 `circleci_kerghan-base`, `production_kerghan-base`) is built but not published to Docker Hub —
 see `docs/agents/architecture/infra.md` for the CircleCI `release-image` jobs that publish each

@@ -36,8 +36,8 @@ through `docker-compose run` or the relevant image.
 
 | Service | Image | Port | Purpose |
 |---------|-------|------|---------|
-| `kerghan_app` | `darthjee/kerghan` | 3030 | Backend dev server |
-| `kerghan_tests` | `darthjee/kerghan` | — | Backend test runner |
+| `kerghan_app` | `darthjee/dev_kerghan` | 3030 | Backend dev server |
+| `kerghan_tests` | `darthjee/dev_kerghan` | — | Backend test runner |
 | `kerghan_fe` | built from `dockerfiles/vite_kerghan/` | 3010 | Vite dev server / build |
 | `kerghan_proxy` | `darthjee/tent:0.10.1` | 3000 | Reverse proxy (single entry point) |
 | `proxy_lint` | `darthjee/tent-test:0.10.4` | — | PSR-12 PHPCS check for `proxy/` (ruleset: root `phpcs.xml`) |
@@ -66,7 +66,8 @@ publish on tag builds; `yarn install` still runs but reads from the base image's
 instead of a cold network install. `jasmine`/`frontend-checks` intentionally stay on the generic
 `darthjee/circleci_node` image, since no frontend-specific CI base image exists.
 
-The **leaf app images** — `darthjee/kerghan` (backend) and `darthjee/production_kerghan` — are
+The **leaf app images** — `darthjee/dev_kerghan` (dev backend, built from `dockerfiles/kerghan/`) and
+`darthjee/kerghan` (production, built from `dockerfiles/production_kerghan/`) — are
 still **not published to Docker Hub**; they're built locally (`make build`) or, in CI, from the
 generic `darthjee/circleci_node` image. Only the `*-base` images are published. See
 `docs/agents/architecture/backend.md`.

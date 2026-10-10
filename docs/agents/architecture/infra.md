@@ -132,7 +132,7 @@ step strips the leading `-` from `suffix` before calling `bin/image.sh push <ima
 |---------------|----------------|-----------|
 | `release-kerghan-base(-arm64)` | `kerghan-base` | Dev backend base image |
 | `release-circleci_kerghan-base(-arm64)` | `circleci_kerghan-base` | CI backend base image (used by `backend_tests`/`backend_checks`) |
-| `release-production_kerghan-base(-arm64)` | `production_kerghan-base` | Production backend base image (`production_kerghan` is `FROM` this, by `:latest`) |
+| `release-production_kerghan-base(-arm64)` | `production_kerghan-base` | Production backend base image (the `darthjee/kerghan` production image, built from `dockerfiles/production_kerghan/`, is `FROM` this, by `:latest`) |
 | `release-vite_kerghan-base(-arm64)` | `vite_kerghan-base` | Frontend/proxy build base image |
 
 The backend image family (`kerghan-base`, `circleci_kerghan-base`, `production_kerghan-base`)

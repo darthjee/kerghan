@@ -97,8 +97,8 @@ docker-compose run --rm kerghan_tests yarn test
 - Max 300 lines per file, max complexity 10 (both backend and frontend, ESLint-enforced).
 - Keep backend controllers thin — business logic belongs in each module's service, not the
   controller, unless a change explicitly documents why an exception is warranted.
-- The backend image family (`kerghan`, `circleci_kerghan-base`, `production_kerghan-base`) is
-  **not published to Docker Hub** — built locally / in CI only. Only the frontend/proxy
+- The backend image family (`dev_kerghan` (dev), `kerghan` (production), `circleci_kerghan-base`,
+  `production_kerghan-base`) is **not published to Docker Hub** — built locally / in CI only. Only the frontend/proxy
   (`vite_kerghan*`) images are published.
 - Kerghan has a lightweight per-user account/login (not GitHub OAuth) — see
   [Flow](docs/agents/flow.md). GitHub data itself is still read unauthenticated (public-repo
