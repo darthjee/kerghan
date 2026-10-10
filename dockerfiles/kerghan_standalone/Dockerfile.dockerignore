@@ -1,0 +1,22 @@
+# Build-context ignore file for dockerfiles/kerghan_standalone/Dockerfile only
+# (BuildKit per-Dockerfile ignore file). Keeps secrets and local build
+# leftovers out of the standalone image.
+.git
+**/node_modules
+frontend/dist
+frontend/coverage
+frontend/.nyc_output
+backend
+docker_volumes
+.env
+*.env
+.env.*
+.vault.env
+**/*.env
+**/.env
+**/.env.*
+standalone/vault/.env
+standalone/vault/tent/static
+standalone/vault/tent/extension
+proxy/extension/vendor
+proxy/extension/tests

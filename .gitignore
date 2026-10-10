@@ -47,3 +47,4 @@ proxy/extension/vendor
 standalone/vault/tent/static/
 standalone/vault/tent/extension/
 standalone/vault/.env
+standalone/images/
