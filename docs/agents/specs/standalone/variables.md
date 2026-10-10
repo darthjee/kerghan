@@ -43,10 +43,13 @@ not passed through: its default (`1`) matches the single Tent hop of the stack.
 
 ## Shipped documentation
 
-- `standalone/kerghan.env.example`, published as a release asset (see
-  [installer.md](installer.md)): the required secrets (empty), the MySQL password override and
-  the most useful pass-through variables, commented.
-- A "Standalone" section in `environment-variables.md`, written by #347.
+- A "Standalone" section in `environment-variables.md`, written by #347: the required secrets,
+  the MySQL password override and the pass-through variables users can add to
+  `~/.kerghan/kerghan.env`.
+
+No example env file is shipped (a decision taken on #346): the client generates
+`~/.kerghan/kerghan.env` itself, and the release assets are listed in
+[installer.md](installer.md#release-assets).
 
 ## Required tests
 

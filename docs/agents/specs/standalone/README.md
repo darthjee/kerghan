@@ -71,7 +71,6 @@ done while enhancing #337. Re-discussing them is out of scope for the sub-issues
 | `standalone/vault/` | The inner compose file and `tent/` (Tent standalone configuration; the built frontend is added at image build time). Copied to `/vault` in the image. | `standalone` agent (#338) |
 | `standalone/bin/kerghan` | The client script. | `standalone` |
 | `standalone/install.sh` | The installer. | `standalone` |
-| `standalone/kerghan.env.example` | Example env file, shipped as a release asset. | `standalone` |
 | `standalone/config.example` | Commented example of `~/.kerghan/config` (see [config.md](config.md)), shipped as a release asset. | `standalone` |
 | `dockerfiles/kerghan_standalone/Dockerfile` | The standalone image, targets `standalone` and `standalone-offline`. | `standalone` |
 | `.circleci/config.yml`, `bin/image.sh`, `scripts/deploy.sh` | Release jobs and the Render deploy. | `infra` |
