@@ -1,0 +1,58 @@
+#!/usr/bin/env bash
+# Test stub for curl, used by the installer tests: logs its call and writes
+# the -o target according to the URL.
+#   .../releases/download/<v>/kerghan       a fake kerghan client printing <v>
+#   raw.githubusercontent.com/darthjee/vault  a fake Vault installer that logs
+#                                            `vault-install VAULT_VERSION=<v>`
+#                                            and writes an executable vault to
+#                                            $HOME/.local/bin
+#   STUB_CURL_FAIL_URL=<substring>  a matching download fails (exit 22)
+#   STUB_VAULT_INSTALL_EXIT         exit code of the fake Vault installer
+echo "curl $*" >>"$STUB_LOG"
+out=""
+url=""
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    -o)
+      out="$2"
+      shift 2
+      ;;
+    -*) shift ;;
+    *)
+      url="$1"
+      shift
+      ;;
+  esac
+done
+if [ -n "${STUB_CURL_FAIL_URL:-}" ]; then
+  case "$url" in
+    *"$STUB_CURL_FAIL_URL"*)
+      echo "curl: (22) The requested URL returned error: 404" >&2
+      exit 22
+      ;;
+  esac
+fi
+case "$url" in
+  */releases/download/*/kerghan)
+    v="${url%/kerghan}"
+    v="${v##*/}"
+    printf '#!/usr/bin/env bash\necho "fake kerghan %s"\n' "$v" >"$out"
+    ;;
+  https://raw.githubusercontent.com/darthjee/vault/*/install.sh)
+    cat >"$out" <<'INSTALLER'
+#!/usr/bin/env bash
+echo "vault-install VAULT_VERSION=$VAULT_VERSION" >>"$STUB_LOG"
+if [ "${STUB_VAULT_INSTALL_EXIT:-0}" != "0" ]; then
+  exit "$STUB_VAULT_INSTALL_EXIT"
+fi
+mkdir -p "$HOME/.local/bin"
+printf '#!/usr/bin/env bash\necho "fake vault"\n' >"$HOME/.local/bin/vault"
+chmod +x "$HOME/.local/bin/vault"
+INSTALLER
+    ;;
+  *)
+    echo "curl stub: unexpected URL: $url" >&2
+    exit 22
+    ;;
+esac
+exit 0

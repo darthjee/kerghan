@@ -5,7 +5,11 @@
 #   STUB_RUNNING_IMAGE     image of the vault-kerghan container (unset: none)
 #   STUB_RUNNING_STATE     its .State.Running (default true)
 #   STUB_RUNNING_PORT      its host port for 80/tcp (default 3000)
+#   STUB_DOCKER_INFO_EXIT  exit code of `docker info` (default 0)
 echo "docker $*" >>"$STUB_LOG"
+if [ "${1:-}" = "info" ]; then
+  exit "${STUB_DOCKER_INFO_EXIT:-0}"
+fi
 case "${1:-} ${2:-}" in
   "volume inspect")
     [ "${STUB_VOLUME_EXISTS:-0}" = "1" ] && exit 0
