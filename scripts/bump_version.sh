@@ -7,6 +7,7 @@ README="$ROOT/README.md"
 FE_PACKAGE="$ROOT/frontend/package.json"
 BE_PACKAGE="$ROOT/backend/package.json"
 CLI="$ROOT/standalone/bin/kerghan"
+INSTALLER="$ROOT/standalone/install.sh"
 
 # Extract current Next Release version from README
 current_next=$(grep -oE '\*\*Next Release:\*\* \[[0-9]+\.[0-9]+\.[0-9]+' "$README" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+')
@@ -55,6 +56,14 @@ if [ -f "$CLI" ]; then
   sed -i '' \
     "s|^KERGHAN_VERSION=\"[0-9.]*\"|KERGHAN_VERSION=\"${new_version}\"|" \
     "$CLI"
+fi
+
+# Update the client version pinned in the installer, so latest/download/install.sh
+# from release <v> installs client <v>
+if [ -f "$INSTALLER" ]; then
+  sed -i '' \
+    "s|^KERGHAN_VERSION=\"[0-9.]*\"|KERGHAN_VERSION=\"${new_version}\"|" \
+    "$INSTALLER"
 fi
 
 echo "Done."
