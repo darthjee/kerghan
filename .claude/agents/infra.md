@@ -71,3 +71,13 @@ The **leaf app images** — `darthjee/dev_kerghan` (dev backend, built from `doc
 still **not published to Docker Hub**; they're built locally (`make build`) or, in CI, from the
 generic `darthjee/circleci_node` image. Only the `*-base` images are published. See
 `docs/agents/architecture/backend.md`.
+
+**One-time stale-image cleanup (#339):** before #339 the dev image was tagged `darthjee/kerghan`,
+which is now the production image's name. A developer who still has that old local tag would have
+`base_prod` run the stale dev image under the production tag. Remove it and rebuild once:
+
+```bash
+docker image rm darthjee/kerghan
+docker-compose build base_prod_build   # rebuilds darthjee/kerghan (production)
+docker-compose build base_build        # rebuilds darthjee/dev_kerghan (dev)
+```

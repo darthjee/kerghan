@@ -141,6 +141,24 @@ is built in CI but **not actually published to Docker Hub** — only the fronten
 so the ordering/`requires` machinery stays uniform; see `docs/agents/environment-variables.md`
 for which Docker Hub credentials are actually wired up.
 
+### Leaf image tags and the one-time stale-image cleanup
+
+The leaf images keep their `dockerfiles/` folder names but are tagged differently (#339):
+`dockerfiles/kerghan/` builds the local dev image `darthjee/dev_kerghan` (compose `base` /
+`base_build`, `make build`), and `dockerfiles/production_kerghan/` builds the production image
+`darthjee/kerghan` (compose `base_prod` / `base_prod_build`; Render builds the same Dockerfile by
+path). Neither is published to Docker Hub yet.
+
+Before #339 the dev image was tagged `darthjee/kerghan`. A developer who still has that old local
+tag would have `base_prod` run the stale dev image under the production tag, so remove it and
+rebuild once:
+
+```bash
+docker image rm darthjee/kerghan
+docker-compose build base_prod_build   # rebuilds darthjee/kerghan (production)
+docker-compose build base_build        # rebuilds darthjee/dev_kerghan (dev)
+```
+
 ### Shared base Dockerfile
 
 All four `*-base` images are built by `bin/image.sh` from the single
