@@ -30,9 +30,10 @@ explore, or plan what belongs to a specialist yourself.
 |-------|-------|
 | `frontend` | `frontend/` — React components, Jasmine specs, ESLint, Vite, CSS |
 | `backend` | `backend/` — NestJS modules/controllers/services, TypeORM entities/migrations, Jest specs, ESLint |
-| `infra` | `docker-compose.yml`, `dockerfiles/`, `.circleci/config.yml`, `scripts/`, `Makefile` |
+| `infra` | `docker-compose.yml`, `dockerfiles/` (except `kerghan_standalone/`), `.circleci/config.yml`, `scripts/`, `Makefile` |
 | `proxy` | `proxy/` — PHP Tent proxy configuration, custom middleware, and tests |
 | `cache` | `navi/navi_config.yaml`, `navi/resources/*.yml`, cache-warmer docs — Navi warm-up route maintenance + `X-Skip-Cache` review |
+| `standalone` | `standalone/`, `dockerfiles/kerghan_standalone/Dockerfile` — Vault-based standalone distribution (inner compose stack, client CLI, installer) |
 
 ## How to coordinate
 
