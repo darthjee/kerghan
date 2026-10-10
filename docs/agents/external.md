@@ -16,5 +16,6 @@ before making changes involving that tool.
   Navi instance.
 - [Vault](external/vault.md) — the Docker-in-Docker image that runs a `docker compose` stack
   inside a single container, shipping an app and its dependencies as one image exposing one
-  port. Not used by Kerghan yet; planned for upcoming deployment work. Consulted by the
-  `standalone` agent, which owns the Vault-based standalone distribution.
+  port. Kerghan uses it as the base of `darthjee/kerghan-standalone` (see
+  [Standalone Distribution](standalone.md)). Consulted by the `standalone` agent, which owns the
+  Vault-based standalone distribution.
