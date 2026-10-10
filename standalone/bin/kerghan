@@ -78,9 +78,11 @@ usage_error() {
   exit 2
 }
 
-# image_ref [offline] - prints the image reference for this CLI's version.
+# image_ref [offline] [tag] - prints the image reference. The tag (default
+# KERGHAN_VERSION, or image-tag from the config) replaces only the version
+# part; -offline is still appended for the offline variant.
 image_ref() {
-  local ref="$IMAGE_REPO:$KERGHAN_VERSION"
+  local ref="$IMAGE_REPO:${2:-$KERGHAN_VERSION}"
   if [ "${1:-}" = "true" ]; then
     ref="$ref-offline"
   fi
@@ -332,7 +334,7 @@ cmd_up() {
   fi
 
   local image
-  image="$(image_ref "$offline")"
+  image="$(image_ref "$offline" "${CFG_IMAGE_TAG:-$KERGHAN_VERSION}")"
 
   # 1. Refuse: secrets lost but data kept.
   if [ ! -e "$ENV_FILE" ] && volume_exists; then
@@ -367,7 +369,12 @@ cmd_up() {
 
 # recreate_reason <current image> <wanted image> <current port> <wanted port>
 # Prints why the running instance must be recreated, or nothing when it
-# already matches. Returns 1 (after warning) on a downgrade.
+# already matches. Returns 1 (after warning) on a downgrade. Only the image and
+# the port drive this decision (runtime and stop-timeout never do).
+#
+# The wanted version is the wanted tag without -offline: KERGHAN_VERSION, or
+# image-tag from ~/.kerghan/config. When it is not x.y.z semver (e.g. latest),
+# the version compare and the downgrade guard are skipped.
 recreate_reason() {
   local current="$1" wanted="$2" current_port="$3" port="$4"
   local current_repo="${current%:*}" current_tag current_version current_variant
@@ -382,8 +389,17 @@ recreate_reason() {
   else
     current_variant="offline"
   fi
-  local wanted_variant="online"
+  local wanted_tag="${wanted##*:}" wanted_version wanted_variant="online"
+  wanted_version="${wanted_tag%-offline}"
   case "$wanted" in *-offline) wanted_variant="offline" ;; esac
+
+  # Same image reference: only the port can differ.
+  if [ "$current" = "$wanted" ]; then
+    if [ "$current_port" != "$port" ]; then
+      echo "moving to port $port"
+    fi
+    return 0
+  fi
 
   if [ "$current_repo" != "$IMAGE_REPO" ] || ! is_semver "$current_version"; then
     warn "the running instance uses $current, not a $IMAGE_REPO release; recreating it with $wanted"
@@ -391,10 +407,20 @@ recreate_reason() {
     return 0
   fi
 
-  case "$(version_compare "$current_version" "$KERGHAN_VERSION")" in
+  if ! is_semver "$wanted_version"; then
+    echo "replacing $current -> $wanted"
+    return 0
+  fi
+
+  case "$(version_compare "$current_version" "$wanted_version")" in
     gt)
-      warn "the running instance uses $current, newer than this CLI ($KERGHAN_VERSION); downgrades are unsupported"
-      hint "install the kerghan CLI $current_version to manage this instance"
+      if [ "$wanted_version" = "$KERGHAN_VERSION" ]; then
+        warn "the running instance uses $current, newer than this CLI ($KERGHAN_VERSION); downgrades are unsupported"
+        hint "install the kerghan CLI $current_version to manage this instance"
+      else
+        warn "the running instance uses $current, newer than image-tag $wanted_version in ~/.kerghan/config; downgrades are unsupported"
+        hint "set image-tag=$current_version in ~/.kerghan/config (or remove it) to manage this instance"
+      fi
       return 1
       ;;
     lt)
