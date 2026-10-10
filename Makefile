@@ -1,10 +1,10 @@
 .PHONY: build-base push-base build build-fe-base push-fe-base build-fe push-fe build-circleci-base push-circleci-base build-production-base push-production-base dev dev-up setup tests integrations-keys-status integrations-keys-reencrypt
 
 PROJECT?=kerghan
-IMAGE?=$(PROJECT)
+DOCKER_ID_USER?=darthjee
+IMAGE?=$(DOCKER_ID_USER)/dev_$(PROJECT)
 BASE_VERSION?=0.1.0
 FE_IMAGE?=$(DOCKER_ID_USER)/vite_$(PROJECT)
-PUSH_IMAGE=$(DOCKER_ID_USER)/$(PROJECT)
 DOCKER_FILE=dockerfiles/$(PROJECT)/Dockerfile
 DOCKER_FILE_FE=dockerfiles/vite_$(PROJECT)/Dockerfile
 
@@ -35,13 +35,15 @@ push-fe-base:
 	bin/image.sh push vite_$(PROJECT)-base
 
 # ── Backend ──────────────────────────────────────────────────────────────────
-# Note: the leaf kerghan (backend app) and production_kerghan images are not
-# published to Docker Hub — only the 4 *-base images are (see
+# Note: the leaf dev_kerghan (backend dev app) and kerghan (production) images
+# are not published to Docker Hub — only the 4 *-base images are (see
 # .claude/agents/infra.md "Backend image publishing" and
-# docs/agents/architecture/backend.md).
+# docs/agents/architecture/backend.md). `make build` tags the dev image only
+# darthjee/dev_kerghan; it never tags anything darthjee/kerghan (the production
+# image's name).
 
 build:
-	docker build -f $(DOCKER_FILE) . -t $(IMAGE) -t $(PUSH_IMAGE) -t $(PUSH_IMAGE):$(BASE_VERSION)
+	docker build -f $(DOCKER_FILE) . -t $(IMAGE)
 
 # ── Frontend ─────────────────────────────────────────────────────────────────
 
