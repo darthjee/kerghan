@@ -12,7 +12,7 @@ Developers who built the dev image before this change still have it tagged `dart
     `docker-compose run kerghan_tests` still start.
   - `docker-compose build base_prod_build` produces `darthjee/kerghan`; `docker-compose run
     base_prod` (the production sanity check) still starts.
-  - `make build` (dry check of the command line, `make -n build`) tags only `darthjee/dev_kerghan`.
+  - The `make build` recipe (read it, don't run it on the host) tags only `darthjee/dev_kerghan`.
 
 ## Files to Change
 - `.claude/agents/infra.md` — one-time cleanup note.

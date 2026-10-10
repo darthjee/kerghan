@@ -42,4 +42,5 @@ those leaf images, and document a one-time cleanup of the stale local `darthjee/
   names (`kerghan_app`, `kerghan_tests`, ...), `PROJECT`, the Render service name or any repo URL.
 - The "leaf images are not published" statements stay true after this issue (`darthjee/kerghan` is
   only published from #340 on); only the names in them change.
-- Never run `docker`/`make`/tooling assumptions on the host beyond docker-compose, per CLAUDE.md.
+- Run every build and verification through docker-compose, never tooling directly on the host,
+  per CLAUDE.md.
