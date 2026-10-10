@@ -24,8 +24,8 @@ release-circleci_kerghan-base(-arm64) ─┬─ backend_tests ──┐
                                           jasmine ─────────┼─ build-and-release ─────────────────┐
                                     frontend-checks ───────┤                                      │
                               proxy_extension_tests ───────┤                                      │
-                                                            │                                      │
-        release-production_kerghan-base(-arm64) ───────────┘                                      │
+                                      scripts_tests ───────┤                                      │
+                                     release-kerghan ──────┘                                      │
                                                             ├─ upload_proxy_files ─┬─ upload_extension ──────┐
                                                             │                      └─ copy_proxy_configuration┤
                                                             └─ upload_fe_files ─────────────────────────────┼─ release
@@ -37,14 +37,14 @@ jasmine ───────┘
 release-kerghan-base(-arm64)  — published for local/dev use; nothing in this workflow requires it
 
 backend_tests, backend_checks, jasmine, frontend-checks, proxy_extension_tests ─┐
-                              release-production_kerghan-base(-arm64) ──────────┴─ release-kerghan ─ release-kerghan-standalone ─ release-kerghan-assets
-                                  (build-and-release does not require release-kerghan yet — #341 will)
+                              release-production_kerghan-base(-arm64) ──────────┴─ release-kerghan ─┬─ release-kerghan-standalone ─ release-kerghan-assets
+                                                                                                      └─ build-and-release (above)
 ```
 
 The five boxes feeding `build-and-release`/`upload_proxy_files`/`upload_fe_files`
 (`backend_tests`, `backend_checks`, `jasmine`, `frontend-checks`, `proxy_extension_tests`) are
 each required directly by all three of those jobs — the diagram only draws the edges once to
-stay readable. `coverage-final` requires only `backend_tests` and `jasmine` (the two jobs that
+stay readable. `scripts_tests` and `release-kerghan` are required only by `build-and-release`. `coverage-final` requires only `backend_tests` and `jasmine` (the two jobs that
 upload partial Codacy coverage) and isn't required by anything else — it doesn't gate the release
 chain, it just finalizes the aggregated Codacy report once both partial uploads have completed.
 
@@ -81,21 +81,19 @@ per-line-inline-disable approach when the underlying tool supports it, falling b
 narrowly-scoped `.codacy.yml` `exclude_paths` entry (documented inline, same as above) only when
 it doesn't.
 
-### Why `build-and-release` requires the production-base release-image jobs
+### Why `build-and-release` requires `release-kerghan`
 
-`build-and-release` requires `release-production_kerghan-base` and
-`release-production_kerghan-base-arm64` (fixed by issue #17) even though its own steps
-(`scripts/deploy.sh update_deploy_branch` / `deploy`) never reference the image directly. The
-dependency exists purely to sequence the Docker Hub push ahead of the Render deploy trigger:
-`dockerfiles/production_kerghan/Dockerfile` is `FROM darthjee/production_kerghan-base:${BASE_VERSION}`
-(`-arm64` suffixed on arm64, see "Production Dockerfile base selection" below), and Render does not
-pass `BASE_VERSION`, so it builds from `:latest`. Render's build must never fire before the freshly built `production_kerghan-base:latest` has
-finished pushing — otherwise it could pull a stale image left over from a previous release. Same
-pattern already existed for `upload_fe_files`, which requires `release-vite_kerghan-base(-arm64)`
-for the equivalent reason on the frontend side.
+`build-and-release` deploys the released image to Render (#341): `scripts/deploy.sh deploy` asks
+Render to deploy `docker.io/darthjee/kerghan:<CIRCLE_TAG>` by `imageUrl`. That tag only exists once
+`release-kerghan` has pushed it, so `build-and-release` requires `release-kerghan`. Render no longer
+builds `dockerfiles/production_kerghan/Dockerfile` itself, so `build-and-release` no longer needs a
+direct dependency on `release-production_kerghan-base(-arm64)` (added by #17 when Render built from
+`:latest`): `release-kerghan` already requires those jobs to pin its base image, so the ordering
+holds transitively. It also requires `scripts_tests`, the bats suite for the deploy scripts. The
+same pattern exists for `upload_fe_files`, which requires `release-vite_kerghan-base(-arm64)`.
 
-`release` (the final atomic-swap job) does not need its own direct dependency on the
-production-base jobs — it already requires `build-and-release`, and CircleCI only starts a job
+`release` (the final atomic-swap job) does not need its own direct dependency on
+`release-kerghan` or the production-base jobs — it already requires `build-and-release`, and CircleCI only starts a job
 once everything in its `requires` list has finished successfully, so the ordering guarantee
 holds transitively.
 
@@ -121,7 +119,8 @@ workflow at all — nothing downstream depends on it being fresh.
 | `release-kerghan-standalone` | machine (`ubuntu-2204:current`, multi-arch: amd64 + arm64) | tag only | Requires `release-kerghan`. Publishes `darthjee/kerghan-standalone` online and offline via `bin/release_kerghan_standalone.sh release`; smoke-tests the offline image before moving `latest`/`latest-offline` — see below |
 | `release-kerghan-assets` | `cimg/base:stable` | tag only | Requires `release-kerghan-standalone`. Publishes the client assets (`kerghan`, `install.sh`, `config.example`, `SHA256SUMS`) to the GitHub release of the tag via `bin/release_kerghan_assets.sh release` — see below |
 | `standalone_tests` | `bats/bats:1.11.0` | every push | bats suite for the standalone client and installer (`bats standalone/test`) |
-| `build-and-release` | machine | tag only | Triggers the Render deploy of the backend (`scripts/deploy.sh`), blocks until it reports "live" |
+| `scripts_tests` | `bats/bats:1.11.0` | every push | bats suite for the Render deploy scripts (`bats scripts/test`); locally `docker-compose run --rm scripts_tests` |
+| `build-and-release` | machine | tag only | Requires `release-kerghan`. Deploys `darthjee/kerghan:<tag>` to Render by `imageUrl` (`scripts/deploy.sh deploy`), blocks until it reports "live" — see "Render deploy and rollback" |
 | `upload_proxy_files` | `darthjee/tent:1.0.3` | tag only | Uploads Tent proxy runtime to the SSH deploy host's staging dir |
 | `upload_fe_files` | `darthjee/vite_kerghan-base:0.1.0` | tag only | Builds the Vite frontend, uploads the static output to the staging dir |
 | `upload_extension` | `darthjee/tent:1.0.3` | tag only | Uploads the proxy PHP extension (test files stripped) |
@@ -155,8 +154,8 @@ for which Docker Hub credentials are actually wired up.
 The leaf images keep their `dockerfiles/` folder names but are tagged differently (#339):
 `dockerfiles/kerghan/` builds the local dev image `darthjee/dev_kerghan` (compose `base` /
 `base_build`, `make build`), and `dockerfiles/production_kerghan/` builds the production image
-`darthjee/kerghan` (compose `base_prod` / `base_prod_build`; Render builds the same Dockerfile by
-path). `darthjee/kerghan` is published to Docker Hub by `release-kerghan` (see below);
+`darthjee/kerghan` (compose `base_prod` / `base_prod_build`; Render runs the released image, see "Render deploy and
+rollback"). `darthjee/kerghan` is published to Docker Hub by `release-kerghan` (see below);
 `darthjee/dev_kerghan` is never pushed.
 
 Before #339 the dev image was tagged `darthjee/kerghan`. A developer who still has that old local
@@ -186,8 +185,52 @@ file (the `version` file only pins its base image).
 
 It requires the five test/lint jobs and `release-production_kerghan-base(-arm64)`, so the pinned
 base tags exist before the build. `release-kerghan-standalone` (#343) requires it, because the
-standalone image bundles `darthjee/kerghan:<tag>`. #341 will also make `build-and-release` depend
-on it.
+standalone image bundles `darthjee/kerghan:<tag>`. `build-and-release` requires it too, because
+Render deploys that tag (#341).
+
+### Render deploy and rollback
+
+Render runs the released `docker.io/darthjee/kerghan:<tag>` image; it never builds from git and
+never runs the standalone (Vault) image. On a semver tag, `build-and-release` runs
+`scripts/deploy.sh deploy`, which:
+
+1. skips the deploy unless HEAD is the latest tag (`checkLastVersion`);
+2. looks up the service id by `RENDER_SERVICE_NAME` (default `kerghan`);
+3. calls `POST /v1/services/{id}/deploys` with `{"imageUrl": "docker.io/darthjee/kerghan:<CIRCLE_TAG>"}`
+   (the deploy fails if the request is rejected or returns no deploy id);
+4. polls `watch_deployment` until the deploy is `live`, exiting non-zero on `build_failed`,
+   `update_failed`, `pre_deploy_failed`, `canceled`, `deactivated`, or a timeout.
+
+Deploys always use a version tag: `scripts/deploy.sh` refuses an empty tag and `latest`. The
+service's branch/source is never changed by the scripts.
+
+**Rollback** is a deploy of the previous version tag. No rebuild is needed:
+
+```bash
+RENDER_API_KEY=... scripts/deploy.sh deploy_image <previous-tag>   # e.g. deploy_image 1.0.0
+```
+
+It runs from any directory on a machine with `bash`, `curl` and `jq`, skips `checkLastVersion`, and
+blocks until the deploy is `live`. Migrations already applied by the newer image stay applied (see
+"Migrations on production boot").
+
+#### Manual Render checklist (done by hand, once)
+
+1. Wait for the first `darthjee/kerghan:<tag>` to be published by `release-kerghan`.
+2. In the Render dashboard, open the `kerghan` service: Settings → Build → Source → Existing
+   Image, and set `docker.io/darthjee/kerghan:<tag>` (public, no registry credential). Render
+   supports switching a Git-backed service to a prebuilt image in place
+   (https://render.com/changelog/change-your-services-backing-repo-or-image-in-the-render-dashboard).
+   Do this **before** the first CI image deploy: Render rejects an `imageUrl` that does not match
+   the service's configured image.
+3. Let CI deploy the next tag (or run `scripts/deploy.sh deploy_image <tag>`) and confirm the
+   service goes `live`.
+
+Nothing else moves: the service id and the `kerghan.onrender.com` hostname stay the same, so
+there is no new service, no copying of environment variables, and no change to the Tent
+`$backendHost`. Image-backed services have no auto-deploy, so every deploy is triggered by CI
+(or manually, for a rollback). The production database is external to the service, so no data
+moves.
 
 ### `release-kerghan-standalone` — the standalone image on Docker Hub
 
@@ -325,8 +368,9 @@ docker-compose run --rm circleci config process .circleci/config.yml   # expande
 
 | Script | Purpose |
 |--------|---------|
-| `scripts/deploy.sh` | Trigger and monitor a Render.com deployment (`update_deploy_branch`, `deploy`) |
+| `scripts/deploy.sh` | Deploy `darthjee/kerghan:<tag>` to Render.com and wait for `live`: `deploy` (CI, uses `CIRCLE_TAG`), `deploy_image <tag>` (rollback/manual), `watch`, `service_id` |
 | `scripts/render.sh` | Render.com API helpers (sourced by `deploy.sh`) |
+| `scripts/test/` | bats suite for `deploy.sh`/`render.sh` (stubbed `curl`), run by `scripts_tests` |
 | `scripts/bump_version.sh` | Bump the version string across the repo |
 | `scripts/wake_navi.sh` / `scripts/warm_navi_cache.sh` | Navi cache-warmer scripts — not yet wired into CircleCI, see `docs/agents/cache-warmer.md` |
 | `bin/release_kerghan.sh` | Multi-arch buildx release of `darthjee/kerghan` (`release` subcommand), used by `release-kerghan` |
