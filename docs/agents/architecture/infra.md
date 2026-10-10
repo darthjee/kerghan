@@ -10,8 +10,8 @@ equivalents — Kerghan doesn't warm the Navi cache from CI yet, see `docs/agent
 
 ## Workflow
 
-All test/lint jobs run on every push. The release chain (`build-and-release`, the `upload_*`
-jobs, and `release`) is gated to **semver tag pushes only**, via the shared `tags_only` filter
+All test/lint jobs run on every push. The release chain (`build-and-release`, `release-kerghan`,
+the `upload_*` jobs, and `release`) is gated to **semver tag pushes only**, via the shared `tags_only` filter
 (`tags: { only: /\d+\.\d+\.\d+/ }`, `branches: { ignore: /.*/ }`). The `release-image` jobs
 (the 4 base-image publishes) have no branch filter at all — CircleCI schedules them on every
 push, but `bin/image.sh`'s `skip_if_not_tag` guard makes them a fast no-op unless the push is a
@@ -35,6 +35,10 @@ backend_tests ─┬─ coverage-final   (side branch off the same jobs, not par
 jasmine ───────┘
 
 release-kerghan-base(-arm64)  — published for local/dev use; nothing in this workflow requires it
+
+backend_tests, backend_checks, jasmine, frontend-checks, proxy_extension_tests ─┐
+                              release-production_kerghan-base(-arm64) ──────────┴─ release-kerghan
+                                  (nothing requires it yet — #341 / #343 will)
 ```
 
 The five boxes feeding `build-and-release`/`upload_proxy_files`/`upload_fe_files`
@@ -83,8 +87,9 @@ it doesn't.
 `release-production_kerghan-base-arm64` (fixed by issue #17) even though its own steps
 (`scripts/deploy.sh update_deploy_branch` / `deploy`) never reference the image directly. The
 dependency exists purely to sequence the Docker Hub push ahead of the Render deploy trigger:
-`dockerfiles/production_kerghan/Dockerfile` is `FROM darthjee/production_kerghan-base:latest`,
-so Render's build must never fire before the freshly built `production_kerghan-base:latest` has
+`dockerfiles/production_kerghan/Dockerfile` is `FROM darthjee/production_kerghan-base:${BASE_VERSION}`
+(`-arm64` suffixed on arm64, see "Production Dockerfile base selection" below), and Render does not
+pass `BASE_VERSION`, so it builds from `:latest`. Render's build must never fire before the freshly built `production_kerghan-base:latest` has
 finished pushing — otherwise it could pull a stale image left over from a previous release. Same
 pattern already existed for `upload_fe_files`, which requires `release-vite_kerghan-base(-arm64)`
 for the equivalent reason on the frontend side.
@@ -112,6 +117,7 @@ workflow at all — nothing downstream depends on it being fresh.
 | `proxy_extension_tests` | `darthjee/tent-test:1.0.3` | every push | PHPUnit tests for `proxy/extension/` |
 | `coverage-final` | `darthjee/circleci_kerghan-base:0.1.0` | every push | Finalizes the aggregated Codacy coverage report once `backend_tests`/`jasmine`'s partial uploads land (best-effort, non-blocking) |
 | `release-image` | machine (multi-arch: amd64 + arm64) | every push (no-op unless tag) | Publishes one of the 4 base images to Docker Hub via `bin/image.sh`; instantiated through a single workflow `matrix` (4 images × 2 archs = 8 jobs) — see below |
+| `release-kerghan` | machine (`ubuntu-2204:current`, multi-arch: amd64 + arm64) | tag only | Builds and pushes `darthjee/kerghan:<tag>` and `:latest` as one multi-arch manifest via `bin/release_kerghan.sh release` (buildx, `docker-container` builder) — see below |
 | `build-and-release` | machine | tag only | Triggers the Render deploy of the backend (`scripts/deploy.sh`), blocks until it reports "live" |
 | `upload_proxy_files` | `darthjee/tent:1.0.3` | tag only | Uploads Tent proxy runtime to the SSH deploy host's staging dir |
 | `upload_fe_files` | `darthjee/vite_kerghan-base:0.1.0` | tag only | Builds the Vite frontend, uploads the static output to the staging dir |
@@ -132,7 +138,7 @@ step strips the leading `-` from `suffix` before calling `bin/image.sh push <ima
 |---------------|----------------|-----------|
 | `release-kerghan-base(-arm64)` | `kerghan-base` | Dev backend base image |
 | `release-circleci_kerghan-base(-arm64)` | `circleci_kerghan-base` | CI backend base image (used by `backend_tests`/`backend_checks`) |
-| `release-production_kerghan-base(-arm64)` | `production_kerghan-base` | Production backend base image (the `darthjee/kerghan` production image, built from `dockerfiles/production_kerghan/`, is `FROM` this, by `:latest`) |
+| `release-production_kerghan-base(-arm64)` | `production_kerghan-base` | Production backend base image (the `darthjee/kerghan` production image, built from `dockerfiles/production_kerghan/`, is `FROM` this — `:latest` by default, pinned to the `version` file only in `release-kerghan`; the per-arch tag is picked from `TARGETARCH`) |
 | `release-vite_kerghan-base(-arm64)` | `vite_kerghan-base` | Frontend/proxy build base image |
 
 The backend image family (`kerghan-base`, `circleci_kerghan-base`, `production_kerghan-base`)
@@ -147,7 +153,8 @@ The leaf images keep their `dockerfiles/` folder names but are tagged differentl
 `dockerfiles/kerghan/` builds the local dev image `darthjee/dev_kerghan` (compose `base` /
 `base_build`, `make build`), and `dockerfiles/production_kerghan/` builds the production image
 `darthjee/kerghan` (compose `base_prod` / `base_prod_build`; Render builds the same Dockerfile by
-path). Neither is published to Docker Hub yet.
+path). `darthjee/kerghan` is published to Docker Hub by `release-kerghan` (see below);
+`darthjee/dev_kerghan` is never pushed.
 
 Before #339 the dev image was tagged `darthjee/kerghan`. A developer who still has that old local
 tag would have `base_prod` run the stale dev image under the production tag, so remove it and
@@ -158,6 +165,37 @@ docker image rm darthjee/kerghan
 docker-compose build base_prod_build   # rebuilds darthjee/kerghan (production)
 docker-compose build base_build        # rebuilds darthjee/dev_kerghan (dev)
 ```
+
+### `release-kerghan` — the production image on Docker Hub
+
+`release-kerghan` (#340) runs `bin/release_kerghan.sh release` on semver tags. The script fails if
+`CIRCLE_TAG` is empty, reads `production_kerghan-base=<ver>` from the `version` file, sets up QEMU
+and a `docker-container` buildx builder (the default `docker` driver cannot push multi-platform
+images), logs in with `DOCKER_HUB_USERNAME`/`DOCKER_HUB_PASSWORD`, and runs one
+`docker buildx build --platform linux/amd64,linux/arm64 --build-arg BASE_VERSION=<ver> --push`
+tagged `$DOCKER_ID_USER/kerghan:<CIRCLE_TAG>` and `:latest`. It then prints
+`docker buildx imagetools inspect` so the log shows both platforms. There is no skip-if-unchanged
+guard: every release tag publishes the image.
+
+Unlike the `*-base` images, `darthjee/kerghan` is a **multi-arch manifest**: one tag serves both
+amd64 and arm64, with no `-arm64` suffix. It is versioned by the **git tag**, not by the `version`
+file (the `version` file only pins its base image).
+
+It requires the five test/lint jobs and `release-production_kerghan-base(-arm64)`, so the pinned
+base tags exist before the build. Nothing requires `release-kerghan` yet: #341 makes
+`build-and-release` depend on it, and #343 adds the standalone release after it.
+
+### Production Dockerfile base selection
+
+`darthjee/production_kerghan-base` uses a different tag per architecture (`:<ver>` for amd64,
+`:<ver>-arm64` for arm64), so `dockerfiles/production_kerghan/Dockerfile` declares one stage per
+architecture (`base-amd64`, `base-arm64`) and selects `FROM base-${TARGETARCH:-amd64} as base`.
+BuildKit fills `TARGETARCH` from the target platform and only pulls the stage it needs. The global
+`ARG TARGETARCH` deliberately has **no default**: a default would override BuildKit's automatic
+value (an arm64 build would silently pick `base-amd64`). The legacy builder leaves it empty, so the
+`:-amd64` fallback keeps it on the amd64 base. `BASE_VERSION` defaults to `latest`; only
+`release-kerghan` pins it. Note that a local `docker-compose build base_prod_build` on an arm64
+host now builds from `production_kerghan-base:latest-arm64`.
 
 ### Shared base Dockerfile
 
@@ -218,6 +256,7 @@ docker-compose run --rm circleci config process .circleci/config.yml   # expande
 | `scripts/render.sh` | Render.com API helpers (sourced by `deploy.sh`) |
 | `scripts/bump_version.sh` | Bump the version string across the repo |
 | `scripts/wake_navi.sh` / `scripts/warm_navi_cache.sh` | Navi cache-warmer scripts — not yet wired into CircleCI, see `docs/agents/cache-warmer.md` |
+| `bin/release_kerghan.sh` | Multi-arch buildx release of `darthjee/kerghan` (`release` subcommand), used by `release-kerghan` |
 | `bin/image.sh` | Builds/pushes a `release-image` instance; `skip_if_not_tag`/`skip_if_unchanged` guards, `qemu`/`push` subcommands |
 | `bin/deploy_frontend.sh` | SSH-based upload/release helpers used by `upload_proxy_files`, `upload_fe_files`, `upload_extension`, `copy_proxy_configuration`, `release` |
 

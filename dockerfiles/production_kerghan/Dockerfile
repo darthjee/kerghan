@@ -1,6 +1,11 @@
 ARG BASE_VERSION=latest
+# No default here: a default would override BuildKit's automatic TARGETARCH.
+# The legacy builder leaves it empty, so the FROM below falls back to amd64.
+ARG TARGETARCH
 FROM darthjee/scripts:0.8.0 as scripts
-FROM darthjee/production_kerghan-base:${BASE_VERSION} as base
+FROM darthjee/production_kerghan-base:${BASE_VERSION} as base-amd64
+FROM darthjee/production_kerghan-base:${BASE_VERSION}-arm64 as base-arm64
+FROM base-${TARGETARCH:-amd64} as base
 
 ######################################
 
