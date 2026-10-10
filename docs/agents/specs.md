@@ -45,7 +45,8 @@ file changes.
 
 ## Active specs
 
-none
+- **Standalone distribution** — [specs/standalone/](specs/standalone/README.md): ship Kerghan
+  as `darthjee/kerghan` (Render) and `darthjee/kerghan-standalone` (Vault). Epic #336.
 
 When no feature is in progress, this list reads "none".
 
