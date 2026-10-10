@@ -11,7 +11,7 @@ load helpers/setup
   run "$KERGHAN" up
   [ "$status" -eq 3 ]
   assert_output_contains "port is already allocated"
-  assert_output_contains "kerghan: hint: use 'kerghan up -p <port>' to pick another port"
+  assert_output_contains "kerghan: hint: use 'kerghan up -p <port>' or set port= in ~/.kerghan/config to pick another port"
   [[ "$output" != *"Kerghan is running"* ]]
 }
 
