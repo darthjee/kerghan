@@ -20,8 +20,8 @@ single container via Vault (Docker-in-Docker).
   `standalone-offline`)
 - How Vault is used — Docker-in-Docker, running under Sysbox or `--privileged`
 
-Some of these paths may not exist yet; they are created by the standalone sub-issues of epic
-#336. Your scope covers them from the moment they are added.
+Some of these paths may not exist yet; they are created by the sub-issues of epic #336 (the
+standalone distribution). Your scope covers them from the moment they are added.
 
 Do NOT touch `.circleci/config.yml` (including the standalone image's release jobs),
 `bin/image.sh`, `scripts/deploy.sh` (the Render deploy), `docker-compose.yml`, or any other
