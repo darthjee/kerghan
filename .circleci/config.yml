@@ -318,11 +318,13 @@ jobs:
   # imageUrl=docker.io/darthjee/kerghan:<tag> (the tag that triggered this workflow, published by
   # release-kerghan) and blocks (watch_deployment, in scripts/deploy.sh) until it reaches "live";
   # a failed status fails the job. The service's branch/source is never changed. Rollback is the
-  # same deploy for an older tag: `scripts/deploy.sh deploy_image <tag>`. Runs on `machine: true`
-  # since scripts/render.sh/scripts/deploy.sh only need curl/jq, already present on the machine
-  # executor.
+  # same deploy for an older tag: `scripts/deploy.sh deploy_image <tag>`. Pinned to the
+  # ubuntu-2204:current machine image (curl 7.81, jq preinstalled): scripts/render.sh uses
+  # `curl --fail-with-body`, which needs curl >= 7.76 and is unknown to the legacy default image
+  # behind `machine: true`.
   build-and-release:
-    machine: true
+    machine:
+      image: ubuntu-2204:current
     steps:
       - checkout
       - run:
