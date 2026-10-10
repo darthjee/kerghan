@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+# Test stub for openssl: `openssl rand -base64 32` prints an incrementing fake
+# key (fake-key-1, fake-key-2, ...).
+echo "openssl $*" >>"$STUB_LOG"
+counter_file="$STUB_LOG.openssl"
+n=$(($(cat "$counter_file" 2>/dev/null || echo 0) + 1))
+echo "$n" >"$counter_file"
+echo "fake-key-$n"
