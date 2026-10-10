@@ -54,10 +54,17 @@ RUN set -e; \
 
 #######################
 # Offline image: inner images preloaded from /vault/images/*.tar.
-# standalone/images/ must exist and hold the `docker save` tarballs of
-# darthjee/kerghan:<v>, mysql:9.3.0 and the matching Tent tag before building
-# this target (produced by CI).
+# standalone/images/<arch>/ (amd64, arm64) must exist and hold that
+# architecture's `docker save` tarballs of darthjee/kerghan:<v>, mysql:9.3.0
+# and the matching Tent tag before building this target. They are produced by
+# bin/release_kerghan_standalone.sh; only the folder matching TARGETARCH is
+# copied, so a multi-platform build gives each architecture its own.
 FROM standalone AS standalone-offline
 
-COPY standalone/images/ /vault/images/
+# ARGs do not carry over from the parent stage. No default: a default would
+# override BuildKit's automatic TARGETARCH; the legacy builder leaves it
+# empty, which selects amd64 below.
+ARG TARGETARCH
+
+COPY standalone/images/${TARGETARCH:-amd64}/ /vault/images/
 ENV COMPOSE_UP_ARGS="--pull never"
