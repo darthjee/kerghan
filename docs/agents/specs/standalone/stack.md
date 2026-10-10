@@ -58,8 +58,11 @@ See [docs/agents/external/vault.md](../../external/vault.md) and its pages. In s
   `KERGHAN_VERSION` (build arg, default `latest`), failing the build on an unsupported
   `TARGETARCH`.
 - **`standalone-offline`**: `FROM standalone`; adds the inner image tarballs to `/vault/images/`
-  (copied from `standalone/images/`, git-ignored, which must hold the `*.tar` files before this
-  target is built) and sets `ENV COMPOSE_UP_ARGS="--pull never"`.
+  and sets `ENV COMPOSE_UP_ARGS="--pull never"`. The tarballs are copied from
+  `standalone/images/<arch>/` (`amd64`, `arm64`; git-ignored), picked by `TARGETARCH` (`amd64`
+  when unset). Each folder must hold that architecture's `*.tar` files (`kerghan.tar`,
+  `mysql.tar`, `tent.tar`, written by `bin/release_kerghan_standalone.sh`) before this target is
+  built, so one multi-platform build gives each architecture its own tarballs.
 
 No secret is baked into either target; the per-Dockerfile ignore file
 (`dockerfiles/kerghan_standalone/Dockerfile.dockerignore`) excludes env files.
@@ -107,8 +110,12 @@ No secret is baked into either target; the per-Dockerfile ignore file
 
 - The standalone image boots with `--privileged`, waits for the stack, then checks the backend
   health endpoint (`/health.json`) and the frontend, both through Tent on port 80. Implemented by
-  `standalone/scripts/smoke_test.sh`, run locally with `make standalone-smoke` (#342); the CI job
-  running it comes with #343.
+  `standalone/scripts/smoke_test.sh`, run locally with `make standalone-smoke` (#342).
+- The release CI job (#343) runs the same smoke test against the offline image on amd64 with
+  `SMOKE_EXPECT_OFFLINE=true`, which also asserts that `COMPOSE_UP_ARGS` holds `--pull never` and
+  that the inner daemon has `darthjee/kerghan:<v>`, `mysql:9.3.0` and the `TENT_IMAGE` from
+  `/vault/.env` (the stack started from the preloaded tarballs). The arm64 offline image is
+  checked by hand.
 - Data survives a restart when the data volume is kept (covered by the same smoke test).
 - The offline variant starts with no network access, on amd64 and on arm64.
 - The image selects the Tent tag matching its architecture.
