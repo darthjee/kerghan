@@ -60,6 +60,17 @@ workflows:
               only: /\d+\.\d+\.\d+/
             branches:
               ignore: /.*/
+      # Not required by anything yet: #341 gates build-and-release on it.
+      - release-kerghan:
+          requires:
+            - backend_tests
+            - backend_checks
+            - jasmine
+            - frontend-checks
+            - proxy_extension_tests
+            - release-production_kerghan-base
+            - release-production_kerghan-base-arm64
+          filters: *tags_only
       - upload_proxy_files:
           requires: [backend_tests, backend_checks, jasmine, frontend-checks, proxy_extension_tests]
           filters: *tags_only
@@ -206,6 +217,18 @@ jobs:
           command: |
             SUFFIX='<< parameters.suffix >>'
             bin/image.sh push << parameters.image >> "${SUFFIX#-}"
+
+  # Multi-arch (amd64 + arm64) publish of the production backend image darthjee/kerghan, as one
+  # manifest under the app's semver tag and `latest` (see the "Standalone distribution" entry in
+  # docs/agents/specs.md). Pinned machine image so docker buildx is guaranteed to be available.
+  release-kerghan:
+    machine:
+      image: ubuntu-2204:current
+    steps:
+      - checkout
+      - run:
+          name: Release darthjee/kerghan
+          command: bin/release_kerghan.sh release
 
   # Deploys the backend to Render: points the service's branch at the tag that triggered this
   # workflow, triggers a deploy, and blocks (watch_deployment, in scripts/deploy.sh) until it
