@@ -67,6 +67,10 @@ make tests
 
 # Run TypeORM migrations
 make setup
+
+# Build the standalone (Vault) image / run its smoke test (needs --privileged Docker)
+make build-standalone
+make standalone-smoke
 ```
 
 Backend runs on port `3030`, frontend dev server on `3010`, full stack proxy on `3000`.

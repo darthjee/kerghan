@@ -1,4 +1,4 @@
-.PHONY: build-base push-base build build-fe-base push-fe-base build-fe push-fe build-circleci-base push-circleci-base build-production-base push-production-base dev dev-up setup tests integrations-keys-status integrations-keys-reencrypt
+.PHONY: build-base push-base build build-fe-base push-fe-base build-fe push-fe build-circleci-base push-circleci-base build-production-base push-production-base dev dev-up setup tests integrations-keys-status integrations-keys-reencrypt build-standalone standalone-smoke
 
 PROJECT?=kerghan
 DOCKER_ID_USER?=darthjee
@@ -7,6 +7,9 @@ BASE_VERSION?=0.1.0
 FE_IMAGE?=$(DOCKER_ID_USER)/vite_$(PROJECT)
 DOCKER_FILE=dockerfiles/$(PROJECT)/Dockerfile
 DOCKER_FILE_FE=dockerfiles/vite_$(PROJECT)/Dockerfile
+STANDALONE_IMAGE?=$(DOCKER_ID_USER)/$(PROJECT)-standalone:dev
+KERGHAN_VERSION?=latest
+DOCKER_FILE_STANDALONE=dockerfiles/$(PROJECT)_standalone/Dockerfile
 
 # ── Base images ────────────────────────────────────────────────────────────────
 
@@ -54,6 +57,15 @@ push-fe:
 	make build-fe
 	docker push $(FE_IMAGE)
 	docker push $(FE_IMAGE):$(BASE_VERSION)
+
+# ── Standalone ───────────────────────────────────────────────────────────────
+# standalone-smoke needs --privileged support on the host Docker; its CI job lands in #343.
+
+build-standalone:
+	DOCKER_BUILDKIT=1 docker build -f $(DOCKER_FILE_STANDALONE) --target standalone --build-arg KERGHAN_VERSION=$(KERGHAN_VERSION) -t $(STANDALONE_IMAGE) .
+
+standalone-smoke:
+	IMAGE=$(STANDALONE_IMAGE) KERGHAN_VERSION=$(KERGHAN_VERSION) standalone/scripts/smoke_test.sh
 
 # ── Development ───────────────────────────────────────────────────────────────
 
