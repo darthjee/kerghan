@@ -21,13 +21,23 @@ See [docs/agents/external/vault.md](../../external/vault.md) and its pages. In s
 | Service | Image | Notes |
 |---|---|---|
 | `mysql` | `mysql:9.3.0` | Internal only, never published. Healthcheck. Data in an inner named volume (inside `/var/lib/docker`). |
-| `kerghan` | `darthjee/kerghan:<v>` | Runs migrations on boot. `depends_on: { mysql: { condition: service_healthy } }`. `restart: unless-stopped`. Environment per [variables.md](variables.md). |
-| `tent` | `${TENT_IMAGE}` (stock `darthjee/tent`) | No custom proxy image. Tent standalone configuration and the built frontend come from `/vault/tent/`, bind-mounted. `$backendHost=http://kerghan:<PORT>`. Published on Vault port 80. `restart: unless-stopped`. |
+| `kerghan` | `darthjee/kerghan:${KERGHAN_VERSION}` (`<v>`, from `/vault/.env`) | Runs migrations on boot. `depends_on: { mysql: { condition: service_healthy } }`. `restart: unless-stopped`. Environment per [variables.md](variables.md). |
+| `tent` | `${TENT_IMAGE}` (stock `darthjee/tent`) | No custom proxy image. Tent standalone configuration (`/vault/tent/configuration/`), the built frontend (`/vault/tent/static/`) and Kerghan's Tent extension (`/vault/tent/extension/`) come from `/vault/tent/`, bind-mounted read-only. `$backendHost=http://kerghan:3000/`. Published on Vault port 80. `restart: unless-stopped`. |
 
 - The Tent standalone configuration routes `*.json` to the backend and serves the frontend's
   static files otherwise, like production, with no Navi and no `/admin`.
-- The built frontend is produced at image build time and lands under `/vault/tent/`. How the
-  build stage is written is left to #342's plan.
+- The Tent standalone configuration lives in `standalone/vault/tent/configuration/`. It mirrors
+  `proxy/prod_configuration/` (same rules, middlewares and CSP) and must be kept in sync with it;
+  only its committed `locals.php` (no secrets) differs.
+- The production rules use Kerghan's custom Tent middlewares (`SetClientIpMiddleware`,
+  `CacheControlMiddleware`, `SetResponseHeadersMiddleware`), which the stock Tent image does not
+  ship. The Dockerfile therefore copies the runtime part of `proxy/extension/` (`loader.php` and
+  `lib/`, no tests) to `/vault/tent/extension/`, mounted at `/var/www/html/extension`. No copy is
+  committed under `standalone/`, so the extension never drifts from `proxy/`.
+- The built frontend is produced at image build time by a `frontend` stage
+  (`FROM --platform=$BUILDPLATFORM darthjee/vite_kerghan-base:0.1.0`, `yarn build`) and lands in
+  `/vault/tent/static/` (`standalone/vault/tent/static/` is git-ignored). That base tag is
+  amd64-only, so an arm64 build host runs the stage under emulation.
 
 ## Multi-arch Tent
 
@@ -44,11 +54,15 @@ See [docs/agents/external/vault.md](../../external/vault.md) and its pages. In s
 `dockerfiles/kerghan_standalone/Dockerfile`, one file, two targets:
 
 - **`standalone`**: `FROM darthjee/vault:0.1.0`; copies `standalone/vault/` (with the built
-  frontend) to `/vault`; writes `/vault/.env` as above.
+  frontend) to `/vault`; writes `/vault/.env` with `TENT_IMAGE` (as above) and
+  `KERGHAN_VERSION` (build arg, default `latest`), failing the build on an unsupported
+  `TARGETARCH`.
 - **`standalone-offline`**: `FROM standalone`; adds the inner image tarballs to `/vault/images/`
-  and sets `ENV COMPOSE_UP_ARGS="--pull never"`.
+  (copied from `standalone/images/`, git-ignored, which must hold the `*.tar` files before this
+  target is built) and sets `ENV COMPOSE_UP_ARGS="--pull never"`.
 
-No secret is baked into either target; `.dockerignore` excludes env files.
+No secret is baked into either target; the per-Dockerfile ignore file
+(`dockerfiles/kerghan_standalone/Dockerfile.dockerignore`) excludes env files.
 
 ## Offline preload
 
@@ -91,9 +105,11 @@ No secret is baked into either target; `.dockerignore` excludes env files.
 
 ## Required tests
 
-- CI boots the standalone image with `--privileged`, waits for the stack, then checks the backend
-  health endpoint (`/health.json`) and the frontend, both through Tent on port 80.
-- Data survives a restart when the data volume is kept.
+- The standalone image boots with `--privileged`, waits for the stack, then checks the backend
+  health endpoint (`/health.json`) and the frontend, both through Tent on port 80. Implemented by
+  `standalone/scripts/smoke_test.sh`, run locally with `make standalone-smoke` (#342); the CI job
+  running it comes with #343.
+- Data survives a restart when the data volume is kept (covered by the same smoke test).
 - The offline variant starts with no network access, on amd64 and on arm64.
 - The image selects the Tent tag matching its architecture.
 - No secret or env file is present in either image.

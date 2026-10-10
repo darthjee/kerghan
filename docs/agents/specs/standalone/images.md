@@ -73,8 +73,9 @@ Tent manifest upstream is an optional follow-up, outside this epic.
 
 - On a semver tag, every tag in the table above exists on Docker Hub, and
   `docker manifest inspect` shows amd64 and arm64 for each.
-- `darthjee/kerghan-standalone:<v>` (both variants) references `darthjee/kerghan:<v>` in its inner
-  compose file.
+- `darthjee/kerghan-standalone:<v>` (both variants) references `darthjee/kerghan:<v>`: its
+  `/vault/.env` holds `KERGHAN_VERSION=<v>` (read by the inner compose file's
+  `image: darthjee/kerghan:${KERGHAN_VERSION}`).
 - After the rename, the dev and production compose services still build, with the new tags, and
   no reference to `darthjee/production_kerghan` or to `darthjee/kerghan` as a dev image remains.
 - The CI workflow encodes the job order above (`release-kerghan` before the standalone release and
