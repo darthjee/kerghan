@@ -27,6 +27,10 @@ The allowlist is written out by name in the inner compose file; the wildcard not
 shorthand for the variables of that family listed in `environment-variables.md`. A variable
 added to the backend later is not passed through until it is added to the allowlist.
 
+The `KERGHAN_*_TTL_MS` family also includes `KERGHAN_PASSWORD_RESET_TOKEN_TTL_MS`, which the
+backend reads but `environment-variables.md` does not list yet. `KERGHAN_TRUSTED_PROXY_HOPS` is
+not passed through: its default (`1`) matches the single Tent hop of the stack.
+
 ## FRONTEND_BASE_URL
 
 - The `kerghan` client passes `FRONTEND_BASE_URL=http://localhost:<port>` by default, unless

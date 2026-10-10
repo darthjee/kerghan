@@ -42,3 +42,9 @@ Thumbs.db
 .claude/state
 proxy/extension/.phpunit.result.cache
 proxy/extension/vendor
+
+# Standalone stack: filled / written by the standalone image build
+standalone/vault/tent/static/
+standalone/vault/tent/extension/
+standalone/vault/.env
+standalone/images/
