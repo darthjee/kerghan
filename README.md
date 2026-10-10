@@ -66,9 +66,78 @@ kerghan/
 ├── dockerfiles/          # Dockerfiles for each service
 ├── docker_volumes/       # Bind-mounted volumes (static assets, proxy cache)
 ├── navi/                 # Navi cache-warmer configuration
+├── standalone/           # Standalone distribution: inner stack, kerghan client, installer
 ├── docs/                 # Project documentation
 └── docker-compose.yml    # Full stack service definitions
 ```
+
+## Run Kerghan standalone
+
+Kerghan also ships as one container that runs the whole stack (MySQL, the backend and the
+frontend), for self-hosting and local use. The `kerghan` client starts and manages it.
+
+**Requirements:** Linux or macOS, and Docker with the [Sysbox](https://github.com/nestybox/sysbox)
+runtime or `--privileged` containers allowed.
+
+### Install
+
+```bash
+curl -fsSL https://github.com/darthjee/kerghan/releases/latest/download/install.sh | bash
+```
+
+This installs the `kerghan` client into `~/.local/bin` (set `KERGHAN_INSTALL_DIR` to change it,
+`KERGHAN_VERSION` to pick a release), and the `vault` CLI it relies on when it is missing. It
+never uses `sudo`. To verify the downloads against the release's `SHA256SUMS`, see
+[docs/agents/standalone.md](docs/agents/standalone.md#verifying-the-release-assets).
+
+### Run
+
+```bash
+kerghan up              # starts Kerghan on http://localhost:3000
+kerghan up -p 8080      # on another port
+kerghan up --offline    # with the offline image
+```
+
+The other commands are `kerghan down` (stop; data is kept), `kerghan logs [-f]`,
+`kerghan status`, `kerghan compose <args>` and `kerghan reset` (wipe all data, after a
+confirmation). Run `kerghan help` for the full list.
+
+### Upgrade
+
+Run the installer again, then `kerghan up`: the instance is recreated with the new image, the
+data is kept, and the database migrations run on boot. Downgrades are not supported.
+
+### Online and offline images
+
+- `darthjee/kerghan-standalone:<version>` (online) pulls its inner images on the first start.
+- `darthjee/kerghan-standalone:<version>-offline` ships them preloaded: use it on hosts without
+  access to Docker Hub. It is larger and starts more slowly.
+
+The client picks the image for you. If you run the image with plain `docker run` instead, you
+must pass `--privileged` (or the Sysbox runtime), the required secrets (`KERGHAN_SECRET_KEY`,
+`KERGHAN_INTEGRATIONS_KEY`) and `FRONTEND_BASE_URL` yourself.
+
+### Configuration (`~/.kerghan/`)
+
+| File | Content |
+|---|---|
+| `~/.kerghan/config` | Optional client settings: `port`, `variant`, `runtime`, `stop-timeout`, `image-tag`. Copy `config.example` from the release assets to start. |
+| `~/.kerghan/kerghan.env` | Secrets generated on the first `kerghan up`, plus any backend variables you add (see [Standalone variables](docs/agents/environment-variables.md#5-standalone-darthjeekerghan-standalone)). |
+
+### Caveats
+
+See [Caveats](docs/agents/standalone.md#caveats) for the details of each one.
+
+- **HTTPS:** plain HTTP works only on `localhost`. Anywhere else, put a TLS reverse proxy in
+  front, otherwise login fails.
+- **Back up `~/.kerghan/kerghan.env`:** losing it logs everyone out and makes stored integration
+  credentials unreadable.
+- **MySQL password:** fixed when the data volume is created.
+- **Disk usage:** older inner images pile up after upgrades; prune them by hand.
+- **No downgrades**, and **one instance per host**.
+- **Demo user:** standalone databases contain the `demo` user.
+
+See [docs/agents/standalone.md](docs/agents/standalone.md) for the full reference.
 
 ## Development Setup
 

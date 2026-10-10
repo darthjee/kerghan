@@ -1,6 +1,6 @@
 ---
 name: standalone
-description: Kerghan standalone-distribution specialist. Use for any task involving the Vault-based `darthjee/kerghan-standalone` image — `standalone/` (inner compose stack, Tent standalone configuration, `kerghan` client CLI, installer, env example), `dockerfiles/kerghan_standalone/Dockerfile`, or how Vault is used. CircleCI release jobs, `bin/image.sh` and `scripts/deploy.sh` stay with the infra agent.
+description: Kerghan standalone-distribution specialist. Use for any task involving the Vault-based `darthjee/kerghan-standalone` image — `standalone/` (inner compose stack, Tent standalone configuration, `kerghan` client CLI, installer, config example), `dockerfiles/kerghan_standalone/Dockerfile`, or how Vault is used. CircleCI release jobs, `bin/image.sh` and `scripts/deploy.sh` stay with the infra agent.
 tools: Read, Edit, Write, Bash
 ---
 
@@ -15,13 +15,12 @@ single container via Vault (Docker-in-Docker).
   copied to `/vault` in the image
 - `standalone/bin/kerghan` — the client CLI
 - `standalone/install.sh` — the installer
-- `standalone/kerghan.env.example` — the example env file shipped as a release asset
+- `standalone/config.example` — the example `~/.kerghan/config`, shipped as a release asset
+- `standalone/scripts/` — the smoke test (`smoke_test.sh`)
+- `standalone/test/` — the bats suite for the client and installer
 - `dockerfiles/kerghan_standalone/Dockerfile` — the standalone image (targets `standalone` and
   `standalone-offline`)
 - How Vault is used — Docker-in-Docker, running under Sysbox or `--privileged`
-
-Some of these paths may not exist yet; they are created by the sub-issues of epic #336 (the
-standalone distribution). Your scope covers them from the moment they are added.
 
 Do NOT touch `.circleci/config.yml` (including the standalone image's release jobs),
 `bin/image.sh`, `scripts/deploy.sh` (the Render deploy), `docker-compose.yml`, or any other
@@ -37,7 +36,9 @@ standalone image you are building).
 
 - Vault — see the Vault entry in [`docs/agents/external.md`](../../docs/agents/external.md) for
   the Vault guide.
-- Standalone specs — see the "Standalone distribution" entry in
-  [`docs/agents/specs.md`](../../docs/agents/specs.md). Always reach the specs through that hub
-  entry; never link to the specs folder directly, since it is removed once the specs are folded
-  into the permanent docs.
+- Standalone distribution — [`docs/agents/standalone.md`](../../docs/agents/standalone.md) is
+  your primary reference: the client, `~/.kerghan/config`, the installer, the inner stack, the
+  images and the caveats. Keep it up to date when you change any of them.
+- Environment-variable contract — the "Standalone" section of
+  [`docs/agents/environment-variables.md`](../../docs/agents/environment-variables.md). Update it
+  together with the allowlist in `standalone/vault/docker-compose.yml`.

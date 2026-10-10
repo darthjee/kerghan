@@ -11,7 +11,7 @@ equivalents — Kerghan doesn't warm the Navi cache from CI yet, see `docs/agent
 ## Workflow
 
 All test/lint jobs run on every push. The release chain (`build-and-release`, `release-kerghan`,
-`release-kerghan-standalone`, the `upload_*` jobs, and `release`) is gated to **semver tag pushes only**, via the shared `tags_only` filter
+`release-kerghan-standalone`, `release-kerghan-assets`, the `upload_*` jobs, and `release`) is gated to **semver tag pushes only**, via the shared `tags_only` filter
 (`tags: { only: /\d+\.\d+\.\d+/ }`, `branches: { ignore: /.*/ }`). The `release-image` jobs
 (the 4 base-image publishes) have no branch filter at all — CircleCI schedules them on every
 push, but `bin/image.sh`'s `skip_if_not_tag` guard makes them a fast no-op unless the push is a
@@ -37,7 +37,7 @@ jasmine ───────┘
 release-kerghan-base(-arm64)  — published for local/dev use; nothing in this workflow requires it
 
 backend_tests, backend_checks, jasmine, frontend-checks, proxy_extension_tests ─┐
-                              release-production_kerghan-base(-arm64) ──────────┴─ release-kerghan ─ release-kerghan-standalone
+                              release-production_kerghan-base(-arm64) ──────────┴─ release-kerghan ─ release-kerghan-standalone ─ release-kerghan-assets
                                   (build-and-release does not require release-kerghan yet — #341 will)
 ```
 
@@ -119,6 +119,8 @@ workflow at all — nothing downstream depends on it being fresh.
 | `release-image` | machine (multi-arch: amd64 + arm64) | every push (no-op unless tag) | Publishes one of the 4 base images to Docker Hub via `bin/image.sh`; instantiated through a single workflow `matrix` (4 images × 2 archs = 8 jobs) — see below |
 | `release-kerghan` | machine (`ubuntu-2204:current`, multi-arch: amd64 + arm64) | tag only | Builds and pushes `darthjee/kerghan:<tag>` and `:latest` as one multi-arch manifest via `bin/release_kerghan.sh release` (buildx, `docker-container` builder) — see below |
 | `release-kerghan-standalone` | machine (`ubuntu-2204:current`, multi-arch: amd64 + arm64) | tag only | Requires `release-kerghan`. Publishes `darthjee/kerghan-standalone` online and offline via `bin/release_kerghan_standalone.sh release`; smoke-tests the offline image before moving `latest`/`latest-offline` — see below |
+| `release-kerghan-assets` | `cimg/base:stable` | tag only | Requires `release-kerghan-standalone`. Publishes the client assets (`kerghan`, `install.sh`, `config.example`, `SHA256SUMS`) to the GitHub release of the tag via `bin/release_kerghan_assets.sh release` — see below |
+| `standalone_tests` | `bats/bats:1.11.0` | every push | bats suite for the standalone client and installer (`bats standalone/test`) |
 | `build-and-release` | machine | tag only | Triggers the Render deploy of the backend (`scripts/deploy.sh`), blocks until it reports "live" |
 | `upload_proxy_files` | `darthjee/tent:1.0.3` | tag only | Uploads Tent proxy runtime to the SSH deploy host's staging dir |
 | `upload_fe_files` | `darthjee/vite_kerghan-base:0.1.0` | tag only | Builds the Vite frontend, uploads the static output to the staging dir |
@@ -190,7 +192,8 @@ on it.
 ### `release-kerghan-standalone` — the standalone image on Docker Hub
 
 `release-kerghan-standalone` (#343) runs `bin/release_kerghan_standalone.sh release` on semver
-tags, after `release-kerghan`. It uses the same Docker Hub env vars (`DOCKER_ID_USER`,
+tags, after `release-kerghan`. What the image contains is described in
+[../standalone.md](../standalone.md). It uses the same Docker Hub env vars (`DOCKER_ID_USER`,
 `DOCKER_HUB_USERNAME`, `DOCKER_HUB_PASSWORD`) and the same QEMU + `docker-container` buildx setup.
 It publishes four tags of `$DOCKER_ID_USER/kerghan-standalone`, all multi-arch manifests
 (amd64 + arm64):
@@ -224,6 +227,36 @@ Both targets come from `dockerfiles/kerghan_standalone/Dockerfile`, built with
 The versioned tags are pushed before the smoke test, because a multi-arch manifest must be
 pushed before it can be pulled. If the smoke test fails, `<tag>` and `<tag>-offline` stay
 published and `latest` / `latest-offline` are not moved.
+
+### `release-kerghan-assets` — client assets on the GitHub release
+
+`release-kerghan-assets` runs `bin/release_kerghan_assets.sh release` on semver tags, after
+`release-kerghan-standalone`, so the image the client pins is already published when the client
+ships. It runs on `cimg/base:stable` and installs `gh` from the pinned release tarball
+(`GH_VERSION`), checked against `GH_SHA256` before it is extracted. `gh` authenticates with the
+`GITHUB_TOKEN` project variable (see `docs/agents/environment-variables.md`).
+
+The script:
+
+1. Fails when `CIRCLE_TAG` or `GITHUB_TOKEN` is empty, and when `standalone/bin/kerghan` or
+   `standalone/install.sh` does not pin `KERGHAN_VERSION="<tag>"` (both are stamped by
+   `scripts/bump_version.sh`), so a release never ships a client that runs another image version.
+2. Stages the assets and writes `SHA256SUMS` (bare basenames, checked right away):
+
+   | Asset | Source |
+   |-------|--------|
+   | `kerghan` | `standalone/bin/kerghan`, pinned to the tag's image |
+   | `install.sh` | `standalone/install.sh` |
+   | `config.example` | `standalone/config.example` |
+   | `SHA256SUMS` | SHA-256 of the three files above |
+
+3. Creates the GitHub release of the tag when it does not exist yet (`gh release create
+   --verify-tag`; a release created concurrently is fine).
+4. Uploads the assets with `gh release upload --clobber`, so a rerun replaces them.
+
+The installer one-liner downloads `install.sh` from `releases/latest/download/`, which then
+downloads `kerghan` from the same release. How users verify the assets with `SHA256SUMS`, and
+what the images contain, is in [../standalone.md](../standalone.md).
 
 ### Production Dockerfile base selection
 
@@ -298,6 +331,7 @@ docker-compose run --rm circleci config process .circleci/config.yml   # expande
 | `scripts/wake_navi.sh` / `scripts/warm_navi_cache.sh` | Navi cache-warmer scripts — not yet wired into CircleCI, see `docs/agents/cache-warmer.md` |
 | `bin/release_kerghan.sh` | Multi-arch buildx release of `darthjee/kerghan` (`release` subcommand), used by `release-kerghan` |
 | `bin/release_kerghan_standalone.sh` | Multi-arch release of `darthjee/kerghan-standalone` online and offline (`release` subcommand): saves per-arch inner tarballs, pushes `<tag>`/`<tag>-offline`, smoke-tests, then promotes `latest`/`latest-offline`. Used by `release-kerghan-standalone` |
+| `bin/release_kerghan_assets.sh` | Publishes the `kerghan` client, `install.sh`, `config.example` and `SHA256SUMS` to the GitHub release of the tag (`release` subcommand), after checking the client and installer pin the tag. Used by `release-kerghan-assets` |
 | `bin/image.sh` | Builds/pushes a `release-image` instance; `skip_if_not_tag`/`skip_if_unchanged` guards, `qemu`/`push` subcommands |
 | `bin/deploy_frontend.sh` | SSH-based upload/release helpers used by `upload_proxy_files`, `upload_fe_files`, `upload_extension`, `copy_proxy_configuration`, `release` |
 
