@@ -49,7 +49,8 @@ Uploaded to the GitHub release of each semver tag by a CircleCI job (`gh release
 | `kerghan` | The client, with its image version pinned to the release tag. |
 | `install.sh` | The installer. |
 | `kerghan.env.example` | The example env file (see [variables.md](variables.md#shipped-documentation)). |
-| `SHA256SUMS` | SHA-256 checksums of the three files above. |
+| `config.example` | The commented example of `~/.kerghan/config`, from `standalone/config.example` (see [config.md](config.md#example)). |
+| `SHA256SUMS` | SHA-256 checksums of the four files above. |
 
 Verification, documented for users: download the assets and run `sha256sum -c SHA256SUMS`
 (Linux) or `shasum -a 256 -c SHA256SUMS` (macOS).

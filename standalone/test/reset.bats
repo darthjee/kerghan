@@ -38,7 +38,7 @@ load helpers/setup
   export STUB_VOLUME_EXISTS=1
   run "$KERGHAN" reset <<<"y"
   [ "$status" -eq 0 ]
-  [ "$(grep -E '^(vault|docker volume rm)' "$STUB_LOG" | sed -n 1p)" = "vault down --name kerghan" ]
+  [ "$(grep -E '^(vault|docker volume rm)' "$STUB_LOG" | sed -n 1p)" = "vault down --name kerghan --stop-timeout 60" ]
   [ "$(grep -E '^(vault|docker volume rm)' "$STUB_LOG" | sed -n 2p)" = "docker volume rm vault-kerghan-data" ]
   [ "$(cat "$ENV_FILE")" = "$before" ]
   assert_output_contains "Removed volume vault-kerghan-data."
@@ -54,7 +54,7 @@ load helpers/setup
 @test "reset tolerates a missing volume" {
   run "$KERGHAN" reset <<<"y"
   [ "$status" -eq 0 ]
-  assert_logged "vault down --name kerghan"
+  assert_logged "vault down --name kerghan --stop-timeout 60"
   refute_logged_prefix "docker volume rm"
   assert_output_contains "does not exist"
 }

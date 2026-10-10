@@ -1,0 +1,42 @@
+# Example settings for the kerghan client.
+#
+# Copy this file to ~/.kerghan/config and uncomment the settings you want to
+# change. The file is optional; every setting has a default.
+#
+# Format: one key=value per line. Blank lines and # comments (whole line or
+# trailing) are ignored, and surrounding whitespace is trimmed. An empty value
+# uses the default. Unknown keys only print a warning; a line without "=" or an
+# invalid value makes up, down and reset fail with the line number, without
+# touching the instance.
+#
+# Precedence: command-line flag, then this file, then the default.
+#
+# A changed port, variant or image-tag recreates the instance on the next
+# `kerghan up` (the data volume is kept). A changed runtime or stop-timeout
+# applies the next time the container is created; run
+# `kerghan down && kerghan up` to apply it now.
+
+# Host port Kerghan is served on (http://localhost:<port>). 1-65535.
+# Overridden by `kerghan up -p PORT`.
+#port=3000
+
+# Image variant: online | offline. The offline variant ships its inner images
+# preloaded. `kerghan up --offline` selects offline even when this is online.
+#variant=online
+
+# How Vault runs the Docker-in-Docker container: auto | sysbox | privileged.
+# auto uses Sysbox when it is installed and falls back to --privileged.
+#runtime=auto
+
+# Seconds to wait for a graceful stop before the container is killed, on
+# `kerghan up` (applied when the container is created), `down` and `reset`.
+# A positive integer.
+#stop-timeout=60
+
+# Override of the image tag pinned in this kerghan release. Replaces only the
+# version part: the -offline suffix is still added for the offline variant
+# (image-tag=0.4.0 with --offline runs darthjee/kerghan-standalone:0.4.0-offline).
+# With an x.y.z tag the usual upgrade rules and downgrade guard apply against
+# it; with any other tag (e.g. latest) `up` only checks that the running image
+# and port match. Leave empty to use the pinned tag.
+#image-tag=

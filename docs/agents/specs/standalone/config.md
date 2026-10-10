@@ -26,15 +26,47 @@ stop-timeout=60
 image-tag=            # optional override of the pinned image tag
 ```
 
-| Key | Values | Default | Overridden by |
-|---|---|---|---|
-| `port` | 1–65535 | `3000` | `-p PORT` |
-| `variant` | `online` \| `offline` | `online` | `--offline` |
-| `runtime` | `auto` \| `sysbox` \| `privileged` | `auto` | none |
-| `stop-timeout` | seconds, positive integer | `60` | none |
-| `image-tag` | an image tag, or empty | the tag pinned in the script | none |
+| Key | Values | Default | Overridden by | Passed to Vault as |
+|---|---|---|---|---|
+| `port` | 1–65535 | `3000` | `-p PORT` | `-p <port>:80` (and `FRONTEND_BASE_URL`) |
+| `variant` | `online` \| `offline` | `online` | `--offline` | the `-offline` image suffix |
+| `runtime` | `auto` \| `sysbox` \| `privileged` | `auto` | none | `--runtime` on `up` |
+| `stop-timeout` | seconds, positive integer | `60` | none | `--stop-timeout` on `up` and every `down` |
+| `image-tag` | an image tag, or empty | the tag pinned in the script | none | the image tag |
 
 An empty value means "use the default".
+
+`image-tag` must be a valid Docker tag (`[A-Za-z0-9_.-]`, not starting with `.` or `-`, at most
+128 characters) and must not end in `-offline`: the variant adds that suffix.
+
+## Which commands read it
+
+Only `up`, `down` and `reset` load the file, before any side effect (in `reset`, before the
+confirmation prompt). `version`, `help`, `logs`, `status` and `compose` never read it, so a broken
+config does not block them.
+
+## `image-tag`
+
+- It replaces only the version part of the tag; the `-offline` suffix is still appended for the
+  offline variant (`image-tag=0.4.0` with `--offline` runs
+  `darthjee/kerghan-standalone:0.4.0-offline`).
+- When the resolved tag is `x.y.z` semver, `up`'s upgrade/downgrade rules (see
+  [client.md](client.md#upgrade-and-downgrade)) apply against it instead of the pinned version.
+- When it is not semver (e.g. `latest`), the version compare and the downgrade guard are skipped:
+  `up` is a no-op when the running image reference and port match, and recreates otherwise.
+
+## Recreation on `up`
+
+Only the effective image (version tag and variant) and port drive `up`'s no-op / recreate
+decision, resolved from flags, the config and the defaults. A changed `runtime` or
+`stop-timeout` does not trigger recreation; it takes effect the next time the container is
+created (`kerghan down && kerghan up` applies it now).
+
+## Example
+
+`standalone/config.example` is a commented example with every key, its default, its allowed
+values and the flag that overrides it. It ships as a release asset (see
+[installer.md](installer.md#release-assets)); users copy it to `~/.kerghan/config`.
 
 ## Precedence
 
@@ -64,3 +96,6 @@ e.g. run in a container, adding a pull and latency). Reconsider only if nesting 
 - Comments, blank lines and whitespace are ignored.
 - Malformed lines and invalid values fail with the line number; unknown keys warn and continue.
 - `--offline` overrides `variant=online`, and `variant=offline` applies without the flag.
+- `runtime` / `stop-timeout` reach `vault` (`--runtime` on `up`, `--stop-timeout` on `up`,
+  `down`, the recreate `down` and `reset`).
+- `image-tag`: semver and non-semver tags, with both variants.

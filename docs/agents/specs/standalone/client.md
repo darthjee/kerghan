@@ -28,15 +28,21 @@ kerghan version | help
 ## Mapping to `vault`
 
 ```
-vault <cmd> --name kerghan --image darthjee/kerghan-standalone:<version>[-offline] \
-  --env-file ~/.kerghan/kerghan.env -p <port>:80
+vault up --name kerghan --image darthjee/kerghan-standalone:<version>[-offline] \
+  --env-file ~/.kerghan/kerghan.env -p <port>:80 [-e FRONTEND_BASE_URL=http://localhost:<port>] \
+  --runtime <runtime> --stop-timeout <seconds> [-f]
+vault down --name kerghan --stop-timeout <seconds>
+vault logs|status|compose --name kerghan ...
 ```
 
 - This yields container `vault-kerghan` and data volume `vault-kerghan-data`.
 - `<version>` is pinned in the script at release time, so CLI `<v>` always runs image `<v>`
   (overridable with `image-tag`, see [config.md](config.md)).
 - The online and offline variants share the same instance name and data volume.
-- The runtime (`sysbox` / `privileged` / `auto`) and stop timeout come from [config.md](config.md).
+- The runtime (`sysbox` / `privileged` / `auto`) and stop timeout come from [config.md](config.md)
+  (defaults `auto` and `60`). Both are always passed explicitly: `--runtime` and
+  `--stop-timeout` on `up`, and `--stop-timeout` on every `down` (`kerghan down`, the `down`
+  before a recreate, and `reset`).
 
 ## Secrets
 
@@ -70,8 +76,8 @@ vault <cmd> --name kerghan --image darthjee/kerghan-standalone:<version>[-offlin
 
 ## Other behavior
 
-- **Port in use:** surface Vault's error with a hint to use `-p <port>` or set `port=` in
-  `~/.kerghan/config`.
+- **Port in use:** surface Vault's error with the hint
+  `use 'kerghan up -p <port>' or set port= in ~/.kerghan/config to pick another port`.
 - **One instance per host:** the instance name `kerghan` is fixed. Accepted and documented.
 - **`reset`:** asks for confirmation (default no), then stops the instance and removes
   `vault-kerghan-data`. It leaves `kerghan.env` in place.

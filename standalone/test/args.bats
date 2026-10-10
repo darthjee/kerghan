@@ -9,7 +9,7 @@ IMAGE="darthjee/kerghan-standalone:0.5.0"
   write_env_file
   run "$KERGHAN" up
   [ "$status" -eq 0 ]
-  assert_logged "vault up --name kerghan --image $IMAGE --env-file $ENV_FILE -p 3000:80 -e FRONTEND_BASE_URL=http://localhost:3000"
+  assert_logged "vault up --name kerghan --image $IMAGE --env-file $ENV_FILE -p 3000:80 -e FRONTEND_BASE_URL=http://localhost:3000 --runtime auto --stop-timeout 60"
   assert_output_contains "Kerghan is running at http://localhost:3000"
 }
 
@@ -17,28 +17,28 @@ IMAGE="darthjee/kerghan-standalone:0.5.0"
   write_env_file
   run "$KERGHAN" up --offline
   [ "$status" -eq 0 ]
-  assert_logged "vault up --name kerghan --image $IMAGE-offline --env-file $ENV_FILE -p 3000:80 -e FRONTEND_BASE_URL=http://localhost:3000"
+  assert_logged "vault up --name kerghan --image $IMAGE-offline --env-file $ENV_FILE -p 3000:80 -e FRONTEND_BASE_URL=http://localhost:3000 --runtime auto --stop-timeout 60"
 }
 
 @test "up -p 8080 publishes the custom port" {
   write_env_file
   run "$KERGHAN" up -p 8080
   [ "$status" -eq 0 ]
-  assert_logged "vault up --name kerghan --image $IMAGE --env-file $ENV_FILE -p 8080:80 -e FRONTEND_BASE_URL=http://localhost:8080"
+  assert_logged "vault up --name kerghan --image $IMAGE --env-file $ENV_FILE -p 8080:80 -e FRONTEND_BASE_URL=http://localhost:8080 --runtime auto --stop-timeout 60"
 }
 
 @test "up --port and --offline combine" {
   write_env_file
   run "$KERGHAN" up --offline --port 4000
   [ "$status" -eq 0 ]
-  assert_logged "vault up --name kerghan --image $IMAGE-offline --env-file $ENV_FILE -p 4000:80 -e FRONTEND_BASE_URL=http://localhost:4000"
+  assert_logged "vault up --name kerghan --image $IMAGE-offline --env-file $ENV_FILE -p 4000:80 -e FRONTEND_BASE_URL=http://localhost:4000 --runtime auto --stop-timeout 60"
 }
 
 @test "up -f runs vault in the foreground" {
   write_env_file
   run "$KERGHAN" up -f
   [ "$status" -eq 0 ]
-  assert_logged "vault up --name kerghan --image $IMAGE --env-file $ENV_FILE -p 3000:80 -e FRONTEND_BASE_URL=http://localhost:3000 -f"
+  assert_logged "vault up --name kerghan --image $IMAGE --env-file $ENV_FILE -p 3000:80 -e FRONTEND_BASE_URL=http://localhost:3000 --runtime auto --stop-timeout 60 -f"
 }
 
 @test "vault runs from ~/.kerghan, away from a stray .vaultrc" {
@@ -53,7 +53,7 @@ IMAGE="darthjee/kerghan-standalone:0.5.0"
 @test "down runs vault down" {
   run "$KERGHAN" down
   [ "$status" -eq 0 ]
-  [ "$(vault_calls)" = "vault down --name kerghan" ]
+  [ "$(vault_calls)" = "vault down --name kerghan --stop-timeout 60" ]
 }
 
 @test "logs runs vault logs" {

@@ -6,6 +6,12 @@
 # instance `kerghan`: container `vault-kerghan`, data volume
 # `vault-kerghan-data`, secrets in ~/.kerghan/kerghan.env.
 #
+# Persistent settings (port, variant, runtime, stop-timeout, image-tag) are
+# read from the optional ~/.kerghan/config (flat key=value, see
+# config.example); CLI flags override it, built-in defaults fill the rest. It
+# is only loaded by up, down and reset, so a broken config never blocks the
+# other commands.
+#
 # Dependencies on the host: vault, docker and openssl.
 #
 # Must stay compatible with bash 3.2 (macOS): no associative arrays, no
@@ -29,9 +35,21 @@ INSTANCE="kerghan"
 VOLUME="vault-kerghan-data"
 CONTAINER="vault-kerghan"
 DEFAULT_PORT=3000
+DEFAULT_VARIANT=online
+DEFAULT_RUNTIME=auto
+DEFAULT_STOP_TIMEOUT=60
+# The default image tag is KERGHAN_VERSION.
 
 KERGHAN_HOME="${HOME}/.kerghan"
 ENV_FILE="$KERGHAN_HOME/kerghan.env"
+CONFIG_FILE="$KERGHAN_HOME/config"
+
+# Values read from CONFIG_FILE by load_config (empty = unset, default applies).
+CFG_PORT=""
+CFG_VARIANT=""
+CFG_RUNTIME=""
+CFG_STOP_TIMEOUT=""
+CFG_IMAGE_TAG=""
 
 usage() {
   cat <<USAGE
@@ -51,6 +69,17 @@ Options for up:
   --offline          use the offline image variant
   -p, --port PORT    host port (default $DEFAULT_PORT)
   -f                 run in the foreground
+
+Settings are read from ~/.kerghan/config (optional, one key=value per line):
+  port=$DEFAULT_PORT           host port (overridden by -p)
+  variant=$DEFAULT_VARIANT       online | offline (--offline forces offline)
+  runtime=$DEFAULT_RUNTIME         auto | sysbox | privileged
+  stop-timeout=$DEFAULT_STOP_TIMEOUT      seconds to wait for a graceful stop
+  image-tag=           override the pinned image tag ($KERGHAN_VERSION)
+Flags override the file; an empty value uses the default. A changed port,
+variant or image-tag recreates the instance on the next 'kerghan up'; a
+changed runtime or stop-timeout applies the next time the container is
+created ('kerghan down && kerghan up').
 USAGE
 }
 
@@ -66,9 +95,11 @@ usage_error() {
   exit 2
 }
 
-# image_ref [offline] - prints the image reference for this CLI's version.
+# image_ref [offline] [tag] - prints the image reference. The tag (default
+# KERGHAN_VERSION, or image-tag from the config) replaces only the version
+# part; -offline is still appended for the offline variant.
 image_ref() {
-  local ref="$IMAGE_REPO:$KERGHAN_VERSION"
+  local ref="$IMAGE_REPO:${2:-$KERGHAN_VERSION}"
   if [ "${1:-}" = "true" ]; then
     ref="$ref-offline"
   fi
@@ -89,6 +120,122 @@ valid_port() {
   esac
   [ "${#1}" -le 5 ] || return 1
   [ "$1" -ge 1 ] && [ "$1" -le 65535 ]
+}
+
+valid_variant() {
+  case "$1" in
+    online | offline) return 0 ;;
+  esac
+  return 1
+}
+
+valid_runtime() {
+  case "$1" in
+    auto | sysbox | privileged) return 0 ;;
+  esac
+  return 1
+}
+
+valid_stop_timeout() {
+  case "$1" in
+    '' | *[!0-9]*) return 1 ;;
+  esac
+  [ "${#1}" -le 9 ] || return 1
+  [ "$((10#$1))" -ge 1 ]
+}
+
+# valid_image_tag <tag> - a Docker tag (charset [A-Za-z0-9_.-], not starting
+# with . or -, at most 128 chars) that does not end in -offline (the variant
+# adds that suffix).
+valid_image_tag() {
+  case "$1" in
+    '' | .* | -* | *[!A-Za-z0-9_.-]* | *-offline) return 1 ;;
+  esac
+  [ "${#1}" -le 128 ]
+}
+
+# trim <string> - prints the string without surrounding whitespace.
+trim() {
+  local s="$1"
+  s="${s#"${s%%[![:space:]]*}"}"
+  s="${s%"${s##*[![:space:]]}"}"
+  printf '%s' "$s"
+}
+
+# config_invalid <line> <key> <value> <expected> - reports an invalid value and
+# exits.
+config_invalid() {
+  error "$CONFIG_FILE:$1: invalid $2 '$3' (expected $4)"
+  exit 1
+}
+
+# load_config - reads CONFIG_FILE into the CFG_* globals. A missing file is not
+# an error. A malformed line or an invalid value exits 1; an unknown key only
+# warns. Must run before any side effect.
+load_config() {
+  CFG_PORT=""
+  CFG_VARIANT=""
+  CFG_RUNTIME=""
+  CFG_STOP_TIMEOUT=""
+  CFG_IMAGE_TAG=""
+  [ -e "$CONFIG_FILE" ] || return 0
+  if [ ! -r "$CONFIG_FILE" ] || [ -d "$CONFIG_FILE" ]; then
+    error "$CONFIG_FILE: cannot be read"
+    exit 1
+  fi
+
+  local line key value n=0
+  while IFS= read -r line || [ -n "$line" ]; do
+    n=$((n + 1))
+    line="${line%%#*}"
+    line="$(trim "$line")"
+    [ -n "$line" ] || continue
+    case "$line" in
+      *=*) ;;
+      *)
+        error "$CONFIG_FILE:$n: expected key=value"
+        exit 1
+        ;;
+    esac
+    key="$(trim "${line%%=*}")"
+    value="$(trim "${line#*=}")"
+    case "$key" in
+      port)
+        [ -z "$value" ] || valid_port "$value" || config_invalid "$n" "$key" "$value" "1-65535"
+        CFG_PORT="$value"
+        ;;
+      variant)
+        [ -z "$value" ] || valid_variant "$value" || config_invalid "$n" "$key" "$value" "online or offline"
+        CFG_VARIANT="$value"
+        ;;
+      runtime)
+        [ -z "$value" ] || valid_runtime "$value" ||
+          config_invalid "$n" "$key" "$value" "auto, sysbox or privileged"
+        CFG_RUNTIME="$value"
+        ;;
+      stop-timeout)
+        [ -z "$value" ] || valid_stop_timeout "$value" ||
+          config_invalid "$n" "$key" "$value" "a positive number of seconds"
+        CFG_STOP_TIMEOUT="$value"
+        ;;
+      image-tag)
+        [ -z "$value" ] || valid_image_tag "$value" ||
+          config_invalid "$n" "$key" "$value" "a Docker image tag, without the -offline suffix"
+        CFG_IMAGE_TAG="$value"
+        ;;
+      *)
+        warn "$CONFIG_FILE:$n: unknown key '$key' (ignored)"
+        ;;
+    esac
+  done <"$CONFIG_FILE"
+}
+
+effective_runtime() {
+  echo "${CFG_RUNTIME:-$DEFAULT_RUNTIME}"
+}
+
+effective_stop_timeout() {
+  echo "${CFG_STOP_TIMEOUT:-$DEFAULT_STOP_TIMEOUT}"
 }
 
 volume_exists() {
@@ -176,13 +323,14 @@ compare_number() {
 }
 
 cmd_up() {
-  local offline=false port="$DEFAULT_PORT" foreground=false
+  local flag_offline=false flag_port="" flag_port_set=false foreground=false
   while [ "$#" -gt 0 ]; do
     case "$1" in
-      --offline) offline=true ;;
+      --offline) flag_offline=true ;;
       -p | --port)
         [ "$#" -ge 2 ] || usage_error "option '$1' requires a value"
-        port="$2"
+        flag_port="$2"
+        flag_port_set=true
         shift
         ;;
       -f) foreground=true ;;
@@ -190,10 +338,20 @@ cmd_up() {
     esac
     shift
   done
-  valid_port "$port" || usage_error "invalid port '$port' (expected 1-65535)"
+  if [ "$flag_port_set" = "true" ]; then
+    valid_port "$flag_port" || usage_error "invalid port '$flag_port' (expected 1-65535)"
+  fi
+
+  # Resolve: flag > ~/.kerghan/config > default. Before any side effect.
+  load_config
+  local port="${flag_port:-${CFG_PORT:-$DEFAULT_PORT}}"
+  local offline=false
+  if [ "$flag_offline" = "true" ] || [ "${CFG_VARIANT:-$DEFAULT_VARIANT}" = "offline" ]; then
+    offline=true
+  fi
 
   local image
-  image="$(image_ref "$offline")"
+  image="$(image_ref "$offline" "${CFG_IMAGE_TAG:-$KERGHAN_VERSION}")"
 
   # 1. Refuse: secrets lost but data kept.
   if [ ! -e "$ENV_FILE" ] && volume_exists; then
@@ -219,7 +377,7 @@ cmd_up() {
       return 0
     fi
     echo "$reason"
-    vault_cmd down
+    vault_cmd down --stop-timeout "$(effective_stop_timeout)"
   fi
 
   # 4. Start it.
@@ -228,7 +386,12 @@ cmd_up() {
 
 # recreate_reason <current image> <wanted image> <current port> <wanted port>
 # Prints why the running instance must be recreated, or nothing when it
-# already matches. Returns 1 (after warning) on a downgrade.
+# already matches. Returns 1 (after warning) on a downgrade. Only the image and
+# the port drive this decision (runtime and stop-timeout never do).
+#
+# The wanted version is the wanted tag without -offline: KERGHAN_VERSION, or
+# image-tag from ~/.kerghan/config. When it is not x.y.z semver (e.g. latest),
+# the version compare and the downgrade guard are skipped.
 recreate_reason() {
   local current="$1" wanted="$2" current_port="$3" port="$4"
   local current_repo="${current%:*}" current_tag current_version current_variant
@@ -243,8 +406,17 @@ recreate_reason() {
   else
     current_variant="offline"
   fi
-  local wanted_variant="online"
+  local wanted_tag="${wanted##*:}" wanted_version wanted_variant="online"
+  wanted_version="${wanted_tag%-offline}"
   case "$wanted" in *-offline) wanted_variant="offline" ;; esac
+
+  # Same image reference: only the port can differ.
+  if [ "$current" = "$wanted" ]; then
+    if [ "$current_port" != "$port" ]; then
+      echo "moving to port $port"
+    fi
+    return 0
+  fi
 
   if [ "$current_repo" != "$IMAGE_REPO" ] || ! is_semver "$current_version"; then
     warn "the running instance uses $current, not a $IMAGE_REPO release; recreating it with $wanted"
@@ -252,10 +424,20 @@ recreate_reason() {
     return 0
   fi
 
-  case "$(version_compare "$current_version" "$KERGHAN_VERSION")" in
+  if ! is_semver "$wanted_version"; then
+    echo "replacing $current -> $wanted"
+    return 0
+  fi
+
+  case "$(version_compare "$current_version" "$wanted_version")" in
     gt)
-      warn "the running instance uses $current, newer than this CLI ($KERGHAN_VERSION); downgrades are unsupported"
-      hint "install the kerghan CLI $current_version to manage this instance"
+      if [ "$wanted_version" = "$KERGHAN_VERSION" ]; then
+        warn "the running instance uses $current, newer than this CLI ($KERGHAN_VERSION); downgrades are unsupported"
+        hint "install the kerghan CLI $current_version to manage this instance"
+      else
+        warn "the running instance uses $current, newer than image-tag $wanted_version in ~/.kerghan/config; downgrades are unsupported"
+        hint "set image-tag=$current_version in ~/.kerghan/config (or remove it) to manage this instance"
+      fi
       return 1
       ;;
     lt)
@@ -280,6 +462,7 @@ up_instance() {
   while IFS= read -r extra; do
     args+=("$extra")
   done < <(frontend_base_url_args "$port")
+  args+=(--runtime "$(effective_runtime)" --stop-timeout "$(effective_stop_timeout)")
   if [ "$foreground" = "true" ]; then
     args+=(-f)
   fi
@@ -296,7 +479,7 @@ up_instance() {
   set -e
   if [ "$rc" -ne 0 ]; then
     if grep -qiE 'choose another host port|port is already allocated|address already in use' "$errfile"; then
-      hint "use 'kerghan up -p <port>' to pick another port"
+      hint "use 'kerghan up -p <port>' or set port= in ~/.kerghan/config to pick another port"
     fi
     rm -f "$errfile"
     exit "$rc"
@@ -310,7 +493,8 @@ up_instance() {
 
 cmd_down() {
   [ "$#" -eq 0 ] || usage_error "unknown option '$1'"
-  vault_cmd down
+  load_config
+  vault_cmd down --stop-timeout "$(effective_stop_timeout)"
 }
 
 cmd_logs() {
@@ -341,6 +525,7 @@ cmd_version() {
 
 cmd_reset() {
   [ "$#" -eq 0 ] || usage_error "unknown option '$1'"
+  load_config
   local answer=""
   printf 'This deletes all Kerghan data (%s). Continue? [y/N] ' "$VOLUME" >&2
   read -r answer || true
@@ -353,7 +538,7 @@ cmd_reset() {
       ;;
   esac
 
-  vault_cmd down
+  vault_cmd down --stop-timeout "$(effective_stop_timeout)"
   if docker volume inspect "$VOLUME" >/dev/null 2>&1; then
     docker volume rm "$VOLUME" >/dev/null
     echo "Removed volume $VOLUME."

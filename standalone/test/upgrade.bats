@@ -30,8 +30,8 @@ IMAGE="darthjee/kerghan-standalone:0.5.0"
   run "$KERGHAN" up
   [ "$status" -eq 0 ]
   assert_output_contains "upgrading darthjee/kerghan-standalone:0.4.0 -> $IMAGE"
-  [ "$(vault_calls | sed -n 1p)" = "vault down --name kerghan" ]
-  [ "$(vault_calls | sed -n 2p)" = "vault up --name kerghan --image $IMAGE --env-file $ENV_FILE -p 3000:80 -e FRONTEND_BASE_URL=http://localhost:3000" ]
+  [ "$(vault_calls | sed -n 1p)" = "vault down --name kerghan --stop-timeout 60" ]
+  [ "$(vault_calls | sed -n 2p)" = "vault up --name kerghan --image $IMAGE --env-file $ENV_FILE -p 3000:80 -e FRONTEND_BASE_URL=http://localhost:3000 --runtime auto --stop-timeout 60" ]
   refute_logged_prefix "docker volume rm"
 }
 
@@ -41,7 +41,7 @@ IMAGE="darthjee/kerghan-standalone:0.5.0"
   run "$KERGHAN" up --offline
   [ "$status" -eq 0 ]
   assert_output_contains "upgrading"
-  [ "$(vault_calls | sed -n 2p)" = "vault up --name kerghan --image $IMAGE-offline --env-file $ENV_FILE -p 3000:80 -e FRONTEND_BASE_URL=http://localhost:3000" ]
+  [ "$(vault_calls | sed -n 2p)" = "vault up --name kerghan --image $IMAGE-offline --env-file $ENV_FILE -p 3000:80 -e FRONTEND_BASE_URL=http://localhost:3000 --runtime auto --stop-timeout 60" ]
 }
 
 @test "switching online to offline recreates the instance" {
@@ -50,8 +50,8 @@ IMAGE="darthjee/kerghan-standalone:0.5.0"
   run "$KERGHAN" up --offline
   [ "$status" -eq 0 ]
   assert_output_contains "switching to the offline variant"
-  [ "$(vault_calls | sed -n 1p)" = "vault down --name kerghan" ]
-  [ "$(vault_calls | sed -n 2p)" = "vault up --name kerghan --image $IMAGE-offline --env-file $ENV_FILE -p 3000:80 -e FRONTEND_BASE_URL=http://localhost:3000" ]
+  [ "$(vault_calls | sed -n 1p)" = "vault down --name kerghan --stop-timeout 60" ]
+  [ "$(vault_calls | sed -n 2p)" = "vault up --name kerghan --image $IMAGE-offline --env-file $ENV_FILE -p 3000:80 -e FRONTEND_BASE_URL=http://localhost:3000 --runtime auto --stop-timeout 60" ]
   refute_logged_prefix "docker volume rm"
 }
 
@@ -61,7 +61,7 @@ IMAGE="darthjee/kerghan-standalone:0.5.0"
   run "$KERGHAN" up
   [ "$status" -eq 0 ]
   assert_output_contains "switching to the online variant"
-  [ "$(vault_calls | sed -n 1p)" = "vault down --name kerghan" ]
+  [ "$(vault_calls | sed -n 1p)" = "vault down --name kerghan --stop-timeout 60" ]
   vault_calls | sed -n 2p | grep -q -- "--image $IMAGE --env-file"
 }
 
@@ -71,8 +71,8 @@ IMAGE="darthjee/kerghan-standalone:0.5.0"
   run "$KERGHAN" up -p 8080
   [ "$status" -eq 0 ]
   assert_output_contains "moving to port 8080"
-  [ "$(vault_calls | sed -n 1p)" = "vault down --name kerghan" ]
-  [ "$(vault_calls | sed -n 2p)" = "vault up --name kerghan --image $IMAGE --env-file $ENV_FILE -p 8080:80 -e FRONTEND_BASE_URL=http://localhost:8080" ]
+  [ "$(vault_calls | sed -n 1p)" = "vault down --name kerghan --stop-timeout 60" ]
+  [ "$(vault_calls | sed -n 2p)" = "vault up --name kerghan --image $IMAGE --env-file $ENV_FILE -p 8080:80 -e FRONTEND_BASE_URL=http://localhost:8080 --runtime auto --stop-timeout 60" ]
   refute_logged_prefix "docker volume rm"
 }
 
@@ -92,7 +92,7 @@ IMAGE="darthjee/kerghan-standalone:0.5.0"
   run "$KERGHAN" up
   [ "$status" -eq 0 ]
   assert_output_contains "kerghan: warning: the running instance uses darthjee/kerghan-standalone:dev"
-  [ "$(vault_calls | sed -n 1p)" = "vault down --name kerghan" ]
+  [ "$(vault_calls | sed -n 1p)" = "vault down --name kerghan --stop-timeout 60" ]
   vault_calls | sed -n 2p | grep -q -- "--image $IMAGE --env-file"
 }
 
@@ -101,7 +101,7 @@ IMAGE="darthjee/kerghan-standalone:0.5.0"
   export STUB_RUNNING_IMAGE="darthjee/kerghan-standalone:0.6.0" STUB_RUNNING_STATE=false
   run "$KERGHAN" up
   [ "$status" -eq 0 ]
-  [ "$(vault_calls)" = "vault up --name kerghan --image $IMAGE --env-file $ENV_FILE -p 3000:80 -e FRONTEND_BASE_URL=http://localhost:3000" ]
+  [ "$(vault_calls)" = "vault up --name kerghan --image $IMAGE --env-file $ENV_FILE -p 3000:80 -e FRONTEND_BASE_URL=http://localhost:3000 --runtime auto --stop-timeout 60" ]
 }
 
 @test "version_compare orders plain semver numerically" {

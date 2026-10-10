@@ -78,3 +78,10 @@ assert_output_contains() {
 vault_calls() {
   grep '^vault ' "$STUB_LOG" || true
 }
+
+# write_config [lines...] - writes ~/.kerghan/config, one argument per line.
+write_config() {
+  mkdir -p "$HOME/.kerghan"
+  CONFIG_FILE="$HOME/.kerghan/config"
+  printf '%s\n' "$@" >"$CONFIG_FILE"
+}
