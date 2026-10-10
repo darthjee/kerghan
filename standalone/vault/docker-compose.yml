@@ -1,0 +1,107 @@
+# Kerghan standalone: the inner compose stack run by Vault (Docker-in-Docker).
+#
+# This file is copied to /vault in darthjee/kerghan-standalone; Vault runs
+# `docker compose up` from there. Bind mounts resolve against the Vault
+# container's filesystem (/vault/tent/...).
+#
+# Specs: see the "Standalone distribution" entry in docs/agents/specs.md
+# (stack and environment-variable contract).
+#
+# /vault/.env (written by the image build, no secrets) provides:
+#   TENT_IMAGE      - darthjee/tent tag matching the image's architecture
+#   KERGHAN_VERSION - darthjee/kerghan tag baked into this image
+#
+# Environment allowlist rule: the `kerghan` service only receives the
+# variables listed in its `environment:` below. Fixed values are literals, so
+# they cannot be overridden from the Vault container's environment. Optional
+# variables are listed by name only, so each reaches the backend only when it
+# is set on the Vault container. A backend variable not listed here never
+# reaches the backend; add it here when the backend gains a new one.
+
+services:
+  mysql:
+    image: mysql:9.3.0
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: kerghan
+      MYSQL_USER: kerghan
+      # Fixed when the data volume is first initialized.
+      MYSQL_PASSWORD: ${KERGHAN_MYSQL_PASSWORD:-kerghan}
+      MYSQL_ROOT_PASSWORD: ${KERGHAN_MYSQL_PASSWORD:-kerghan}
+    volumes:
+      - mysql-data:/var/lib/mysql
+    healthcheck:
+      # TCP ping: during the first init MySQL runs a socket-only temporary
+      # server, so this only succeeds once the real server is up.
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "--silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 120s
+
+  kerghan:
+    image: darthjee/kerghan:${KERGHAN_VERSION}
+    restart: unless-stopped
+    depends_on:
+      mysql:
+        condition: service_healthy
+    environment:
+      # Fixed by the stack (literals, never interpolated).
+      - NODE_ENV=production
+      - PORT=3000
+      - KERGHAN_MYSQL_HOST=mysql
+      - KERGHAN_MYSQL_PORT=3306
+      - KERGHAN_MYSQL_NAME=kerghan
+      - KERGHAN_MYSQL_USER=kerghan
+      - KERGHAN_EMAILS_ENABLED=false
+      # Overridable, with a default (same as the mysql service).
+      - KERGHAN_MYSQL_PASSWORD=${KERGHAN_MYSQL_PASSWORD:-kerghan}
+      # Required secrets (no default; the backend refuses to boot without them).
+      - KERGHAN_SECRET_KEY
+      - KERGHAN_INTEGRATIONS_KEY
+      # Optional pass-through allowlist (name only: passed only when set).
+      - FRONTEND_BASE_URL
+      - KERGHAN_ALLOWED_ORIGINS
+      - KERGHAN_LOG_LEVEL
+      - KERGHAN_ACCESS_TOKEN_TTL_MS
+      - KERGHAN_REFRESH_TOKEN_TTL_MS
+      - KERGHAN_PERSISTENT_REFRESH_TOKEN_TTL_MS
+      - KERGHAN_PASSWORD_RESET_TOKEN_TTL_MS
+      - KERGHAN_AUTHORIZATION_REQUEST_TTL_MS
+      - KERGHAN_AUTHORIZATION_REQUEST_AUTHORIZE_LOCK_MS
+      - KERGHAN_AUTHORIZATION_REQUEST_AUTHORIZE_MAX_ATTEMPTS
+      - KERGHAN_AUTHORIZATION_REQUEST_CREATE_LIMIT
+      - KERGHAN_AUTHORIZATION_REQUEST_CREATE_WINDOW_MS
+      - KERGHAN_AUTHORIZATION_REQUEST_MAX_OPEN_PER_USER
+      - KERGHAN_ACCOUNT_EDIT_LOCK_MS
+      - KERGHAN_ACCOUNT_EDIT_MAX_ATTEMPTS
+      - KERGHAN_INTEGRATIONS_MAX_PER_USER
+      - KERGHAN_INTEGRATIONS_CREDENTIAL_LOCK_MS
+      - KERGHAN_INTEGRATIONS_CREDENTIAL_MAX_ATTEMPTS
+      - KERGHAN_INTEGRATIONS_TEST_COOLDOWN_MS
+      - KERGHAN_GITHUB_OAUTH_APP_CLIENT_ID
+      - KERGHAN_GITHUB_OAUTH_APP_CLIENT_SECRET
+      - KERGHAN_GITHUB_APP_ID
+      - KERGHAN_GITHUB_APP_SLUG
+      - KERGHAN_GITHUB_APP_CLIENT_ID
+      - KERGHAN_GITHUB_APP_CLIENT_SECRET
+      - KERGHAN_GITHUB_APP_PRIVATE_KEY
+      - KERGHAN_PREVIOUS_SECRET_KEYS
+      - KERGHAN_PREVIOUS_INTEGRATIONS_KEYS
+
+  tent:
+    image: ${TENT_IMAGE}
+    restart: unless-stopped
+    depends_on:
+      - kerghan
+    ports:
+      - "80:80"
+    volumes:
+      - ./tent/configuration:/var/www/html/configuration:ro
+      - ./tent/static:/var/www/html/static:ro
+      # Kerghan's custom Tent middlewares, copied from proxy/extension/ at
+      # image build time (the rules depend on them).
+      - ./tent/extension:/var/www/html/extension:ro
+
+volumes:
+  mysql-data: {}
