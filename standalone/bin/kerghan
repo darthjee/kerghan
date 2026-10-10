@@ -6,6 +6,12 @@
 # instance `kerghan`: container `vault-kerghan`, data volume
 # `vault-kerghan-data`, secrets in ~/.kerghan/kerghan.env.
 #
+# Persistent settings (port, variant, runtime, stop-timeout, image-tag) are
+# read from the optional ~/.kerghan/config (flat key=value, see
+# config.example); CLI flags override it, built-in defaults fill the rest. It
+# is only loaded by up, down and reset, so a broken config never blocks the
+# other commands.
+#
 # Dependencies on the host: vault, docker and openssl.
 #
 # Must stay compatible with bash 3.2 (macOS): no associative arrays, no
@@ -63,6 +69,17 @@ Options for up:
   --offline          use the offline image variant
   -p, --port PORT    host port (default $DEFAULT_PORT)
   -f                 run in the foreground
+
+Settings are read from ~/.kerghan/config (optional, one key=value per line):
+  port=$DEFAULT_PORT           host port (overridden by -p)
+  variant=$DEFAULT_VARIANT       online | offline (--offline forces offline)
+  runtime=$DEFAULT_RUNTIME         auto | sysbox | privileged
+  stop-timeout=$DEFAULT_STOP_TIMEOUT      seconds to wait for a graceful stop
+  image-tag=           override the pinned image tag ($KERGHAN_VERSION)
+Flags override the file; an empty value uses the default. A changed port,
+variant or image-tag recreates the instance on the next 'kerghan up'; a
+changed runtime or stop-timeout applies the next time the container is
+created ('kerghan down && kerghan up').
 USAGE
 }
 
@@ -360,7 +377,7 @@ cmd_up() {
       return 0
     fi
     echo "$reason"
-    vault_cmd down
+    vault_cmd down --stop-timeout "$(effective_stop_timeout)"
   fi
 
   # 4. Start it.
@@ -445,6 +462,7 @@ up_instance() {
   while IFS= read -r extra; do
     args+=("$extra")
   done < <(frontend_base_url_args "$port")
+  args+=(--runtime "$(effective_runtime)" --stop-timeout "$(effective_stop_timeout)")
   if [ "$foreground" = "true" ]; then
     args+=(-f)
   fi
@@ -461,7 +479,7 @@ up_instance() {
   set -e
   if [ "$rc" -ne 0 ]; then
     if grep -qiE 'choose another host port|port is already allocated|address already in use' "$errfile"; then
-      hint "use 'kerghan up -p <port>' to pick another port"
+      hint "use 'kerghan up -p <port>' or set port= in ~/.kerghan/config to pick another port"
     fi
     rm -f "$errfile"
     exit "$rc"
@@ -475,7 +493,8 @@ up_instance() {
 
 cmd_down() {
   [ "$#" -eq 0 ] || usage_error "unknown option '$1'"
-  vault_cmd down
+  load_config
+  vault_cmd down --stop-timeout "$(effective_stop_timeout)"
 }
 
 cmd_logs() {
@@ -506,6 +525,7 @@ cmd_version() {
 
 cmd_reset() {
   [ "$#" -eq 0 ] || usage_error "unknown option '$1'"
+  load_config
   local answer=""
   printf 'This deletes all Kerghan data (%s). Continue? [y/N] ' "$VOLUME" >&2
   read -r answer || true
@@ -518,7 +538,7 @@ cmd_reset() {
       ;;
   esac
 
-  vault_cmd down
+  vault_cmd down --stop-timeout "$(effective_stop_timeout)"
   if docker volume inspect "$VOLUME" >/dev/null 2>&1; then
     docker volume rm "$VOLUME" >/dev/null
     echo "Removed volume $VOLUME."
