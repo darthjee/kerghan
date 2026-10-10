@@ -1,0 +1,200 @@
+#!/usr/bin/env bash
+# kerghan - client for the Kerghan standalone distribution.
+#
+# A thin wrapper around the `vault` CLI that runs darthjee/kerghan-standalone
+# (the whole Kerghan stack in one Docker-in-Docker container) as the Vault
+# instance `kerghan`: container `vault-kerghan`, data volume
+# `vault-kerghan-data`, secrets in ~/.kerghan/kerghan.env.
+#
+# Dependencies on the host: vault, docker and openssl.
+#
+# Must stay compatible with bash 3.2 (macOS): no associative arrays, no
+# ${var,,}, no mapfile/readarray, no [[ -v ]], no local -n, and empty arrays
+# expanded as ${arr[@]+"${arr[@]}"}.
+#
+# KERGHAN_VERSION below is pinned by scripts/bump_version.sh together with the
+# package.json versions, so CLI <v> always runs image <v>. Never derive it any
+# other way.
+#
+# Every `vault` call runs from ~/.kerghan in a subshell: with --image and no
+# [dir], Vault still reads .vaultrc and .vault.env from the current directory,
+# so a stray one in the user's working directory could otherwise change the
+# instance name, image or env.
+set -euo pipefail
+
+KERGHAN_VERSION="0.5.0"
+
+IMAGE_REPO="darthjee/kerghan-standalone"
+INSTANCE="kerghan"
+VOLUME="vault-kerghan-data"
+CONTAINER="vault-kerghan"
+DEFAULT_PORT=3000
+
+KERGHAN_HOME="${HOME}/.kerghan"
+ENV_FILE="$KERGHAN_HOME/kerghan.env"
+
+usage() {
+  cat <<USAGE
+Usage: kerghan <command> [options]
+
+Commands:
+  up [--offline] [-p PORT] [-f]   start Kerghan (detached by default) on http://localhost:$DEFAULT_PORT
+  down                            stop and remove the container; data is kept
+  logs [-f]                       show (or follow) the logs
+  status                          show the instance state
+  compose <args>                  run docker compose inside the instance (e.g. compose exec mysql sh)
+  reset                           wipe all data (removes $VOLUME), asks for confirmation
+  version                         print the version
+  help                            print this help
+
+Options for up:
+  --offline          use the offline image variant
+  -p, --port PORT    host port (default $DEFAULT_PORT)
+  -f                 run in the foreground
+USAGE
+}
+
+error() { echo "kerghan: error: $*" >&2; }
+warn() { echo "kerghan: warning: $*" >&2; }
+hint() { echo "kerghan: hint: $*" >&2; }
+
+usage_error() {
+  if [ "$#" -gt 0 ]; then
+    error "$*"
+  fi
+  usage >&2
+  exit 2
+}
+
+# image_ref [offline] - prints the image reference for this CLI's version.
+image_ref() {
+  local ref="$IMAGE_REPO:$KERGHAN_VERSION"
+  if [ "${1:-}" = "true" ]; then
+    ref="$ref-offline"
+  fi
+  echo "$ref"
+}
+
+# vault_cmd <command> [args...] - runs vault from KERGHAN_HOME (see header).
+vault_cmd() {
+  local cmd="$1"
+  shift
+  mkdir -p "$KERGHAN_HOME"
+  (cd "$KERGHAN_HOME" && vault "$cmd" --name "$INSTANCE" ${@+"$@"})
+}
+
+valid_port() {
+  case "$1" in
+    '' | *[!0-9]*) return 1 ;;
+  esac
+  [ "${#1}" -le 5 ] || return 1
+  [ "$1" -ge 1 ] && [ "$1" -le 65535 ]
+}
+
+cmd_up() {
+  local offline=false port="$DEFAULT_PORT" foreground=false
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --offline) offline=true ;;
+      -p | --port)
+        [ "$#" -ge 2 ] || usage_error "option '$1' requires a value"
+        port="$2"
+        shift
+        ;;
+      -f) foreground=true ;;
+      *) usage_error "unknown option '$1'" ;;
+    esac
+    shift
+  done
+  valid_port "$port" || usage_error "invalid port '$port' (expected 1-65535)"
+
+  up_instance "$(image_ref "$offline")" "$port" "$foreground"
+}
+
+# up_instance <image> <port> <foreground> - plain `vault up`.
+up_instance() {
+  local image="$1" port="$2" foreground="$3"
+  local args=(--image "$image" --env-file "$ENV_FILE" -p "$port:80")
+  if [ "$foreground" = "true" ]; then
+    args+=(-f)
+  fi
+  vault_cmd up "${args[@]}"
+}
+
+cmd_down() {
+  [ "$#" -eq 0 ] || usage_error "unknown option '$1'"
+  vault_cmd down
+}
+
+cmd_logs() {
+  local args=()
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      -f) args+=(-f) ;;
+      *) usage_error "unknown option '$1'" ;;
+    esac
+    shift
+  done
+  vault_cmd logs ${args[@]+"${args[@]}"}
+}
+
+cmd_status() {
+  [ "$#" -eq 0 ] || usage_error "unknown option '$1'"
+  vault_cmd status
+}
+
+cmd_compose() {
+  vault_cmd compose ${@+"$@"}
+}
+
+cmd_version() {
+  [ "$#" -eq 0 ] || usage_error "unknown option '$1'"
+  echo "kerghan $KERGHAN_VERSION"
+}
+
+cmd_reset() {
+  [ "$#" -eq 0 ] || usage_error "unknown option '$1'"
+  local answer=""
+  printf 'This deletes all Kerghan data (%s). Continue? [y/N] ' "$VOLUME" >&2
+  read -r answer || true
+  answer="$(printf '%s' "$answer" | tr '[:upper:]' '[:lower:]')"
+  case "$answer" in
+    y | yes) ;;
+    *)
+      echo "Aborted."
+      return 0
+      ;;
+  esac
+
+  vault_cmd down
+  if docker volume inspect "$VOLUME" >/dev/null 2>&1; then
+    docker volume rm "$VOLUME" >/dev/null
+    echo "Removed volume $VOLUME."
+  else
+    echo "Volume $VOLUME does not exist."
+  fi
+  echo "Kerghan data wiped; $ENV_FILE was kept."
+}
+
+main() {
+  if [ "$#" -eq 0 ]; then
+    usage_error
+  fi
+  local cmd="$1"
+  shift
+  case "$cmd" in
+    up) cmd_up ${@+"$@"} ;;
+    down) cmd_down ${@+"$@"} ;;
+    logs) cmd_logs ${@+"$@"} ;;
+    status) cmd_status ${@+"$@"} ;;
+    compose) cmd_compose ${@+"$@"} ;;
+    reset) cmd_reset ${@+"$@"} ;;
+    version) cmd_version ${@+"$@"} ;;
+    help | -h | --help) usage ;;
+    *) usage_error "unknown command '$cmd'" ;;
+  esac
+}
+
+if [ "${BASH_SOURCE[0]}" = "$0" ]; then
+  main "$@"
+fi
