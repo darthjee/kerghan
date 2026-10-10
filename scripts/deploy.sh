@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 SCRIPTS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 IMAGE_REPOSITORY="${IMAGE_REPOSITORY:-docker.io/darthjee/kerghan}"
@@ -79,6 +79,10 @@ function force_deploy() {
   TAG=$1
   IMAGE_URL=$(image_url "$TAG") || exit 1
   SERVICE_ID=$(service_id)
+  if [ -z "$SERVICE_ID" ]; then
+    echo "render service not found: $RENDER_SERVICE_NAME" >&2
+    exit 1
+  fi
 
   echo "DEPLOYING $IMAGE_URL"
   RESPONSE=$(deploy "$SERVICE_ID" "$IMAGE_URL") || {

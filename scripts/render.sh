@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 RENDER_SERVICE_NAME="${RENDER_SERVICE_NAME:-kerghan}"
 
@@ -19,7 +19,7 @@ function services() {
 function deploy() {
   SERVICE_ID=$1
   IMAGE_URL=$2
-  BODY=$(jq -n --arg imageUrl "$IMAGE_URL" '{imageUrl: $imageUrl}')
+  BODY=$(jq -nc --arg imageUrl "$IMAGE_URL" '{imageUrl: $imageUrl}')
 
   curl -sS --fail-with-body --request POST \
     --url "https://api.render.com/v1/services/$SERVICE_ID/deploys" \

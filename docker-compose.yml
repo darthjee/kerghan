@@ -126,6 +126,15 @@ services:
       - ./standalone:/standalone:ro
     command: /standalone/test
 
+  # bats suite for scripts/ (Render deploy: deploy.sh/render.sh); image entrypoint is `bats`
+  scripts_tests:
+    build:
+      context: ./dockerfiles/scripts_tests
+    image: kerghan_scripts_tests
+    volumes:
+      - ./scripts:/scripts:ro
+    command: /scripts/test
+
   # PSR-12 PHPCS check for proxy/ (ruleset: root phpcs.xml; the same file Codacy reads)
   proxy_lint:
     image: darthjee/tent-test:1.0.3

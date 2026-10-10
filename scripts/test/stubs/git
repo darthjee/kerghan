@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+# Test stub for git, used by checkLastVersion:
+#   git tag                prints $STUB_GIT_TAGS (one per line)
+#   git describe --tags    prints $STUB_GIT_DESCRIBE
+echo "git $*" >>"$STUB_LOG"
+case "$1" in
+  tag) printf '%s\n' ${STUB_GIT_TAGS:-} ;;
+  describe) echo "${STUB_GIT_DESCRIBE:-}" ;;
+esac

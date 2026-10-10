@@ -45,6 +45,8 @@ workflows:
           filters: *all_tags
       - standalone_tests:
           filters: *all_tags
+      - scripts_tests:
+          filters: *all_tags
       - coverage-final:
           requires: [backend_tests, jasmine]
           filters: *all_tags
@@ -55,6 +57,7 @@ workflows:
             - jasmine
             - frontend-checks
             - proxy_extension_tests
+            - scripts_tests
             - release-production_kerghan-base
             - release-production_kerghan-base-arm64
           filters: &tags_only
@@ -216,6 +219,20 @@ jobs:
       - run:
           name: Tests
           command: bats standalone/test
+
+  # bats suite for scripts/ (Render deploy: deploy.sh/render.sh), same bats/bats image as
+  # standalone_tests plus jq, which the deploy scripts need (mirrors dockerfiles/scripts_tests).
+  scripts_tests:
+    docker:
+      - image: bats/bats:1.11.0
+    steps:
+      - run:
+          name: Install checkout and test dependencies
+          command: apk add --no-cache git openssh-client jq
+      - checkout
+      - run:
+          name: Tests
+          command: bats scripts/test
 
   # Multi-arch (amd64 + arm64) publish of Kerghan's 4 base images, mirroring Majora's
   # release-image pattern. Instantiated once via a workflow `matrix` (image x suffix). Runs on
