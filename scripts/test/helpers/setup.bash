@@ -15,8 +15,9 @@ setup() {
   export STUB_LOG="$TEST_ROOT/stub.log"
   : >"$STUB_LOG"
   export RENDER_API_KEY="test-key"
-  unset CIRCLE_TAG RENDER_SERVICE_NAME IMAGE_REPOSITORY \
+  unset CIRCLE_TAG RENDER_SERVICE_NAME RENDER_DOCKERFILE STUB_PATCH_FAIL \
     STUB_DEPLOY_FAIL STUB_DEPLOY_RESPONSE STUB_DEPLOY_STATUSES STUB_GIT_TAGS STUB_GIT_DESCRIBE
+  export RENDER_DOCKERFILE="$TEST_ROOT/Dockerfile"
 }
 
 teardown() {
@@ -59,7 +60,18 @@ assert_output_contains() {
   esac
 }
 
-# deploy_post <tag> - the expected deploy request line for darthjee/kerghan:<tag>.
+# write_dockerfile [tag] - writes the thin Render Dockerfile used by the test
+# as `FROM darthjee/kerghan:<tag>` (default 1.2.3, the tag under test).
+write_dockerfile() {
+  printf '# thin Render Dockerfile\nFROM darthjee/kerghan:%s\n' "${1:-1.2.3}" >"$RENDER_DOCKERFILE"
+}
+
+# branch_patch <tag> - the expected request moving the service branch to <tag>.
+branch_patch() {
+  echo "curl PATCH https://api.render.com/v1/services/srv-123 {\"branch\":\"$1\"}"
+}
+
+# deploy_post - the expected plain deploy request (no body).
 deploy_post() {
-  echo "curl POST https://api.render.com/v1/services/srv-123/deploys {\"imageUrl\":\"docker.io/darthjee/kerghan:$1\"}"
+  echo "curl POST https://api.render.com/v1/services/srv-123/deploys "
 }

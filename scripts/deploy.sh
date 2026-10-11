@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 SCRIPTS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-IMAGE_REPOSITORY="${IMAGE_REPOSITORY:-docker.io/darthjee/kerghan}"
+RENDER_DOCKERFILE="${RENDER_DOCKERFILE:-$SCRIPTS_DIR/../dockerfiles/production_kerghan/Dockerfile}"
 
 source "$SCRIPTS_DIR/render.sh"
 
@@ -64,28 +64,47 @@ function watch_deployment() {
   exit 1
 }
 
-function image_url() {
+# check_dockerfile_version TAG - the thin Render Dockerfile must be
+# `FROM darthjee/kerghan:TAG`, otherwise Render would build another release.
+function check_dockerfile_version() {
   TAG=$1
 
-  if [ -z "$TAG" ] || [ "$TAG" == "latest" ]; then
-    echo "invalid image tag: '$TAG' (a release tag is required, latest is not allowed)" >&2
+  if [ -z "$TAG" ]; then
+    echo "invalid release tag: a release tag is required" >&2
     exit 1
   fi
 
-  echo "$IMAGE_REPOSITORY:$TAG"
+  DOCKERFILE_TAG=""
+  if [ -f "$RENDER_DOCKERFILE" ]; then
+    DOCKERFILE_TAG=$(sed -n -e 's|^FROM darthjee/kerghan:\([^[:space:]]*\)[[:space:]]*$|\1|p' \
+      "$RENDER_DOCKERFILE" | head -n 1)
+  fi
+
+  if [ "$DOCKERFILE_TAG" != "$TAG" ]; then
+    echo "dockerfile version mismatch: $RENDER_DOCKERFILE has '${DOCKERFILE_TAG:-none}'," \
+      "release is '$TAG' (run scripts/bump_version.sh)" >&2
+    exit 1
+  fi
 }
 
 function force_deploy() {
   TAG=$1
-  IMAGE_URL=$(image_url "$TAG") || exit 1
+  check_dockerfile_version "$TAG"
+
   SERVICE_ID=$(service_id)
   if [ -z "$SERVICE_ID" ]; then
     echo "render service not found: $RENDER_SERVICE_NAME" >&2
     exit 1
   fi
 
-  echo "DEPLOYING $IMAGE_URL"
-  RESPONSE=$(deploy "$SERVICE_ID" "$IMAGE_URL") || {
+  echo "UPDATING BRANCH TO $TAG"
+  RESPONSE=$(update_service_branch "$SERVICE_ID" "$TAG") || {
+    echo "branch update failed: $RESPONSE" >&2
+    exit 1
+  }
+
+  echo "DEPLOYING $TAG"
+  RESPONSE=$(deploy "$SERVICE_ID") || {
     echo "deploy request failed: $RESPONSE" >&2
     exit 1
   }
@@ -104,10 +123,6 @@ function run_deploy() {
   force_deploy "$CIRCLE_TAG"
 }
 
-function deploy_image() {
-  force_deploy "$1"
-}
-
 function watch_last_deployment() {
   checkLastVersion
   SERVICE_ID=$(service_id)
@@ -124,9 +139,6 @@ case $ACTION in
     ;;
   "force_deploy")
     force_deploy "$@"
-    ;;
-  "deploy_image")
-    deploy_image "$@"
     ;;
   "watch")
     watch_last_deployment

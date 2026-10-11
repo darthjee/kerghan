@@ -58,8 +58,9 @@ workflows:
             - frontend-checks
             - proxy_extension_tests
             - scripts_tests
-            # release-kerghan publishes darthjee/kerghan:<tag>, the image Render deploys; it
-            # requires the production-base jobs itself, so that ordering stays transitive.
+            # release-kerghan publishes darthjee/kerghan:<tag>, the image the thin Render
+            # Dockerfile (dockerfiles/production_kerghan/Dockerfile) is FROM; it requires the
+            # production-base jobs itself, so that ordering stays transitive.
             - release-kerghan
           filters: &tags_only
             tags:
@@ -314,21 +315,21 @@ jobs:
             gh --version
             bin/release_kerghan_assets.sh release
 
-  # Deploys the backend to Render from the published image: triggers a deploy with
-  # imageUrl=docker.io/darthjee/kerghan:<tag> (the tag that triggered this workflow, published by
-  # release-kerghan) and blocks (watch_deployment, in scripts/deploy.sh) until it reaches "live";
-  # a failed status fails the job. The service's branch/source is never changed. Rollback is the
-  # same deploy for an older tag: `scripts/deploy.sh deploy_image <tag>`. Pinned to the
-  # ubuntu-2204:current machine image (curl 7.81, jq preinstalled): scripts/render.sh uses
-  # `curl --fail-with-body`, which needs curl >= 7.76 and is unknown to the legacy default image
-  # behind `machine: true`.
+  # Deploys the backend to Render for the tag that triggered this workflow. The Render service is
+  # Git-backed: scripts/deploy.sh first checks that dockerfiles/production_kerghan/Dockerfile is
+  # `FROM darthjee/kerghan:<tag>` (pinned by scripts/bump_version.sh; the image is published by
+  # release-kerghan), then moves the service branch to the tag, requests a deploy (Render builds
+  # that thin Dockerfile from the tag) and blocks (watch_deployment) until it reaches "live"; a
+  # failed status fails the job. There is no rollback command. Pinned to the ubuntu-2204:current
+  # machine image (curl 7.81, jq preinstalled): scripts/render.sh uses `curl --fail-with-body`,
+  # which needs curl >= 7.76 and is unknown to the legacy default image behind `machine: true`.
   build-and-release:
     machine:
       image: ubuntu-2204:current
     steps:
       - checkout
       - run:
-          name: Deploy darthjee/kerghan image to Render
+          name: Deploy release tag to Render
           command: scripts/deploy.sh deploy
 
   # Uploads the Tent proxy runtime (/var/www/html/) to the SSH deploy host's workspace-scoped
