@@ -45,8 +45,7 @@ file changes.
 
 ## Active specs
 
-- **Standalone distribution** — [specs/standalone/](specs/standalone/README.md): ship Kerghan
-  as `darthjee/kerghan` (Render) and `darthjee/kerghan-standalone` (Vault). Epic #336.
+none
 
 When no feature is in progress, this list reads "none".
 
@@ -57,3 +56,4 @@ Features whose specs were folded into the permanent docs, and where their defini
 | Feature | Now defined in | Product decision |
 |---------|----------------|------------------|
 | Integrations (GitHub credentials) | [modules/integrations.md](modules/integrations.md) (encryption at rest: its *Security* section) | #295 |
+| Standalone distribution | [standalone.md](standalone.md); `README.md` "Run Kerghan standalone"; [environment-variables.md](environment-variables.md) "Standalone"; [architecture/infra.md](architecture/infra.md) (release jobs, Render image deploy); [folder-structure.md](folder-structure.md) | #336 |
