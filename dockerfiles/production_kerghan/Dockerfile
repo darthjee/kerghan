@@ -1,38 +1,5 @@
-ARG BASE_VERSION=latest
-# No default here: a default would override BuildKit's automatic TARGETARCH.
-# The legacy builder leaves it empty, so the FROM below falls back to amd64.
-ARG TARGETARCH
-FROM darthjee/scripts:0.8.0 as scripts
-FROM darthjee/production_kerghan-base:${BASE_VERSION} as base-amd64
-FROM darthjee/production_kerghan-base:${BASE_VERSION}-arm64 as base-arm64
-FROM base-${TARGETARCH:-amd64} as base
-
-######################################
-
-FROM base as builder
-
-COPY --chown=node:node ./backend/ /home/node/app/
-
-ENV HOME_DIR /home/node
-
-USER node
-COPY --chown=node:node --from=scripts /home/scripts/builder/yarn_builder.sh /usr/local/sbin/yarn_builder.sh
-RUN /bin/bash yarn_builder.sh
-RUN yarn build
-RUN find src -type d -name tests -exec rm -rf {} +
-
-#######################
-# FINAL IMAGE
-FROM base
-ENV HOME_DIR /home/node
-
-COPY --chown=node:node --from=builder /home/node/yarn/new/ /usr/local/share/.cache/yarn/v6/
-COPY --chown=node:node --from=builder /home/node/app/ /home/node/app/
-
-USER node
-
-RUN yarn install --production
-
-COPY --chown=node:node ./dockerfiles/production_kerghan/entrypoint.sh /home/node/app/entrypoint.sh
-
-ENTRYPOINT ["/home/node/app/entrypoint.sh"]
+# The Dockerfile Render builds for the production `kerghan` service.
+# It only pulls the published darthjee/kerghan release image (built from
+# dockerfiles/release_kerghan/Dockerfile); everything, ENTRYPOINT included, is inherited.
+# The version is pinned by scripts/bump_version.sh and checked by scripts/deploy.sh.
+FROM darthjee/kerghan:0.6.0

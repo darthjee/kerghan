@@ -4,7 +4,7 @@
 
 load helpers/install_setup
 
-CLIENT_URL="https://github.com/darthjee/kerghan/releases/download/0.5.0/kerghan"
+CLIENT_URL="https://github.com/darthjee/kerghan/releases/download/$CURRENT_VERSION/kerghan"
 VAULT_URL="https://raw.githubusercontent.com/darthjee/vault/0.1.0/install.sh"
 
 @test "installs the stamped client version on Linux" {
@@ -12,9 +12,9 @@ VAULT_URL="https://raw.githubusercontent.com/darthjee/vault/0.1.0/install.sh"
   run_installer
   [ "$status" -eq 0 ]
   [ -x "$DEFAULT_DIR/kerghan" ]
-  [ "$("$DEFAULT_DIR/kerghan")" = "fake kerghan 0.5.0" ]
+  [ "$("$DEFAULT_DIR/kerghan")" = "fake kerghan $CURRENT_VERSION" ]
   grep -q "^curl -fsSL -o $TMPDIR/.*/kerghan $CLIENT_URL\$" "$STUB_LOG"
-  assert_output_contains "kerghan 0.5.0 installed to $DEFAULT_DIR/kerghan"
+  assert_output_contains "kerghan $CURRENT_VERSION installed to $DEFAULT_DIR/kerghan"
   assert_staging_cleaned
 }
 
@@ -82,7 +82,7 @@ VAULT_URL="https://raw.githubusercontent.com/darthjee/vault/0.1.0/install.sh"
   export STUB_CURL_FAIL_URL="/releases/download/"
   run_installer
   [ "$status" -eq 1 ]
-  assert_output_contains "error: failed to download kerghan 0.5.0 from $CLIENT_URL"
+  assert_output_contains "error: failed to download kerghan $CURRENT_VERSION from $CLIENT_URL"
   assert_no_install
 }
 
@@ -129,7 +129,7 @@ VAULT_URL="https://raw.githubusercontent.com/darthjee/vault/0.1.0/install.sh"
   [ "$status" -eq 0 ]
   [ -x "$KERGHAN_INSTALL_DIR/kerghan" ]
   [ ! -e "$DEFAULT_DIR/kerghan" ]
-  assert_output_contains "kerghan 0.5.0 installed to $KERGHAN_INSTALL_DIR/kerghan"
+  assert_output_contains "kerghan $CURRENT_VERSION installed to $KERGHAN_INSTALL_DIR/kerghan"
 }
 
 @test "warns with the export line when the install dir is not on PATH" {
@@ -156,7 +156,7 @@ VAULT_URL="https://raw.githubusercontent.com/darthjee/vault/0.1.0/install.sh"
   chmod +x "$DEFAULT_DIR/kerghan"
   run_installer
   [ "$status" -eq 0 ]
-  [ "$("$DEFAULT_DIR/kerghan")" = "fake kerghan 0.5.0" ]
+  [ "$("$DEFAULT_DIR/kerghan")" = "fake kerghan $CURRENT_VERSION" ]
 }
 
 @test "KERGHAN_VERSION installs that release" {

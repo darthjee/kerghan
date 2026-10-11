@@ -1,20 +1,36 @@
 #!/usr/bin/env bats
-# scripts/deploy.sh: CI deploy and rollback of the darthjee/kerghan image on Render.
+# scripts/deploy.sh: CI deploy of a release tag on Render. The service is Git-backed:
+# the branch is moved to the tag, then Render builds the thin
+# dockerfiles/production_kerghan/Dockerfile (FROM darthjee/kerghan:<tag>).
 
 bats_require_minimum_version 1.5.0
 load helpers/setup
 
-@test "deploy on a tag deploys docker.io/darthjee/kerghan:<tag> and waits for live" {
+@test "deploy on the latest tag moves the branch, deploys and waits for live" {
+  write_dockerfile 1.2.3
   export CIRCLE_TAG=1.2.3 STUB_GIT_TAGS="1.2.2 1.2.3" STUB_GIT_DESCRIBE=1.2.3
   export STUB_DEPLOY_STATUSES="build_in_progress update_in_progress live"
   run "$DEPLOY" deploy
   [ "$status" -eq 0 ]
-  assert_logged "$(deploy_post 1.2.3)"
+  assert_logged "$(branch_patch 1.2.3)"
+  assert_logged "$(deploy_post)"
   assert_output_contains "DEPLOYMENT STATUS live"
   [ "$(grep -c '^curl GET .*/deploys/dep-1 $' "$STUB_LOG")" -eq 3 ]
 }
 
+@test "the branch is moved before the deploy is requested" {
+  write_dockerfile 1.2.3
+  run "$DEPLOY" force_deploy 1.2.3
+  [ "$status" -eq 0 ]
+  patch_line=$(grep -nxF -- "$(branch_patch 1.2.3)" "$STUB_LOG" | cut -d: -f1)
+  post_line=$(grep -nxF -- "$(deploy_post)" "$STUB_LOG" | cut -d: -f1)
+  [ -n "$patch_line" ]
+  [ -n "$post_line" ]
+  [ "$patch_line" -lt "$post_line" ]
+}
+
 @test "deploy is skipped when the commit is not the latest tag" {
+  write_dockerfile 1.2.3
   export CIRCLE_TAG=1.2.3 STUB_GIT_TAGS="1.2.3" STUB_GIT_DESCRIBE=1.2.3-2-gabcdef
   run "$DEPLOY" deploy
   [ "$status" -eq 0 ]
@@ -22,79 +38,82 @@ load helpers/setup
   refute_logged_prefix "curl"
 }
 
-@test "deploy_image deploys an arbitrary (rollback) tag and waits for live" {
-  run "$DEPLOY" deploy_image 1.0.0
-  [ "$status" -eq 0 ]
-  assert_logged "$(deploy_post 1.0.0)"
-  assert_output_contains "DEPLOYMENT STATUS live"
-  refute_logged_prefix "git"
-}
-
-@test "an unknown RENDER_SERVICE_NAME exits non-zero without deploying" {
-  export RENDER_SERVICE_NAME=missing
-  run "$DEPLOY" deploy_image 1.0.0
-  [ "$status" -eq 1 ]
-  assert_output_contains "render service not found: missing"
-  refute_logged_prefix "curl POST"
-}
-
-@test "no call ever changes the service branch or source" {
+@test "a Dockerfile version mismatch fails without calling the Render API" {
+  write_dockerfile 1.2.2
   export CIRCLE_TAG=1.2.3 STUB_GIT_TAGS="1.2.3" STUB_GIT_DESCRIBE=1.2.3
   run "$DEPLOY" deploy
-  [ "$status" -eq 0 ]
-  run "$DEPLOY" deploy_image 1.0.0
-  [ "$status" -eq 0 ]
-  refute_logged_prefix "curl PATCH"
-  refute_logged_prefix "curl PUT"
-}
-
-@test "update_deploy_branch no longer exists" {
-  export CIRCLE_TAG=1.2.3
-  run -127 "$DEPLOY" update_deploy_branch
-  [ "$status" -eq 127 ]
+  [ "$status" -eq 1 ]
+  assert_output_contains "dockerfile version mismatch"
+  assert_output_contains "1.2.2"
+  assert_output_contains "1.2.3"
   refute_logged_prefix "curl"
 }
 
-@test "an empty tag is rejected without calling the Render API" {
-  run "$DEPLOY" deploy_image
+@test "a Dockerfile without a darthjee/kerghan FROM line fails without calling the Render API" {
+  printf 'FROM darthjee/other:1.2.3\n' >"$RENDER_DOCKERFILE"
+  run "$DEPLOY" force_deploy 1.2.3
   [ "$status" -eq 1 ]
-  assert_output_contains "invalid image tag"
+  assert_output_contains "dockerfile version mismatch"
   refute_logged_prefix "curl"
 }
 
-@test "latest is rejected without calling the Render API" {
-  run "$DEPLOY" deploy_image latest
+@test "a missing Dockerfile fails without calling the Render API" {
+  run "$DEPLOY" force_deploy 1.2.3
   [ "$status" -eq 1 ]
-  assert_output_contains "invalid image tag"
+  assert_output_contains "dockerfile version mismatch"
   refute_logged_prefix "curl"
 }
 
 @test "deploy without CIRCLE_TAG is rejected without calling the Render API" {
+  write_dockerfile 1.2.3
   export STUB_GIT_TAGS="1.2.3" STUB_GIT_DESCRIBE=1.2.3
   run "$DEPLOY" deploy
   [ "$status" -eq 1 ]
+  assert_output_contains "a release tag is required"
   refute_logged_prefix "curl"
 }
 
+@test "an unknown RENDER_SERVICE_NAME exits non-zero without moving the branch or deploying" {
+  write_dockerfile 1.2.3
+  export RENDER_SERVICE_NAME=missing
+  run "$DEPLOY" force_deploy 1.2.3
+  [ "$status" -eq 1 ]
+  assert_output_contains "render service not found: missing"
+  refute_logged_prefix "curl PATCH"
+  refute_logged_prefix "curl POST"
+}
+
+@test "a rejected branch update exits non-zero without deploying" {
+  write_dockerfile 1.2.3
+  export STUB_PATCH_FAIL=1
+  run "$DEPLOY" force_deploy 1.2.3
+  [ "$status" -eq 1 ]
+  assert_output_contains "branch update failed"
+  refute_logged_prefix "curl POST"
+}
+
 @test "a rejected deploy request exits non-zero without watching" {
+  write_dockerfile 1.2.3
   export STUB_DEPLOY_FAIL=1
-  run "$DEPLOY" deploy_image 1.0.0
+  run "$DEPLOY" force_deploy 1.2.3
   [ "$status" -eq 1 ]
   assert_output_contains "deploy request failed"
   refute_logged_prefix "curl GET https://api.render.com/v1/services/srv-123/deploys/"
 }
 
 @test "a deploy response without an id exits non-zero without watching" {
+  write_dockerfile 1.2.3
   export STUB_DEPLOY_RESPONSE='{}'
-  run "$DEPLOY" deploy_image 1.0.0
+  run "$DEPLOY" force_deploy 1.2.3
   [ "$status" -eq 1 ]
   assert_output_contains "returned no deploy id"
   refute_logged_prefix "curl GET https://api.render.com/v1/services/srv-123/deploys/"
 }
 
 @test "a deployment that never goes live times out non-zero" {
+  write_dockerfile 1.2.3
   export STUB_DEPLOY_STATUSES="update_in_progress"
-  run "$DEPLOY" deploy_image 1.0.0
+  run "$DEPLOY" force_deploy 1.2.3
   [ "$status" -eq 1 ]
   assert_output_contains "timed out"
 }
@@ -108,36 +127,41 @@ load helpers/setup
 }
 
 @test "a build_failed deployment exits non-zero" {
+  write_dockerfile 1.2.3
   export STUB_DEPLOY_STATUSES="build_in_progress build_failed"
-  run "$DEPLOY" deploy_image 1.0.0
+  run "$DEPLOY" force_deploy 1.2.3
   [ "$status" -eq 1 ]
   assert_output_contains "DEPLOYMENT STATUS build_failed"
 }
 
 @test "a update_failed deployment exits non-zero" {
+  write_dockerfile 1.2.3
   export STUB_DEPLOY_STATUSES="build_in_progress update_failed"
-  run "$DEPLOY" deploy_image 1.0.0
+  run "$DEPLOY" force_deploy 1.2.3
   [ "$status" -eq 1 ]
   assert_output_contains "DEPLOYMENT STATUS update_failed"
 }
 
 @test "a pre_deploy_failed deployment exits non-zero" {
+  write_dockerfile 1.2.3
   export STUB_DEPLOY_STATUSES="build_in_progress pre_deploy_failed"
-  run "$DEPLOY" deploy_image 1.0.0
+  run "$DEPLOY" force_deploy 1.2.3
   [ "$status" -eq 1 ]
   assert_output_contains "DEPLOYMENT STATUS pre_deploy_failed"
 }
 
 @test "a canceled deployment exits non-zero" {
+  write_dockerfile 1.2.3
   export STUB_DEPLOY_STATUSES="build_in_progress canceled"
-  run "$DEPLOY" deploy_image 1.0.0
+  run "$DEPLOY" force_deploy 1.2.3
   [ "$status" -eq 1 ]
   assert_output_contains "DEPLOYMENT STATUS canceled"
 }
 
 @test "a deactivated deployment exits non-zero" {
+  write_dockerfile 1.2.3
   export STUB_DEPLOY_STATUSES="build_in_progress deactivated"
-  run "$DEPLOY" deploy_image 1.0.0
+  run "$DEPLOY" force_deploy 1.2.3
   [ "$status" -eq 1 ]
   assert_output_contains "DEPLOYMENT STATUS deactivated"
 }

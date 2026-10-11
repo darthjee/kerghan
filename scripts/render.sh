@@ -18,11 +18,20 @@ function services() {
 
 function deploy() {
   SERVICE_ID=$1
-  IMAGE_URL=$2
-  BODY=$(jq -nc --arg imageUrl "$IMAGE_URL" '{imageUrl: $imageUrl}')
 
   curl -sS --fail-with-body --request POST \
     --url "https://api.render.com/v1/services/$SERVICE_ID/deploys" \
+    --header 'Accept: application/json' \
+    --header "Authorization: Bearer $RENDER_API_KEY"
+}
+
+function update_service_branch() {
+  SERVICE_ID=$1
+  BRANCH=$2
+  BODY=$(jq -nc --arg branch "$BRANCH" '{branch: $branch}')
+
+  curl -sS --fail-with-body --request PATCH \
+    --url "https://api.render.com/v1/services/$SERVICE_ID" \
     --header 'Accept: application/json' \
     --header 'Content-Type: application/json' \
     --header "Authorization: Bearer $RENDER_API_KEY" \

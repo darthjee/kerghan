@@ -83,13 +83,14 @@ it doesn't.
 
 ### Why `build-and-release` requires `release-kerghan`
 
-`build-and-release` deploys the released image to Render (#341): `scripts/deploy.sh deploy` asks
-Render to deploy `docker.io/darthjee/kerghan:<CIRCLE_TAG>` by `imageUrl`. That tag only exists once
-`release-kerghan` has pushed it, so `build-and-release` requires `release-kerghan`. Render no longer
-builds `dockerfiles/production_kerghan/Dockerfile` itself, so `build-and-release` no longer needs a
-direct dependency on `release-production_kerghan-base(-arm64)` (added by #17 when Render built from
-`:latest`): `release-kerghan` already requires those jobs to pin its base image, so the ordering
-holds transitively. It also requires `scripts_tests`, the bats suite for the deploy scripts. The
+`build-and-release` deploys the release to Render (#341, #362): Render builds the thin
+`dockerfiles/production_kerghan/Dockerfile`, which is only `FROM darthjee/kerghan:<CIRCLE_TAG>`.
+That tag only exists once `release-kerghan` has pushed it, so `build-and-release` requires
+`release-kerghan`. Render no longer builds the full image itself (that is
+`dockerfiles/release_kerghan/Dockerfile`, built by `release-kerghan`), so `build-and-release` no
+longer needs a direct dependency on `release-production_kerghan-base(-arm64)` (added by #17 when
+Render built from `:latest`): `release-kerghan` already requires those jobs to pin its base image,
+so the ordering holds transitively. It also requires `scripts_tests`, the bats suite for the deploy scripts. The
 same pattern exists for `upload_fe_files`, which requires `release-vite_kerghan-base(-arm64)`.
 
 `release` (the final atomic-swap job) does not need its own direct dependency on
@@ -120,7 +121,7 @@ workflow at all — nothing downstream depends on it being fresh.
 | `release-kerghan-assets` | `cimg/base:stable` | tag only | Requires `release-kerghan-standalone`. Publishes the client assets (`kerghan`, `install.sh`, `config.example`, `SHA256SUMS`) to the GitHub release of the tag via `bin/release_kerghan_assets.sh release` — see below |
 | `standalone_tests` | `bats/bats:1.11.0` | every push | bats suite for the standalone client and installer (`bats standalone/test`) |
 | `scripts_tests` | `bats/bats:1.11.0` | every push | bats suite for the Render deploy scripts (`bats scripts/test`); locally `docker-compose run --rm scripts_tests` |
-| `build-and-release` | machine (`ubuntu-2204:current`, for `curl --fail-with-body`) | tag only | Requires `release-kerghan`. Deploys `darthjee/kerghan:<tag>` to Render by `imageUrl` (`scripts/deploy.sh deploy`), blocks until it reports "live" — see "Render deploy and rollback" |
+| `build-and-release` | machine (`ubuntu-2204:current`, for `curl --fail-with-body`) | tag only | Requires `release-kerghan`. Checks the thin Render Dockerfile is `FROM darthjee/kerghan:<tag>`, moves the Render service branch to the tag and triggers a deploy (`scripts/deploy.sh deploy`), blocks until it reports "live" — see "Render deploy" |
 | `upload_proxy_files` | `darthjee/tent:1.0.3` | tag only | Uploads Tent proxy runtime to the SSH deploy host's staging dir |
 | `upload_fe_files` | `darthjee/vite_kerghan-base:0.1.0` | tag only | Builds the Vite frontend, uploads the static output to the staging dir |
 | `upload_extension` | `darthjee/tent:1.0.3` | tag only | Uploads the proxy PHP extension (test files stripped) |
@@ -140,7 +141,7 @@ step strips the leading `-` from `suffix` before calling `bin/image.sh push <ima
 |---------------|----------------|-----------|
 | `release-kerghan-base(-arm64)` | `kerghan-base` | Dev backend base image |
 | `release-circleci_kerghan-base(-arm64)` | `circleci_kerghan-base` | CI backend base image (used by `backend_tests`/`backend_checks`) |
-| `release-production_kerghan-base(-arm64)` | `production_kerghan-base` | Production backend base image (the `darthjee/kerghan` production image, built from `dockerfiles/production_kerghan/`, is `FROM` this — `:latest` by default, pinned to the `version` file only in `release-kerghan`; the per-arch tag is picked from `TARGETARCH`) |
+| `release-production_kerghan-base(-arm64)` | `production_kerghan-base` | Production backend base image (the `darthjee/kerghan` production image, built from `dockerfiles/release_kerghan/`, is `FROM` this — `:latest` by default, pinned to the `version` file only in `release-kerghan`; the per-arch tag is picked from `TARGETARCH`) |
 | `release-vite_kerghan-base(-arm64)` | `vite_kerghan-base` | Frontend/proxy build base image |
 
 The backend image family (`kerghan-base`, `circleci_kerghan-base`, `production_kerghan-base`)
@@ -153,9 +154,10 @@ for which Docker Hub credentials are actually wired up.
 
 The leaf images keep their `dockerfiles/` folder names but are tagged differently (#339):
 `dockerfiles/kerghan/` builds the local dev image `darthjee/dev_kerghan` (compose `base` /
-`base_build`, `make build`), and `dockerfiles/production_kerghan/` builds the production image
-`darthjee/kerghan` (compose `base_prod` / `base_prod_build`; Render runs the released image, see "Render deploy and
-rollback"). `darthjee/kerghan` is published to Docker Hub by `release-kerghan` (see below);
+`base_build`, `make build`), and `dockerfiles/release_kerghan/` builds the production image
+`darthjee/kerghan` (compose `base_prod` / `base_prod_build`). `dockerfiles/production_kerghan/`
+only holds the thin Dockerfile Render builds (`FROM darthjee/kerghan:<tag>`, see "Render
+deploy"). `darthjee/kerghan` is published to Docker Hub by `release-kerghan` (see below);
 `darthjee/dev_kerghan` is never pushed.
 
 Before #339 the dev image was tagged `darthjee/kerghan`. A developer who still has that old local
@@ -186,51 +188,34 @@ file (the `version` file only pins its base image).
 It requires the five test/lint jobs and `release-production_kerghan-base(-arm64)`, so the pinned
 base tags exist before the build. `release-kerghan-standalone` (#343) requires it, because the
 standalone image bundles `darthjee/kerghan:<tag>`. `build-and-release` requires it too, because
-Render deploys that tag (#341).
+Render's thin Dockerfile is `FROM` that tag (#341, #362).
 
-### Render deploy and rollback
+### Render deploy
 
-Render runs the released `docker.io/darthjee/kerghan:<tag>` image; it never builds from git and
-never runs the standalone (Vault) image. On a semver tag, `build-and-release` runs
-`scripts/deploy.sh deploy`, which:
+The Render `kerghan` service is Git-backed: it builds `./dockerfiles/production_kerghan/Dockerfile`
+(context `.`) from its configured branch. That Dockerfile is thin (#362) — a comment and the single
+line `FROM darthjee/kerghan:<version>` — so production runs exactly the image `release-kerghan`
+published, and `ENTRYPOINT` (migrations, see "Migrations on production boot") is inherited.
+`scripts/bump_version.sh` rewrites that `FROM` tag along with the other release pins. Render never
+runs the standalone (Vault) image.
+
+On a semver tag, `build-and-release` runs `scripts/deploy.sh deploy`, which:
 
 1. skips the deploy unless HEAD is the latest tag (`checkLastVersion`);
-2. looks up the service id by `RENDER_SERVICE_NAME` (default `kerghan`);
-3. calls `POST /v1/services/{id}/deploys` with `{"imageUrl": "docker.io/darthjee/kerghan:<CIRCLE_TAG>"}`
-   (the deploy fails if the request is rejected or returns no deploy id);
-4. polls `watch_deployment` until the deploy is `live`, exiting non-zero on `build_failed`,
-   `update_failed`, `pre_deploy_failed`, `canceled`, `deactivated`, or a timeout.
+2. checks that the thin Dockerfile's `FROM darthjee/kerghan:<x>` tag equals `CIRCLE_TAG`, failing
+   (before any Render API call) on an empty tag, a missing `FROM` line or a mismatch
+   (`dockerfile version mismatch: ... (run scripts/bump_version.sh)`);
+3. looks up the service id by `RENDER_SERVICE_NAME` (default `kerghan`);
+4. moves the service branch to the tag (`PATCH /v1/services/{id}` with `{"branch": "<CIRCLE_TAG>"}`);
+5. triggers a deploy (`POST /v1/services/{id}/deploys`, no body); the deploy fails if either
+   request is rejected or the POST returns no deploy id;
+6. polls `watch_deployment` on that deploy id until it is `live`, exiting non-zero on
+   `build_failed`, `update_failed`, `pre_deploy_failed`, `canceled`, `deactivated`, or a timeout.
 
-Deploys always use a version tag: `scripts/deploy.sh` refuses an empty tag and `latest`. The
-service's branch/source is never changed by the scripts.
-
-**Rollback** is a deploy of the previous version tag. No rebuild is needed:
-
-```bash
-RENDER_API_KEY=... scripts/deploy.sh deploy_image <previous-tag>   # e.g. deploy_image 1.0.0
-```
-
-It runs from any directory on a machine with `bash`, `curl` and `jq`, skips `checkLastVersion`, and
-blocks until the deploy is `live`. Migrations already applied by the newer image stay applied (see
-"Migrations on production boot").
-
-#### Manual Render checklist (done by hand, once)
-
-1. Wait for the first `darthjee/kerghan:<tag>` to be published by `release-kerghan`.
-2. In the Render dashboard, open the `kerghan` service: Settings → Build → Source → Existing
-   Image, and set `docker.io/darthjee/kerghan:<tag>` (public, no registry credential). Render
-   supports switching a Git-backed service to a prebuilt image in place
-   (https://render.com/changelog/change-your-services-backing-repo-or-image-in-the-render-dashboard).
-   Do this **before** the first CI image deploy: Render rejects an `imageUrl` that does not match
-   the service's configured image.
-3. Let CI deploy the next tag (or run `scripts/deploy.sh deploy_image <tag>`) and confirm the
-   service goes `live`.
-
-Nothing else moves: the service id and the `kerghan.onrender.com` hostname stay the same, so
-there is no new service, no copying of environment variables, and no change to the Tent
-`$backendHost`. Image-backed services have no auto-deploy, so every deploy is triggered by CI
-(or manually, for a rollback). The production database is external to the service, so no data
-moves.
+The branch PATCH may itself trigger an auto-deploy; CI watches the deploy id returned by its own
+POST, so that is harmless. There is no rollback command. No Render dashboard change is needed: the
+service id, Dockerfile path and `kerghan.onrender.com` hostname stay the same. The production
+database is external to the service, so no data moves.
 
 ### `release-kerghan-standalone` — the standalone image on Docker Hub
 
@@ -304,7 +289,7 @@ what the images contain, is in [../standalone.md](../standalone.md).
 ### Production Dockerfile base selection
 
 `darthjee/production_kerghan-base` uses a different tag per architecture (`:<ver>` for amd64,
-`:<ver>-arm64` for arm64), so `dockerfiles/production_kerghan/Dockerfile` declares one stage per
+`:<ver>-arm64` for arm64), so `dockerfiles/release_kerghan/Dockerfile` declares one stage per
 architecture (`base-amd64`, `base-arm64`) and selects `FROM base-${TARGETARCH:-amd64} as base`.
 BuildKit fills `TARGETARCH` from the target platform and only pulls the stage it needs. The global
 `ARG TARGETARCH` deliberately has **no default**: a default would override BuildKit's automatic
@@ -368,7 +353,7 @@ docker-compose run --rm circleci config process .circleci/config.yml   # expande
 
 | Script | Purpose |
 |--------|---------|
-| `scripts/deploy.sh` | Deploy `darthjee/kerghan:<tag>` to Render.com and wait for `live`: `deploy` (CI, uses `CIRCLE_TAG`), `deploy_image <tag>` (rollback/manual), `watch`, `service_id` |
+| `scripts/deploy.sh` | Deploy a release tag to Render.com and wait for `live`: `deploy` (CI, uses `CIRCLE_TAG`), `force_deploy <tag>` (skips the latest-tag check); both check the thin Dockerfile's `FROM` tag, move the service branch to the tag and trigger a deploy. Also `watch`, `service_id` |
 | `scripts/render.sh` | Render.com API helpers (sourced by `deploy.sh`) |
 | `scripts/test/` | bats suite for `deploy.sh`/`render.sh` (stubbed `curl`), run by `scripts_tests` |
 | `scripts/bump_version.sh` | Bump the version string across the repo |
@@ -381,8 +366,8 @@ docker-compose run --rm circleci config process .circleci/config.yml   # expande
 
 ## Migrations on production boot
 
-`dockerfiles/production_kerghan/Dockerfile` sets `dockerfiles/production_kerghan/entrypoint.sh`
-as its `ENTRYPOINT`. On container start, the entrypoint runs `yarn migration:run` first and,
+`dockerfiles/release_kerghan/Dockerfile` sets `dockerfiles/release_kerghan/entrypoint.sh`
+as its `ENTRYPOINT` (inherited by the thin Render Dockerfile). On container start, the entrypoint runs `yarn migration:run` first and,
 because it's a `set -e` `/bin/sh` script, any migration failure aborts immediately with a
 non-zero exit — `node dist/main.js` (invoked via `exec`, so it replaces the shell as PID 1) never
 runs against a broken/partial schema. This applies only to the production image; the dev/test

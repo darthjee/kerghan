@@ -2,7 +2,7 @@
 # stub dir (curl, docker, uname; no vault by default) plus a minimal set of
 # real tools as the installer's whole PATH, so a real vault, curl or docker on
 # the host can never be hit.
-# shellcheck disable=SC2034,SC2154 # INSTALLER is used and $output set by the .bats files
+# shellcheck disable=SC2034,SC2154 # INSTALLER, CURRENT_VERSION are used and $output set by the .bats files
 
 INSTALLER="$BATS_TEST_DIRNAME/../install.sh"
 KERGHAN_CLIENT="$BATS_TEST_DIRNAME/../bin/kerghan"
@@ -123,3 +123,7 @@ assert_staging_cleaned() {
 stamped() {
   sed -n "s/^$1=\"\\([0-9.]*\\)\"\$/\\1/p" "$2"
 }
+
+# CURRENT_VERSION - the installer's stamped KERGHAN_VERSION, read rather than
+# hard-coded so a version bump (scripts/bump_version.sh) needs no test changes.
+CURRENT_VERSION="$(stamped KERGHAN_VERSION "$INSTALLER")"

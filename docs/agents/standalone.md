@@ -13,7 +13,7 @@ The `standalone` agent owns the files described here; the CI release jobs belong
 Kerghan ships as two public Docker images, plus a client and an installer:
 
 - **`darthjee/kerghan`**: the production backend image (NestJS, runs migrations on boot), built
-  from `dockerfiles/production_kerghan/Dockerfile`. Render deploys it, and the standalone image
+  from `dockerfiles/release_kerghan/Dockerfile`. Render deploys it, and the standalone image
   runs it as an inner service.
 - **`darthjee/kerghan-standalone`**: a [Vault](external/vault.md) image
   (`FROM darthjee/vault`) that runs the whole stack in one container: MySQL, the backend, and Tent
@@ -342,7 +342,7 @@ also gives the backend the base URL for password-reset links and the GitHub call
 
 | Image | Built from | Tags |
 |---|---|---|
-| `darthjee/kerghan` | `dockerfiles/production_kerghan/Dockerfile` | `<v>`, `latest` |
+| `darthjee/kerghan` | `dockerfiles/release_kerghan/Dockerfile` | `<v>`, `latest` |
 | `darthjee/kerghan-standalone` | `dockerfiles/kerghan_standalone/Dockerfile`, target `standalone` | `<v>`, `latest` |
 | `darthjee/kerghan-standalone` | same file, target `standalone-offline` | `<v>-offline`, `latest-offline` |
 

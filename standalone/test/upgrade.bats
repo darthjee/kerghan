@@ -4,8 +4,6 @@
 
 load helpers/setup
 
-IMAGE="darthjee/kerghan-standalone:0.5.0"
-
 @test "the same image and port is a no-op that prints the URL" {
   write_env_file
   export STUB_RUNNING_IMAGE="$IMAGE" STUB_RUNNING_PORT=3000
@@ -26,10 +24,10 @@ IMAGE="darthjee/kerghan-standalone:0.5.0"
 
 @test "an older running version is recreated with the new image, keeping the volume" {
   write_env_file
-  export STUB_VOLUME_EXISTS=1 STUB_RUNNING_IMAGE="darthjee/kerghan-standalone:0.4.0"
+  export STUB_VOLUME_EXISTS=1 STUB_RUNNING_IMAGE="$IMAGE_REPO:$OLDER_VERSION"
   run "$KERGHAN" up
   [ "$status" -eq 0 ]
-  assert_output_contains "upgrading darthjee/kerghan-standalone:0.4.0 -> $IMAGE"
+  assert_output_contains "upgrading $IMAGE_REPO:$OLDER_VERSION -> $IMAGE"
   [ "$(vault_calls | sed -n 1p)" = "vault down --name kerghan --stop-timeout 60" ]
   [ "$(vault_calls | sed -n 2p)" = "vault up --name kerghan --image $IMAGE --env-file $ENV_FILE -p 3000:80 -e FRONTEND_BASE_URL=http://localhost:3000 --runtime auto --stop-timeout 60" ]
   refute_logged_prefix "docker volume rm"
@@ -37,7 +35,7 @@ IMAGE="darthjee/kerghan-standalone:0.5.0"
 
 @test "an older offline version is upgraded with the offline image" {
   write_env_file
-  export STUB_RUNNING_IMAGE="darthjee/kerghan-standalone:0.4.9-offline"
+  export STUB_RUNNING_IMAGE="$IMAGE_REPO:$OLDER_VERSION-offline"
   run "$KERGHAN" up --offline
   [ "$status" -eq 0 ]
   assert_output_contains "upgrading"
@@ -78,11 +76,11 @@ IMAGE="darthjee/kerghan-standalone:0.5.0"
 
 @test "a newer running version warns about the downgrade and is not recreated" {
   write_env_file
-  export STUB_RUNNING_IMAGE="darthjee/kerghan-standalone:0.6.0"
+  export STUB_RUNNING_IMAGE="$IMAGE_REPO:$NEWER_VERSION"
   run "$KERGHAN" up
   [ "$status" -eq 1 ]
-  assert_output_contains "kerghan: warning: the running instance uses darthjee/kerghan-standalone:0.6.0, newer than this CLI (0.5.0); downgrades are unsupported"
-  assert_output_contains "kerghan: hint: install the kerghan CLI 0.6.0"
+  assert_output_contains "kerghan: warning: the running instance uses $IMAGE_REPO:$NEWER_VERSION, newer than this CLI ($CURRENT_VERSION); downgrades are unsupported"
+  assert_output_contains "kerghan: hint: install the kerghan CLI $NEWER_VERSION"
   [ -z "$(vault_calls)" ]
 }
 
@@ -98,7 +96,7 @@ IMAGE="darthjee/kerghan-standalone:0.5.0"
 
 @test "a stopped container counts as no running instance" {
   write_env_file
-  export STUB_RUNNING_IMAGE="darthjee/kerghan-standalone:0.6.0" STUB_RUNNING_STATE=false
+  export STUB_RUNNING_IMAGE="$IMAGE_REPO:$NEWER_VERSION" STUB_RUNNING_STATE=false
   run "$KERGHAN" up
   [ "$status" -eq 0 ]
   [ "$(vault_calls)" = "vault up --name kerghan --image $IMAGE --env-file $ENV_FILE -p 3000:80 -e FRONTEND_BASE_URL=http://localhost:3000 --runtime auto --stop-timeout 60" ]

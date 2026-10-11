@@ -3,8 +3,6 @@
 
 load helpers/setup
 
-IMAGE="darthjee/kerghan-standalone:0.5.0"
-
 @test "up runs vault up with the online image, the env file and port 3000" {
   write_env_file
   run "$KERGHAN" up
@@ -132,7 +130,7 @@ IMAGE="darthjee/kerghan-standalone:0.5.0"
 @test "version prints the pinned version" {
   run "$KERGHAN" version
   [ "$status" -eq 0 ]
-  [ "$output" = "kerghan 0.5.0" ]
+  [ "$output" = "kerghan $CURRENT_VERSION" ]
 }
 
 @test "the pinned version is a single column-0 KERGHAN_VERSION line" {

@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Test stub for curl, used by the Render deploy script tests: logs every call
 # as `curl <METHOD> <URL> <DATA>` (one line) and prints canned Render API JSON.
+#   STUB_PATCH_FAIL=1          the service branch PATCH fails like --fail-with-body (exit 22)
 #   STUB_DEPLOY_FAIL=1         the deploy POST fails like --fail-with-body (exit 22)
 #   STUB_DEPLOY_RESPONSE=<json> body returned by the deploy POST (default {"id":"dep-1"})
 #   STUB_DEPLOY_STATUSES="a b"  statuses returned by successive deploy GETs; the
@@ -39,9 +40,17 @@ case "$method $url" in
   "GET $api/services")
     echo '[{"service":{"name":"kerghan","id":"srv-123"}},{"service":{"name":"other","id":"srv-999"}}]'
     ;;
+  "PATCH $api/services/srv-123")
+    if [ -n "${STUB_PATCH_FAIL:-}" ]; then
+      echo '{"message":"invalid branch"}'
+      echo "curl: (22) The requested URL returned error: 400" >&2
+      exit 22
+    fi
+    echo '{"name":"kerghan","id":"srv-123"}'
+    ;;
   "POST $api/services/srv-123/deploys")
     if [ -n "${STUB_DEPLOY_FAIL:-}" ]; then
-      echo '{"message":"invalid imageUrl"}'
+      echo '{"message":"deploy rejected"}'
       echo "curl: (22) The requested URL returned error: 400" >&2
       exit 22
     fi

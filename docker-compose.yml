@@ -42,7 +42,7 @@ services:
     <<: *base_prod
     build:
       context: .
-      dockerfile: dockerfiles/production_kerghan/Dockerfile
+      dockerfile: dockerfiles/release_kerghan/Dockerfile
     command: echo done
 
   #################### DEV CONTAINERS ####################

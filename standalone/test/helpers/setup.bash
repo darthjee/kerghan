@@ -1,8 +1,31 @@
 # Shared harness for the kerghan client tests: a temporary HOME, the vault,
 # docker and openssl stubs first on PATH, and STUB_LOG assertions.
-# shellcheck disable=SC2034,SC2154 # KERGHAN is used and $output set by the .bats files
+# The current version is read from the client's KERGHAN_VERSION pin, and the
+# older/newer versions are derived from it, so a version bump
+# (scripts/bump_version.sh) needs no test changes.
+# shellcheck disable=SC2034,SC2154 # KERGHAN etc. are used and $output set by the .bats files
 
 KERGHAN="$BATS_TEST_DIRNAME/../bin/kerghan"
+IMAGE_REPO="darthjee/kerghan-standalone"
+
+# CURRENT_VERSION - the CLI's pinned KERGHAN_VERSION (x.y.z).
+CURRENT_VERSION="$(sed -n 's/^KERGHAN_VERSION="\([0-9.]*\)"$/\1/p' "$KERGHAN")"
+IFS=. read -r _major _minor _patch <<<"$CURRENT_VERSION"
+
+# OLDER_VERSION - a release before CURRENT_VERSION.
+if [ "$_patch" -gt 0 ]; then
+  OLDER_VERSION="$_major.$_minor.$((_patch - 1))"
+elif [ "$_minor" -gt 0 ]; then
+  OLDER_VERSION="$_major.$((_minor - 1)).0"
+else
+  OLDER_VERSION="$((_major - 1)).0.0"
+fi
+
+# NEWER_VERSION - a release after CURRENT_VERSION.
+NEWER_VERSION="$_major.$((_minor + 1)).0"
+
+# IMAGE - the online image the CLI runs by default.
+IMAGE="$IMAGE_REPO:$CURRENT_VERSION"
 
 setup() {
   TEST_ROOT="$(mktemp -d "$BATS_TMPDIR/kerghan-test.XXXXXX")"

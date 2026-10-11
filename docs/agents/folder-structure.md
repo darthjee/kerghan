@@ -113,8 +113,10 @@ one named target per image (`docker build --target <image>`), with the per-image
 (base image, user, directories, rsync pin, ...) defined in the `build_args` function of
 `bin/image.sh`. The leaf images keep their own
 directory under `dockerfiles/`, each `FROM` its published base image; the folder names differ from
-the image tags: `dockerfiles/kerghan/` builds `dev_kerghan`, `dockerfiles/production_kerghan/`
-builds `kerghan` (production) and `dockerfiles/vite_kerghan/` builds `vite_kerghan`.
+the image tags: `dockerfiles/kerghan/` builds `dev_kerghan`, `dockerfiles/release_kerghan/`
+builds `kerghan` (production, published by `release-kerghan`) and `dockerfiles/vite_kerghan/`
+builds `vite_kerghan`. `dockerfiles/production_kerghan/` holds only the thin Dockerfile Render
+builds (`FROM darthjee/kerghan:<version>`, pinned by `scripts/bump_version.sh`).
 `dockerfiles/kerghan_standalone/` builds `kerghan-standalone` (targets `standalone` and
 `standalone-offline`, with its own `Dockerfile.dockerignore`; see `docs/agents/standalone.md`).
 `dockerfiles/scripts_tests/` builds the local `kerghan_scripts_tests` image (bats + jq) for the

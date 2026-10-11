@@ -8,6 +8,7 @@ FE_PACKAGE="$ROOT/frontend/package.json"
 BE_PACKAGE="$ROOT/backend/package.json"
 CLI="$ROOT/standalone/bin/kerghan"
 INSTALLER="$ROOT/standalone/install.sh"
+RENDER_DOCKERFILE="$ROOT/dockerfiles/production_kerghan/Dockerfile"
 
 # Extract current Next Release version from README
 current_next=$(grep -oE '\*\*Next Release:\*\* \[[0-9]+\.[0-9]+\.[0-9]+' "$README" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+')
@@ -64,6 +65,13 @@ if [ -f "$INSTALLER" ]; then
   sed -i '' \
     "s|^KERGHAN_VERSION=\"[0-9.]*\"|KERGHAN_VERSION=\"${new_version}\"|" \
     "$INSTALLER"
+fi
+
+# Update the darthjee/kerghan image version Render deploys (the thin Render Dockerfile)
+if [ -f "$RENDER_DOCKERFILE" ]; then
+  sed -i '' \
+    "s|^FROM darthjee/kerghan:[0-9.]*$|FROM darthjee/kerghan:${new_version}|" \
+    "$RENDER_DOCKERFILE"
 fi
 
 echo "Done."

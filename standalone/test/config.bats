@@ -4,7 +4,6 @@
 
 load helpers/setup
 
-IMAGE="darthjee/kerghan-standalone:0.5.0"
 URL_ARGS="-e FRONTEND_BASE_URL=http://localhost"
 
 # up_line <image> <port> [runtime] [stop-timeout] - the expected `vault up` line.
@@ -97,7 +96,7 @@ refute_side_effects() {
 @test "stop-timeout reaches the down before a recreate" {
   write_env_file
   write_config "stop-timeout=90" "runtime=privileged"
-  export STUB_RUNNING_IMAGE="darthjee/kerghan-standalone:0.4.0"
+  export STUB_RUNNING_IMAGE="$IMAGE_REPO:$OLDER_VERSION"
   run "$KERGHAN" up
   [ "$status" -eq 0 ]
   [ "$(vault_calls | sed -n 1p)" = "vault down --name kerghan --stop-timeout 90" ]
@@ -223,7 +222,7 @@ refute_side_effects() {
   write_config "garbage"
   run "$KERGHAN" version
   [ "$status" -eq 0 ]
-  [ "$output" = "kerghan 0.5.0" ]
+  [ "$output" = "kerghan $CURRENT_VERSION" ]
   run "$KERGHAN" help
   [ "$status" -eq 0 ]
   assert_output_contains "Usage: kerghan"
@@ -239,46 +238,46 @@ refute_side_effects() {
 
 @test "a semver image-tag replaces the version, online" {
   write_env_file
-  write_config "image-tag=0.4.0"
+  write_config "image-tag=$OLDER_VERSION"
   run "$KERGHAN" up
   [ "$status" -eq 0 ]
-  [ "$(vault_calls)" = "$(up_line "darthjee/kerghan-standalone:0.4.0" 3000)" ]
+  [ "$(vault_calls)" = "$(up_line "$IMAGE_REPO:$OLDER_VERSION" 3000)" ]
 }
 
 @test "a semver image-tag keeps the -offline suffix for the offline variant" {
   write_env_file
-  write_config "image-tag=0.4.0"
+  write_config "image-tag=$OLDER_VERSION"
   run "$KERGHAN" up --offline
   [ "$status" -eq 0 ]
-  [ "$(vault_calls)" = "$(up_line "darthjee/kerghan-standalone:0.4.0-offline" 3000)" ]
+  [ "$(vault_calls)" = "$(up_line "$IMAGE_REPO:$OLDER_VERSION-offline" 3000)" ]
 }
 
 @test "a semver image-tag upgrades an older running instance" {
   write_env_file
-  write_config "image-tag=0.6.0"
+  write_config "image-tag=$NEWER_VERSION"
   export STUB_RUNNING_IMAGE="$IMAGE"
   run "$KERGHAN" up
   [ "$status" -eq 0 ]
-  assert_output_contains "upgrading $IMAGE -> darthjee/kerghan-standalone:0.6.0"
+  assert_output_contains "upgrading $IMAGE -> $IMAGE_REPO:$NEWER_VERSION"
   [ "$(vault_calls | sed -n 1p)" = "vault down --name kerghan --stop-timeout 60" ]
-  [ "$(vault_calls | sed -n 2p)" = "$(up_line "darthjee/kerghan-standalone:0.6.0" 3000)" ]
+  [ "$(vault_calls | sed -n 2p)" = "$(up_line "$IMAGE_REPO:$NEWER_VERSION" 3000)" ]
 }
 
 @test "a semver image-tag older than the running instance is a refused downgrade" {
   write_env_file
-  write_config "image-tag=0.4.0"
+  write_config "image-tag=$OLDER_VERSION"
   export STUB_RUNNING_IMAGE="$IMAGE"
   run "$KERGHAN" up
   [ "$status" -eq 1 ]
-  assert_output_contains "kerghan: warning: the running instance uses $IMAGE, newer than image-tag 0.4.0"
-  assert_output_contains "image-tag=0.5.0"
+  assert_output_contains "kerghan: warning: the running instance uses $IMAGE, newer than image-tag $OLDER_VERSION"
+  assert_output_contains "image-tag=$CURRENT_VERSION"
   [ -z "$(vault_calls)" ]
 }
 
 @test "a semver image-tag matching the running instance and port is a no-op" {
   write_env_file
-  write_config "image-tag=0.4.0" "variant=offline"
-  export STUB_RUNNING_IMAGE="darthjee/kerghan-standalone:0.4.0-offline" STUB_RUNNING_PORT=3000
+  write_config "image-tag=$OLDER_VERSION" "variant=offline"
+  export STUB_RUNNING_IMAGE="$IMAGE_REPO:$OLDER_VERSION-offline" STUB_RUNNING_PORT=3000
   run "$KERGHAN" up
   [ "$status" -eq 0 ]
   assert_output_contains "Kerghan is already running at http://localhost:3000"

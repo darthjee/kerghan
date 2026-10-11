@@ -49,7 +49,7 @@ function release() {
   login
 
   docker buildx build --platform "$PLATFORMS" \
-    -f dockerfiles/production_kerghan/Dockerfile \
+    -f dockerfiles/release_kerghan/Dockerfile \
     --build-arg "BASE_VERSION=$version" \
     -t "$repo:$CIRCLE_TAG" \
     -t "$repo:latest" \
