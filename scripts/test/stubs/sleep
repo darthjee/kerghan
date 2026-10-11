@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+# Test stub for sleep: logs the wait instead of sleeping.
+echo "sleep $*" >>"$STUB_LOG"

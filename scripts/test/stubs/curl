@@ -1,0 +1,69 @@
+#!/usr/bin/env bash
+# Test stub for curl, used by the Render deploy script tests: logs every call
+# as `curl <METHOD> <URL> <DATA>` (one line) and prints canned Render API JSON.
+#   STUB_DEPLOY_FAIL=1         the deploy POST fails like --fail-with-body (exit 22)
+#   STUB_DEPLOY_RESPONSE=<json> body returned by the deploy POST (default {"id":"dep-1"})
+#   STUB_DEPLOY_STATUSES="a b"  statuses returned by successive deploy GETs; the
+#                              last one repeats (default "live")
+method="GET"
+url=""
+data=""
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --request | -X)
+      method="$2"
+      shift 2
+      ;;
+    --url)
+      url="$2"
+      shift 2
+      ;;
+    --data | -d)
+      data="$2"
+      shift 2
+      ;;
+    --header | -H)
+      shift 2
+      ;;
+    -*) shift ;;
+    *)
+      url="$1"
+      shift
+      ;;
+  esac
+done
+echo "curl $method $url $(printf '%s' "$data" | tr -d '\n')" >>"$STUB_LOG"
+
+api="https://api.render.com/v1"
+case "$method $url" in
+  "GET $api/services")
+    echo '[{"service":{"name":"kerghan","id":"srv-123"}},{"service":{"name":"other","id":"srv-999"}}]'
+    ;;
+  "POST $api/services/srv-123/deploys")
+    if [ -n "${STUB_DEPLOY_FAIL:-}" ]; then
+      echo '{"message":"invalid imageUrl"}'
+      echo "curl: (22) The requested URL returned error: 400" >&2
+      exit 22
+    fi
+    echo "${STUB_DEPLOY_RESPONSE:-{\"id\":\"dep-1\"\}}"
+    ;;
+  "GET $api/services/srv-123/deploys?limit=1")
+    echo '[{"deploy":{"id":"dep-1"}}]'
+    ;;
+  "GET $api/services/srv-123/deploys/dep-1")
+    counter="$STUB_LOG.status_count"
+    count=$(cat "$counter" 2>/dev/null || echo 0)
+    read -r -a statuses <<<"${STUB_DEPLOY_STATUSES:-live}"
+    index=$count
+    if [ "$index" -ge "${#statuses[@]}" ]; then
+      index=$((${#statuses[@]} - 1))
+    fi
+    echo $((count + 1)) >"$counter"
+    echo "{\"id\":\"dep-1\",\"status\":\"${statuses[$index]}\"}"
+    ;;
+  *)
+    echo "curl stub: unexpected request: $method $url" >&2
+    exit 22
+    ;;
+esac
+exit 0

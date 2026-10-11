@@ -45,6 +45,8 @@ workflows:
           filters: *all_tags
       - standalone_tests:
           filters: *all_tags
+      - scripts_tests:
+          filters: *all_tags
       - coverage-final:
           requires: [backend_tests, jasmine]
           filters: *all_tags
@@ -55,14 +57,15 @@ workflows:
             - jasmine
             - frontend-checks
             - proxy_extension_tests
-            - release-production_kerghan-base
-            - release-production_kerghan-base-arm64
+            - scripts_tests
+            # release-kerghan publishes darthjee/kerghan:<tag>, the image Render deploys; it
+            # requires the production-base jobs itself, so that ordering stays transitive.
+            - release-kerghan
           filters: &tags_only
             tags:
               only: /\d+\.\d+\.\d+/
             branches:
               ignore: /.*/
-      # Not required by anything yet: #341 gates build-and-release on it.
       - release-kerghan:
           requires:
             - backend_tests
@@ -217,6 +220,20 @@ jobs:
           name: Tests
           command: bats standalone/test
 
+  # bats suite for scripts/ (Render deploy: deploy.sh/render.sh), same bats/bats image as
+  # standalone_tests plus jq, which the deploy scripts need (mirrors dockerfiles/scripts_tests).
+  scripts_tests:
+    docker:
+      - image: bats/bats:1.11.0
+    steps:
+      - run:
+          name: Install checkout and test dependencies
+          command: apk add --no-cache git openssh-client jq
+      - checkout
+      - run:
+          name: Tests
+          command: bats scripts/test
+
   # Multi-arch (amd64 + arm64) publish of Kerghan's 4 base images, mirroring Majora's
   # release-image pattern. Instantiated once via a workflow `matrix` (image x suffix). Runs on
   # tag builds only — bin/image.sh's skip_if_not_tag/skip_if_unchanged decide whether to actually
@@ -297,19 +314,21 @@ jobs:
             gh --version
             bin/release_kerghan_assets.sh release
 
-  # Deploys the backend to Render: points the service's branch at the tag that triggered this
-  # workflow, triggers a deploy, and blocks (watch_deployment, in scripts/deploy.sh) until it
-  # reaches "live". Runs on `machine: true` since scripts/render.sh/scripts/deploy.sh only need
-  # curl/jq, already present on the machine executor.
+  # Deploys the backend to Render from the published image: triggers a deploy with
+  # imageUrl=docker.io/darthjee/kerghan:<tag> (the tag that triggered this workflow, published by
+  # release-kerghan) and blocks (watch_deployment, in scripts/deploy.sh) until it reaches "live";
+  # a failed status fails the job. The service's branch/source is never changed. Rollback is the
+  # same deploy for an older tag: `scripts/deploy.sh deploy_image <tag>`. Pinned to the
+  # ubuntu-2204:current machine image (curl 7.81, jq preinstalled): scripts/render.sh uses
+  # `curl --fail-with-body`, which needs curl >= 7.76 and is unknown to the legacy default image
+  # behind `machine: true`.
   build-and-release:
-    machine: true
+    machine:
+      image: ubuntu-2204:current
     steps:
       - checkout
       - run:
-          name: Update Render Deploy Branch
-          command: scripts/deploy.sh update_deploy_branch
-      - run:
-          name: Trigger Deploy
+          name: Deploy darthjee/kerghan image to Render
           command: scripts/deploy.sh deploy
 
   # Uploads the Tent proxy runtime (/var/www/html/) to the SSH deploy host's workspace-scoped

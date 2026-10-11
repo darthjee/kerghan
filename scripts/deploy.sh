@@ -1,6 +1,9 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
-source "scripts/render.sh"
+SCRIPTS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+IMAGE_REPOSITORY="${IMAGE_REPOSITORY:-docker.io/darthjee/kerghan}"
+
+source "$SCRIPTS_DIR/render.sh"
 
 function isLatestCommit() {
   VERSION=$(git tag | grep $(git describe  --tags))
@@ -31,6 +34,7 @@ function check_deployment_status() {
     exit 0;
   elif [ "$STATUS" == "build_failed" ] ||
     [ "$STATUS" == "update_failed" ] ||
+    [ "$STATUS" == "pre_deploy_failed" ] ||
     [ "$STATUS" == "canceled" ] ||
     [ "$STATUS" == "deactivated" ]; then
     exit 1;
@@ -52,7 +56,7 @@ function watch_deployment() {
     sleep $WAIT_TIME
 
     if [ "$WAIT_TIME" -gt 10 ]; then
-      WAIT_TIME=$[WAIT_TIME/2]
+      WAIT_TIME=$((WAIT_TIME / 2))
     fi
   done
 
@@ -60,20 +64,48 @@ function watch_deployment() {
   exit 1
 }
 
+function image_url() {
+  TAG=$1
+
+  if [ -z "$TAG" ] || [ "$TAG" == "latest" ]; then
+    echo "invalid image tag: '$TAG' (a release tag is required, latest is not allowed)" >&2
+    exit 1
+  fi
+
+  echo "$IMAGE_REPOSITORY:$TAG"
+}
+
 function force_deploy() {
+  TAG=$1
+  IMAGE_URL=$(image_url "$TAG") || exit 1
   SERVICE_ID=$(service_id)
-  DEPLOYMENT_ID=$(deploy "$SERVICE_ID" | jq '.id' | sed -e 's/"//g')
+  if [ -z "$SERVICE_ID" ]; then
+    echo "render service not found: $RENDER_SERVICE_NAME" >&2
+    exit 1
+  fi
+
+  echo "DEPLOYING $IMAGE_URL"
+  RESPONSE=$(deploy "$SERVICE_ID" "$IMAGE_URL") || {
+    echo "deploy request failed: $RESPONSE" >&2
+    exit 1
+  }
+
+  DEPLOYMENT_ID=$(echo "$RESPONSE" | jq -r '.id')
+  if [ -z "$DEPLOYMENT_ID" ] || [ "$DEPLOYMENT_ID" == "null" ]; then
+    echo "deploy request returned no deploy id: $RESPONSE" >&2
+    exit 1
+  fi
+
   watch_deployment "$SERVICE_ID" "$DEPLOYMENT_ID"
 }
 
 function run_deploy() {
   checkLastVersion
-  force_deploy
+  force_deploy "$CIRCLE_TAG"
 }
 
-function update_deploy_branch() {
-  SERVICE_ID=$(service_id)
-  update_service_branch "$SERVICE_ID" "$CIRCLE_TAG"
+function deploy_image() {
+  force_deploy "$1"
 }
 
 function watch_last_deployment() {
@@ -84,13 +116,17 @@ function watch_last_deployment() {
 }
 
 ACTION=$1
+shift
 
 case $ACTION in
   "deploy")
     run_deploy
     ;;
   "force_deploy")
-    force_deploy
+    force_deploy "$@"
+    ;;
+  "deploy_image")
+    deploy_image "$@"
     ;;
   "watch")
     watch_last_deployment
@@ -98,10 +134,7 @@ case $ACTION in
   "service_id")
     service_id
     ;;
-  "update_deploy_branch")
-    update_deploy_branch
-    ;;
   *)
-    $ACTION
+    $ACTION "$@"
     ;;
 esac

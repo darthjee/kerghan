@@ -12,7 +12,7 @@
 | `docker_volumes/` | Bind-mount targets for local dev (gitignored contents) |
 | `docs/agents/` | Agent-facing documentation, hub + per-topic pages (this directory) |
 | `bin/` | Language-agnostic CI shell scripts (`image.sh`, `deploy_frontend.sh`, `release_kerghan.sh`, `release_kerghan_standalone.sh`, `release_kerghan_assets.sh`) |
-| `scripts/` | Release shell scripts (`bump_version.sh`, `deploy.sh`, `render.sh`, `wake_navi.sh`, `warm_navi_cache.sh`) |
+| `scripts/` | Release shell scripts (`bump_version.sh`, `deploy.sh`, `render.sh`, `wake_navi.sh`, `warm_navi_cache.sh`) and their bats suite (`scripts/test/`) |
 | `.circleci/` | CI pipeline config (validate with `docker-compose run --rm circleci config validate`) |
 | `.claude/agents/` | Specialist AI agent definitions |
 | `.github/` | Commit/PR templates + `copilot-instructions.md` |
@@ -116,7 +116,9 @@ directory under `dockerfiles/`, each `FROM` its published base image; the folder
 the image tags: `dockerfiles/kerghan/` builds `dev_kerghan`, `dockerfiles/production_kerghan/`
 builds `kerghan` (production) and `dockerfiles/vite_kerghan/` builds `vite_kerghan`.
 `dockerfiles/kerghan_standalone/` builds `kerghan-standalone` (targets `standalone` and
-`standalone-offline`, with its own `Dockerfile.dockerignore`; see `docs/agents/standalone.md`). See `ls dockerfiles/` for
+`standalone-offline`, with its own `Dockerfile.dockerignore`; see `docs/agents/standalone.md`).
+`dockerfiles/scripts_tests/` builds the local `kerghan_scripts_tests` image (bats + jq) for the
+`scripts_tests` compose service. See `ls dockerfiles/` for
 the current list. The backend image family (`kerghan-base`,
 `circleci_kerghan-base`, `production_kerghan-base`) is built but not published to Docker Hub —
 see `docs/agents/architecture/infra.md` for the CircleCI `release-image` jobs that publish each
