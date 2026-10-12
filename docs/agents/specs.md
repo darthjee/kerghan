@@ -45,7 +45,8 @@ file changes.
 
 ## Active specs
 
-none
+- **Default user** — [specs/default-user/](specs/default-user/README.md): an
+  environment-configured default user, with optional automatic login in `status.json`. Epic #366.
 
 When no feature is in progress, this list reads "none".
 
