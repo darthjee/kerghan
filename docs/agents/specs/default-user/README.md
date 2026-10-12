@@ -32,8 +32,8 @@ scope for the sub-issues.
 
 - The `KERGHAN_DEFAULT_USER_*` variables and the `DefaultUserConfig` class that reads and validates
   them ([configuration.md](configuration.md)).
-- Creating or synchronizing the default user at boot, and blocking edits of the fields the
-  environment manages ([boot-sync.md](boot-sync.md)).
+- Creating or synchronizing the default user at boot ([boot-sync.md](boot-sync.md)), and blocking
+  writes of the fields the environment manages ([edit-blocking.md](edit-blocking.md)).
 - Automatic login in `status.json` ([automatic-login.md](automatic-login.md)).
 - The security rules: IP allowlist, production guard, session flooding, credentials, admin access
   ([security.md](security.md)).
@@ -63,11 +63,9 @@ scope for the sub-issues.
 
 ## Open items
 
-These are not decided yet. The files that depend on them carry a placeholder reading "to be
-defined by #374 / #375; do not implement before then".
+These are not decided yet. The files that depend on #375 carry a placeholder reading "to be
+defined by #375; do not implement before then".
 
-- **#374: API contract for edits blocked on the default user** (HTTP status, error code, response
-  body). Placeholder in [boot-sync.md](boot-sync.md#edit-blocking). #369 depends on it.
 - **#375: `status.json` contract for automatic login** (response body, automatic-login indicator,
   cookie attributes, session metadata). Placeholder in
   [automatic-login.md](automatic-login.md#response-contract). #370 depends on it.
@@ -96,10 +94,10 @@ Root instruction files and agents link only to the hub, never to this folder.
 | # | Sub-issue | Owner | Reads | Depends on |
 |---|---|---|---|---|
 | #367 | Specs: default user feature definition | architect | all | none |
-| #374 | Specs: API contract for edits blocked on the default user | architect | [boot-sync.md](boot-sync.md) | #367 |
+| #374 | Specs: API contract for edits blocked on the default user | architect | [edit-blocking.md](edit-blocking.md) | #367 |
 | #375 | Specs: `status.json` contract for automatic login | architect | [automatic-login.md](automatic-login.md) | #367 |
 | #368 | Backend: `DefaultUserConfig` | backend | [configuration.md](configuration.md), [security.md](security.md) | #367 |
-| #369 | Backend: boot-time sync and edit blocking | backend | [boot-sync.md](boot-sync.md) | #368, #374 |
+| #369 | Backend: boot-time sync and edit blocking | backend | [boot-sync.md](boot-sync.md), [edit-blocking.md](edit-blocking.md) | #368, #374 |
 | #370 | Backend: automatic login in `status.json` | backend (+ security review) | [automatic-login.md](automatic-login.md), [security.md](security.md) | #368, #369, #375 |
 | #371 | Standalone: wiring, `auto-login` and `bind` | standalone (+ infra if the image changes) | [standalone.md](standalone.md), [security.md](security.md) | #370 |
 | #372 | Standalone: `kerghan.env` update command | standalone | [standalone.md](standalone.md#existing-installations) | #371 |
@@ -113,7 +111,8 @@ Order: #367, then #374, #375 and #368 (in parallel), then #369, #370, #371, #372
 | File | Content | Implemented by |
 |---|---|---|
 | [configuration.md](configuration.md) | The variables, `DefaultUserConfig`, flag rules, boot validation | #368 |
-| [boot-sync.md](boot-sync.md) | Creating or synchronizing the user at boot, edit blocking | #369 (+ #374) |
+| [boot-sync.md](boot-sync.md) | Creating or synchronizing the user at boot | #369 |
+| [edit-blocking.md](edit-blocking.md) | API contract for writes refused on the default user (edit, recovery, reset) | #369 |
 | [automatic-login.md](automatic-login.md) | Automatic login in `status.json`, boot warning, turning it off | #370 (+ #375) |
 | [security.md](security.md) | IP allowlist, production guard, session flooding, credentials, admin access | #368, #370, #371 |
 | [standalone.md](standalone.md) | Compose pass-through, `kerghan.env` defaults, `auto-login`, `bind`, update command, open IP risk | #371, #372 |

@@ -1,6 +1,6 @@
 # Boot sync and edit blocking
 
-Implemented by #369 (edit-blocking contract by #374). Part of the
+Implemented by #369 (edit-blocking contract in [edit-blocking.md](edit-blocking.md)). Part of the
 [default-user specs](README.md).
 
 `auth_users.username` and `auth_users.email` are both unique. A user can edit their username,
@@ -46,8 +46,12 @@ error such as "managed by environment configuration". Without this:
 
 The blocking logic lives in the services, not in the controllers.
 
-**HTTP status, error code and response body: to be defined by #374; do not implement before
-then.**
+A blocked write returns `409 DEFAULT_USER_MANAGED`; the block also covers password recovery and
+reset. The full contract is in [edit-blocking.md](edit-blocking.md).
+
+**Boot sync records the default user's id.** The block identifies the default user by the id of the
+row boot sync created or matched, never by username string; see
+[edit-blocking.md](edit-blocking.md#identifying-the-default-user).
 
 ## Required tests
 
@@ -59,6 +63,5 @@ then.**
 - An email belonging to another user fails at boot with a clear error.
 - A unique-constraint error on insert falls through to the update path.
 - With `isEnabled()` false, nothing happens and an existing default user is untouched.
-- While enabled, edits of username, email, password and admin flag are blocked through
-  `account.json` and through each admin endpoint; other users stay editable, and the default user
-  becomes editable again when the feature is disabled.
+- Boot records the id of the row it created or matched.
+- Edit blocking: see [edit-blocking.md](edit-blocking.md#required-tests).
