@@ -63,12 +63,8 @@ scope for the sub-issues.
 
 ## Open items
 
-These are not decided yet. The files that depend on #375 carry a placeholder reading "to be
-defined by #375; do not implement before then".
+This is not decided yet.
 
-- **#375: `status.json` contract for automatic login** (response body, automatic-login indicator,
-  cookie attributes, session metadata). Placeholder in
-  [automatic-login.md](automatic-login.md#response-contract). #370 depends on it.
 - **The effective client IP inside Docker-in-Docker / Tent.** Open technical risk, owned by #371.
   See [standalone.md](standalone.md#open-risk-effective-client-ip).
 
@@ -113,7 +109,7 @@ Order: #367, then #374, #375 and #368 (in parallel), then #369, #370, #371, #372
 | [configuration.md](configuration.md) | The variables, `DefaultUserConfig`, flag rules, boot validation | #368 |
 | [boot-sync.md](boot-sync.md) | Creating or synchronizing the user at boot | #369 |
 | [edit-blocking.md](edit-blocking.md) | API contract for writes refused on the default user (edit, recovery, reset) | #369 |
-| [automatic-login.md](automatic-login.md) | Automatic login in `status.json`, boot warning, turning it off | #370 (+ #375) |
+| [automatic-login.md](automatic-login.md) | Automatic login in `status.json`, its response contract, boot warning, turning it off | #370 (contract by #375) |
 | [security.md](security.md) | IP allowlist, production guard, session flooding, credentials, admin access | #368, #370, #371 |
 | [standalone.md](standalone.md) | Compose pass-through, `kerghan.env` defaults, `auto-login`, `bind`, update command, open IP risk | #371, #372 |
 
