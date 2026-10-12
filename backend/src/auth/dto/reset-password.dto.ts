@@ -1,4 +1,5 @@
 import { IsNotEmpty, IsString, MinLength } from 'class-validator';
+import { PASSWORD_MIN_LENGTH } from '../password-rules.js';
 
 /**
  * Request body for `POST /auth/reset-password.json`. `password_confirmation`,
@@ -12,6 +13,6 @@ export class ResetPasswordDto {
     token!: string;
 
   @IsString()
-  @MinLength(8)
+  @MinLength(PASSWORD_MIN_LENGTH)
     password!: string;
 }
