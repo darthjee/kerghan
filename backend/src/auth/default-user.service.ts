@@ -7,7 +7,7 @@ import { ErrorCodes } from '../core/error-codes.js';
 import { LoggerService } from '../core/logger.service.js';
 import { RevokedReason } from './entities/refresh-token.entity.js';
 import { User } from './entities/user.entity.js';
-import { TokenService } from './token.service.js';
+import { TokenService, type AuthResult } from './token.service.js';
 
 /**
  * The message of every `409 DEFAULT_USER_MANAGED` response (see
@@ -20,6 +20,11 @@ export const DEFAULT_USER_MANAGED_MESSAGE =
 // MySQL's driver error code for a unique-index violation, used to detect the
 // concurrent-boot insert race without depending on the message text.
 const MYSQL_DUPLICATE_ENTRY_CODE = 'ER_DUP_ENTRY';
+
+// The boot warning logged while automatic login is on (see
+// `docs/agents/specs/default-user/automatic-login.md#boot-warning`).
+export const AUTOMATIC_LOGIN_WARNING =
+  'AUTOMATIC LOGIN IS ON: status.json logs callers in as the default user';
 
 /**
  * Synchronizes the default user (`KERGHAN_DEFAULT_USER_*`, read through
@@ -76,6 +81,28 @@ export class DefaultUserService implements OnApplicationBootstrap {
 
     this.#defaultUserId = user.id;
     this.logger.info('default user synchronized', { context: 'DefaultUserService', userId: user.id });
+    this.#warnIfAutomaticLogin();
+  }
+
+  /**
+   * Logs the caller in as the default user (`status.json`'s automatic
+   * login): mints a regular session (`keepSignedIn: false`, regular refresh
+   * TTL) through the same {@link TokenService#issueTokens} path
+   * `login.json` uses, without any password check.
+   * @param {string} clientIp - The resolved client IP (trusted proxy hops
+   *   already applied).
+   * @returns {Promise<AuthResult | null>} The new session, or `null` when
+   *   always-authenticated is off, boot sync recorded no id, the IP is not
+   *   allowed (an empty IP never is) or the default user row is gone.
+   */
+  async autoLogin(clientIp: string): Promise<AuthResult | null> {
+    if (!this.#canAutoLogin(clientIp)) {
+      return null;
+    }
+
+    const user = await this.userRepository.findOneBy({ id: this.#defaultUserId as number });
+
+    return user ? this.tokenService.issueTokens(user, false) : null;
   }
 
   /**
@@ -101,6 +128,25 @@ export class DefaultUserService implements OnApplicationBootstrap {
         message: DEFAULT_USER_MANAGED_MESSAGE,
       });
     }
+  }
+
+  #canAutoLogin(clientIp: string): boolean {
+    return this.config.isAlwaysAuthenticated()
+      && this.#defaultUserId !== null
+      && clientIp !== ''
+      && this.config.isIpAllowed(clientIp);
+  }
+
+  #warnIfAutomaticLogin(): void {
+    if (!this.config.isAlwaysAuthenticated()) {
+      return;
+    }
+
+    this.logger.warn(AUTOMATIC_LOGIN_WARNING, {
+      context: 'DefaultUserService',
+      username: this.config.username(),
+      allowedIps: this.config.allowedIps(),
+    });
   }
 
   async #sync(): Promise<User> {
