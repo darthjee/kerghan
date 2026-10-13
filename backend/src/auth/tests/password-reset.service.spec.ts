@@ -7,6 +7,11 @@ import { PasswordResetToken } from '../entities/password-reset-token.entity.js';
 import { User } from '../entities/user.entity.js';
 import { PasswordResetService } from '../password-reset.service.js';
 import { repoMock, RepoMock } from './repo-mock.test-support.js';
+import {
+  asDefaultUserService,
+  defaultUserServiceDouble,
+  expectDefaultUserManaged,
+} from './support/default-user-service-double.js';
 import { createInMemoryRepo } from './support/in-memory-repo.js';
 
 describe('PasswordResetService', () => {
@@ -38,6 +43,7 @@ describe('PasswordResetService', () => {
       eventEmitter as unknown as EventEmitter2,
       configService as unknown as ConfigService,
       logger as never,
+      asDefaultUserService(defaultUserServiceDouble()),
     );
   });
 
@@ -202,6 +208,7 @@ describe('PasswordResetService', () => {
           eventEmitter as unknown as EventEmitter2,
           configService as unknown as ConfigService,
           logger as never,
+          asDefaultUserService(defaultUserServiceDouble()),
         );
       });
 
@@ -324,6 +331,97 @@ describe('PasswordResetService', () => {
           service.resetPassword({ token: 'expired-token', password: 'new-password' }),
         ).rejects.toThrow(new BadRequestException('Invalid or expired token'));
       });
+    });
+  });
+
+  describe('when the default user is enabled', () => {
+    const defaultUser = { id: 7, username: 'admin', email: 'admin@kerghan.local' } as User;
+    const other = { id: 1, username: 'darthjee', email: 'darthjee@example.com' } as User;
+    let blocking: PasswordResetService;
+
+    beforeEach(() => {
+      blocking = new PasswordResetService(
+        userRepository as never,
+        passwordResetTokenRepository as never,
+        eventEmitter as unknown as EventEmitter2,
+        configService as unknown as ConfigService,
+        logger as never,
+        asDefaultUserService(defaultUserServiceDouble(7)),
+      );
+    });
+
+    describe('recover', () => {
+      it('resolves silently for the default user, creating no token and emitting no event', async () => {
+        userRepository.findOneBy.mockResolvedValue(defaultUser);
+
+        await expect(blocking.recover({ email: 'admin@kerghan.local' })).resolves.toBeUndefined();
+
+        expect(passwordResetTokenRepository.save).not.toHaveBeenCalled();
+        expect(eventEmitter.emit).not.toHaveBeenCalled();
+      });
+
+      it('still creates a token and emits the event for other users', async () => {
+        userRepository.findOneBy.mockResolvedValue(other);
+
+        await blocking.recover({ email: 'darthjee@example.com' });
+
+        expect(passwordResetTokenRepository.save).toHaveBeenCalled();
+        expect(eventEmitter.emit).toHaveBeenCalledWith('password-recovery.requested', expect.anything());
+      });
+    });
+
+    describe('resetPassword', () => {
+      const token = (userId: number, overrides = {}) => ({
+        id: 10,
+        userId,
+        usedAt: null,
+        expiresAt: new Date(Date.now() + 60_000),
+        ...overrides,
+      });
+
+      it('rejects a valid default-user token with 409, changing no password and keeping the token', async () => {
+        passwordResetTokenRepository.findOneBy.mockResolvedValue(token(7));
+
+        await expectDefaultUserManaged(blocking.resetPassword({ token: 'a-token', password: 'new-password' }));
+
+        expect(userRepository.update).not.toHaveBeenCalled();
+        expect(passwordResetTokenRepository.update).not.toHaveBeenCalled();
+      });
+
+      it('keeps the 400 for an expired default-user token', async () => {
+        passwordResetTokenRepository.findOneBy.mockResolvedValue(token(7, { expiresAt: new Date(Date.now() - 1000) }));
+
+        await expect(blocking.resetPassword({ token: 'a-token', password: 'new-password' }))
+          .rejects.toThrow(new BadRequestException('Invalid or expired token'));
+      });
+
+      it('keeps the 400 for an unknown token', async () => {
+        passwordResetTokenRepository.findOneBy.mockResolvedValue(null);
+
+        await expect(blocking.resetPassword({ token: 'a-token', password: 'new-password' }))
+          .rejects.toThrow(new BadRequestException('Invalid or expired token'));
+      });
+
+      it('still resets other users\' passwords', async () => {
+        passwordResetTokenRepository.findOneBy.mockResolvedValue(token(1));
+
+        await expect(blocking.resetPassword({ token: 'a-token', password: 'new-password' })).resolves.toBe(1);
+        expect(passwordResetTokenRepository.update).toHaveBeenCalledWith(10, { usedAt: expect.any(Date) });
+      });
+    });
+  });
+
+  describe('when the feature is disabled', () => {
+    it('recovers and resets a user previously synchronized as default user as usual', async () => {
+      userRepository.findOneBy.mockResolvedValue({ id: 7, email: 'admin@kerghan.local' } as User);
+      passwordResetTokenRepository.findOneBy.mockResolvedValue({
+        id: 10, userId: 7, usedAt: null, expiresAt: new Date(Date.now() + 60_000),
+      });
+
+      await service.recover({ email: 'admin@kerghan.local' });
+      await expect(service.resetPassword({ token: 'a-token', password: 'new-password' })).resolves.toBe(7);
+
+      expect(eventEmitter.emit).toHaveBeenCalledWith('password-recovery.requested', expect.anything());
     });
   });
 });
