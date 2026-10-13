@@ -49,8 +49,9 @@ The blocking logic lives in the services, not in the controllers.
 A blocked write returns `409 DEFAULT_USER_MANAGED`; the block also covers password recovery and
 reset. The full contract is in [edit-blocking.md](edit-blocking.md).
 
-**Boot sync records the default user's id.** The block identifies the default user by the id of the
-row boot sync created or matched, never by username string; see
+**Boot sync records the default user's id.** `DefaultUserService`
+(`backend/src/auth/default-user.service.ts`) holds it in memory. The block identifies the default user by the
+id of the row boot sync created or matched, never by username string; see
 [edit-blocking.md](edit-blocking.md#identifying-the-default-user).
 
 ## Required tests

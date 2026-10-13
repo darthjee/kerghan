@@ -34,10 +34,11 @@ identified **by id**, never by comparing username strings.
   accent-insensitive). Boot sync's lookup can therefore match a stored `Admin` for a configured
   `admin`, which a strict `user.username === config.username()` check would miss, bypassing the
   block.
-- Boot sync records the id of the row it created or matched, and the block compares ids (for
-  example an `isDefaultUser(user)` helper). This needs no extra query per request, and each
-  instance resolves the id at its own boot.
-- #369 owns where the id is held. While `isEnabled()` is false, no id is held and nothing is
+- Boot sync records the id of the row it created or matched, and the block compares ids
+  (`isDefaultUser(userId)`). This needs no extra query per request, and each instance resolves the id at its own boot.
+- The id is held in memory by `DefaultUserService` (`backend/src/auth/default-user.service.ts`),
+  recorded in `onApplicationBootstrap` and exposed through `isDefaultUser(userId)` and
+  `assertNotDefaultUser(userId)`. While `isEnabled()` is false, no id is held and nothing is
   blocked.
 
 ## Response
@@ -189,8 +190,8 @@ endpoints has an abuse guard, so there is no counter interaction.
   non-`403` error's `error.message` as the submit error, so the `409` shows "This user is managed
   by environment configuration and cannot be edited" with no frontend change. (`409` also avoids
   the admin form's `403` redirect-home handling, which would have misled the admin.) The
-  reset-password page is expected to surface the message the same way; #369 confirms this while
-  implementing.
+  reset-password page (the login modal's `resetPassword` mode, `LoginModalController`) surfaces
+  the message the same way, confirmed by #369.
 - **Existing data.** No migration. A default user created by an earlier enabled boot that is now
   disabled stays editable (see [Edge cases](#edge-cases)).
 
