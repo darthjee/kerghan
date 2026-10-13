@@ -11,6 +11,7 @@ import { AuthorizationRequestAbuseGuardService } from './authorization-request-a
 import { AuthorizationRequestController } from './authorization-request.controller.js';
 import { AuthorizationRequestService } from './authorization-request.service.js';
 import { DefaultUserConfig } from './default-user.config.js';
+import { DefaultUserService } from './default-user.service.js';
 import { MailModule } from '../mail/mail.module.js';
 import { AccountEditLockout } from './entities/account-edit-lockout.entity.js';
 import { AuthorizationRequest } from './entities/authorization-request.entity.js';
@@ -55,6 +56,7 @@ import { UserUpdateService } from './user-update.service.js';
     AuthorizationRequestService,
     AuthorizationRequestAbuseGuardService,
     PasswordRecoveryRequestedListener,
+    DefaultUserService,
     {
       provide: DefaultUserConfig,
       inject: [ConfigService],
