@@ -13,6 +13,8 @@ the automatic login.
   normal login flow, with no error.
 - When the variable is empty or unset, only loopback (`127.0.0.1`, `::1`) is allowed. Opening
   automatic login to remote clients is always a deliberate choice.
+- IPv4-mapped IPv6 client addresses (`::ffff:a.b.c.d`, as Node reports IPv4 clients on a
+  dual-stack socket) are matched as their IPv4 form, so `127.0.0.1` and IPv4 ranges apply to them.
 - A malformed IP or CIDR fails at boot, naming the bad entry
   ([configuration.md](configuration.md#validation-at-boot)).
 - The client IP is resolved with the existing `KERGHAN_TRUSTED_PROXY_HOPS` handling (see
