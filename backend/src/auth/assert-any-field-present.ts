@@ -16,3 +16,19 @@ export function assertAnyFieldPresent(dto: UserFieldChangesDto): void {
     throw new BadRequestException('At least one of username, email, or newPassword is required');
   }
 }
+
+// The default user's fields managed by environment configuration (see
+// `docs/agents/specs/default-user/edit-blocking.md`'s "Scope of the block").
+const MANAGED_FIELDS = ['username', 'email', 'newPassword'] as const;
+
+/**
+ * Reports whether a user-update request carries any field managed by the
+ * default-user configuration — by presence, never by value — so
+ * `DefaultUserService#assertNotDefaultUser` is applied only to requests that
+ * would write a managed field (a future unmanaged field stays editable).
+ * @param {UserFieldChangesDto} dto - The requested changes.
+ * @returns {boolean} `true` when `username`, `email` or `newPassword` is present.
+ */
+export function hasManagedField(dto: UserFieldChangesDto): boolean {
+  return MANAGED_FIELDS.some((field) => dto[field] !== undefined && dto[field] !== null);
+}

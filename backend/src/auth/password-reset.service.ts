@@ -5,6 +5,7 @@ import { EventEmitter2 } from '@nestjs/event-emitter';
 import { InjectRepository } from '@nestjs/typeorm';
 import bcrypt from 'bcryptjs';
 import { IsNull, LessThan, Not, Repository } from 'typeorm';
+import { DefaultUserService } from './default-user.service.js';
 import { RecoverDto } from './dto/recover.dto.js';
 import { ResetPasswordDto } from './dto/reset-password.dto.js';
 import { PasswordResetToken } from './entities/password-reset-token.entity.js';
@@ -32,6 +33,7 @@ export class PasswordResetService {
   private readonly eventEmitter: EventEmitter2;
   private readonly configService: ConfigService;
   private readonly logger: LoggerService;
+  private readonly defaultUserService: DefaultUserService;
 
   /**
    * @param {Repository<User>} userRepository - The Auth module's user repository.
@@ -41,6 +43,8 @@ export class PasswordResetService {
    * @param {ConfigService} configService - Supplies `FRONTEND_BASE_URL` and
    *   the password-reset-token TTL.
    * @param {LoggerService} logger - The injected Core logger.
+   * @param {DefaultUserService} defaultUserService - Identifies the default
+   *   user, whose password recovery/reset is refused.
    */
   constructor(
     @InjectRepository(User) userRepository: Repository<User>,
@@ -48,12 +52,14 @@ export class PasswordResetService {
       eventEmitter: EventEmitter2,
       configService: ConfigService,
       logger: LoggerService,
+      defaultUserService: DefaultUserService,
   ) {
     this.userRepository = userRepository;
     this.passwordResetTokenRepository = passwordResetTokenRepository;
     this.eventEmitter = eventEmitter;
     this.configService = configService;
     this.logger = logger;
+    this.defaultUserService = defaultUserService;
   }
 
   /**
@@ -62,7 +68,10 @@ export class PasswordResetService {
    * `password-recovery.requested` event is fired (consumed later by #39).
    * Never throws and never branches its return value on whether the email
    * matched — callers must respond identically either way, per the
-   * enumeration-safety contract (see `docs/agents/product.md`).
+   * enumeration-safety contract (see `docs/agents/product.md`). The default
+   * user (while enabled) is treated like an unknown email: no token, no
+   * event, no email, so the response never reveals which email belongs to
+   * the environment-managed user.
    * @param {RecoverDto} dto - Carries the email to look up.
    * @returns {Promise<void>} Resolves once the (possible) token/event have
    *   been created, whether or not the email matched an account.
@@ -85,6 +94,14 @@ export class PasswordResetService {
       email: dto.email,
       userId: user.id,
     });
+
+    if (this.defaultUserService.isDefaultUser(user.id)) {
+      this.logger.info('password recovery skipped for the default user', {
+        context: 'PasswordResetService',
+        userId: user.id,
+      });
+      return;
+    }
 
     const { token, resetUrl } = await this.issueToken(user);
 
@@ -142,9 +159,15 @@ export class PasswordResetService {
    * @returns {Promise<number>} The ID of the user whose password was reset,
    *   so the caller (`AuthService`) can revoke that user's other sessions.
    * @throws {BadRequestException} When the token is unknown, already used, or expired.
+   * @throws {ConflictException} `409 DEFAULT_USER_MANAGED` when a valid
+   *   token belongs to the default user — the password is unchanged and the
+   *   token is not consumed.
    */
   async resetPassword(dto: ResetPasswordDto): Promise<number> {
     const tokenRow = await this.#findActiveToken(dto.token);
+
+    this.defaultUserService.assertNotDefaultUser(tokenRow.userId);
+
     const passwordDigest = await bcrypt.hash(dto.password, 10);
 
     await this.userRepository.update(tokenRow.userId, { passwordDigest });

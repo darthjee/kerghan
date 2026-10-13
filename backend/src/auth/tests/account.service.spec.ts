@@ -7,6 +7,12 @@ import { AuthService } from '../auth.service.js';
 import { User } from '../entities/user.entity.js';
 import { TokenService } from '../token.service.js';
 import { UserUpdateService } from '../user-update.service.js';
+import {
+  asDefaultUserService,
+  defaultUserServiceDouble,
+  DefaultUserServiceDouble,
+  expectDefaultUserManaged,
+} from './support/default-user-service-double.js';
 
 type RepoMock<T extends object> = {
   findOneBy: jest.Mock;
@@ -52,16 +58,19 @@ describe('AccountService', () => {
 
     tokenService = { revokeUserTokens: jest.fn().mockResolvedValue(undefined) };
 
-    const userUpdateService = new UserUpdateService(userRepository as never);
+    service = buildService(defaultUserServiceDouble());
+  });
 
-    service = new AccountService(
+  function buildService(defaultUserService: DefaultUserServiceDouble): AccountService {
+    return new AccountService(
       userRepository as never,
       authService as unknown as AuthService,
-      userUpdateService,
+      new UserUpdateService(userRepository as never),
       accountEditAbuseGuardService as unknown as AccountEditAbuseGuardService,
       tokenService as unknown as TokenService,
+      asDefaultUserService(defaultUserService),
     );
-  });
+  }
 
   describe('updateAccount', () => {
     describe('when only the username is provided', () => {
@@ -340,6 +349,75 @@ describe('AccountService', () => {
         await expect(
           service.updateAccount(999, { currentPassword: 'current-password', username: 'new-username' }),
         ).rejects.toThrow(UnauthorizedException);
+      });
+    });
+
+    describe('when the caller is the default user (feature enabled)', () => {
+      beforeEach(() => {
+        service = buildService(defaultUserServiceDouble(1));
+      });
+
+      it.each([
+        ['username', { username: 'new-username' }],
+        ['email', { email: 'new@example.com' }],
+        ['newPassword', { newPassword: 'a-new-password' }],
+      ])('rejects a %s change with 409 DEFAULT_USER_MANAGED and saves nothing', async (_field, changes) => {
+        await expectDefaultUserManaged(service.updateAccount(1, { currentPassword: 'current-password', ...changes }));
+
+        expect(userRepository.save).not.toHaveBeenCalled();
+        expect(tokenService.revokeUserTokens).not.toHaveBeenCalled();
+      });
+
+      it('rejects even when the values equal the stored ones', async () => {
+        await expectDefaultUserManaged(service.updateAccount(1, {
+          currentPassword: 'current-password',
+          username: 'darthjee',
+          email: 'darthjee@example.com',
+          newPassword: 'current-password',
+        }));
+
+        expect(userRepository.save).not.toHaveBeenCalled();
+      });
+
+      it('never checks currentPassword: a wrong one still gets 409', async () => {
+        await expectDefaultUserManaged(service.updateAccount(1, { currentPassword: 'wrong', username: 'x' }));
+
+        expect(userRepository.findOneBy).not.toHaveBeenCalled();
+      });
+
+      it('never calls registerFailure nor resets the lockout', async () => {
+        await expectDefaultUserManaged(service.updateAccount(1, { currentPassword: 'wrong', username: 'x' }));
+
+        expect(accountEditAbuseGuardService.registerFailure).not.toHaveBeenCalled();
+        expect(accountEditAbuseGuardService.reset).not.toHaveBeenCalled();
+      });
+
+      it('answers 409, not 423, when the default user is locked out', async () => {
+        accountEditAbuseGuardService.isLockedOut.mockResolvedValue(true);
+
+        await expectDefaultUserManaged(service.updateAccount(1, { currentPassword: 'current-password', username: 'x' }));
+
+        expect(accountEditAbuseGuardService.isLockedOut).not.toHaveBeenCalled();
+      });
+
+      it('still rejects a request with no field with 400, before the block', async () => {
+        await expect(service.updateAccount(1, { currentPassword: 'current-password' }))
+          .rejects.toThrow(BadRequestException);
+      });
+
+      it('leaves other users editable', async () => {
+        const other = { ...user, id: 2 } as User;
+        userRepository.findOneBy.mockResolvedValue(other);
+
+        await expect(service.updateAccount(2, { currentPassword: 'current-password', username: 'renamed' }))
+          .resolves.toEqual({ username: 'renamed', email: 'darthjee@example.com' });
+      });
+    });
+
+    describe('when the feature is disabled', () => {
+      it('lets a user previously synchronized as default user edit as usual', async () => {
+        await expect(service.updateAccount(1, { currentPassword: 'current-password', username: 'renamed' }))
+          .resolves.toEqual({ username: 'renamed', email: 'darthjee@example.com' });
       });
     });
   });

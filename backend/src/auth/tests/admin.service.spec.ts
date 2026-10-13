@@ -7,6 +7,12 @@ import { User } from '../entities/user.entity.js';
 import { PasswordResetService } from '../password-reset.service.js';
 import { TokenService } from '../token.service.js';
 import { UserUpdateService } from '../user-update.service.js';
+import {
+  asDefaultUserService,
+  defaultUserServiceDouble,
+  DefaultUserServiceDouble,
+  expectDefaultUserManaged,
+} from './support/default-user-service-double.js';
 
 type UserRepoMock = {
   find: jest.Mock;
@@ -37,15 +43,20 @@ describe('AdminService', () => {
     userUpdateService = { applyUserUpdate: jest.fn().mockResolvedValue(undefined) };
     tokenService = { revokeUserTokens: jest.fn().mockResolvedValue(undefined) };
 
-    service = new AdminService(
+    service = buildService(defaultUserServiceDouble());
+  });
+
+  function buildService(defaultUserService: DefaultUserServiceDouble): AdminService {
+    return new AdminService(
       userRepository as never,
       authService as unknown as AuthService,
       passwordResetService as unknown as PasswordResetService,
       mailService as unknown as MailService,
       userUpdateService as unknown as UserUpdateService,
       tokenService as unknown as TokenService,
+      asDefaultUserService(defaultUserService),
     );
-  });
+  }
 
   describe('searchUsers', () => {
     describe('when no query is given', () => {
@@ -323,6 +334,104 @@ describe('AdminService', () => {
           NotFoundException,
         );
       });
+    });
+  });
+
+  describe('when the target is the default user (feature enabled)', () => {
+    const users = new Map<number, User>([
+      [7, { id: 7, username: 'Admin', email: 'admin@kerghan.local' } as User],
+      [1, { id: 1, username: 'darthjee', email: 'darthjee@example.com' } as User],
+    ]);
+
+    beforeEach(() => {
+      service = buildService(defaultUserServiceDouble(7));
+      userRepository.findOneBy.mockImplementation(async ({ id }: { id: number }) => users.get(id) ?? null);
+      passwordResetService.issueToken.mockResolvedValue({ token: 't', resetUrl: 'http://localhost/#/r?token=t' });
+      mailService.sendEmailTemplate.mockResolvedValue({ status: 'sent' });
+    });
+
+    describe('editUser', () => {
+      it.each([
+        ['username', { username: 'renamed' }],
+        ['email', { email: 'new@example.com' }],
+        ['newPassword', { newPassword: 'a-new-password' }],
+      ])('rejects a %s change with 409 DEFAULT_USER_MANAGED, writing nothing', async (_field, changes) => {
+        await expectDefaultUserManaged(service.editUser(7, changes));
+
+        expect(authService.assertAvailableForUpdate).not.toHaveBeenCalled();
+        expect(userUpdateService.applyUserUpdate).not.toHaveBeenCalled();
+        expect(tokenService.revokeUserTokens).not.toHaveBeenCalled();
+      });
+
+      it('rejects even when the values equal the stored ones', async () => {
+        await expectDefaultUserManaged(service.editUser(7, { username: 'Admin', email: 'admin@kerghan.local' }));
+      });
+
+      it('still answers 404 for an unknown id', async () => {
+        await expect(service.editUser(404, { username: 'x' })).rejects.toThrow(NotFoundException);
+      });
+
+      it('still answers 400 when no field is present', async () => {
+        await expect(service.editUser(7, {})).rejects.toThrow(BadRequestException);
+      });
+
+      it('leaves other users editable', async () => {
+        await service.editUser(1, { username: 'renamed' });
+
+        expect(userUpdateService.applyUserUpdate).toHaveBeenCalled();
+      });
+    });
+
+    describe('generateRecoveryLink', () => {
+      it('rejects with 409 DEFAULT_USER_MANAGED and creates no token', async () => {
+        await expectDefaultUserManaged(service.generateRecoveryLink(7));
+
+        expect(passwordResetService.issueToken).not.toHaveBeenCalled();
+      });
+
+      it('still answers 404 for an unknown id', async () => {
+        await expect(service.generateRecoveryLink(404)).rejects.toThrow(NotFoundException);
+      });
+
+      it('still mints a link for other users', async () => {
+        await expect(service.generateRecoveryLink(1)).resolves.toEqual({ resetUrl: 'http://localhost/#/r?token=t' });
+      });
+    });
+
+    describe('sendRecoveryEmail', () => {
+      it('rejects with 409 DEFAULT_USER_MANAGED, creating no token and sending no email', async () => {
+        await expectDefaultUserManaged(service.sendRecoveryEmail(7));
+
+        expect(passwordResetService.issueToken).not.toHaveBeenCalled();
+        expect(mailService.sendEmailTemplate).not.toHaveBeenCalled();
+      });
+
+      it('still answers 404 for an unknown id', async () => {
+        await expect(service.sendRecoveryEmail(404)).rejects.toThrow(NotFoundException);
+      });
+
+      it('still sends to other users', async () => {
+        await expect(service.sendRecoveryEmail(1)).resolves.toEqual({ sent: true });
+      });
+    });
+  });
+
+  describe('when the feature is disabled', () => {
+    const formerDefault = { id: 7, username: 'admin', email: 'admin@kerghan.local' } as User;
+
+    beforeEach(() => {
+      userRepository.findOneBy.mockResolvedValue(formerDefault);
+      passwordResetService.issueToken.mockResolvedValue({ token: 't', resetUrl: 'http://localhost/#/r?token=t' });
+    });
+
+    it('edits a user previously synchronized as default user as usual', async () => {
+      await service.editUser(7, { username: 'renamed' });
+
+      expect(userUpdateService.applyUserUpdate).toHaveBeenCalledWith(formerDefault, { username: 'renamed' });
+    });
+
+    it('mints a recovery link for it as usual', async () => {
+      await expect(service.generateRecoveryLink(7)).resolves.toEqual({ resetUrl: 'http://localhost/#/r?token=t' });
     });
   });
 });

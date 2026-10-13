@@ -3,8 +3,9 @@ import { InjectRepository } from '@nestjs/typeorm';
 import bcrypt from 'bcryptjs';
 import { Repository } from 'typeorm';
 import { AccountEditAbuseGuardService } from './account-edit-abuse-guard.service.js';
-import { assertAnyFieldPresent } from './assert-any-field-present.js';
+import { assertAnyFieldPresent, hasManagedField } from './assert-any-field-present.js';
 import { AuthService } from './auth.service.js';
+import { DefaultUserService } from './default-user.service.js';
 import { UpdateAccountDto } from './dto/update-account.dto.js';
 import { RevokedReason } from './entities/refresh-token.entity.js';
 import { User } from './entities/user.entity.js';
@@ -25,6 +26,7 @@ export class AccountService {
   private readonly userUpdateService: UserUpdateService;
   private readonly accountEditAbuseGuardService: AccountEditAbuseGuardService;
   private readonly tokenService: TokenService;
+  private readonly defaultUserService: DefaultUserService;
 
   /**
    * @param {Repository<User>} userRepository - The Auth module's user repository.
@@ -36,6 +38,8 @@ export class AccountService {
    *   the per-user brute-force cool-off lockout for this endpoint.
    * @param {TokenService} tokenService - Revokes the caller's other refresh
    *   tokens after a successful password change.
+   * @param {DefaultUserService} defaultUserService - Refuses edits of the
+   *   default user's managed fields.
    */
   constructor(
     @InjectRepository(User) userRepository: Repository<User>,
@@ -43,12 +47,14 @@ export class AccountService {
       userUpdateService: UserUpdateService,
       accountEditAbuseGuardService: AccountEditAbuseGuardService,
       tokenService: TokenService,
+      defaultUserService: DefaultUserService,
   ) {
     this.userRepository = userRepository;
     this.authService = authService;
     this.userUpdateService = userUpdateService;
     this.accountEditAbuseGuardService = accountEditAbuseGuardService;
     this.tokenService = tokenService;
+    this.defaultUserService = defaultUserService;
   }
 
   /**
@@ -61,7 +67,11 @@ export class AccountService {
    * never revokes anything. Any failed
    * validation (wrong current password, duplicate username/email) counts
    * toward a per-user cool-off lockout, checked before any other validation
-   * runs and reset on success (see `AccountEditAbuseGuardService`).
+   * runs and reset on success (see `AccountEditAbuseGuardService`). While
+   * the default user is enabled, a request carrying a managed field for the
+   * default user is refused right after the "any field" check — before the
+   * lockout check, never checking `currentPassword` and never touching the
+   * abuse-guard counter.
    * @param {number} userId - The id of the authenticated user (from the access-token session).
    * @param {UpdateAccountDto} dto - The requested changes plus the current password.
    * @param {string} [currentRefreshToken] - The caller's refresh token (from
@@ -70,12 +80,14 @@ export class AccountService {
    * @returns {Promise<AccountSummary>} The user's resulting username and email.
    * @throws {BadRequestException} When no field is being changed or the
    *   current password is wrong.
-   * @throws {ConflictException} When the new username/email is already taken.
+   * @throws {ConflictException} When the new username/email is already taken,
+   *   or `409 DEFAULT_USER_MANAGED` when the caller is the default user.
    * @throws {LockedException} `423 Locked` when the caller's per-user cool-off
    *   lockout is currently active.
    */
   async updateAccount(userId: number, dto: UpdateAccountDto, currentRefreshToken?: string): Promise<AccountSummary> {
     assertAnyFieldPresent(dto);
+    this.#assertNotManaged(userId, dto);
     await this.#assertNotLockedOut(userId);
 
     const user = await this.#loadUser(userId);
@@ -89,6 +101,12 @@ export class AccountService {
     }
 
     return result;
+  }
+
+  #assertNotManaged(userId: number, dto: UpdateAccountDto): void {
+    if (hasManagedField(dto)) {
+      this.defaultUserService.assertNotDefaultUser(userId);
+    }
   }
 
   async #assertNotLockedOut(userId: number): Promise<void> {
