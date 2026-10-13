@@ -40,6 +40,17 @@ export interface AuthResult {
 }
 
 /**
+ * `AuthService#status`'s result: the `status.json` body plus, only on an
+ * automatic login as the default user, the freshly issued session to set as
+ * cookies.
+ */
+export interface StatusResult {
+  loggedIn: boolean;
+  isAdmin: boolean;
+  session?: AuthResult;
+}
+
+/**
  * Session minting for the Auth module: signs the stateless access-token JWT,
  * and persists a SHA-256-hashed rotating refresh token. Split out of `AuthService` so the
  * device-authorization flow can mint a login session byte-for-byte identical
@@ -153,6 +164,26 @@ export class TokenService {
    */
   hashToken(token: string): string {
     return hashToken(token);
+  }
+
+  /**
+   * Looks up the active (unrevoked, unexpired) refresh-token row for a
+   * plaintext token, without mutating anything. Deliberately distinct from
+   * `AuthService#refresh`'s lookup, whose replay detection revokes the
+   * user's tokens: a passive status check must never revoke anything, or a
+   * second tab's mount-time check could log every tab out after the first
+   * tab's legitimate refresh.
+   * @param {string} [refreshToken] - The presented token (absent: no lookup).
+   * @returns {Promise<RefreshToken | null>} The active row, or `null` when
+   *   the token is absent, unknown, revoked or expired.
+   */
+  async findActiveToken(refreshToken?: string): Promise<RefreshToken | null> {
+    const tokenRow = refreshToken
+      ? await this.refreshTokenRepository.findOneBy({ tokenHash: this.hashToken(refreshToken) })
+      : null;
+    const isActive = !!tokenRow && !tokenRow.revokedAt && tokenRow.expiresAt > new Date();
+
+    return isActive ? tokenRow : null;
   }
 
   /**
