@@ -1,6 +1,7 @@
 import { INestApplication } from '@nestjs/common';
 import request from 'supertest';
 import { ProtectedTestController } from './auth.controller.e2e-test-support.js';
+import { DefaultUserSettings } from '../default-user.config.js';
 import {
   findSetCookie,
   loginAs,
@@ -10,7 +11,6 @@ import {
   setCookieHeaders,
 } from './support/auth-requests.js';
 import { DEFAULT_PASSWORD, ENABLED_DEFAULT_USER, seedUser, useDefaultUserApp } from './support/default-user-e2e.js';
-import { DefaultUserSettings } from '../default-user.config.js';
 import { RevokedReason } from '../entities/refresh-token.entity.js';
 import { User } from '../entities/user.entity.js';
 
