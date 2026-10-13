@@ -38,13 +38,52 @@ export function isInAllowlist(allowlist: BlockList, ip: string): boolean {
 
 /**
  * Parses one allowlist entry: a bare IP or `ip/prefix` with an in-range
- * integer prefix.
+ * integer prefix. IPv6 zone IDs (`fe80::1%eth0`) are malformed — `isIP`
+ * accepts them but `BlockList` drops (or, on some Node versions, rejects)
+ * the zone — as is any entry `BlockList` itself refuses.
  * @param {string} entry - The trimmed entry.
  * @returns {AllowlistRule | null} The rule, or `null` when malformed.
  */
 export function parseAllowlistEntry(entry: string): AllowlistRule | null {
+  const rule = parseRule(entry);
+
+  return rule && addRule(new BlockList(), rule) ? rule : null;
+}
+
+
+/**
+ * Builds the allowlist from the well-formed entries; loopback only
+ * (`127.0.0.1`, `::1`) when there are none.
+ * @param {string[]} entries - The trimmed, non-empty allowlist entries.
+ * @returns {BlockList} The allowlist (a `BlockList` used as an allow set).
+ */
+export function buildAllowlist(entries: string[]): BlockList {
+  const blockList = new BlockList();
+  const rules = entries
+    .map(parseAllowlistEntry)
+    .filter((rule): rule is AllowlistRule => rule !== null);
+
+  if (rules.length === 0) {
+    blockList.addAddress('127.0.0.1', 'ipv4');
+    blockList.addAddress('::1', 'ipv6');
+    return blockList;
+  }
+
+  for (const rule of rules) {
+    addRule(blockList, rule);
+  }
+
+  return blockList;
+}
+
+/**
+ * Syntactic parse of one entry (no `BlockList` involvement).
+ * @param {string} entry - The trimmed entry.
+ * @returns {AllowlistRule | null} The rule, or `null` when malformed.
+ */
+function parseRule(entry: string): AllowlistRule | null {
   const [address, prefixRaw, ...rest] = entry.split('/');
-  const familyNumber = isIP(address);
+  const familyNumber = address.includes('%') ? 0 : isIP(address);
 
   if (familyNumber === 0 || rest.length > 0) {
     return null;
@@ -66,32 +105,23 @@ export function parseAllowlistEntry(entry: string): AllowlistRule | null {
 }
 
 /**
- * Builds the allowlist from the well-formed entries; loopback only
- * (`127.0.0.1`, `::1`) when there are none.
- * @param {string[]} entries - The trimmed, non-empty allowlist entries.
- * @returns {BlockList} The allowlist (a `BlockList` used as an allow set).
+ * Adds `rule` to `blockList`, turning a `BlockList` rejection into `false`
+ * so a bad entry can never crash boot.
+ * @param {BlockList} blockList - The list to add to.
+ * @param {AllowlistRule} rule - The parsed rule.
+ * @returns {boolean} `true` when added, `false` when `BlockList` threw.
  */
-export function buildAllowlist(entries: string[]): BlockList {
-  const blockList = new BlockList();
-  const rules = entries
-    .map(parseAllowlistEntry)
-    .filter((rule): rule is AllowlistRule => rule !== null);
-
-  if (rules.length === 0) {
-    blockList.addAddress('127.0.0.1', 'ipv4');
-    blockList.addAddress('::1', 'ipv6');
-    return blockList;
-  }
-
-  for (const rule of rules) {
+function addRule(blockList: BlockList, rule: AllowlistRule): boolean {
+  try {
     if (rule.prefix === null) {
       blockList.addAddress(rule.address, rule.family);
     } else {
       blockList.addSubnet(rule.address, rule.prefix, rule.family);
     }
+    return true;
+  } catch {
+    return false;
   }
-
-  return blockList;
 }
 
 /**

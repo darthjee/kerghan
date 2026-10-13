@@ -1,3 +1,4 @@
+import { BlockList } from 'node:net';
 import { DefaultUserConfig } from '../default-user.config.js';
 import { PASSWORD_MIN_LENGTH } from '../password-rules.js';
 
@@ -162,6 +163,39 @@ describe('DefaultUserConfig', () => {
       },
     );
 
+    it.each(['fe80::1%eth0', 'fe80::%eth0/64', 'fe80::1%25eth0'])(
+      'reports the zone-ID entry %p as malformed in the single boot error',
+      (entry) => {
+        const error = errorOf({
+          ...VALID,
+          KERGHAN_DEFAULT_USER_EMAIL: 'bad',
+          KERGHAN_DEFAULT_USER_ALLOWED_IPS: `127.0.0.1, ${entry}`,
+        });
+
+        expect(error.message).toBe(
+          'default-user: the default user is enabled but the following are missing/invalid: '
+          + 'KERGHAN_DEFAULT_USER_EMAIL (not a valid email), '
+          + `KERGHAN_DEFAULT_USER_ALLOWED_IPS (malformed entry "${entry}")`,
+        );
+      },
+    );
+
+    describe('when BlockList rejects a syntactically valid entry', () => {
+      afterEach(() => jest.restoreAllMocks());
+
+      it.each([
+        ['addAddress', '10.0.0.1'],
+        ['addSubnet', '10.0.0.0/8'],
+      ] as const)('reports it as malformed (%s)', (method, entry) => {
+        jest.spyOn(BlockList.prototype, method).mockImplementation(() => {
+          throw new Error('rejected');
+        });
+
+        expect(() => allowlist(entry))
+          .toThrow(`KERGHAN_DEFAULT_USER_ALLOWED_IPS (malformed entry "${entry}")`);
+      });
+    });
+
     it.each([
       ['a short password', { KERGHAN_DEFAULT_USER_PASSWORD: 'Zq9!x' }, 'Zq9!x'],
       ['an invalid email', { KERGHAN_DEFAULT_USER_EMAIL: 'bad' }, SECRET],
@@ -188,6 +222,29 @@ describe('DefaultUserConfig', () => {
 
       expect(config.isEnabled()).toBe(false);
       expect(config.isIpAllowed('127.0.0.1')).toBe(true);
+    });
+
+    it.each(['fe80::1%eth0', 'fe80::%eth0/64'])(
+      'does not throw on the zone-ID ALLOWED_IPS entry %p (falls back to loopback)',
+      (entry) => {
+        const values = { KERGHAN_DEFAULT_USER_ALLOWED_IPS: entry };
+
+        expect(() => build(values)).not.toThrow();
+        expect(build(values).isIpAllowed('fe80::1')).toBe(false);
+        expect(build(values).isIpAllowed('::1')).toBe(true);
+      },
+    );
+
+    it('does not throw when BlockList rejects an entry', () => {
+      jest.spyOn(BlockList.prototype, 'addAddress').mockImplementationOnce(() => {
+        throw new Error('rejected');
+      });
+
+      try {
+        expect(() => build({ KERGHAN_DEFAULT_USER_ALLOWED_IPS: '10.0.0.1' })).not.toThrow();
+      } finally {
+        jest.restoreAllMocks();
+      }
     });
   });
 
