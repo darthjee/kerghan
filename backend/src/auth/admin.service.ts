@@ -1,8 +1,9 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { ILike, Repository } from 'typeorm';
-import { assertAnyFieldPresent } from './assert-any-field-present.js';
+import { assertAnyFieldPresent, hasManagedField } from './assert-any-field-present.js';
 import { AuthService } from './auth.service.js';
+import { DefaultUserService } from './default-user.service.js';
 import { AdminUpdateUserDto } from './dto/admin-update-user.dto.js';
 import { RevokedReason } from './entities/refresh-token.entity.js';
 import { User } from './entities/user.entity.js';
@@ -28,6 +29,7 @@ export class AdminService {
   private readonly mailService: MailService;
   private readonly userUpdateService: UserUpdateService;
   private readonly tokenService: TokenService;
+  private readonly defaultUserService: DefaultUserService;
 
   /**
    * @param {Repository<User>} userRepository - The Auth module's user repository.
@@ -40,6 +42,8 @@ export class AdminService {
    *   the requested changes for `editUser`, shared with `AccountService`.
    * @param {TokenService} tokenService - Revokes the target user's refresh
    *   tokens after a password edit.
+   * @param {DefaultUserService} defaultUserService - Refuses edits and
+   *   recovery of the default user.
    */
   constructor(
     @InjectRepository(User) userRepository: Repository<User>,
@@ -48,6 +52,7 @@ export class AdminService {
       mailService: MailService,
       userUpdateService: UserUpdateService,
       tokenService: TokenService,
+      defaultUserService: DefaultUserService,
   ) {
     this.userRepository = userRepository;
     this.authService = authService;
@@ -55,6 +60,7 @@ export class AdminService {
     this.mailService = mailService;
     this.userUpdateService = userUpdateService;
     this.tokenService = tokenService;
+    this.defaultUserService = defaultUserService;
   }
 
   /**
@@ -81,9 +87,12 @@ export class AdminService {
    * @param {number} userId - The id of the user to mint a link for.
    * @returns {Promise<{ resetUrl: string }>} The freshly minted recovery URL.
    * @throws {NotFoundException} When no user matches `userId`.
+   * @throws {ConflictException} `409 DEFAULT_USER_MANAGED` when `userId` is
+   *   the default user (no token is created).
    */
   async generateRecoveryLink(userId: number): Promise<{ resetUrl: string }> {
     const user = await this.#findUserOrThrow(userId);
+    this.defaultUserService.assertNotDefaultUser(user.id);
     const { resetUrl } = await this.passwordResetService.issueToken(user);
 
     return { resetUrl };
@@ -99,9 +108,12 @@ export class AdminService {
    *   transport accepted the message, `{ sent: false }` when email is
    *   disabled or the send failed.
    * @throws {NotFoundException} When no user matches `userId`.
+   * @throws {ConflictException} `409 DEFAULT_USER_MANAGED` when `userId` is
+   *   the default user (no token is created, no email is sent).
    */
   async sendRecoveryEmail(userId: number): Promise<{ sent: boolean }> {
     const user = await this.#findUserOrThrow(userId);
+    this.defaultUserService.assertNotDefaultUser(user.id);
     const { resetUrl } = await this.passwordResetService.issueToken(user);
 
     try {
@@ -132,13 +144,20 @@ export class AdminService {
    * @param {AdminUpdateUserDto} dto - The requested changes.
    * @returns {Promise<User>} The user's resulting row.
    * @throws {BadRequestException} When no field is being changed.
-   * @throws {ConflictException} When the new username/email is already taken.
+   * @throws {ConflictException} When the new username/email is already taken,
+   *   or `409 DEFAULT_USER_MANAGED` when the target is the default user and a
+   *   managed field is present (checked after the `404`, before any write).
    * @throws {NotFoundException} When no user matches `userId`.
    */
   async editUser(userId: number, dto: AdminUpdateUserDto): Promise<User> {
     assertAnyFieldPresent(dto);
 
     const user = await this.#findUserOrThrow(userId);
+
+    if (hasManagedField(dto)) {
+      this.defaultUserService.assertNotDefaultUser(user.id);
+    }
+
     const username = dto.username && dto.username !== user.username ? dto.username : undefined;
     const email = dto.email && dto.email !== user.email ? dto.email : undefined;
 

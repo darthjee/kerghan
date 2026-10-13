@@ -1,5 +1,5 @@
 import { BadRequestException } from '@nestjs/common';
-import { assertAnyFieldPresent } from '../assert-any-field-present.js';
+import { assertAnyFieldPresent, hasManagedField } from '../assert-any-field-present.js';
 
 describe('assertAnyFieldPresent', () => {
   it('throws BadRequestException when username, email, and newPassword are all absent', () => {
@@ -18,5 +18,19 @@ describe('assertAnyFieldPresent', () => {
 
   it('does not throw when only newPassword is present', () => {
     expect(() => assertAnyFieldPresent({ newPassword: 'new-password' })).not.toThrow();
+  });
+});
+
+describe('hasManagedField', () => {
+  it('is false when no managed field is present', () => {
+    expect(hasManagedField({})).toBe(false);
+  });
+
+  it.each([
+    ['username', { username: 'alice' }],
+    ['email', { email: 'alice@example.com' }],
+    ['newPassword', { newPassword: 'new-password' }],
+  ])('is true when %s is present', (_field, dto) => {
+    expect(hasManagedField(dto)).toBe(true);
   });
 });
