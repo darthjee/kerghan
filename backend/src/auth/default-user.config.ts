@@ -1,6 +1,7 @@
-import { BlockList, isIP } from 'node:net';
+import { BlockList } from 'node:net';
 import { ConfigService } from '@nestjs/config';
 import { isEmail } from 'class-validator';
+import { buildAllowlist, isInAllowlist, parseAllowlistEntry } from './default-user-allowlist.js';
 import { PASSWORD_MIN_LENGTH } from './password-rules.js';
 
 // Env var names — `DefaultUserConfig` is their only reader.
@@ -12,20 +13,6 @@ const PASSWORD = 'KERGHAN_DEFAULT_USER_PASSWORD';
 const ADMIN = 'KERGHAN_DEFAULT_USER_ADMIN';
 const ALLOWED_IPS = 'KERGHAN_DEFAULT_USER_ALLOWED_IPS';
 const ALLOW_IN_PRODUCTION = 'KERGHAN_DEFAULT_USER_ALLOW_IN_PRODUCTION';
-
-// Matches an IPv4-mapped IPv6 address (`::ffff:a.b.c.d`), capturing the IPv4 tail.
-const IPV4_MAPPED_PATTERN = /^::ffff:(\d{1,3}(?:\.\d{1,3}){3})$/i;
-// Matches a decimal CIDR prefix length.
-const PREFIX_PATTERN = /^\d{1,3}$/;
-// Maximum CIDR prefix length per IP family (`isIP`'s return value).
-const MAX_PREFIX: Record<number, number> = { 4: 32, 6: 128 };
-
-/** One parsed `ALLOWED_IPS` entry: a single address or a CIDR range. */
-interface AllowlistRule {
-  address: string;
-  family: 'ipv4' | 'ipv6';
-  prefix: number | null;
-}
 
 /**
  * The raw-but-normalized values read from `KERGHAN_DEFAULT_USER_*` (and
@@ -69,7 +56,7 @@ export class DefaultUserConfig {
       throwIfInvalid(collectInvalid(this.#settings));
     }
 
-    this.#blockList = buildBlockList(this.#settings.allowedIps);
+    this.#blockList = buildAllowlist(this.#settings.allowedIps);
   }
 
   /**
@@ -136,14 +123,7 @@ export class DefaultUserConfig {
    * @returns {boolean} `true` when `ip` is a valid IP inside the allowlist.
    */
   isIpAllowed(ip: string): boolean {
-    const address = normalizeIp(ip.trim());
-    const family = isIP(address);
-
-    if (family === 0) {
-      return false;
-    }
-
-    return this.#blockList.check(address, family === 4 ? 'ipv4' : 'ipv6');
+    return isInAllowlist(this.#blockList, ip);
   }
 }
 
@@ -177,7 +157,7 @@ function collectInvalid(settings: DefaultUserSettings): string[] {
   return [
     ...collectCredentialsInvalid(settings),
     ...settings.allowedIps
-      .filter((entry) => parseRule(entry) === null)
+      .filter((entry) => parseAllowlistEntry(entry) === null)
       .map((entry) => `${ALLOWED_IPS} (malformed entry "${entry}")`),
     ...collectProductionInvalid(settings),
   ];
@@ -238,73 +218,4 @@ function throwIfInvalid(invalid: string[]): void {
   throw new Error(
     `default-user: the default user is enabled but the following are missing/invalid: ${invalid.join(', ')}`,
   );
-}
-
-/**
- * Parses one allowlist entry: a bare IP or `ip/prefix` with an in-range
- * integer prefix.
- * @param {string} entry - The trimmed entry.
- * @returns {AllowlistRule | null} The rule, or `null` when malformed.
- */
-function parseRule(entry: string): AllowlistRule | null {
-  const [address, prefixRaw, ...rest] = entry.split('/');
-  const familyNumber = isIP(address);
-
-  if (familyNumber === 0 || rest.length > 0) {
-    return null;
-  }
-
-  const family = familyNumber === 4 ? 'ipv4' : 'ipv6';
-
-  if (prefixRaw === undefined) {
-    return { address, family, prefix: null };
-  }
-
-  const prefix = Number(prefixRaw);
-
-  if (!PREFIX_PATTERN.test(prefixRaw) || prefix > MAX_PREFIX[familyNumber]) {
-    return null;
-  }
-
-  return { address, family, prefix };
-}
-
-/**
- * Builds the allowlist from the well-formed entries; loopback only
- * (`127.0.0.1`, `::1`) when there are none.
- * @param {string[]} entries - The trimmed, non-empty allowlist entries.
- * @returns {BlockList} The allowlist (a `BlockList` used as an allow set).
- */
-function buildBlockList(entries: string[]): BlockList {
-  const blockList = new BlockList();
-  const rules = entries
-    .map(parseRule)
-    .filter((rule): rule is AllowlistRule => rule !== null);
-
-  if (rules.length === 0) {
-    blockList.addAddress('127.0.0.1', 'ipv4');
-    blockList.addAddress('::1', 'ipv6');
-    return blockList;
-  }
-
-  for (const rule of rules) {
-    if (rule.prefix === null) {
-      blockList.addAddress(rule.address, rule.family);
-    } else {
-      blockList.addSubnet(rule.address, rule.prefix, rule.family);
-    }
-  }
-
-  return blockList;
-}
-
-/**
- * Maps an IPv4-mapped IPv6 address (`::ffff:a.b.c.d`) to its IPv4 form.
- * @param {string} ip - The trimmed client IP.
- * @returns {string} The IPv4 tail when `ip` is IPv4-mapped, `ip` otherwise.
- */
-function normalizeIp(ip: string): string {
-  const match = IPV4_MAPPED_PATTERN.exec(ip);
-
-  return match && isIP(match[1]) === 4 ? match[1] : ip;
 }
