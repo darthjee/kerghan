@@ -1,4 +1,5 @@
 import { IsEmail, IsNotEmpty, IsOptional, IsString, MinLength } from 'class-validator';
+import { PASSWORD_MIN_LENGTH } from '../password-rules.js';
 
 /**
  * Shared field block for `UpdateAccountDto` and `AdminUpdateUserDto` — the
@@ -19,6 +20,6 @@ export class UserFieldChangesDto {
 
   @IsOptional()
   @IsString()
-  @MinLength(8)
+  @MinLength(PASSWORD_MIN_LENGTH)
     newPassword?: string;
 }

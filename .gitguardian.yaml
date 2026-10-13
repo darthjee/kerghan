@@ -18,3 +18,7 @@ secret:
       match: gho_CANARYcanaryNEW0000000000000000000n3w4
     - name: Standalone inner-MySQL overridable default password (issue #342) — the inner MySQL is never published outside the standalone container; operators override it via KERGHAN_MYSQL_PASSWORD
       match: ${KERGHAN_MYSQL_PASSWORD:-kerghan}
+    - name: DefaultUserConfig spec canary password (issue #368) — fake value used only in backend Jest specs to assert the default-user password never appears in boot errors
+      match: Sup3r-Secret-Pa$$
+    - name: DefaultUserConfig spec too-short password fixture (issue #368) — fake value used only to exercise the minimum-length check and assert it never leaks into errors
+      match: Zq9!x
