@@ -4,6 +4,7 @@ import bcrypt from 'bcryptjs';
 import { IsNull } from 'typeorm';
 import { ErrorCodes } from '../../core/error-codes.js';
 import { AuthService } from '../auth.service.js';
+import { DefaultUserService } from '../default-user.service.js';
 import { RefreshToken } from '../entities/refresh-token.entity.js';
 import { User } from '../entities/user.entity.js';
 import { PasswordResetService } from '../password-reset.service.js';
@@ -13,9 +14,15 @@ import { repoMock, RepoMock } from './repo-mock.test-support.js';
 describe('AuthService', () => {
   let userRepository: RepoMock<User>;
   let refreshTokenRepository: RepoMock<RefreshToken>;
-  let tokenService: { issueTokens: jest.Mock; hashToken: jest.Mock; revokeUserTokens: jest.Mock };
+  let tokenService: {
+    issueTokens: jest.Mock;
+    hashToken: jest.Mock;
+    revokeUserTokens: jest.Mock;
+    findActiveToken: jest.Mock;
+  };
   let eventEmitter: { emit: jest.Mock };
   let passwordResetService: { recover: jest.Mock; resetPassword: jest.Mock };
+  let defaultUserService: { autoLogin: jest.Mock };
   let service: AuthService;
 
   const activeToken = {
@@ -52,9 +59,11 @@ describe('AuthService', () => {
       })),
       hashToken: jest.fn((token: string) => `hashed:${token}`),
       revokeUserTokens: jest.fn().mockResolvedValue(undefined),
+      findActiveToken: jest.fn().mockResolvedValue(null),
     };
     eventEmitter = { emit: jest.fn() };
     passwordResetService = { recover: jest.fn(), resetPassword: jest.fn() };
+    defaultUserService = { autoLogin: jest.fn().mockResolvedValue(null) };
 
     service = new AuthService(
       userRepository as never,
@@ -62,6 +71,7 @@ describe('AuthService', () => {
       tokenService as unknown as TokenService,
       eventEmitter as unknown as EventEmitter2,
       passwordResetService as unknown as PasswordResetService,
+      defaultUserService as unknown as DefaultUserService,
     );
   });
 
@@ -508,15 +518,35 @@ describe('AuthService', () => {
 
   describe('status', () => {
     const user = { id: 1, username: 'darthjee', email: 'darthjee@example.com', isAdmin: false } as User;
+    const defaultUser = { id: 99, username: 'admin', email: 'admin@kerghan.local', isAdmin: true } as User;
+    const autoSession = {
+      user: defaultUser,
+      accessToken: 'auto-access-token',
+      refreshToken: 'auto-refresh-token',
+      refreshTokenExpiresAt: new Date(Date.now() + 60_000),
+    };
+
+    const expectNothingRevoked = (): void => {
+      expect(refreshTokenRepository.update).not.toHaveBeenCalled();
+      expect(tokenService.revokeUserTokens).not.toHaveBeenCalled();
+    };
+
+    it('looks the active token up through TokenService', async () => {
+      await service.status('a-refresh-token', '127.0.0.1');
+
+      expect(tokenService.findActiveToken).toHaveBeenCalledWith('a-refresh-token');
+    });
 
     describe('when the refresh token is active', () => {
       beforeEach(() => {
-        refreshTokenRepository.findOneBy.mockResolvedValue(activeToken);
+        tokenService.findActiveToken.mockResolvedValue(activeToken);
         userRepository.findOneBy.mockResolvedValue(user);
+        defaultUserService.autoLogin.mockResolvedValue(autoSession);
       });
 
-      it('resolves with loggedIn: true and the user isAdmin', async () => {
-        await expect(service.status('a-refresh-token')).resolves.toEqual({ loggedIn: true, isAdmin: false });
+      it('resolves with loggedIn: true and the user isAdmin, with no session', async () => {
+        await expect(service.status('a-refresh-token', '127.0.0.1'))
+          .resolves.toEqual({ loggedIn: true, isAdmin: false });
       });
 
       it('looks the user up by the token row userId', async () => {
@@ -525,16 +555,22 @@ describe('AuthService', () => {
         expect(userRepository.findOneBy).toHaveBeenCalledWith({ id: 1 });
       });
 
-      it('does not mutate the token row', async () => {
+      it('wins over automatic login, even for another user than the default one', async () => {
+        await service.status('a-refresh-token', '127.0.0.1');
+
+        expect(defaultUserService.autoLogin).not.toHaveBeenCalled();
+      });
+
+      it('does not mutate anything', async () => {
         await service.status('a-refresh-token');
 
-        expect(refreshTokenRepository.update).not.toHaveBeenCalled();
+        expectNothingRevoked();
       });
     });
 
     describe('when the active token belongs to an admin', () => {
       beforeEach(() => {
-        refreshTokenRepository.findOneBy.mockResolvedValue(activeToken);
+        tokenService.findActiveToken.mockResolvedValue(activeToken);
         userRepository.findOneBy.mockResolvedValue({ ...user, isAdmin: true });
       });
 
@@ -543,56 +579,57 @@ describe('AuthService', () => {
       });
     });
 
-    describe('when the refresh token is unknown', () => {
-      beforeEach(() => {
-        refreshTokenRepository.findOneBy.mockResolvedValue(null);
+    describe.each([
+      ['missing', undefined],
+      ['unknown, expired or revoked', 'inactive-token'],
+    ])('when the refresh token is %s', (_label, refreshToken) => {
+      describe('and automatic login applies', () => {
+        beforeEach(() => {
+          defaultUserService.autoLogin.mockResolvedValue(autoSession);
+        });
+
+        it('logs in as the default user, returning the session', async () => {
+          await expect(service.status(refreshToken, '127.0.0.1'))
+            .resolves.toEqual({ loggedIn: true, isAdmin: true, session: autoSession });
+        });
+
+        it('passes the client IP to the automatic login', async () => {
+          await service.status(refreshToken, '10.1.2.3');
+
+          expect(defaultUserService.autoLogin).toHaveBeenCalledWith('10.1.2.3');
+        });
+
+        it('takes isAdmin from the default user', async () => {
+          defaultUserService.autoLogin.mockResolvedValue({ ...autoSession, user: { ...defaultUser, isAdmin: false } });
+
+          await expect(service.status(refreshToken, '127.0.0.1')).resolves.toMatchObject({ isAdmin: false });
+        });
+
+        it('does not revoke anything', async () => {
+          await service.status(refreshToken, '127.0.0.1');
+
+          expectNothingRevoked();
+        });
       });
 
-      it('resolves with loggedIn: false and isAdmin: false, without throwing', async () => {
-        await expect(service.status('unknown-token')).resolves.toEqual({ loggedIn: false, isAdmin: false });
-      });
+      describe('and automatic login does not apply', () => {
+        it('resolves with exactly loggedIn: false and isAdmin: false', async () => {
+          await expect(service.status(refreshToken, '10.0.0.1')).resolves.toEqual({ loggedIn: false, isAdmin: false });
+        });
 
-      it('does not look up the user', async () => {
-        await service.status('unknown-token');
+        it('does not look up the user nor revoke anything', async () => {
+          await service.status(refreshToken, '10.0.0.1');
 
-        expect(userRepository.findOneBy).not.toHaveBeenCalled();
+          expect(userRepository.findOneBy).not.toHaveBeenCalled();
+          expectNothingRevoked();
+        });
       });
     });
 
-    describe('when no refresh token is presented', () => {
-      it('resolves with loggedIn: false and isAdmin: false without any lookup', async () => {
-        await expect(service.status(undefined)).resolves.toEqual({ loggedIn: false, isAdmin: false });
+    it('passes an empty client IP when none is given', async () => {
+      await service.status(undefined);
 
-        expect(refreshTokenRepository.findOneBy).not.toHaveBeenCalled();
-        expect(userRepository.findOneBy).not.toHaveBeenCalled();
-      });
-    });
-
-    describe('when the refresh token has expired', () => {
-      beforeEach(() => {
-        stubExpiredRefreshToken();
-      });
-
-      it('resolves with loggedIn: false and isAdmin: false', async () => {
-        await expect(service.status('expired-token')).resolves.toEqual({ loggedIn: false, isAdmin: false });
-      });
-    });
-
-    describe('when the refresh token was already revoked', () => {
-      beforeEach(() => {
-        stubRevokedRefreshToken();
-      });
-
-      it('resolves with loggedIn: false and isAdmin: false, without throwing', async () => {
-        await expect(service.status('revoked-token')).resolves.toEqual({ loggedIn: false, isAdmin: false });
-      });
-
-      it('does not revoke the rest of the token family', async () => {
-        await service.status('revoked-token');
-
-        expect(refreshTokenRepository.update).not.toHaveBeenCalled();
-        expect(tokenService.revokeUserTokens).not.toHaveBeenCalled();
-      });
+      expect(defaultUserService.autoLogin).toHaveBeenCalledWith('');
     });
   });
 });

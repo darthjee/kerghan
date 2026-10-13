@@ -326,4 +326,39 @@ describe('DefaultUserConfig', () => {
       },
     );
   });
+
+  describe('allowedIps', () => {
+    it.each([
+      ['unset', undefined],
+      ['empty', ''],
+      ['only commas and spaces', ' , ,'],
+    ])('returns the loopback defaults with ALLOWED_IPS %s', (_label, value) => {
+      expect(allowlist(value).allowedIps()).toEqual(['127.0.0.1', '::1']);
+    });
+
+    it('returns the configured entries, trimmed', () => {
+      expect(allowlist(' 203.0.113.7 ,,10.0.0.0/8, 2001:db8::/32 ').allowedIps())
+        .toEqual(['203.0.113.7', '10.0.0.0/8', '2001:db8::/32']);
+    });
+
+    it('skips malformed entries while disabled, as the allowlist itself does', () => {
+      const config = build({ KERGHAN_DEFAULT_USER_ALLOWED_IPS: 'nope,10.0.0.1' });
+
+      expect(config.allowedIps()).toEqual(['10.0.0.1']);
+    });
+
+    it('falls back to loopback when every entry is malformed while disabled', () => {
+      const config = build({ KERGHAN_DEFAULT_USER_ALLOWED_IPS: 'nope' });
+
+      expect(config.allowedIps()).toEqual(['127.0.0.1', '::1']);
+    });
+
+    it('returns a copy that cannot change the configuration', () => {
+      const config = allowlist('10.0.0.1');
+
+      config.allowedIps().push('0.0.0.0/0');
+
+      expect(config.allowedIps()).toEqual(['10.0.0.1']);
+    });
+  });
 });
