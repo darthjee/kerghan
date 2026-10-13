@@ -15,6 +15,7 @@ import { JwtGuard } from '../../../core/jwt.guard.js';
 import { LoggingModule } from '../../../core/logging.module.js';
 import { OriginGuard } from '../../../core/origin.guard.js';
 import { AuthModule } from '../../auth.module.js';
+import { DefaultUserConfig, DefaultUserSettings } from '../../default-user.config.js';
 import { AccountEditLockout } from '../../entities/account-edit-lockout.entity.js';
 import { AuthorizationRequest } from '../../entities/authorization-request.entity.js';
 import { PasswordResetToken } from '../../entities/password-reset-token.entity.js';
@@ -26,7 +27,22 @@ export interface BuildAuthTestAppOptions {
   registerDefaultUser?: boolean;
   configOverrides?: Record<string, string>;
   controllers?: Type<unknown>[];
+  defaultUserSettings?: Partial<DefaultUserSettings>;
+  beforeInit?: (repos: { userRepo: ReturnType<typeof createInMemoryRepo<User>> }) => void | Promise<void>;
 }
+
+// Baseline for `defaultUserSettings`: the KERGHAN_DEFAULT_USER_* feature off.
+const DISABLED_DEFAULT_USER: DefaultUserSettings = {
+  enabled: false,
+  alwaysAuthenticated: false,
+  username: '',
+  email: '',
+  password: '',
+  admin: false,
+  allowedIps: [],
+  allowInProduction: false,
+  stage: 'test',
+};
 
 export interface BuildAuthTestAppResult {
   app: INestApplication;
@@ -63,11 +79,18 @@ export interface BuildAuthTestAppResult {
 //   consumer only ever calls `.get(key)`). When empty, the real `ConfigService`
 //   is kept.
 // - `controllers` registers extra (throwaway) controllers on the test module.
+// - `defaultUserSettings` overrides the `DefaultUserConfig` provider with one
+//   built from these settings (on top of a disabled baseline), so default-user
+//   boot sync runs against the in-memory user repo during `app.init()`.
+// - `beforeInit` runs against the in-memory repos before `app.init()` (and so
+//   before boot sync), e.g. to seed rows boot sync should match.
 export async function buildAuthTestApp({
   adminGuard = false,
   registerDefaultUser = true,
   configOverrides = {},
   controllers = [],
+  defaultUserSettings,
+  beforeInit,
 }: BuildAuthTestAppOptions = {}): Promise<BuildAuthTestAppResult> {
   const userRepo = createInMemoryRepo<User>();
   const refreshTokenRepo = createInMemoryRepo<RefreshToken>();
@@ -106,6 +129,14 @@ export async function buildAuthTestApp({
   if (Object.keys(configOverrides).length > 0) {
     moduleBuilder.overrideProvider(ConfigService).useValue({ get: (key: string) => configOverrides[key] });
   }
+
+  if (defaultUserSettings) {
+    moduleBuilder
+      .overrideProvider(DefaultUserConfig)
+      .useValue(new DefaultUserConfig({ ...DISABLED_DEFAULT_USER, ...defaultUserSettings }));
+  }
+
+  await beforeInit?.({ userRepo });
 
   const moduleRef = await moduleBuilder.compile();
 
