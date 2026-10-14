@@ -244,21 +244,32 @@ volume_exists() {
 
 # ensure_env_file - generates kerghan.env (mode 600) when it does not exist.
 # Never touches an existing file.
+#
+# Besides the two secrets it writes the default user (admin, with a generated
+# 48-character hex password, so it is easy to type when auto-login is off).
+# KERGHAN_DEFAULT_USER_ALWAYS_AUTHENTICATED and KERGHAN_DEFAULT_USER_ALLOWED_IPS
+# are not written: the client passes them on every up (auto-login and bind).
 ensure_env_file() {
   [ -e "$ENV_FILE" ] && return 0
-  local secret_key integrations_key
+  local secret_key integrations_key admin_password
   secret_key="$(openssl rand -base64 32)"
   integrations_key="$(openssl rand -base64 32)"
+  admin_password="$(openssl rand -hex 24)"
   mkdir -p "$KERGHAN_HOME"
   (
     umask 077
     {
       echo "KERGHAN_SECRET_KEY=$secret_key"
       echo "KERGHAN_INTEGRATIONS_KEY=$integrations_key"
+      echo "KERGHAN_DEFAULT_USER_ENABLED=true"
+      echo "KERGHAN_DEFAULT_USER_USERNAME=admin"
+      echo "KERGHAN_DEFAULT_USER_EMAIL=admin@kerghan.local"
+      echo "KERGHAN_DEFAULT_USER_PASSWORD=$admin_password"
+      echo "KERGHAN_DEFAULT_USER_ADMIN=true"
     } >"$ENV_FILE"
   )
   chmod 600 "$ENV_FILE"
-  echo "Generated secrets in $ENV_FILE; back this file up (losing it logs everyone out and makes stored integration credentials unreadable)."
+  echo "Generated secrets in $ENV_FILE; back this file up (losing it logs everyone out and makes stored integration credentials unreadable). It also holds the password of the 'admin' user, for manual login."
 }
 
 # frontend_base_url_args <port> - prints `-e FRONTEND_BASE_URL=...` (one word
