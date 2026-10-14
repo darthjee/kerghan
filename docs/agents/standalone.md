@@ -48,7 +48,9 @@ image.
 
 - A Linux or macOS host. Windows and rootless Docker are not supported.
 - Docker, with the [Sysbox](https://github.com/nestybox/sysbox) runtime or `--privileged`
-  containers allowed. The daemon must be reachable by the current user.
+  containers allowed. The daemon must be reachable by the current user. On Linux, Docker Engine
+  28.0 or later is required for the loopback-only default `bind` to hold (see
+  [Caveats](#caveats)).
 - For the client: `vault`, `docker` and `openssl` on the host, and bash 3.2 or later. The
   installer installs `vault` when it is missing.
 
@@ -213,8 +215,8 @@ ones (from the flags, the config and the defaults):
   recreates otherwise.
 - Same image and port, but a changed `auto-login` (read from the running container's
   `KERGHAN_DEFAULT_USER_ALWAYS_AUTHENTICATED`, missing counts as `false`, an inspect failure always
-  recreates) or `bind` (the published
-  host IP, empty counts as `0.0.0.0`): the instance is recreated, and the data volume is kept.
+  recreates) or `bind` (the published host IP, empty counts as `0.0.0.0`): the instance is
+  recreated, and the data volume is kept.
 
 A changed `runtime` or `stop-timeout` never triggers a recreation; it applies the next time the
 container is created (`kerghan down && kerghan up` applies it now).
@@ -417,6 +419,12 @@ The CI jobs that build and publish the images and the client assets (`release-ke
   fails. Run standalone on `localhost`, or put your own TLS reverse proxy in front of it (and set
   `FRONTEND_BASE_URL` to the `https` URL in `kerghan.env`). An `https` `FRONTEND_BASE_URL` is also
   required to enable the GitHub OAuth App and GitHub App integration types.
+- **Docker Engine before 28.0 on Linux exposes `127.0.0.1` ports to the LAN.** This is a known
+  Docker issue ([moby#45610](https://github.com/moby/moby/issues/45610)), fixed in Docker Engine
+  28.0: on older engines, hosts on the same LAN segment can reach a port published on
+  `127.0.0.1` by routing to the container's address. The default `bind=127.0.0.1` is the guard for
+  automatic login, so on Linux use Docker Engine 28.0 or later (check with
+  `docker version --format '{{.Server.Version}}'`), or turn automatic login off.
 - **Back up `~/.kerghan/kerghan.env`.** Losing it logs everyone out and makes the stored
   integration credentials unreadable (they are encrypted with `KERGHAN_INTEGRATIONS_KEY`). Without
   it, `kerghan up` refuses to start until the file is restored or the data is wiped with

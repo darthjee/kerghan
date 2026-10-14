@@ -161,6 +161,14 @@ Open verification items:
 - On a Linux host with `bind=0.0.0.0`, LAN clients reach the inner service through DNAT with
   their real (often private) address, which is inside the allowlist. This is why the warning above
   exists and why `bind` is the real guard.
+- On a Linux host, Docker Engine 28.0 or later is required for the loopback guarantee of the
+  default bind. Before 28.0, hosts on the same LAN segment could reach a port published on
+  `127.0.0.1` by routing straight to the container address; this is a known Docker issue
+  ([moby#45610](https://github.com/moby/moby/issues/45610)), fixed in 28.0. On an older engine,
+  `bind=127.0.0.1` does not stop LAN neighbours, and they would arrive with their private address,
+  inside the allowlist. The client does not check the engine version; the requirement is
+  documented in [standalone.md](../../standalone.md#requirements). The "not reachable from other
+  interfaces" check above should be repeated on Linux with Docker Engine 28 or later.
 
 ## Existing installations
 
