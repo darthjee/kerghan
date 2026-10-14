@@ -6,11 +6,11 @@
 # instance `kerghan`: container `vault-kerghan`, data volume
 # `vault-kerghan-data`, secrets in ~/.kerghan/kerghan.env.
 #
-# Persistent settings (port, variant, runtime, stop-timeout, image-tag) are
-# read from the optional ~/.kerghan/config (flat key=value, see
-# config.example); CLI flags override it, built-in defaults fill the rest. It
-# is only loaded by up, down and reset, so a broken config never blocks the
-# other commands.
+# Persistent settings (port, variant, runtime, stop-timeout, image-tag,
+# auto-login, bind) are read from the optional ~/.kerghan/config (flat
+# key=value, see config.example); CLI flags override it, built-in defaults fill
+# the rest. It is only loaded by up, down and reset, so a broken config never
+# blocks the other commands.
 #
 # Dependencies on the host: vault, docker and openssl.
 #
@@ -69,7 +69,8 @@ usage() {
 Usage: kerghan <command> [options]
 
 Commands:
-  up [--offline] [-p PORT] [-f]   start Kerghan (detached by default) on http://localhost:$DEFAULT_PORT
+  up [--offline] [-p PORT] [--[no-]auto-login] [--bind ADDRESS] [-f]
+                                  start Kerghan (detached by default) on http://localhost:$DEFAULT_PORT
   down                            stop and remove the container; data is kept
   logs [-f]                       show (or follow) the logs
   status                          show the instance state
@@ -81,6 +82,10 @@ Commands:
 Options for up:
   --offline          use the offline image variant
   -p, --port PORT    host port (default $DEFAULT_PORT)
+  --auto-login       log in automatically as admin (default)
+  --no-auto-login    require a manual login (admin password in kerghan.env)
+  --bind ADDRESS     host IPv4 address to publish on (default $DEFAULT_BIND_AUTO_LOGIN with
+                     auto-login, $DEFAULT_BIND_NO_AUTO_LOGIN without)
   -f                 run in the foreground
 
 Settings are read from ~/.kerghan/config (optional, one key=value per line):
@@ -89,10 +94,14 @@ Settings are read from ~/.kerghan/config (optional, one key=value per line):
   runtime=$DEFAULT_RUNTIME         auto | sysbox | privileged
   stop-timeout=$DEFAULT_STOP_TIMEOUT      seconds to wait for a graceful stop
   image-tag=           override the pinned image tag ($KERGHAN_VERSION)
+  auto-login=$DEFAULT_AUTO_LOGIN      true | false (overridden by --[no-]auto-login)
+  bind=                host address (overridden by --bind)
 Flags override the file; an empty value uses the default. A changed port,
-variant or image-tag recreates the instance on the next 'kerghan up'; a
-changed runtime or stop-timeout applies the next time the container is
-created ('kerghan down && kerghan up').
+variant, image-tag, auto-login or bind recreates the instance on the next
+'kerghan up'; a changed runtime or stop-timeout applies the next time the
+container is created ('kerghan down && kerghan up').
+With auto-login on, anyone who can reach the port is logged in as admin; a
+non-loopback bind prints a warning but still starts.
 USAGE
 }
 

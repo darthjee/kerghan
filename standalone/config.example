@@ -11,9 +11,9 @@
 #
 # Precedence: command-line flag, then this file, then the default.
 #
-# A changed port, variant or image-tag recreates the instance on the next
-# `kerghan up` (the data volume is kept). A changed runtime or stop-timeout
-# applies the next time the container is created; run
+# A changed port, variant, image-tag, auto-login or bind recreates the instance
+# on the next `kerghan up` (the data volume is kept). A changed runtime or
+# stop-timeout applies the next time the container is created; run
 # `kerghan down && kerghan up` to apply it now.
 
 # Host port Kerghan is served on (http://localhost:<port>). 1-65535.
@@ -40,3 +40,19 @@
 # it; with any other tag (e.g. latest) `up` only checks that the running image
 # and port match. Leave empty to use the pinned tag.
 #image-tag=
+
+# Automatic login as the default user (admin): true | false.
+# When on, anyone who can reach the port is logged in as admin, with no login
+# step; keep bind on a loopback address (the default) unless you mean it.
+# When off, log in manually as admin with the KERGHAN_DEFAULT_USER_PASSWORD
+# generated in ~/.kerghan/kerghan.env. Sessions created by automatic login stay
+# valid until they expire after you turn it off.
+# Overridden by `kerghan up --auto-login` / `kerghan up --no-auto-login`.
+#auto-login=true
+
+# Host address (IPv4) the port is published on. Defaults to 127.0.0.1 (this
+# machine only) when auto-login is on, and 0.0.0.0 (every interface) when it
+# is off. With auto-login on, a non-loopback address (e.g. 0.0.0.0) prints a
+# warning on `kerghan up`, because anyone who can reach the port is logged in
+# as admin, but still starts. Overridden by `kerghan up --bind ADDRESS`.
+#bind=
