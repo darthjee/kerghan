@@ -51,7 +51,9 @@ to `kerghan.env`: the client passes them on every `up` (see
   the container.
 - A changed value recreates the instance on the next `kerghan up`, keeping the data volume, like
   the other settings that recreate it. The running value is read from the container environment;
-  a missing one (an instance started by an older client) counts as `false`.
+  a missing one (an instance started by an older client) counts as `false`. When the container
+  environment cannot be inspected, the value counts as unknown, which never matches, so the
+  instance is always recreated (it is never left running with automatic login on by mistake).
 - **`kerghan.env` without the default user.** The backend refuses to boot when
   `KERGHAN_DEFAULT_USER_ALWAYS_AUTHENTICATED=true` and the username, email or password is missing
   (`DefaultUserConfig`). A `kerghan.env` created before #371 has none of them, and the client never

@@ -12,6 +12,7 @@
 #                          KERGHAN_DEFAULT_USER_ALWAYS_AUTHENTICATED=true, the
 #                          client's default; set it empty for an instance
 #                          started without it)
+#   STUB_RUNNING_ENV_FAIL=1  inspecting its .Config.Env fails (exit 1)
 #   STUB_DOCKER_INFO_EXIT  exit code of `docker info` (default 0)
 echo "docker $*" >>"$STUB_LOG"
 if [ "${1:-}" = "info" ]; then
@@ -38,6 +39,10 @@ if [ "${1:-}" = "inspect" ]; then
     *State.Running*) echo "${STUB_RUNNING_STATE:-true}" ;;
     *Config.Image*) echo "$STUB_RUNNING_IMAGE" ;;
     *Config.Env*)
+      if [ "${STUB_RUNNING_ENV_FAIL:-0}" = "1" ]; then
+        echo "Error: inspect failed" >&2
+        exit 1
+      fi
       env_value="${STUB_RUNNING_ENV-KERGHAN_DEFAULT_USER_ALWAYS_AUTHENTICATED=true}"
       [ -z "$env_value" ] || printf '%s\n' "$env_value"
       echo

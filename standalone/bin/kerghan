@@ -405,16 +405,24 @@ running_bind() {
 
 # running_auto_login - prints the KERGHAN_DEFAULT_USER_ALWAYS_AUTHENTICATED
 # value of the running container, or false when it is not set (an instance
-# started by an older client, which never passed it).
+# started by an older client, which never passed it). When the inspect fails
+# it prints "unknown", which never matches a wanted value, so the instance is
+# always recreated rather than possibly left with automatic login on.
 running_auto_login() {
-  local line value=""
+  local env line value=""
+  env="$(docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' "$CONTAINER" 2>/dev/null)" || {
+    echo unknown
+    return 0
+  }
   while IFS= read -r line; do
     case "$line" in
       KERGHAN_DEFAULT_USER_ALWAYS_AUTHENTICATED=*)
         value="${line#*=}"
         ;;
     esac
-  done < <(docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' "$CONTAINER" 2>/dev/null || true)
+  done <<ENV
+$env
+ENV
   echo "${value:-false}"
 }
 

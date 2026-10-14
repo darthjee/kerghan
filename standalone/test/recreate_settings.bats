@@ -107,3 +107,21 @@ KERGHAN_DEFAULT_USER_ALWAYS_AUTHENTICATED=true"
   assert_output_contains "Kerghan is already running"
   [ -z "$(vault_calls)" ]
 }
+
+@test "an unreadable running environment recreates the instance when turning auto-login off" {
+  setup_running
+  export STUB_RUNNING_HOST_IP=0.0.0.0 STUB_RUNNING_ENV_FAIL=1
+  run "$KERGHAN" up --no-auto-login
+  [ "$status" -eq 0 ]
+  assert_output_contains "turning automatic login off"
+  assert_recreated 0.0.0.0 false
+}
+
+@test "an unreadable running environment recreates the instance with auto-login on" {
+  setup_running
+  export STUB_RUNNING_HOST_IP=127.0.0.1 STUB_RUNNING_ENV_FAIL=1
+  run "$KERGHAN" up
+  [ "$status" -eq 0 ]
+  assert_output_contains "turning automatic login on"
+  assert_recreated 127.0.0.1 true
+}

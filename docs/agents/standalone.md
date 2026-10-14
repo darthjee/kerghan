@@ -212,7 +212,8 @@ ones (from the flags, the config and the defaults):
   guard are skipped; `up` only checks that the running image reference and port match, and
   recreates otherwise.
 - Same image and port, but a changed `auto-login` (read from the running container's
-  `KERGHAN_DEFAULT_USER_ALWAYS_AUTHENTICATED`, missing counts as `false`) or `bind` (the published
+  `KERGHAN_DEFAULT_USER_ALWAYS_AUTHENTICATED`, missing counts as `false`, an inspect failure always
+  recreates) or `bind` (the published
   host IP, empty counts as `0.0.0.0`): the instance is recreated, and the data volume is kept.
 
 A changed `runtime` or `stop-timeout` never triggers a recreation; it applies the next time the
