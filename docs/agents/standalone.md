@@ -462,6 +462,58 @@ measured, and the outer gateway changes with the Docker setup (a Linux daemon wi
 or `default-address-pools`, other Docker Desktop settings). The items not verified yet are listed
 under [Caveats](#caveats).
 
+### Verifying the effective client IP
+
+`standalone/scripts/verify_client_ip.sh` runs the checks still open in #384. Run it from the repo
+root; it only uses `docker` and `curl` (plus the installed `kerghan` client for the end-to-end
+check) and never installs anything. Each run prints one block between
+`----- BEGIN kerghan client-IP report (#384) -----` and `----- END ... -----` on stdout, with the
+platform (`uname -sm`), Docker Engine version, Docker Desktop or native, runtime, bind and date.
+Paste the whole block into the issue or PR. The header comment of the script lists every input.
+
+| Mode | What it does |
+|---|---|
+| `probe` (default) | Repeats the #371 measurement: starts `darthjee/vault:0.1.0` (`VAULT_IMAGE`) with a probe inner service (`traefik/whoami`, `standalone/scripts/verify_client_ip/docker-compose.yml`) published like Tent (`ports: ["80:80"]`), with the outer container on `BIND:PORT:80` (`BIND` defaults to `127.0.0.1`, `PORT` to `3090`). Requests it from the host (from `127.0.0.1`, plus each non-loopback address when `BIND=0.0.0.0`) and reports the address the probe saw and whether it is inside the allowlist (`DEFAULT_USER_ALLOWED_IPS`, read from `standalone/bin/kerghan`). |
+| `reach` | Starts the same probe on `127.0.0.1:PORT`, tries each non-loopback address of the host (`ip -o addr` on Linux, `ifconfig` on macOS), and prints the commands a second LAN machine runs: the host port, and the moby#45610 route to the Vault container's address. |
+| `e2e` | No container management. POSTs `/auth/status.json` on `BASE_URL` (default `http://localhost:<port>`, the port from `~/.kerghan/config`, else `3000`) without cookies, and reports `loggedIn`, the user (from the `access_token` cookie), `isAdmin`, and the image, published address, runtime and auto-login variables of the `vault-kerghan` container. Exits 1 unless the answer matches `EXPECT_LOGGED_IN` (default `true`) and `EXPECT_USER` (default `admin`). |
+
+- `RUNTIME=auto|sysbox|privileged` picks the runtime (`auto`, the default, uses Sysbox when the
+  daemon has `sysbox-runc`); `RUNTIME=sysbox` fails when Sysbox is missing.
+- `HOLD=true` keeps the probe up after the report, until Ctrl-C, so a LAN machine can run its
+  command. `LAN_IP` overrides the host LAN address used in those commands.
+- `probe` and `reach` always remove their container and data volume, also on failure or Ctrl-C.
+
+Checks (one report per run; record each result in [Effective client IP](#effective-client-ip)):
+
+1. **Linux, native Docker, Sysbox.**
+   `RUNTIME=sysbox BIND=127.0.0.1 standalone/scripts/verify_client_ip.sh probe`, then
+   `RUNTIME=sysbox BIND=0.0.0.0 standalone/scripts/verify_client_ip.sh probe`. Pass: every seen
+   address is inside the allowlist.
+2. **Linux, native Docker, `--privileged`.** Same as 1 with `RUNTIME=privileged`.
+3. **Linux, `bind=0.0.0.0`, from the LAN.**
+   `BIND=0.0.0.0 HOLD=true standalone/scripts/verify_client_ip.sh probe`, then on a second LAN
+   machine the printed `curl ... | grep RemoteAddr` command. Pass: the `RemoteAddr` the LAN machine
+   gets is its own private address, inside the allowlist.
+4. **Linux, Docker Engine 28+, default bind not reachable from other interfaces.**
+   `HOLD=true standalone/scripts/verify_client_ip.sh reach`, then on a second LAN machine both
+   printed commands (the moby#45610 one needs a Linux LAN machine on the same segment and root).
+   Pass: every non-loopback address is `not reachable`, and neither LAN command gets an answer.
+5. **End to end.** With the first released `kerghan-standalone` tag that includes #368–#372 (not
+   a locally built image): `kerghan up` with the default settings (no `~/.kerghan/config` changes,
+   a `kerghan.env` with the default-user values), then
+   `standalone/scripts/verify_client_ip.sh e2e`, and open the URL in the host browser. Pass: the
+   report says `result: PASS` (`loggedIn: true`, `user: admin`, `isAdmin: true`) with the released
+   tag as `instance image`, and the browser shows Kerghan logged in as `admin` with no login step.
+6. **Docker Desktop for macOS, `bind=0.0.0.0`.**
+   `BIND=0.0.0.0 standalone/scripts/verify_client_ip.sh probe`, repeated with the Docker Desktop
+   network settings varied where relevant (for example the networking mode or the host networking
+   toggle, with any VPN or proxy turned off). Record whether `172.64.155.209` (or another
+   non-private address) reproduces, and which change, if any, makes it go away.
+
+If a result shows that `KERGHAN_DEFAULT_USER_ALLOWED_IPS`, `KERGHAN_TRUSTED_PROXY_HOPS` or the
+default `bind` is wrong, open a separate issue and link it from here; the verification does not
+change behavior.
+
 ## Images and versioning
 
 | Image | Built from | Tags |
@@ -517,6 +569,8 @@ The CI jobs that build and publish the images and the client assets (`release-ke
     non-loopback warning exists and why `bind` is the real guard;
   - the "not reachable from other interfaces" check of the default bind, repeated on Linux with
     Docker Engine 28 or later (see the Docker Engine caveat above).
+
+  How to run each check: [Verifying the effective client IP](#verifying-the-effective-client-ip).
 - **Back up `~/.kerghan/kerghan.env`.** Losing it logs everyone out and makes the stored
   integration credentials unreadable (they are encrypted with `KERGHAN_INTEGRATIONS_KEY`). Without
   it, `kerghan up` refuses to start until the file is restored or the data is wiped with
@@ -550,6 +604,7 @@ The CI jobs that build and publish the images and the client assets (`release-ke
 |---|---|
 | Build the online image locally | `make build-standalone` (tags `darthjee/kerghan-standalone:dev`) |
 | Smoke-test it | `make standalone-smoke`, which runs `standalone/scripts/smoke_test.sh`: boots the image with `--privileged`, checks `/health.json` and `/` through Tent, restarts with the data volume kept, and checks no env file or secret is baked in. Needs `--privileged` support on the host Docker. |
+| Verify the effective client IP | `standalone/scripts/verify_client_ip.sh [probe\|reach\|e2e]`, run by hand (no `make` target): measures the address the backend sees through Vault, and checks `status.json` against a running instance. See [Verifying the effective client IP](#verifying-the-effective-client-ip). |
 | Client and installer tests | The bats suite in `standalone/test/` (with `helpers/` and command `stubs/`): `docker-compose run --rm standalone_tests`. CI runs it in the `standalone_tests` job. |
 
 The release job smoke-tests the published offline image on amd64 with `SKIP_BUILD=true` and
