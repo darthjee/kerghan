@@ -48,7 +48,9 @@ image.
 
 - A Linux or macOS host. Windows and rootless Docker are not supported.
 - Docker, with the [Sysbox](https://github.com/nestybox/sysbox) runtime or `--privileged`
-  containers allowed. The daemon must be reachable by the current user.
+  containers allowed. The daemon must be reachable by the current user. On Linux, Docker Engine
+  28.0 or later is required for the loopback-only default `bind` to hold (see
+  [Caveats](#caveats)).
 - For the client: `vault`, `docker` and `openssl` on the host, and bash 3.2 or later. The
   installer installs `vault` when it is missing.
 
@@ -109,7 +111,8 @@ bash install.sh
    `KERGHAN_VERSION`).
 2. Run `kerghan up`. When the running instance uses an older image than the new client, the client
    recreates it (`down`, then `up`) with the new image. The data volume is kept, and the backend
-   runs the pending migrations on boot.
+   runs the pending migrations on boot. An installation whose `kerghan.env` predates the default
+   user keeps automatic login off and the port on every interface (see [Secrets](#secrets)).
 
 **Downgrades are not supported** (an older image against a newer schema). When the running
 instance uses a newer image than the client (or than `image-tag`), `kerghan up` prints a warning
@@ -118,7 +121,8 @@ and a hint, exits non-zero, and does not touch the instance.
 ## The `kerghan` client
 
 ```
-kerghan up [--offline] [-p PORT] [-f]   # start (detached by default) on http://localhost:3000
+kerghan up [--offline] [-p PORT] [--[no-]auto-login] [--bind ADDRESS] [-f]
+                                        # start (detached by default) on http://localhost:3000
 kerghan down                            # stop and remove the container; data is kept
 kerghan logs [-f]                       # show (or follow) the logs
 kerghan status                          # show the instance state
@@ -129,6 +133,9 @@ kerghan version | help
 
 - `-p` / `--port` sets the host port, `--offline` selects the offline image variant for this run,
   and `-f` runs in the foreground.
+- `--auto-login` / `--no-auto-login` turn automatic login as the default `admin` user on or off
+  (the last one wins), and `--bind ADDRESS` sets the host IPv4 address the port is published on.
+  See `auto-login` and `bind` under [`config` format](#config-format).
 - An unknown command or option prints the usage and exits 2.
 
 ### Mapping to `vault`
@@ -138,7 +145,9 @@ Every command calls `vault` with the fixed instance name `kerghan`, which gives 
 
 ```
 vault up --name kerghan --image darthjee/kerghan-standalone:<tag>[-offline] \
-  --env-file ~/.kerghan/kerghan.env -p <port>:80 [-e FRONTEND_BASE_URL=http://localhost:<port>] \
+  --env-file ~/.kerghan/kerghan.env -p <bind>:<port>:80 [-e FRONTEND_BASE_URL=http://localhost:<port>] \
+  -e KERGHAN_DEFAULT_USER_ALWAYS_AUTHENTICATED=<auto-login> \
+  -e KERGHAN_DEFAULT_USER_ALLOWED_IPS=127.0.0.1,::1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16 \
   --runtime <runtime> --stop-timeout <seconds> [-f]
 vault down --name kerghan --stop-timeout <seconds>
 vault logs|status|compose --name kerghan ...
@@ -151,6 +160,13 @@ vault logs|status|compose --name kerghan ...
   between them keeps the data.
 - `--runtime` and `--stop-timeout` come from the config (defaults `auto` and `60`). The stop
   timeout is passed on every `down`: `kerghan down`, the `down` before a recreation, and `reset`.
+- `KERGHAN_DEFAULT_USER_ALWAYS_AUTHENTICATED` and `KERGHAN_DEFAULT_USER_ALLOWED_IPS` are always
+  passed with `-e`, so `auto-login` stays the single source of truth. `kerghan.env` must not set
+  them (unlike `FRONTEND_BASE_URL`): the value would reach the container twice, and which copy
+  wins along the Docker, Vault and inner compose chain is not guaranteed. When `kerghan.env` has
+  a line for either key (also indented, empty, or a bare `KEY` line, which Docker reads from the
+  environment), `up` fails (exit 1, nothing started or recreated) with an error naming the keys
+  and a hint to remove the lines and use `auto-login` / `bind` instead.
 - `vault` always runs from `~/.kerghan`, so a stray `.vaultrc` or `.vault.env` in the user's
   working directory cannot change the instance.
 
@@ -158,8 +174,22 @@ vault logs|status|compose --name kerghan ...
 
 On the first `up`, when `~/.kerghan/kerghan.env` does not exist and no data volume exists, the
 client creates `~/.kerghan/` and writes `kerghan.env` (mode 600) with `KERGHAN_SECRET_KEY` and
-`KERGHAN_INTEGRATIONS_KEY`, each from `openssl rand -base64 32`. It never regenerates or rewrites
-an existing file.
+`KERGHAN_INTEGRATIONS_KEY`, each from `openssl rand -base64 32`, plus the default user:
+`KERGHAN_DEFAULT_USER_ENABLED=true`, `KERGHAN_DEFAULT_USER_USERNAME=admin`,
+`KERGHAN_DEFAULT_USER_EMAIL=admin@kerghan.local`, `KERGHAN_DEFAULT_USER_PASSWORD` (from
+`openssl rand -hex 24`, used for a manual login when `auto-login` is off) and
+`KERGHAN_DEFAULT_USER_ADMIN=true`. It never regenerates or rewrites an existing file, so an
+installation created by an older client has no default user in its `kerghan.env`.
+
+The backend refuses to boot with automatic login on and no default-user credentials. So when
+`kerghan.env` lacks a non-blank `KERGHAN_DEFAULT_USER_USERNAME`, `KERGHAN_DEFAULT_USER_EMAIL` or
+`KERGHAN_DEFAULT_USER_PASSWORD` (a pre-#371 file):
+
+- with `auto-login` not set (no flag, no config value), `up` resolves it to `false`, so `bind`
+  defaults to `0.0.0.0` (the pre-#371 behavior), and prints a notice that automatic login needs
+  the `KERGHAN_DEFAULT_USER_*` values in `kerghan.env`;
+- with `auto-login=true` set by `--auto-login` or the config, `up` fails (exit 1, nothing started)
+  with an error and a hint to add those values or turn automatic login off.
 
 `up` refuses to start (exit 1, no container created) when `kerghan.env` is missing but the
 `vault-kerghan-data` volume exists: the data was written with secrets that are gone. The hint
@@ -183,6 +213,10 @@ ones (from the flags, the config and the defaults):
 - A non-semver tag (for example `image-tag=latest`): the version comparison and the downgrade
   guard are skipped; `up` only checks that the running image reference and port match, and
   recreates otherwise.
+- Same image and port, but a changed `auto-login` (read from the running container's
+  `KERGHAN_DEFAULT_USER_ALWAYS_AUTHENTICATED`, missing counts as `false`, an inspect failure always
+  recreates) or `bind` (the published host IP, empty counts as `0.0.0.0`): the instance is
+  recreated, and the data volume is kept.
 
 A changed `runtime` or `stop-timeout` never triggers a recreation; it applies the next time the
 container is created (`kerghan down && kerghan up` applies it now).
@@ -213,15 +247,19 @@ variant=online        # online | offline
 runtime=auto          # auto | sysbox | privileged
 stop-timeout=60
 image-tag=            # optional override of the pinned image tag
+auto-login=true       # true | false
+bind=                 # host IPv4 address; default depends on auto-login
 ```
 
 | Key | Values | Default | Overridden by | Passed to Vault as |
 |---|---|---|---|---|
-| `port` | 1–65535 | `3000` | `-p PORT` | `-p <port>:80` (and `FRONTEND_BASE_URL`) |
+| `port` | 1–65535 | `3000` | `-p PORT` | `-p <bind>:<port>:80` (and `FRONTEND_BASE_URL`) |
 | `variant` | `online` \| `offline` | `online` | `--offline` | the `-offline` image suffix |
 | `runtime` | `auto` \| `sysbox` \| `privileged` | `auto` (Sysbox when installed, else `--privileged`) | none | `--runtime` on `up` |
 | `stop-timeout` | seconds, positive integer | `60` | none | `--stop-timeout` on `up` and every `down` |
 | `image-tag` | a Docker tag, or empty | the tag pinned in the client | none | the image tag |
+| `auto-login` | `true` \| `false` | `true` (`false` when `kerghan.env` has no default user, see [Secrets](#secrets)) | `--auto-login`, `--no-auto-login` | `-e KERGHAN_DEFAULT_USER_ALWAYS_AUTHENTICATED` |
+| `bind` | an IPv4 address | `127.0.0.1` with auto-login on, `0.0.0.0` with it off | `--bind ADDRESS` | the host IP in `-p <bind>:<port>:80` |
 
 - **Precedence:** command-line flag, then `~/.kerghan/config`, then the default. `--offline`
   selects the offline variant even with `variant=online`; with `variant=offline`, a run without
@@ -231,6 +269,12 @@ image-tag=            # optional override of the pinned image tag
   `image-tag=0.4.0` with `--offline` runs `darthjee/kerghan-standalone:0.4.0-offline`. An `x.y.z`
   tag gets the usual upgrade and downgrade rules; any other tag skips them (see
   [`up`](#up-start-no-op-or-recreate)).
+- **`auto-login` and `bind`:** with auto-login on, anyone who can reach the port is logged in as
+  `admin`, so `bind` (default `127.0.0.1`) is the real exposure guard. Auto-login on with a
+  non-loopback `bind` (outside `127.0.0.0/8`, for example `bind=0.0.0.0`) prints a warning but
+  still starts. With auto-login off, log in as `admin` with the password in `kerghan.env`;
+  sessions created by automatic login stay valid until they expire. IPv6 bind addresses are not
+  supported. Full design: [default-user/standalone.md](specs/default-user/standalone.md).
 - **Which commands read it:** only `up`, `down` and `reset` load the file, before any side effect
   (in `reset`, before the confirmation prompt). `version`, `help`, `logs`, `status` and `compose`
   never read it, so a broken config does not block them.
@@ -375,6 +419,12 @@ The CI jobs that build and publish the images and the client assets (`release-ke
   fails. Run standalone on `localhost`, or put your own TLS reverse proxy in front of it (and set
   `FRONTEND_BASE_URL` to the `https` URL in `kerghan.env`). An `https` `FRONTEND_BASE_URL` is also
   required to enable the GitHub OAuth App and GitHub App integration types.
+- **Docker Engine before 28.0 on Linux exposes `127.0.0.1` ports to the LAN.** This is a known
+  Docker issue ([moby#45610](https://github.com/moby/moby/issues/45610)), fixed in Docker Engine
+  28.0: on older engines, hosts on the same LAN segment can reach a port published on
+  `127.0.0.1` by routing to the container's address. The default `bind=127.0.0.1` is the guard for
+  automatic login, so on Linux use Docker Engine 28.0 or later (check with
+  `docker version --format '{{.Server.Version}}'`), or turn automatic login off.
 - **Back up `~/.kerghan/kerghan.env`.** Losing it logs everyone out and makes the stored
   integration credentials unreadable (they are encrypted with `KERGHAN_INTEGRATIONS_KEY`). Without
   it, `kerghan up` refuses to start until the file is restored or the data is wiped with

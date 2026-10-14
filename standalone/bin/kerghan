@@ -6,11 +6,11 @@
 # instance `kerghan`: container `vault-kerghan`, data volume
 # `vault-kerghan-data`, secrets in ~/.kerghan/kerghan.env.
 #
-# Persistent settings (port, variant, runtime, stop-timeout, image-tag) are
-# read from the optional ~/.kerghan/config (flat key=value, see
-# config.example); CLI flags override it, built-in defaults fill the rest. It
-# is only loaded by up, down and reset, so a broken config never blocks the
-# other commands.
+# Persistent settings (port, variant, runtime, stop-timeout, image-tag,
+# auto-login, bind) are read from the optional ~/.kerghan/config (flat
+# key=value, see config.example); CLI flags override it, built-in defaults fill
+# the rest. It is only loaded by up, down and reset, so a broken config never
+# blocks the other commands.
 #
 # Dependencies on the host: vault, docker and openssl.
 #
@@ -38,6 +38,17 @@ DEFAULT_PORT=3000
 DEFAULT_VARIANT=online
 DEFAULT_RUNTIME=auto
 DEFAULT_STOP_TIMEOUT=60
+DEFAULT_AUTO_LOGIN=true
+# The default bind depends on auto-login: loopback when it is on, every
+# interface when it is off.
+DEFAULT_BIND_AUTO_LOGIN=127.0.0.1
+DEFAULT_BIND_NO_AUTO_LOGIN=0.0.0.0
+# Passed as KERGHAN_DEFAULT_USER_ALLOWED_IPS on every up. A host request
+# reaches the backend through two Docker port publishings (host -> Vault ->
+# inner Docker -> Tent), so it arrives from a Docker gateway address that
+# varies between hosts: loopback plus the private ranges. The real exposure
+# guard is bind=127.0.0.1.
+DEFAULT_USER_ALLOWED_IPS="127.0.0.1,::1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16"
 # The default image tag is KERGHAN_VERSION.
 
 KERGHAN_HOME="${HOME}/.kerghan"
@@ -50,13 +61,16 @@ CFG_VARIANT=""
 CFG_RUNTIME=""
 CFG_STOP_TIMEOUT=""
 CFG_IMAGE_TAG=""
+CFG_AUTO_LOGIN=""
+CFG_BIND=""
 
 usage() {
   cat <<USAGE
 Usage: kerghan <command> [options]
 
 Commands:
-  up [--offline] [-p PORT] [-f]   start Kerghan (detached by default) on http://localhost:$DEFAULT_PORT
+  up [--offline] [-p PORT] [--[no-]auto-login] [--bind ADDRESS] [-f]
+                                  start Kerghan (detached by default) on http://localhost:$DEFAULT_PORT
   down                            stop and remove the container; data is kept
   logs [-f]                       show (or follow) the logs
   status                          show the instance state
@@ -68,6 +82,10 @@ Commands:
 Options for up:
   --offline          use the offline image variant
   -p, --port PORT    host port (default $DEFAULT_PORT)
+  --auto-login       log in automatically as admin (default)
+  --no-auto-login    require a manual login (admin password in kerghan.env)
+  --bind ADDRESS     host IPv4 address to publish on (default $DEFAULT_BIND_AUTO_LOGIN with
+                     auto-login, $DEFAULT_BIND_NO_AUTO_LOGIN without)
   -f                 run in the foreground
 
 Settings are read from ~/.kerghan/config (optional, one key=value per line):
@@ -76,10 +94,14 @@ Settings are read from ~/.kerghan/config (optional, one key=value per line):
   runtime=$DEFAULT_RUNTIME         auto | sysbox | privileged
   stop-timeout=$DEFAULT_STOP_TIMEOUT      seconds to wait for a graceful stop
   image-tag=           override the pinned image tag ($KERGHAN_VERSION)
+  auto-login=$DEFAULT_AUTO_LOGIN      true | false (overridden by --[no-]auto-login)
+  bind=                host address (overridden by --bind)
 Flags override the file; an empty value uses the default. A changed port,
-variant or image-tag recreates the instance on the next 'kerghan up'; a
-changed runtime or stop-timeout applies the next time the container is
-created ('kerghan down && kerghan up').
+variant, image-tag, auto-login or bind recreates the instance on the next
+'kerghan up'; a changed runtime or stop-timeout applies the next time the
+container is created ('kerghan down && kerghan up').
+With auto-login on, anyone who can reach the port is logged in as admin; a
+non-loopback bind prints a warning but still starts.
 USAGE
 }
 
@@ -154,6 +176,38 @@ valid_image_tag() {
   [ "${#1}" -le 128 ]
 }
 
+valid_bool() {
+  case "$1" in
+    true | false) return 0 ;;
+  esac
+  return 1
+}
+
+# valid_bind <address> - an IPv4 address: four dot-separated 0-255 octets.
+# IPv6 host addresses are not supported (Docker needs them in brackets).
+valid_bind() {
+  case "$1" in
+    '' | *[!0-9.]* | .* | *. | *..*) return 1 ;;
+  esac
+  local a b c d rest octet
+  IFS=. read -r a b c d rest <<ADDRESS
+$1
+ADDRESS
+  [ -n "$a" ] && [ -n "$b" ] && [ -n "$c" ] && [ -n "$d" ] && [ -z "$rest" ] || return 1
+  for octet in "$a" "$b" "$c" "$d"; do
+    [ "${#octet}" -le 3 ] || return 1
+    [ "$((10#$octet))" -le 255 ] || return 1
+  done
+}
+
+# is_loopback <address> - the address is in 127.0.0.0/8.
+is_loopback() {
+  case "$1" in
+    127.*) return 0 ;;
+  esac
+  return 1
+}
+
 # trim <string> - prints the string without surrounding whitespace.
 trim() {
   local s="$1"
@@ -178,6 +232,8 @@ load_config() {
   CFG_RUNTIME=""
   CFG_STOP_TIMEOUT=""
   CFG_IMAGE_TAG=""
+  CFG_AUTO_LOGIN=""
+  CFG_BIND=""
   [ -e "$CONFIG_FILE" ] || return 0
   if [ ! -r "$CONFIG_FILE" ] || [ -d "$CONFIG_FILE" ]; then
     error "$CONFIG_FILE: cannot be read"
@@ -223,6 +279,14 @@ load_config() {
           config_invalid "$n" "$key" "$value" "a Docker image tag, without the -offline suffix"
         CFG_IMAGE_TAG="$value"
         ;;
+      auto-login)
+        [ -z "$value" ] || valid_bool "$value" || config_invalid "$n" "$key" "$value" "true or false"
+        CFG_AUTO_LOGIN="$value"
+        ;;
+      bind)
+        [ -z "$value" ] || valid_bind "$value" || config_invalid "$n" "$key" "$value" "an IPv4 address"
+        CFG_BIND="$value"
+        ;;
       *)
         warn "$CONFIG_FILE:$n: unknown key '$key' (ignored)"
         ;;
@@ -244,21 +308,66 @@ volume_exists() {
 
 # ensure_env_file - generates kerghan.env (mode 600) when it does not exist.
 # Never touches an existing file.
+#
+# Besides the two secrets it writes the default user (admin, with a generated
+# 48-character hex password, so it is easy to type when auto-login is off).
+# KERGHAN_DEFAULT_USER_ALWAYS_AUTHENTICATED and KERGHAN_DEFAULT_USER_ALLOWED_IPS
+# are not written: the client passes them on every up (auto-login and bind).
 ensure_env_file() {
   [ -e "$ENV_FILE" ] && return 0
-  local secret_key integrations_key
+  local secret_key integrations_key admin_password
   secret_key="$(openssl rand -base64 32)"
   integrations_key="$(openssl rand -base64 32)"
+  admin_password="$(openssl rand -hex 24)"
   mkdir -p "$KERGHAN_HOME"
   (
     umask 077
     {
       echo "KERGHAN_SECRET_KEY=$secret_key"
       echo "KERGHAN_INTEGRATIONS_KEY=$integrations_key"
+      echo "KERGHAN_DEFAULT_USER_ENABLED=true"
+      echo "KERGHAN_DEFAULT_USER_USERNAME=admin"
+      echo "KERGHAN_DEFAULT_USER_EMAIL=admin@kerghan.local"
+      echo "KERGHAN_DEFAULT_USER_PASSWORD=$admin_password"
+      echo "KERGHAN_DEFAULT_USER_ADMIN=true"
     } >"$ENV_FILE"
   )
   chmod 600 "$ENV_FILE"
-  echo "Generated secrets in $ENV_FILE; back this file up (losing it logs everyone out and makes stored integration credentials unreadable)."
+  echo "Generated secrets in $ENV_FILE; back this file up (losing it logs everyone out and makes stored integration credentials unreadable). It also holds the password of the 'admin' user, for manual login."
+}
+
+# env_file_sets <key> - kerghan.env has a <key>= line with a non-blank value
+# (Docker's env-file parser ignores leading whitespace on the line).
+env_file_sets() {
+  grep -qE "^[[:space:]]*$1=.*[^[:space:]]" "$ENV_FILE" 2>/dev/null
+}
+
+# has_default_user_credentials - kerghan.env sets the default user's username,
+# email and password, which the backend requires whenever
+# KERGHAN_DEFAULT_USER_ALWAYS_AUTHENTICATED is true (it refuses to boot
+# otherwise). A kerghan.env created before #371 has none of them.
+has_default_user_credentials() {
+  env_file_sets KERGHAN_DEFAULT_USER_USERNAME &&
+    env_file_sets KERGHAN_DEFAULT_USER_EMAIL &&
+    env_file_sets KERGHAN_DEFAULT_USER_PASSWORD
+}
+
+# refuse_client_managed_keys - exits 1 when kerghan.env sets a variable the
+# client passes itself on every up (auto-login and bind). The value would
+# then reach the container twice, and which copy wins along the Docker,
+# Vault and inner compose chain is not guaranteed. A bare `KEY` line counts
+# too: Docker's env-file reads it from the environment.
+refuse_client_managed_keys() {
+  local key found=""
+  for key in KERGHAN_DEFAULT_USER_ALWAYS_AUTHENTICATED KERGHAN_DEFAULT_USER_ALLOWED_IPS; do
+    if grep -qE "^[[:space:]]*$key(=|[[:space:]]*\$)" "$ENV_FILE" 2>/dev/null; then
+      found="$found $key"
+    fi
+  done
+  [ -n "$found" ] || return 0
+  error "$ENV_FILE sets${found}, which the client manages itself"
+  hint "remove the line(s) from kerghan.env; use auto-login (--[no-]auto-login) and bind (--bind) instead"
+  exit 1
 }
 
 # frontend_base_url_args <port> - prints `-e FRONTEND_BASE_URL=...` (one word
@@ -283,6 +392,53 @@ running_image() {
 running_port() {
   docker inspect -f '{{(index (index .NetworkSettings.Ports "80/tcp") 0).HostPort}}' \
     "$CONTAINER" 2>/dev/null || true
+}
+
+# running_bind - prints the host IP published for port 80 (an empty one, which
+# Docker uses for every interface, is printed as 0.0.0.0).
+running_bind() {
+  local ip
+  ip="$(docker inspect -f '{{(index (index .NetworkSettings.Ports "80/tcp") 0).HostIp}}' \
+    "$CONTAINER" 2>/dev/null)" || true
+  echo "${ip:-0.0.0.0}"
+}
+
+# running_auto_login - prints the KERGHAN_DEFAULT_USER_ALWAYS_AUTHENTICATED
+# value of the running container, or false when it is not set (an instance
+# started by an older client, which never passed it). When the inspect fails
+# it prints "unknown", which never matches a wanted value, so the instance is
+# always recreated rather than possibly left with automatic login on.
+running_auto_login() {
+  local env line value=""
+  env="$(docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' "$CONTAINER" 2>/dev/null)" || {
+    echo unknown
+    return 0
+  }
+  while IFS= read -r line; do
+    case "$line" in
+      KERGHAN_DEFAULT_USER_ALWAYS_AUTHENTICATED=*)
+        value="${line#*=}"
+        ;;
+    esac
+  done <<ENV
+$env
+ENV
+  echo "${value:-false}"
+}
+
+# settings_reason <current auto-login> <wanted auto-login> <current bind>
+# <wanted bind> - prints why the running instance must be recreated for a
+# changed auto-login or bind, or nothing when both match.
+settings_reason() {
+  if [ "$1" != "$2" ]; then
+    if [ "$2" = "true" ]; then
+      echo "turning automatic login on"
+    else
+      echo "turning automatic login off"
+    fi
+  elif [ "$3" != "$4" ]; then
+    echo "publishing on $4"
+  fi
 }
 
 is_semver() {
@@ -324,6 +480,7 @@ compare_number() {
 
 cmd_up() {
   local flag_offline=false flag_port="" flag_port_set=false foreground=false
+  local flag_auto_login="" flag_bind="" flag_bind_set=false
   while [ "$#" -gt 0 ]; do
     case "$1" in
       --offline) flag_offline=true ;;
@@ -331,6 +488,14 @@ cmd_up() {
         [ "$#" -ge 2 ] || usage_error "option '$1' requires a value"
         flag_port="$2"
         flag_port_set=true
+        shift
+        ;;
+      --auto-login) flag_auto_login=true ;;
+      --no-auto-login) flag_auto_login=false ;;
+      --bind)
+        [ "$#" -ge 2 ] || usage_error "option '$1' requires a value"
+        flag_bind="$2"
+        flag_bind_set=true
         shift
         ;;
       -f) foreground=true ;;
@@ -341,6 +506,9 @@ cmd_up() {
   if [ "$flag_port_set" = "true" ]; then
     valid_port "$flag_port" || usage_error "invalid port '$flag_port' (expected 1-65535)"
   fi
+  if [ "$flag_bind_set" = "true" ]; then
+    valid_bind "$flag_bind" || usage_error "invalid bind address '$flag_bind' (expected an IPv4 address)"
+  fi
 
   # Resolve: flag > ~/.kerghan/config > default. Before any side effect.
   load_config
@@ -349,6 +517,8 @@ cmd_up() {
   if [ "$flag_offline" = "true" ] || [ "${CFG_VARIANT:-$DEFAULT_VARIANT}" = "offline" ]; then
     offline=true
   fi
+  # Explicit auto-login (flag or config); empty when the default applies.
+  local explicit_auto_login="${flag_auto_login:-$CFG_AUTO_LOGIN}"
 
   local image
   image="$(image_ref "$offline" "${CFG_IMAGE_TAG:-$KERGHAN_VERSION}")"
@@ -363,6 +533,31 @@ cmd_up() {
 
   # 2. Secrets.
   ensure_env_file
+  refuse_client_managed_keys
+
+  # A kerghan.env from before #371 has no default user: the backend refuses
+  # to boot with KERGHAN_DEFAULT_USER_ALWAYS_AUTHENTICATED=true and no
+  # credentials, so the default auto-login falls back to false there (the
+  # pre-#371 behaviour) and an explicit auto-login=true is refused.
+  local auto_login="${explicit_auto_login:-$DEFAULT_AUTO_LOGIN}"
+  if [ "$auto_login" = "true" ] && ! has_default_user_credentials; then
+    if [ -n "$explicit_auto_login" ]; then
+      error "automatic login needs the default user, but $ENV_FILE has no KERGHAN_DEFAULT_USER_USERNAME, KERGHAN_DEFAULT_USER_EMAIL and KERGHAN_DEFAULT_USER_PASSWORD"
+      hint "add the KERGHAN_DEFAULT_USER_* values to kerghan.env, or use 'kerghan up --no-auto-login' (or auto-login=false in ~/.kerghan/config)"
+      exit 1
+    fi
+    auto_login=false
+    echo "Automatic login is off: $ENV_FILE has no default user. To turn it on, add the KERGHAN_DEFAULT_USER_* values to kerghan.env."
+  fi
+  local default_bind="$DEFAULT_BIND_NO_AUTO_LOGIN"
+  if [ "$auto_login" = "true" ]; then
+    default_bind="$DEFAULT_BIND_AUTO_LOGIN"
+  fi
+  local bind="${flag_bind:-${CFG_BIND:-$default_bind}}"
+  if [ "$auto_login" = "true" ] && ! is_loopback "$bind"; then
+    warn "automatic login is on and the port is published on $bind: anyone who can reach it is logged in as admin"
+    hint "use 'kerghan up --no-auto-login' or set bind=127.0.0.1 in ~/.kerghan/config to restrict it"
+  fi
 
   # 3. Compare with the running instance (FRONTEND_BASE_URL is added by
   # up_instance).
@@ -373,6 +568,9 @@ cmd_up() {
     current_port="$(running_port)"
     reason="$(recreate_reason "$current" "$image" "$current_port" "$port")" || exit 1
     if [ -z "$reason" ]; then
+      reason="$(settings_reason "$(running_auto_login)" "$auto_login" "$(running_bind)" "$bind")"
+    fi
+    if [ -z "$reason" ]; then
       echo "Kerghan is already running at http://localhost:$port"
       return 0
     fi
@@ -381,13 +579,14 @@ cmd_up() {
   fi
 
   # 4. Start it.
-  up_instance "$image" "$port" "$foreground"
+  up_instance "$image" "$port" "$foreground" "$bind" "$auto_login"
 }
 
 # recreate_reason <current image> <wanted image> <current port> <wanted port>
 # Prints why the running instance must be recreated, or nothing when it
 # already matches. Returns 1 (after warning) on a downgrade. Only the image and
-# the port drive this decision (runtime and stop-timeout never do).
+# the port are compared here; when they match, cmd_up also compares auto-login
+# and bind (settings_reason). Runtime and stop-timeout never recreate.
 #
 # The wanted version is the wanted tag without -offline: KERGHAN_VERSION, or
 # image-tag from ~/.kerghan/config. When it is not x.y.z semver (e.g. latest),
@@ -453,15 +652,22 @@ recreate_reason() {
   fi
 }
 
-# up_instance <image> <port> <foreground> - runs `vault up`, keeping Vault's
-# stderr and adding a hint on a port conflict.
+# up_instance <image> <port> <foreground> <bind> <auto-login> - runs
+# `vault up`, keeping Vault's stderr and adding a hint on a port conflict.
+#
+# The port is published on <bind> only. KERGHAN_DEFAULT_USER_ALWAYS_AUTHENTICATED
+# and KERGHAN_DEFAULT_USER_ALLOWED_IPS are always passed with -e, so auto-login
+# is the single source of truth (cmd_up refuses a kerghan.env that sets them,
+# see refuse_client_managed_keys).
 up_instance() {
-  local image="$1" port="$2" foreground="$3"
-  local args=(--image "$image" --env-file "$ENV_FILE" -p "$port:80")
+  local image="$1" port="$2" foreground="$3" bind="$4" auto_login="$5"
+  local args=(--image "$image" --env-file "$ENV_FILE" -p "$bind:$port:80")
   local extra
   while IFS= read -r extra; do
     args+=("$extra")
   done < <(frontend_base_url_args "$port")
+  args+=(-e "KERGHAN_DEFAULT_USER_ALWAYS_AUTHENTICATED=$auto_login")
+  args+=(-e "KERGHAN_DEFAULT_USER_ALLOWED_IPS=$DEFAULT_USER_ALLOWED_IPS")
   args+=(--runtime "$(effective_runtime)" --stop-timeout "$(effective_stop_timeout)")
   if [ "$foreground" = "true" ]; then
     args+=(-f)

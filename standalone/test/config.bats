@@ -8,7 +8,7 @@ URL_ARGS="-e FRONTEND_BASE_URL=http://localhost"
 
 # up_line <image> <port> [runtime] [stop-timeout] - the expected `vault up` line.
 up_line() {
-  echo "vault up --name kerghan --image $1 --env-file $ENV_FILE -p $2:80 $URL_ARGS:$2 --runtime ${3:-auto} --stop-timeout ${4:-60}"
+  echo "vault up --name kerghan --image $1 --env-file $ENV_FILE -p 127.0.0.1:$2:80 $URL_ARGS:$2 $DEFAULT_USER_ARGS --runtime ${3:-auto} --stop-timeout ${4:-60}"
 }
 
 # refute_side_effects - no vault call, no openssl call, no kerghan.env.

@@ -65,8 +65,9 @@ scope for the sub-issues.
 
 This is not decided yet.
 
-- **The effective client IP inside Docker-in-Docker / Tent.** Open technical risk, owned by #371.
-  See [standalone.md](standalone.md#open-risk-effective-client-ip).
+- **The effective client IP inside Docker-in-Docker / Tent.** Measured by #371 on Docker Desktop
+  for macOS only; a Linux host and a full end-to-end run with the default-user backend are still
+  to be verified. See [standalone.md](standalone.md#effective-client-ip).
 
 #374 and #375 edit files created here, so they start only after #367 is merged.
 

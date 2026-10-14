@@ -15,6 +15,41 @@ load helpers/setup
   vault_calls | grep -q '^vault up '
 }
 
+@test "the first up writes the default user to kerghan.env" {
+  run "$KERGHAN" up
+  [ "$status" -eq 0 ]
+  [ "$(stat -c %a "$ENV_FILE")" = "600" ]
+  grep -qx 'KERGHAN_DEFAULT_USER_ENABLED=true' "$ENV_FILE"
+  grep -qx 'KERGHAN_DEFAULT_USER_USERNAME=admin' "$ENV_FILE"
+  grep -qx 'KERGHAN_DEFAULT_USER_EMAIL=admin@kerghan.local' "$ENV_FILE"
+  grep -qx 'KERGHAN_DEFAULT_USER_ADMIN=true' "$ENV_FILE"
+  assert_logged "openssl rand -hex 24"
+  [ "$(grep -c '^openssl rand' "$STUB_LOG")" -eq 3 ]
+  assert_output_contains "password of the 'admin' user"
+}
+
+@test "the generated admin password is the third openssl value, 32+ hex characters" {
+  run "$KERGHAN" up
+  [ "$status" -eq 0 ]
+  password="$(sed -n 's/^KERGHAN_DEFAULT_USER_PASSWORD=//p' "$ENV_FILE")"
+  [ "${#password}" -ge 32 ]
+  [ "${#password}" -eq 48 ]
+  case "$password" in
+    3* ) ;;
+    *) echo "unexpected password: $password" >&2; return 1 ;;
+  esac
+  case "$password" in
+    *[!0-9a-f]*) echo "not hex: $password" >&2; return 1 ;;
+  esac
+}
+
+@test "the first up does not write the client-managed default-user variables" {
+  run "$KERGHAN" up
+  [ "$status" -eq 0 ]
+  [ "$(grep -c '^KERGHAN_DEFAULT_USER_ALWAYS_AUTHENTICATED=' "$ENV_FILE")" -eq 0 ]
+  [ "$(grep -c '^KERGHAN_DEFAULT_USER_ALLOWED_IPS=' "$ENV_FILE")" -eq 0 ]
+}
+
 @test "an existing kerghan.env is never rewritten" {
   write_env_file
   touch -d "2020-01-01 00:00:00" "$ENV_FILE"

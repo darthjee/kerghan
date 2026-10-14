@@ -1,8 +1,20 @@
 #!/usr/bin/env bash
-# Test stub for openssl: `openssl rand -base64 32` prints an incrementing fake
-# key (fake-key-1, fake-key-2, ...).
+# Test stub for openssl: logs its call and prints an incrementing fake value
+# (the counter is shared by every call).
+#   rand -base64 N   fake-key-<n>
+#   rand -hex N      a realistic 2N-character lowercase hex string starting
+#                    with the counter (e.g. 3abcdef0123456789...)
 echo "openssl $*" >>"$STUB_LOG"
 counter_file="$STUB_LOG.openssl"
 n=$(($(cat "$counter_file" 2>/dev/null || echo 0) + 1))
 echo "$n" >"$counter_file"
+if [ "${1:-}" = "rand" ] && [ "${2:-}" = "-hex" ]; then
+  len=$((${3:-16} * 2))
+  out="$n"
+  while [ "${#out}" -lt "$len" ]; do
+    out="${out}abcdef0123456789"
+  done
+  echo "${out:0:$len}"
+  exit 0
+fi
 echo "fake-key-$n"

@@ -27,6 +27,18 @@ NEWER_VERSION="$_major.$((_minor + 1)).0"
 # IMAGE - the online image the CLI runs by default.
 IMAGE="$IMAGE_REPO:$CURRENT_VERSION"
 
+# ALLOWED_IPS - the KERGHAN_DEFAULT_USER_ALLOWED_IPS value the client passes.
+ALLOWED_IPS="127.0.0.1,::1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16"
+
+# default_user_args <true|false> - the -e words for the client-managed
+# default-user variables, as they appear in the vault up line.
+default_user_args() {
+  echo "-e KERGHAN_DEFAULT_USER_ALWAYS_AUTHENTICATED=$1 -e KERGHAN_DEFAULT_USER_ALLOWED_IPS=$ALLOWED_IPS"
+}
+
+# DEFAULT_USER_ARGS - the default-user -e words with auto-login on (default).
+DEFAULT_USER_ARGS="$(default_user_args true)"
+
 setup() {
   TEST_ROOT="$(mktemp -d "$BATS_TMPDIR/kerghan-test.XXXXXX")"
   export HOME="$TEST_ROOT/home"
@@ -40,6 +52,7 @@ setup() {
   : >"$STUB_LOG"
   ENV_FILE="$HOME/.kerghan/kerghan.env"
   unset STUB_VOLUME_EXISTS STUB_RUNNING_IMAGE STUB_RUNNING_STATE STUB_RUNNING_PORT \
+    STUB_RUNNING_HOST_IP STUB_RUNNING_ENV STUB_RUNNING_ENV_FAIL \
     STUB_VAULT_UP_EXIT STUB_VAULT_UP_STDERR
 }
 
@@ -47,8 +60,21 @@ teardown() {
   rm -rf "$TEST_ROOT"
 }
 
-# write_env_file [extra lines...] - an existing kerghan.env.
+# write_env_file [extra lines...] - an existing kerghan.env with the default
+# user (as written by the current client).
 write_env_file() {
+  write_legacy_env_file \
+    "KERGHAN_DEFAULT_USER_ENABLED=true" \
+    "KERGHAN_DEFAULT_USER_USERNAME=admin" \
+    "KERGHAN_DEFAULT_USER_EMAIL=admin@kerghan.local" \
+    "KERGHAN_DEFAULT_USER_PASSWORD=existing-password-0123456789abcdef" \
+    "KERGHAN_DEFAULT_USER_ADMIN=true" \
+    ${@+"$@"}
+}
+
+# write_legacy_env_file [extra lines...] - an existing kerghan.env created
+# before #371: the two secrets only, no default user.
+write_legacy_env_file() {
   mkdir -p "$HOME/.kerghan"
   {
     echo "KERGHAN_SECRET_KEY=existing-secret"
