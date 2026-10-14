@@ -1,0 +1,14 @@
+# Inner probe stack for standalone/scripts/verify_client_ip.sh (#384).
+#
+# Copied to /vault in a darthjee/vault container. The probe stands in for
+# Tent: it is published on Vault port 80 exactly like Tent is in
+# standalone/vault/docker-compose.yml (ports: ["80:80"]), and answers every
+# request with the source address of its socket (the "RemoteAddr:" line).
+# Tent passes that same address to the backend as X-Forwarded-For, so it is
+# the client IP the backend sees.
+
+services:
+  probe:
+    image: traefik/whoami:v1.10.3
+    ports:
+      - "80:80"
