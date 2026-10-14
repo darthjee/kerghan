@@ -5,6 +5,13 @@
 #   STUB_RUNNING_IMAGE     image of the vault-kerghan container (unset: none)
 #   STUB_RUNNING_STATE     its .State.Running (default true)
 #   STUB_RUNNING_PORT      its host port for 80/tcp (default 3000)
+#   STUB_RUNNING_HOST_IP   its host IP for 80/tcp (unset: 127.0.0.1, the
+#                          client's default bind; set it empty for Docker's
+#                          "every interface")
+#   STUB_RUNNING_ENV       its .Config.Env, newline-separated (unset:
+#                          KERGHAN_DEFAULT_USER_ALWAYS_AUTHENTICATED=true, the
+#                          client's default; set it empty for an instance
+#                          started without it)
 #   STUB_DOCKER_INFO_EXIT  exit code of `docker info` (default 0)
 echo "docker $*" >>"$STUB_LOG"
 if [ "${1:-}" = "info" ]; then
@@ -30,7 +37,13 @@ if [ "${1:-}" = "inspect" ]; then
   case "${3:-}" in
     *State.Running*) echo "${STUB_RUNNING_STATE:-true}" ;;
     *Config.Image*) echo "$STUB_RUNNING_IMAGE" ;;
+    *Config.Env*)
+      env_value="${STUB_RUNNING_ENV-KERGHAN_DEFAULT_USER_ALWAYS_AUTHENTICATED=true}"
+      [ -z "$env_value" ] || printf '%s\n' "$env_value"
+      echo
+      ;;
     *HostPort*) echo "${STUB_RUNNING_PORT:-3000}" ;;
+    *HostIp*) echo "${STUB_RUNNING_HOST_IP-127.0.0.1}" ;;
     *) echo "unexpected inspect format: $3" >&2; exit 1 ;;
   esac
   exit 0

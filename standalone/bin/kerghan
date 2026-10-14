@@ -351,6 +351,45 @@ running_port() {
     "$CONTAINER" 2>/dev/null || true
 }
 
+# running_bind - prints the host IP published for port 80 (an empty one, which
+# Docker uses for every interface, is printed as 0.0.0.0).
+running_bind() {
+  local ip
+  ip="$(docker inspect -f '{{(index (index .NetworkSettings.Ports "80/tcp") 0).HostIp}}' \
+    "$CONTAINER" 2>/dev/null)" || true
+  echo "${ip:-0.0.0.0}"
+}
+
+# running_auto_login - prints the KERGHAN_DEFAULT_USER_ALWAYS_AUTHENTICATED
+# value of the running container, or false when it is not set (an instance
+# started by an older client, which never passed it).
+running_auto_login() {
+  local line value=""
+  while IFS= read -r line; do
+    case "$line" in
+      KERGHAN_DEFAULT_USER_ALWAYS_AUTHENTICATED=*)
+        value="${line#*=}"
+        ;;
+    esac
+  done < <(docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' "$CONTAINER" 2>/dev/null || true)
+  echo "${value:-false}"
+}
+
+# settings_reason <current auto-login> <wanted auto-login> <current bind>
+# <wanted bind> - prints why the running instance must be recreated for a
+# changed auto-login or bind, or nothing when both match.
+settings_reason() {
+  if [ "$1" != "$2" ]; then
+    if [ "$2" = "true" ]; then
+      echo "turning automatic login on"
+    else
+      echo "turning automatic login off"
+    fi
+  elif [ "$3" != "$4" ]; then
+    echo "publishing on $4"
+  fi
+}
+
 is_semver() {
   case "$1" in
     '' | *[!0-9.]* | .* | *. | *..*) return 1 ;;
@@ -461,6 +500,9 @@ cmd_up() {
     current_port="$(running_port)"
     reason="$(recreate_reason "$current" "$image" "$current_port" "$port")" || exit 1
     if [ -z "$reason" ]; then
+      reason="$(settings_reason "$(running_auto_login)" "$auto_login" "$(running_bind)" "$bind")"
+    fi
+    if [ -z "$reason" ]; then
       echo "Kerghan is already running at http://localhost:$port"
       return 0
     fi
@@ -475,7 +517,8 @@ cmd_up() {
 # recreate_reason <current image> <wanted image> <current port> <wanted port>
 # Prints why the running instance must be recreated, or nothing when it
 # already matches. Returns 1 (after warning) on a downgrade. Only the image and
-# the port drive this decision (runtime and stop-timeout never do).
+# the port are compared here; when they match, cmd_up also compares auto-login
+# and bind (settings_reason). Runtime and stop-timeout never recreate.
 #
 # The wanted version is the wanted tag without -offline: KERGHAN_VERSION, or
 # image-tag from ~/.kerghan/config. When it is not x.y.z semver (e.g. latest),
