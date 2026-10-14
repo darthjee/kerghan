@@ -132,7 +132,7 @@ up_line() {
   [ "$status" -eq 0 ]
   [ "$(vault_calls)" = "$(up_line 0.0.0.0 false)" ]
   assert_output_contains "Automatic login is off: $ENV_FILE has no default user"
-  assert_output_contains "add the KERGHAN_DEFAULT_USER_* values to kerghan.env"
+  assert_output_contains "To turn it on, run 'kerghan update-env', then 'kerghan up' again."
   [[ "$output" != *warning* ]]
   # kerghan.env is left as it is.
   [ "$(grep -c '^KERGHAN_DEFAULT_USER_' "$ENV_FILE")" -eq 0 ]
@@ -160,7 +160,7 @@ up_line() {
   run "$KERGHAN" up --auto-login
   [ "$status" -eq 1 ]
   assert_output_contains "kerghan: error: automatic login needs the default user, but $ENV_FILE has no KERGHAN_DEFAULT_USER_USERNAME"
-  assert_output_contains "kerghan: hint: add the KERGHAN_DEFAULT_USER_* values to kerghan.env"
+  assert_output_contains "kerghan: hint: run 'kerghan update-env' to add the default user to kerghan.env"
   [ -z "$(vault_calls)" ]
 }
 

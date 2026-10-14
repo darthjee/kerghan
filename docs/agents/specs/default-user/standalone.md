@@ -61,10 +61,10 @@ to `kerghan.env`: the client passes them on every `up` (see
   `KERGHAN_DEFAULT_USER_EMAIL` or `KERGHAN_DEFAULT_USER_PASSWORD`:
   - `auto-login` not set (no flag, no config value): it resolves to `false`, so `bind` defaults to
     `0.0.0.0` and the instance behaves as before #371; `up` prints a notice that automatic login
-    needs the `KERGHAN_DEFAULT_USER_*` values in `kerghan.env` (see
-    [Existing installations](#existing-installations));
-  - `auto-login=true` set by flag or config: `up` fails with an error and a hint, and starts
-    nothing, rather than starting a backend that cannot boot.
+    needs the `KERGHAN_DEFAULT_USER_*` values in `kerghan.env` and that `kerghan update-env` adds
+    them (see [Existing installations](#existing-installations));
+  - `auto-login=true` set by flag or config: `up` fails with an error and a hint to run
+    `kerghan update-env` or turn automatic login off, and starts nothing, rather than starting a backend that cannot boot.
 
   Upgrading the client therefore leaves an existing installation with automatic login off (and,
   since the running instance has no value, which counts as `false`, does not recreate it for
@@ -175,13 +175,26 @@ Open verification items:
 Implemented by #372.
 
 - A `kerghan.env` created by an older version is **not** modified automatically on upgrade.
-- A new client command (its name is decided in #372) updates an existing `kerghan.env`:
-  - adds only the missing variables, starting with the `KERGHAN_DEFAULT_USER_*` ones, with a
-    generated password;
-  - keeps existing values untouched and keeps mode 600;
-  - reports which variables it added;
+- The client command `kerghan update-env` updates an existing `kerghan.env`:
+  - adds only the missing variables, i.e. every key a new `kerghan.env` gets (the shared
+    `DEFAULT_ENV_KEYS` list, so the `KERGHAN_DEFAULT_USER_*` ones with a generated password, and a
+    missing secret too), appended at the end of the file; it never writes the client-managed
+    variables;
+  - counts a key as present when the file has any line for it (indented, empty value or bare
+    `KEY`), so it never adds a second copy;
+  - keeps existing values, content and order untouched and keeps mode 600; adds a newline first
+    when the file does not end with one;
+  - leaves a blank key (empty value or bare `KEY` line) as it is and prints a warning naming it;
+    for a default-user credential it adds that `up` still treats the default user as missing;
+  - reports the names of the variables it added, never their values;
   - is idempotent;
-  - tells the user to restart the instance to apply the change.
+  - tells the user to run `kerghan down && kerghan up` to apply the change;
+  - fails (exit 1, writes nothing) when `kerghan.env` does not exist, with a hint to run
+    `kerghan up` for a new installation, or, when `vault-kerghan-data` exists, to restore the file
+    from a backup (new secrets would not match the data);
+  - does not touch the Docker instance.
+- The `up` notice (default `auto-login` turned off) and the explicit `auto-login=true` error hint
+  point at `kerghan update-env`.
 
 ## Required tests (bats)
 
@@ -202,5 +215,8 @@ Implemented by #372.
   starts.
 - Manual (not bats): a fresh installation is logged in from the host and is not reachable from
   other interfaces by default.
-- Update command: missing `kerghan.env`, already up to date, partially missing keys, existing
-  values and mode preserved, idempotent on a second run.
+- `kerghan update-env` (`standalone/test/update_env.bats`): missing `kerghan.env` (with and
+  without the data volume), already up to date, a pre-#371 file, partially missing keys, a missing
+  secret, blank keys (warned about and left as they are), an indented key, a file without a
+  trailing newline, existing values, order and mode preserved, idempotent on a second run, no
+  generated value printed, a usage error on an argument.

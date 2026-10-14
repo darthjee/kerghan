@@ -112,7 +112,8 @@ bash install.sh
 2. Run `kerghan up`. When the running instance uses an older image than the new client, the client
    recreates it (`down`, then `up`) with the new image. The data volume is kept, and the backend
    runs the pending migrations on boot. An installation whose `kerghan.env` predates the default
-   user keeps automatic login off and the port on every interface (see [Secrets](#secrets)).
+   user keeps automatic login off and the port on every interface (see [Secrets](#secrets));
+   `kerghan update-env` adds the missing keys. Upgrading never modifies `kerghan.env` by itself.
 
 **Downgrades are not supported** (an older image against a newer schema). When the running
 instance uses a newer image than the client (or than `image-tag`), `kerghan up` prints a warning
@@ -128,6 +129,7 @@ kerghan logs [-f]                       # show (or follow) the logs
 kerghan status                          # show the instance state
 kerghan compose <args>                  # docker compose inside the instance, e.g. compose exec mysql sh
 kerghan reset                           # wipe all data, asks for confirmation
+kerghan update-env                      # add missing variables to ~/.kerghan/kerghan.env (keeps existing values)
 kerghan version | help
 ```
 
@@ -179,21 +181,52 @@ client creates `~/.kerghan/` and writes `kerghan.env` (mode 600) with `KERGHAN_S
 `KERGHAN_DEFAULT_USER_EMAIL=admin@kerghan.local`, `KERGHAN_DEFAULT_USER_PASSWORD` (from
 `openssl rand -hex 24`, used for a manual login when `auto-login` is off) and
 `KERGHAN_DEFAULT_USER_ADMIN=true`. It never regenerates or rewrites an existing file, so an
-installation created by an older client has no default user in its `kerghan.env`.
+installation created by an older client has no default user in its `kerghan.env` until
+`kerghan update-env` adds it (see [`update-env`](#update-env)). The key list and value generators
+(`DEFAULT_ENV_KEYS`, `default_env_value` in `bin/kerghan`) are shared by both, so they cannot
+drift apart.
 
 The backend refuses to boot with automatic login on and no default-user credentials. So when
 `kerghan.env` lacks a non-blank `KERGHAN_DEFAULT_USER_USERNAME`, `KERGHAN_DEFAULT_USER_EMAIL` or
 `KERGHAN_DEFAULT_USER_PASSWORD` (a pre-#371 file):
 
 - with `auto-login` not set (no flag, no config value), `up` resolves it to `false`, so `bind`
-  defaults to `0.0.0.0` (the pre-#371 behavior), and prints a notice that automatic login needs
-  the `KERGHAN_DEFAULT_USER_*` values in `kerghan.env`;
+  defaults to `0.0.0.0` (the pre-#371 behavior), and prints a notice to run `kerghan update-env`,
+  then `kerghan up` again, to turn it on;
 - with `auto-login=true` set by `--auto-login` or the config, `up` fails (exit 1, nothing started)
-  with an error and a hint to add those values or turn automatic login off.
+  with an error and a hint to run `kerghan update-env` or turn automatic login off.
 
 `up` refuses to start (exit 1, no container created) when `kerghan.env` is missing but the
 `vault-kerghan-data` volume exists: the data was written with secrets that are gone. The hint
 says to restore the file from a backup, or to run `kerghan reset`.
+
+#### `update-env`
+
+`kerghan update-env` is the explicit way to bring a `kerghan.env` written by an older client up to
+date (upgrading the client never modifies it):
+
+- It appends, at the end of the file and in the `ensure_env_file` order, every default key the file
+  has no line for, with the values a new installation gets (fresh secrets, a generated
+  `KERGHAN_DEFAULT_USER_PASSWORD`, the fixed `admin` / `admin@kerghan.local` / `true` values). Only
+  the missing values are generated.
+- A key counts as present when the file has any line for it: indented, with an empty value, or a
+  bare `KEY` line (the same rule as the client-managed check). Present lines are never edited and
+  never duplicated. Existing content, order, inode and mode 600 are kept; a missing trailing
+  newline is added before appending.
+- A present but blank key is left as it is, with a warning naming it. For the default-user
+  credentials (`USERNAME`, `EMAIL`, `PASSWORD`) a hint adds that `up` still treats the default
+  user as missing.
+- It never writes `KERGHAN_DEFAULT_USER_ALWAYS_AUTHENTICATED` or
+  `KERGHAN_DEFAULT_USER_ALLOWED_IPS` (client-managed).
+- It prints the names of the keys it added, never their values, then
+  `Run 'kerghan down && kerghan up' to apply the change.`; or says the file is up to date. A second
+  run adds nothing. Both exit 0, blank-key warnings included.
+- When `kerghan.env` does not exist it exits 1 and writes nothing. The hint says to run
+  `kerghan up` for a new installation, or, when `vault-kerghan-data` exists, to restore the file
+  from a backup (new secrets would not match the data) or run `kerghan reset`.
+- It does not take options, loads `~/.kerghan/config` like `up` (so a broken config fails it), and
+  does not touch the instance: the only Docker call is the read-only volume check when the file is
+  missing.
 
 ### `FRONTEND_BASE_URL`
 
@@ -275,7 +308,7 @@ bind=                 # host IPv4 address; default depends on auto-login
   still starts. With auto-login off, log in as `admin` with the password in `kerghan.env`;
   sessions created by automatic login stay valid until they expire. IPv6 bind addresses are not
   supported. Full design: [default-user/standalone.md](specs/default-user/standalone.md).
-- **Which commands read it:** only `up`, `down` and `reset` load the file, before any side effect
+- **Which commands read it:** only `up`, `down`, `reset` and `update-env` load the file, before any side effect
   (in `reset`, before the confirmation prompt). `version`, `help`, `logs`, `status` and `compose`
   never read it, so a broken config does not block them.
 - **Malformed input:** a line without `=`, or an invalid value for a known key (for example
