@@ -314,4 +314,50 @@ describe('TokenService', () => {
       );
     });
   });
+
+  describe('findActiveToken', () => {
+    const activeRow = {
+      id: 10,
+      userId: 1,
+      revokedAt: null,
+      expiresAt: new Date(Date.now() + 60_000),
+    } as RefreshToken;
+    const sha256 = (token: string): string => createHash('sha256').update(token).digest('hex');
+
+    it('resolves with the active row, looked up by the token hash', async () => {
+      refreshTokenRepository.findOneBy.mockResolvedValue(activeRow);
+
+      await expect(service.findActiveToken('a-refresh-token')).resolves.toBe(activeRow);
+      expect(refreshTokenRepository.findOneBy).toHaveBeenCalledWith({ tokenHash: sha256('a-refresh-token') });
+    });
+
+    it('resolves with null without any lookup when no token is presented', async () => {
+      await expect(service.findActiveToken(undefined)).resolves.toBeNull();
+      await expect(service.findActiveToken('')).resolves.toBeNull();
+      expect(refreshTokenRepository.findOneBy).not.toHaveBeenCalled();
+    });
+
+    it('resolves with null for an unknown token', async () => {
+      refreshTokenRepository.findOneBy.mockResolvedValue(null);
+
+      await expect(service.findActiveToken('unknown')).resolves.toBeNull();
+    });
+
+    it('resolves with null for an expired token', async () => {
+      refreshTokenRepository.findOneBy.mockResolvedValue({ ...activeRow, expiresAt: new Date(Date.now() - 1000) });
+
+      await expect(service.findActiveToken('expired')).resolves.toBeNull();
+    });
+
+    it('resolves with null for a revoked token, without revoking anything', async () => {
+      refreshTokenRepository.findOneBy.mockResolvedValue({
+        ...activeRow,
+        revokedAt: new Date(),
+        revokedReason: 'rotated',
+      });
+
+      await expect(service.findActiveToken('revoked')).resolves.toBeNull();
+      expect(refreshTokenRepository.update).not.toHaveBeenCalled();
+    });
+  });
 });

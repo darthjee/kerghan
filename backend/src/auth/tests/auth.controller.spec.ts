@@ -35,8 +35,11 @@ function authResult(user: User): object {
   };
 }
 
-function requestWith(cookies: Record<string, string> = {}): Request {
-  return { cookies } as unknown as Request;
+function requestWith(
+  cookies: Record<string, string> = {},
+  { headers = {}, remoteAddress = '127.0.0.1' }: { headers?: Record<string, string>; remoteAddress?: string } = {},
+): Request {
+  return { cookies, headers, socket: { remoteAddress } } as unknown as Request;
 }
 
 function defaultConfigService(): { get: jest.Mock } {
@@ -258,7 +261,7 @@ describe('AuthController', () => {
           res as unknown as Response,
         );
 
-        expect(authService.status).toHaveBeenCalledWith('a-refresh-token');
+        expect(authService.status).toHaveBeenCalledWith('a-refresh-token', '127.0.0.1');
         expect(result).toEqual({ loggedIn: true, isAdmin: false });
         expect(res.cookie).not.toHaveBeenCalled();
         expect(res.clearCookie).not.toHaveBeenCalled();
@@ -284,8 +287,62 @@ describe('AuthController', () => {
 
         await controller.status(requestWith(), res as unknown as Response);
 
-        expect(authService.status).toHaveBeenCalledWith(undefined);
+        expect(authService.status).toHaveBeenCalledWith(undefined, '127.0.0.1');
       });
+    });
+
+    describe('when the service logs the caller in automatically', () => {
+      beforeEach(() => {
+        authService.status.mockResolvedValue({ loggedIn: true, isAdmin: true, session: authResult(user) });
+      });
+
+      it('responds with exactly { loggedIn, isAdmin }, never leaking the session', async () => {
+        const result = await buildController().status(requestWith(), res as unknown as Response);
+
+        expect(result).toEqual({ loggedIn: true, isAdmin: true });
+      });
+
+      it('sets the three session cookies and clears none', async () => {
+        await buildController().status(requestWith(), res as unknown as Response);
+
+        expect(res.cookie.mock.calls.map(([name]) => name)).toEqual(['access_token', 'refresh_token', 'logged_in']);
+        expect(res.clearCookie).not.toHaveBeenCalled();
+      });
+    });
+
+    describe('client IP resolution', () => {
+      beforeEach(() => {
+        authService.status.mockResolvedValue({ loggedIn: false, isAdmin: false });
+      });
+
+      it('uses the trusted-boundary X-Forwarded-For hop, ignoring forged hops further left', async () => {
+        const req = requestWith({}, { headers: { 'x-forwarded-for': '127.0.0.1, 203.0.113.9' } });
+
+        await buildController().status(req, res as unknown as Response);
+
+        expect(authService.status).toHaveBeenCalledWith(undefined, '203.0.113.9');
+      });
+
+      it('honors KERGHAN_TRUSTED_PROXY_HOPS', async () => {
+        const configService = { get: jest.fn((key: string) => (key === 'KERGHAN_TRUSTED_PROXY_HOPS' ? '2' : undefined)) };
+        const req = requestWith({}, { headers: { 'x-forwarded-for': '198.51.100.1, 10.0.0.5, 203.0.113.9' } });
+
+        await buildController({ configService }).status(req, res as unknown as Response);
+
+        expect(authService.status).toHaveBeenCalledWith(undefined, '10.0.0.5');
+      });
+
+      it.each(['abc', '', '-1', '1.5'])(
+        'falls back to the default hop count for an invalid KERGHAN_TRUSTED_PROXY_HOPS (%p), never the leftmost hop',
+        async (raw) => {
+          const configService = { get: jest.fn((key: string) => (key === 'KERGHAN_TRUSTED_PROXY_HOPS' ? raw : undefined)) };
+          const req = requestWith({}, { headers: { 'x-forwarded-for': '127.0.0.1, 203.0.113.9' } });
+
+          await buildController({ configService }).status(req, res as unknown as Response);
+
+          expect(authService.status).toHaveBeenCalledWith(undefined, '203.0.113.9');
+        },
+      );
     });
   });
 });

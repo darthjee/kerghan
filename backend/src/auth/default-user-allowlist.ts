@@ -9,6 +9,8 @@ const IPV4_MAPPED_PATTERN = /^::ffff:(\d{1,3}(?:\.\d{1,3}){3})$/i;
 const PREFIX_PATTERN = /^\d{1,3}$/;
 // Maximum CIDR prefix length per IP family (`isIP`'s return value).
 const MAX_PREFIX: Record<number, number> = { 4: 32, 6: 128 };
+// The allowlist used when no well-formed entry is configured.
+const LOOPBACK_ADDRESSES = ['127.0.0.1', '::1'] as const;
 
 /** One parsed `ALLOWED_IPS` entry: a single address or a CIDR range. */
 export interface AllowlistRule {
@@ -49,7 +51,18 @@ export function parseAllowlistEntry(entry: string): AllowlistRule | null {
 
   return rule && addRule(new BlockList(), rule) ? rule : null;
 }
+/**
+ * The entries that actually apply: the well-formed configured entries, or
+ * the loopback defaults (`127.0.0.1`, `::1`) when there are none. Mirrors
+ * {@link buildAllowlist}, so it reports exactly what is enforced.
+ * @param {string[]} entries - The trimmed, non-empty allowlist entries.
+ * @returns {string[]} The effective allowlist entries.
+ */
+export function effectiveAllowlistEntries(entries: string[]): string[] {
+  const wellFormed = entries.filter((entry) => parseAllowlistEntry(entry) !== null);
 
+  return wellFormed.length === 0 ? [...LOOPBACK_ADDRESSES] : wellFormed;
+}
 
 /**
  * Builds the allowlist from the well-formed entries; loopback only

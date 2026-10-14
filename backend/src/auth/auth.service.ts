@@ -3,6 +3,7 @@ import { EventEmitter2 } from '@nestjs/event-emitter';
 import { InjectRepository } from '@nestjs/typeorm';
 import bcrypt from 'bcryptjs';
 import { IsNull, Not, Repository } from 'typeorm';
+import { DefaultUserService } from './default-user.service.js';
 import { ErrorCodes } from '../core/error-codes.js';
 import { LoginDto } from './dto/login.dto.js';
 import { RecoverDto } from './dto/recover.dto.js';
@@ -13,9 +14,9 @@ import { RefreshToken, RevokedReason } from './entities/refresh-token.entity.js'
 import { User } from './entities/user.entity.js';
 import { UserRegisteredEvent } from './events/user-registered.event.js';
 import { PasswordResetService } from './password-reset.service.js';
-import { TokenService, type AuthResult } from './token.service.js';
+import { TokenService, type AuthResult, type StatusResult } from './token.service.js';
 
-export type { AuthResult };
+export type { AuthResult, StatusResult };
 
 // Specific error code attached to the `409` thrown when a field's value is taken.
 const TAKEN_CODES = { username: ErrorCodes.USERNAME_TAKEN, email: ErrorCodes.EMAIL_TAKEN } as const;
@@ -35,6 +36,7 @@ export class AuthService {
   private readonly tokenService: TokenService;
   private readonly eventEmitter: EventEmitter2;
   private readonly passwordResetService: PasswordResetService;
+  private readonly defaultUserService: DefaultUserService;
 
   /**
    * @param {Repository<User>} userRepository - The Auth module's user repository.
@@ -42,6 +44,7 @@ export class AuthService {
    * @param {TokenService} tokenService - Mints login sessions and hashes refresh tokens.
    * @param {EventEmitter2} eventEmitter - Fires the `user.registered` event.
    * @param {PasswordResetService} passwordResetService - Recovery/reset logic (`recover`/`resetPassword`).
+   * @param {DefaultUserService} defaultUserService - `status()`'s automatic login as the default user.
    */
   constructor(
     @InjectRepository(User) userRepository: Repository<User>,
@@ -49,12 +52,14 @@ export class AuthService {
       tokenService: TokenService,
       eventEmitter: EventEmitter2,
       passwordResetService: PasswordResetService,
+      defaultUserService: DefaultUserService,
   ) {
     this.userRepository = userRepository;
     this.refreshTokenRepository = refreshTokenRepository;
     this.tokenService = tokenService;
     this.eventEmitter = eventEmitter;
     this.passwordResetService = passwordResetService;
+    this.defaultUserService = defaultUserService;
   }
 
   /**
@@ -181,22 +186,25 @@ export class AuthService {
   }
 
   /**
-   * Reports whether a refresh token currently identifies an active
-   * session, without mutating anything. Deliberately distinct from
-   * `#findActiveRefreshToken` (used by `refresh()`), whose replay detection
-   * revokes the user's tokens: a passive status check must never revoke
-   * anything, or a second tab's mount-time check could log every tab out
-   * after the first tab's legitimate refresh.
+   * Reports whether a refresh token identifies an active session, never
+   * revoking anything (see `TokenService#findActiveToken`).
+   * With no active session, tries the automatic login as the default user
+   * (see `DefaultUserService#autoLogin`).
    * @param {string} [refreshToken] - The refresh token presented by the client (absent: no lookup).
-   * @returns {Promise<{ loggedIn: boolean; isAdmin: boolean }>} `{ loggedIn:
-   *   true, isAdmin }` (resolved from the token's user) when active; `{
-   *   loggedIn: false, isAdmin: false }` otherwise, with no extra query.
+   * @param {string} [clientIp] - The resolved client IP, checked against the default-user allowlist.
+   * @returns {Promise<StatusResult>} `{ loggedIn: true, isAdmin }` from the
+   *   token's user when active; `{ loggedIn: true, isAdmin, session }` on an
+   *   automatic login; `{ loggedIn: false, isAdmin: false }` otherwise.
    */
-  async status(refreshToken?: string): Promise<{ loggedIn: boolean; isAdmin: boolean }> {
-    const tokenRow = await this.#findActiveTokenRow(refreshToken);
+  async status(refreshToken?: string, clientIp = ''): Promise<StatusResult> {
+    const tokenRow = await this.tokenService.findActiveToken(refreshToken);
 
     if (!tokenRow) {
-      return { loggedIn: false, isAdmin: false };
+      const session = await this.defaultUserService.autoLogin(clientIp);
+
+      return session
+        ? { loggedIn: true, isAdmin: session.user.isAdmin, session }
+        : { loggedIn: false, isAdmin: false };
     }
 
     const user = await this.userRepository.findOneBy({ id: tokenRow.userId });
@@ -275,15 +283,6 @@ export class AuthService {
     }
 
     return tokenRow;
-  }
-
-  async #findActiveTokenRow(refreshToken?: string): Promise<RefreshToken | null> {
-    const tokenRow = refreshToken
-      ? await this.refreshTokenRepository.findOneBy({ tokenHash: this.tokenService.hashToken(refreshToken) })
-      : null;
-    const isActive = !!tokenRow && !tokenRow.revokedAt && tokenRow.expiresAt > new Date();
-
-    return isActive ? tokenRow : null;
   }
 
   async #validateCredentials(username: string, password: string): Promise<User> {

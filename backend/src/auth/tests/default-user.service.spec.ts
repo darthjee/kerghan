@@ -3,7 +3,11 @@ import bcrypt from 'bcryptjs';
 import { QueryFailedError } from 'typeorm';
 import { ErrorCodes } from '../../core/error-codes.js';
 import { DefaultUserConfig, DefaultUserSettings } from '../default-user.config.js';
-import { DEFAULT_USER_MANAGED_MESSAGE, DefaultUserService } from '../default-user.service.js';
+import {
+  AUTOMATIC_LOGIN_WARNING,
+  DEFAULT_USER_MANAGED_MESSAGE,
+  DefaultUserService,
+} from '../default-user.service.js';
 import { RevokedReason } from '../entities/refresh-token.entity.js';
 import { User } from '../entities/user.entity.js';
 import { TokenService } from '../token.service.js';
@@ -29,8 +33,8 @@ function duplicateEntryError(): QueryFailedError {
 
 describe('DefaultUserService', () => {
   let userRepo: ReturnType<typeof createInMemoryRepo<User>>;
-  let tokenService: { revokeUserTokens: jest.Mock };
-  let logger: { info: jest.Mock };
+  let tokenService: { revokeUserTokens: jest.Mock; issueTokens: jest.Mock };
+  let logger: { info: jest.Mock; warn: jest.Mock };
 
   const buildService = (overrides: Partial<DefaultUserSettings> = {}): DefaultUserService =>
     new DefaultUserService(
@@ -45,8 +49,16 @@ describe('DefaultUserService', () => {
 
   beforeEach(() => {
     userRepo = createInMemoryRepo<User>();
-    tokenService = { revokeUserTokens: jest.fn().mockResolvedValue(undefined) };
-    logger = { info: jest.fn() };
+    tokenService = {
+      revokeUserTokens: jest.fn().mockResolvedValue(undefined),
+      issueTokens: jest.fn(async (user: User) => ({
+        user,
+        accessToken: 'access',
+        refreshToken: 'refresh',
+        refreshTokenExpiresAt: new Date(),
+      })),
+    };
+    logger = { info: jest.fn(), warn: jest.fn() };
   });
 
   describe('onApplicationBootstrap', () => {
@@ -280,6 +292,119 @@ describe('DefaultUserService', () => {
 
     it('does not throw for another user', () => {
       expect(() => service.assertNotDefaultUser(defaultId + 1)).not.toThrow();
+    });
+  });
+
+  describe('boot warning', () => {
+    const allLogLines = (): string => JSON.stringify([...logger.info.mock.calls, ...logger.warn.mock.calls]);
+
+    it('is not logged when always-authenticated is off', async () => {
+      await buildService().onApplicationBootstrap();
+
+      expect(logger.warn).not.toHaveBeenCalled();
+    });
+
+    it('names the username and the loopback default allowlist when none is configured', async () => {
+      await buildService({ alwaysAuthenticated: true }).onApplicationBootstrap();
+
+      expect(logger.warn).toHaveBeenCalledTimes(1);
+      expect(logger.warn).toHaveBeenCalledWith(AUTOMATIC_LOGIN_WARNING, {
+        context: 'DefaultUserService',
+        username: 'admin',
+        allowedIps: ['127.0.0.1', '::1'],
+      });
+    });
+
+    it('names the configured allowlist', async () => {
+      await buildService({ alwaysAuthenticated: true, allowedIps: ['10.0.0.0/8', '203.0.113.7'] })
+        .onApplicationBootstrap();
+
+      expect(logger.warn.mock.calls[0][1]).toMatchObject({ allowedIps: ['10.0.0.0/8', '203.0.113.7'] });
+    });
+
+    it('never includes the password in any log line', async () => {
+      await buildService({ alwaysAuthenticated: true }).onApplicationBootstrap();
+
+      expect(allLogLines()).not.toContain(PASSWORD);
+    });
+
+    it('is logged after the sync on every boot', async () => {
+      await buildService({ alwaysAuthenticated: true }).onApplicationBootstrap();
+      await buildService({ alwaysAuthenticated: true }).onApplicationBootstrap();
+
+      expect(logger.warn).toHaveBeenCalledTimes(2);
+      expect(userRepo.rows).toHaveLength(1);
+    });
+  });
+
+  describe('autoLogin', () => {
+    const bootedService = async (overrides: Partial<DefaultUserSettings> = {}): Promise<DefaultUserService> => {
+      const service = buildService({ alwaysAuthenticated: true, ...overrides });
+
+      await service.onApplicationBootstrap();
+
+      return service;
+    };
+
+    it('issues a regular (non-persistent) session for the default user from an allowed IP', async () => {
+      const service = await bootedService();
+
+      const result = await service.autoLogin('127.0.0.1');
+
+      const [user] = userRepo.rows;
+      expect(tokenService.issueTokens).toHaveBeenCalledTimes(1);
+      expect(tokenService.issueTokens).toHaveBeenCalledWith(user, false);
+      expect(result).toMatchObject({ user, accessToken: 'access', refreshToken: 'refresh' });
+    });
+
+    it('accepts an IPv4-mapped loopback address', async () => {
+      const service = await bootedService();
+
+      await expect(service.autoLogin('::ffff:127.0.0.1')).resolves.not.toBeNull();
+    });
+
+    it('accepts an IP inside a configured range', async () => {
+      const service = await bootedService({ allowedIps: ['10.0.0.0/8'] });
+
+      await expect(service.autoLogin('10.1.2.3')).resolves.not.toBeNull();
+    });
+
+    it.each(['10.0.0.1', '', 'not-an-ip'])('returns null for the disallowed IP %p', async (ip) => {
+      const service = await bootedService();
+
+      await expect(service.autoLogin(ip)).resolves.toBeNull();
+      expect(tokenService.issueTokens).not.toHaveBeenCalled();
+    });
+
+    it('returns null when always-authenticated is off', async () => {
+      const service = buildService();
+      await service.onApplicationBootstrap();
+
+      await expect(service.autoLogin('127.0.0.1')).resolves.toBeNull();
+      expect(tokenService.issueTokens).not.toHaveBeenCalled();
+    });
+
+    it('returns null when boot sync recorded no id', async () => {
+      const service = buildService({ alwaysAuthenticated: true });
+
+      await expect(service.autoLogin('127.0.0.1')).resolves.toBeNull();
+      expect(tokenService.issueTokens).not.toHaveBeenCalled();
+    });
+
+    it('returns null when the default user row is gone', async () => {
+      const service = await bootedService();
+      userRepo.rows.splice(0, userRepo.rows.length);
+
+      await expect(service.autoLogin('127.0.0.1')).resolves.toBeNull();
+      expect(tokenService.issueTokens).not.toHaveBeenCalled();
+    });
+
+    it('never revokes anything', async () => {
+      const service = await bootedService();
+
+      await service.autoLogin('127.0.0.1');
+
+      expect(tokenService.revokeUserTokens).not.toHaveBeenCalled();
     });
   });
 });

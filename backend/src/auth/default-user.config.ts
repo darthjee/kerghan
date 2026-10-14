@@ -1,7 +1,12 @@
 import { BlockList } from 'node:net';
 import { ConfigService } from '@nestjs/config';
 import { isEmail } from 'class-validator';
-import { buildAllowlist, isInAllowlist, parseAllowlistEntry } from './default-user-allowlist.js';
+import {
+  buildAllowlist,
+  effectiveAllowlistEntries,
+  isInAllowlist,
+  parseAllowlistEntry,
+} from './default-user-allowlist.js';
 import { PASSWORD_MIN_LENGTH } from './password-rules.js';
 
 // Env var names — `DefaultUserConfig` is their only reader.
@@ -124,6 +129,14 @@ export class DefaultUserConfig {
    */
   isIpAllowed(ip: string): boolean {
     return isInAllowlist(this.#blockList, ip);
+  }
+
+  /**
+   * @returns {string[]} The effective allowlist: the configured entries, or
+   *   the loopback defaults (`127.0.0.1`, `::1`) when none are configured.
+   */
+  allowedIps(): string[] {
+    return effectiveAllowlistEntries(this.#settings.allowedIps);
   }
 }
 

@@ -100,8 +100,9 @@ again.
 
 ### Disallowed IP or feature off
 
-The response is byte-for-byte today's unauthenticated response: `200 { "loggedIn": false,
-"isAdmin": false }`, with the session cookies cleared. Nothing hints that the feature exists.
+The response is byte-for-byte today's unauthenticated response: `201 { "loggedIn": false,
+"isAdmin": false }`, with the session cookies cleared. (`201` because the route has no
+`@HttpCode` override, so NestJS answers its `POST` with `201`.) Nothing hints that the feature exists.
 
 ### Caching
 

@@ -7,12 +7,14 @@ import {
   clearSessionCookiesOnUnauthorized,
   readRefreshToken,
   resolveRefreshToken,
+  setSessionCookies,
 } from './auth-cookies.js';
 import { respondWithSession } from './auth-response.js';
 import { AuthService } from './auth.service.js';
 import type { AccessTokenPayload } from '../core/access-token-payload.js';
 import { CacheClass } from '../core/cache-class.js';
 import { CachePolicy } from '../core/cache-policy.decorator.js';
+import { extractClientRequestInfo, parseTrustedProxyHops } from '../core/client-request.js';
 import { CurrentUser } from '../core/current-user.decorator.js';
 import { Public } from '../core/public.decorator.js';
 import { LoginDto } from './dto/login.dto.js';
@@ -27,8 +29,10 @@ import { UpdateAccountDto } from './dto/update-account.dto.js';
  * `AuthService`. `login`/`register`/`refresh`/`logout`/`status` are all
  * `@Public()`: the first four exist precisely to establish or renew
  * credentials, and `status` exists to let an already-logged-out client
- * check its session without one — so all of them must stay reachable
- * without an already-valid access token. `@CachePolicy(CacheClass.Never)` is
+ * check its session without one — and, with no active session, may also log
+ * the caller in automatically as the default user (allowlisted client IPs
+ * only) — so all of them must stay reachable without an already-valid
+ * access token. `@CachePolicy(CacheClass.Never)` is
  * applied once at the controller level so Tent's proxy never caches — and
  * cross-serves — a login/session response between users, and browsers never
  * store it either. No route overrides it: every route here is a write that
@@ -44,7 +48,7 @@ export class AuthController {
   /**
    * @param {AuthService} authService - The Auth module's business logic.
    * @param {ConfigService} configService - Supplies the access-token TTL used
-   *   for the cookie's `maxAge`.
+   *   for the cookie's `maxAge` and `KERGHAN_TRUSTED_PROXY_HOPS`.
    * @param {AccountService} accountService - The self-service "My Account" update flow's business logic.
    */
   constructor(authService: AuthService, configService: ConfigService, accountService: AccountService) {
@@ -184,24 +188,35 @@ export class AuthController {
 
   /**
    * `POST /auth/status.json`. Reports whether the `refresh_token` cookie
-   * still identifies an active session, without mutating anything
-   * server-side — used for mount-time login-state confirmation (e.g. the
-   * frontend header), not for establishing or renewing credentials. A
-   * `loggedIn: false` answer clears the session cookies so the frontend's
-   * `logged_in` marker can't outlive the session.
-   * @param {Request} req - Carries the `refresh_token` cookie.
-   * @param {Response} res - Used to clear the session cookies when logged out.
-   * @returns {Promise<object>} `{ loggedIn: boolean, isAdmin: boolean }`, always `200`.
+   * still identifies an active session, never revoking anything — used for
+   * mount-time login-state confirmation (e.g. the frontend header). With no
+   * active session, `AuthService#status` may log the caller in as the
+   * default user (automatic login, allowlisted client IPs only, resolved
+   * through `KERGHAN_TRUSTED_PROXY_HOPS`); its session cookies are then set
+   * exactly as `login.json` sets them. A `loggedIn: false` answer clears the
+   * session cookies so the frontend's `logged_in` marker can't outlive the
+   * session.
+   * @param {Request} req - Carries the `refresh_token` cookie and the client IP.
+   * @param {Response} res - Used to set or clear the session cookies.
+   * @returns {Promise<object>} `{ loggedIn: boolean, isAdmin: boolean }`, always
+   *   `201` (Nest's default for `POST`; no `@HttpCode` override).
    */
   @Public()
   @Post('status.json')
   async status(@Req() req: Request, @Res({ passthrough: true }) res: Response): Promise<object> {
-    const result = await this.authService.status(readRefreshToken(req));
+    const { ip } = extractClientRequestInfo(req, this.#trustedProxyHops());
+    const { loggedIn, isAdmin, session } = await this.authService.status(readRefreshToken(req), ip);
 
-    if (!result.loggedIn) {
+    if (session) {
+      setSessionCookies(res, session, this.configService);
+    } else if (!loggedIn) {
       clearSessionCookies(res);
     }
 
-    return result;
+    return { loggedIn, isAdmin };
+  }
+
+  #trustedProxyHops(): number {
+    return parseTrustedProxyHops(this.configService.get('KERGHAN_TRUSTED_PROXY_HOPS'));
   }
 }
