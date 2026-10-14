@@ -20,6 +20,16 @@ the automatic login.
 - The client IP is resolved with the existing `KERGHAN_TRUSTED_PROXY_HOPS` handling (see
   `backend/src/auth/authorization-request.controller.ts`), so a forged `X-Forwarded-For` header
   beyond the trusted hops cannot bypass the allowlist.
+- **Deployment invariant:** that guarantee only holds when every request reaches the backend
+  through Tent, which overwrites `X-Forwarded-For` (`SetClientIpMiddleware`). The backend does
+  not check that the socket peer is Tent, so anyone who can reach the backend port directly can
+  forge the resolved IP (e.g. `X-Forwarded-For: 127.0.0.1`). While automatic login is on, never
+  expose the backend port beyond loopback or the internal Docker network. The dev
+  `docker-compose.yml` binds it to `127.0.0.1`. Verifying the socket peer against a configured
+  trusted-proxy address is a possible future hardening; it is not decided yet.
+- An invalid `KERGHAN_TRUSTED_PROXY_HOPS` (not a non-negative integer) falls back to the default
+  instead of letting the leftmost, client-supplied `X-Forwarded-For` entry win. With `0` and an
+  `X-Forwarded-For` header present, no IP is resolved, so automatic login stays off (fails closed).
 - This lets a regular production release turn on automatic login only for known networks, such as
   an office or VPN range, while everyone else uses the normal login.
 
