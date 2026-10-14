@@ -570,11 +570,11 @@ cmd_up() {
   if [ "$auto_login" = "true" ] && ! has_default_user_credentials; then
     if [ -n "$explicit_auto_login" ]; then
       error "automatic login needs the default user, but $ENV_FILE has no KERGHAN_DEFAULT_USER_USERNAME, KERGHAN_DEFAULT_USER_EMAIL and KERGHAN_DEFAULT_USER_PASSWORD"
-      hint "add the KERGHAN_DEFAULT_USER_* values to kerghan.env, or use 'kerghan up --no-auto-login' (or auto-login=false in ~/.kerghan/config)"
+      hint "run 'kerghan update-env' to add the default user to kerghan.env, or use 'kerghan up --no-auto-login' (or auto-login=false in ~/.kerghan/config)"
       exit 1
     fi
     auto_login=false
-    echo "Automatic login is off: $ENV_FILE has no default user. To turn it on, add the KERGHAN_DEFAULT_USER_* values to kerghan.env."
+    echo "Automatic login is off: $ENV_FILE has no default user. To turn it on, run 'kerghan update-env', then 'kerghan up' again."
   fi
   local default_bind="$DEFAULT_BIND_NO_AUTO_LOGIN"
   if [ "$auto_login" = "true" ]; then

@@ -6,8 +6,8 @@
 # Format: one key=value per line. Blank lines and # comments (whole line or
 # trailing) are ignored, and surrounding whitespace is trimmed. An empty value
 # uses the default. Unknown keys only print a warning; a line without "=" or an
-# invalid value makes up, down and reset fail with the line number, without
-# touching the instance.
+# invalid value makes up, down, reset and update-env fail with the line number,
+# without touching the instance.
 #
 # Precedence: command-line flag, then this file, then the default.
 #
@@ -49,7 +49,8 @@
 # valid until they expire after you turn it off.
 # Needs the KERGHAN_DEFAULT_USER_* values in kerghan.env: a kerghan.env created
 # by an older client has none, so the default is then false, and setting it to
-# true makes `kerghan up` fail until you add them.
+# true makes `kerghan up` fail. Run `kerghan update-env` to add them (it keeps
+# every existing value), then `kerghan up` again.
 # Overridden by `kerghan up --auto-login` / `kerghan up --no-auto-login`.
 #auto-login=true
 
