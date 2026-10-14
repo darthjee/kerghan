@@ -62,6 +62,15 @@ running `kerghan_prod_app` locally to sanity-check the production image).
 | `KERGHAN_EMAIL_TIMEOUT_MS` | **Consumed**, optional | Bounds nodemailer's connection/greeting/socket timeouts. Defaults to `10000`. | `backend/src/mail/mail.config.ts` |
 | `KERGHAN_EMAIL_METHOD` | **Consumed**, optional | Selects the `EmailMethod` `MailService#sendEmail` delivers through (currently only `native`, the nodemailer transport). Defaults to `native`. Boot throws if set to an unregistered name. | `backend/src/mail/mail.config.ts` |
 | `KERGHAN_LOG_LEVEL` | **Consumed**, optional | Log-level threshold (`debug`/`info`/`warn`/`error`) for the Core logger service; defaults to `info` when unset. | `backend/src/core/logger.service.ts` |
+| `KERGHAN_DEFAULT_USER_ENABLED` | **Consumed**, optional flag | When `true`, create or synchronize the [default user](modules/auth/default-user.md) at boot and block API edits of its managed fields. Defaults to off. | `backend/src/auth/default-user.config.ts` |
+| `KERGHAN_DEFAULT_USER_ALWAYS_AUTHENTICATED` | **Consumed**, optional flag | When `true`, `POST /auth/status.json` logs a client with no valid session and an allowed IP in as the default user ([automatic login](modules/auth/default-user.md#automatic-login)). Implies `ENABLED`. Defaults to off. | `backend/src/auth/default-user.config.ts` |
+| `KERGHAN_DEFAULT_USER_USERNAME` | **Consumed**, required when enabled | The default user's username. Trimmed. | `backend/src/auth/default-user.config.ts` |
+| `KERGHAN_DEFAULT_USER_EMAIL` | **Consumed**, required when enabled | The default user's email; must be a valid email. Trimmed. | `backend/src/auth/default-user.config.ts` |
+| `KERGHAN_DEFAULT_USER_PASSWORD` | **Consumed**, required when enabled, **secret** | The default user's password, used verbatim (surrounding whitespace is part of it). At least `PASSWORD_MIN_LENGTH` characters (`backend/src/auth/password-rules.ts`, the same constant `RegisterDto` uses). Never logged, including in boot errors. | `backend/src/auth/default-user.config.ts` |
+| `KERGHAN_DEFAULT_USER_ADMIN` | **Consumed**, optional flag | When `true`, the default user is an admin; otherwise a regular user. Defaults to `false`. With automatic login on, **whoever receives the automatic login is an admin** (see [Admin access](modules/auth/default-user.md#admin-access)). | `backend/src/auth/default-user.config.ts` |
+| `KERGHAN_DEFAULT_USER_ALLOWED_IPS` | **Consumed**, optional | Comma-separated IPs and/or CIDR ranges allowed to receive the automatic login, e.g. `127.0.0.1,10.0.0.0/8,203.0.113.7`. Entries are trimmed and empty entries ignored. Empty or unset means loopback only (`127.0.0.1`, `::1`). IPv4-mapped IPv6 clients (`::ffff:a.b.c.d`) match as IPv4. See [IP allowlist](modules/auth/default-user.md#ip-allowlist). | `backend/src/auth/default-user.config.ts`, `backend/src/auth/default-user-allowlist.ts` |
+| `KERGHAN_DEFAULT_USER_ALLOW_IN_PRODUCTION` | **Consumed**, optional flag | Must be `true` for `ALWAYS_AUTHENTICATED` to boot when `STAGE=production` (the [production guard](modules/auth/default-user.md#production-guard)). Defaults to off. | `backend/src/auth/default-user.config.ts` |
+| `STAGE` | **Consumed**, set to `production` in production | When exactly `production`: the demo-user seed migrations skip their work, and the default-user production guard applies. Unrelated to `NODE_ENV`; the standalone stack does not set it. | `backend/src/database/migrations/helpers.ts`, `backend/src/auth/default-user.config.ts` |
 
 **Device-authorization tuning — undocumented-but-defaulted in dev.** None of the six
 `KERGHAN_AUTHORIZATION_REQUEST_*` variables above (TTL plus the five rate-limit/cap/cool-off keys)
@@ -71,6 +80,47 @@ the four numeric `KERGHAN_INTEGRATIONS_*` tuning variables (`MAX_PER_USER`,
 `CREDENTIAL_MAX_ATTEMPTS`, `CREDENTIAL_LOCK_MS`, `TEST_COOLDOWN_MS`); only
 `KERGHAN_INTEGRATIONS_KEY` is set in the sample, because it has no default (alongside an empty
 `KERGHAN_PREVIOUS_INTEGRATIONS_KEYS`, which only matters during a rotation).
+
+### Default user: values and boot validation
+
+The eight `KERGHAN_DEFAULT_USER_*` variables are read only by `DefaultUserConfig`; the behavior
+they drive is in [Default user and automatic login](modules/auth/default-user.md). None is set in
+`.env.dev.sample`, so the feature is off in local dev and in production unless set explicitly.
+
+- **Flag values.** A flag (`ENABLED`, `ALWAYS_AUTHENTICATED`, `ADMIN`, `ALLOW_IN_PRODUCTION`) is
+  on only when its value is exactly the string `true`, like `KERGHAN_EMAILS_ENABLED`. Anything
+  else (`TRUE`, `1`, `yes`, ` true`, empty, unset) is off; flags are not trimmed.
+- **Value handling.** `USERNAME` and `EMAIL` are trimmed. `ALLOWED_IPS` is split on `,`, each
+  entry trimmed and empty entries ignored. `PASSWORD` is used verbatim.
+- **"Enabled"** means `ENABLED` **or** `ALWAYS_AUTHENTICATED` is on.
+- **Boot validation.** When enabled, boot fails, with one error naming every offending variable
+  (or, for the allowlist, the offending entry) and never the password, when:
+  - `USERNAME`, `EMAIL` or `PASSWORD` is missing or empty (so automatic login without credentials
+    never boots);
+  - `EMAIL` is not a valid email;
+  - `PASSWORD` is shorter than `PASSWORD_MIN_LENGTH`;
+  - `ALLOWED_IPS` has a malformed entry (a valid entry is a bare IP, or `ip/prefix` with an
+    integer prefix of 0–32 for IPv4 or 0–128 for IPv6; IPv6 zone ids are malformed);
+  - `STAGE=production`, `ALWAYS_AUTHENTICATED` is on and `ALLOW_IN_PRODUCTION` is not `true`.
+    `ENABLED` alone boots in production without it.
+- **When disabled,** no check runs at all (including `ALLOWED_IPS` and the production guard).
+- Boot also fails when the configured email belongs to another user (see
+  [Boot sync](modules/auth/default-user.md#boot-sync)).
+
+Example (placeholder values only):
+
+```bash
+KERGHAN_DEFAULT_USER_ENABLED=true
+KERGHAN_DEFAULT_USER_ALWAYS_AUTHENTICATED=true
+KERGHAN_DEFAULT_USER_USERNAME=admin
+KERGHAN_DEFAULT_USER_EMAIL=admin@kerghan.local
+KERGHAN_DEFAULT_USER_PASSWORD=example-password
+KERGHAN_DEFAULT_USER_ADMIN=false
+KERGHAN_DEFAULT_USER_ALLOWED_IPS=127.0.0.1,10.0.0.0/8
+```
+
+For standalone, the client writes and manages these values; see
+[section 5](#5-standalone-darthjeekerghan-standalone).
 
 ### Setting `KERGHAN_INTEGRATIONS_KEY`
 
@@ -338,7 +388,7 @@ into the image.
 |---|---|---|
 | Required secrets (no default) | `KERGHAN_SECRET_KEY`, `KERGHAN_INTEGRATIONS_KEY` | Generated by the `kerghan` client on the first `up` (`openssl rand -base64 32`, into `kerghan.env`, mode 600), or supplied by the user. The backend fails to boot when either is missing or invalid. Back them up: see [standalone.md](standalone.md#caveats). |
 | Internal, fixed by the stack | `NODE_ENV=production`, `PORT=3000`, `KERGHAN_MYSQL_HOST=mysql`, `KERGHAN_MYSQL_PORT=3306`, `KERGHAN_MYSQL_NAME=kerghan`, `KERGHAN_MYSQL_USER=kerghan`, `KERGHAN_EMAILS_ENABLED=false`; Tent's backend host `http://kerghan:3000/` | Literals in the inner compose file and the Tent standalone configuration, so they cannot be overridden from the Vault container. MySQL is never published outside the inner network. |
-| Default user | `KERGHAN_DEFAULT_USER_ENABLED`, `KERGHAN_DEFAULT_USER_USERNAME`, `KERGHAN_DEFAULT_USER_EMAIL`, `KERGHAN_DEFAULT_USER_PASSWORD`, `KERGHAN_DEFAULT_USER_ADMIN`; `KERGHAN_DEFAULT_USER_ALWAYS_AUTHENTICATED`, `KERGHAN_DEFAULT_USER_ALLOWED_IPS`; `KERGHAN_DEFAULT_USER_ALLOW_IN_PRODUCTION` | Listed by name only in the `kerghan` service's `environment:`. On a new installation the `kerghan` client writes `ENABLED=true`, `USERNAME=admin`, `EMAIL=admin@kerghan.local`, a generated `PASSWORD` (`openssl rand -hex 24`) and `ADMIN=true` to `kerghan.env`; existing files are not modified automatically; `kerghan update-env` adds the missing keys. `ALWAYS_AUTHENTICATED` and `ALLOWED_IPS` are client-managed: the client passes them with `-e` on every `up` (from `auto-login`, see [standalone.md](standalone.md)); `kerghan up` refuses a `kerghan.env` that sets either one. A `kerghan.env` without `USERNAME`, `EMAIL` and `PASSWORD` keeps the default `auto-login` off. `ALLOW_IN_PRODUCTION` is a plain pass-through. |
+| Default user (defined in [section 1](#default-user-values-and-boot-validation)) | `KERGHAN_DEFAULT_USER_ENABLED`, `KERGHAN_DEFAULT_USER_USERNAME`, `KERGHAN_DEFAULT_USER_EMAIL`, `KERGHAN_DEFAULT_USER_PASSWORD`, `KERGHAN_DEFAULT_USER_ADMIN`; `KERGHAN_DEFAULT_USER_ALWAYS_AUTHENTICATED`, `KERGHAN_DEFAULT_USER_ALLOWED_IPS`; `KERGHAN_DEFAULT_USER_ALLOW_IN_PRODUCTION` | Listed by name only in the `kerghan` service's `environment:`. On a new installation the `kerghan` client writes `ENABLED=true`, `USERNAME=admin`, `EMAIL=admin@kerghan.local`, a generated `PASSWORD` (`openssl rand -hex 24`) and `ADMIN=true` to `kerghan.env`; existing files are not modified automatically; `kerghan update-env` adds the missing keys. `ALWAYS_AUTHENTICATED` and `ALLOWED_IPS` are client-managed: the client passes them with `-e` on every `up` (from `auto-login`, see [standalone.md](standalone.md)); `kerghan up` refuses a `kerghan.env` that sets either one. A `kerghan.env` without `USERNAME`, `EMAIL` and `PASSWORD` keeps the default `auto-login` off. `ALLOW_IN_PRODUCTION` is a plain pass-through. |
 | Overridable, with a default | `KERGHAN_MYSQL_PASSWORD` (default `kerghan`, also used as MySQL's `MYSQL_PASSWORD` and `MYSQL_ROOT_PASSWORD`) | The value is fixed when the data volume is first initialized: an override only applies to a fresh volume, unless it is also changed inside MySQL. |
 | Optional pass-through (allowlist) | `FRONTEND_BASE_URL`, `KERGHAN_ALLOWED_ORIGINS`, `KERGHAN_LOG_LEVEL`; `KERGHAN_ACCESS_TOKEN_TTL_MS`, `KERGHAN_REFRESH_TOKEN_TTL_MS`, `KERGHAN_PERSISTENT_REFRESH_TOKEN_TTL_MS`, `KERGHAN_PASSWORD_RESET_TOKEN_TTL_MS`; `KERGHAN_AUTHORIZATION_REQUEST_TTL_MS`, `KERGHAN_AUTHORIZATION_REQUEST_AUTHORIZE_LOCK_MS`, `KERGHAN_AUTHORIZATION_REQUEST_AUTHORIZE_MAX_ATTEMPTS`, `KERGHAN_AUTHORIZATION_REQUEST_CREATE_LIMIT`, `KERGHAN_AUTHORIZATION_REQUEST_CREATE_WINDOW_MS`, `KERGHAN_AUTHORIZATION_REQUEST_MAX_OPEN_PER_USER`; `KERGHAN_ACCOUNT_EDIT_LOCK_MS`, `KERGHAN_ACCOUNT_EDIT_MAX_ATTEMPTS`; `KERGHAN_INTEGRATIONS_MAX_PER_USER`, `KERGHAN_INTEGRATIONS_CREDENTIAL_LOCK_MS`, `KERGHAN_INTEGRATIONS_CREDENTIAL_MAX_ATTEMPTS`, `KERGHAN_INTEGRATIONS_TEST_COOLDOWN_MS`; `KERGHAN_GITHUB_OAUTH_APP_CLIENT_ID`, `KERGHAN_GITHUB_OAUTH_APP_CLIENT_SECRET`; `KERGHAN_GITHUB_APP_ID`, `KERGHAN_GITHUB_APP_SLUG`, `KERGHAN_GITHUB_APP_CLIENT_ID`, `KERGHAN_GITHUB_APP_CLIENT_SECRET`, `KERGHAN_GITHUB_APP_PRIVATE_KEY`; `KERGHAN_PREVIOUS_SECRET_KEYS`, `KERGHAN_PREVIOUS_INTEGRATIONS_KEYS` | Listed by name only in the `kerghan` service's `environment:`, so each reaches the backend only when it is set (an unset one is absent, not empty). Add them to `~/.kerghan/kerghan.env`, then run `kerghan down && kerghan up`. |
 | Standalone / Vault level | The host port (client `-p` / `port=`, or `docker run -p <port>:80`), `VAULT_DOCKERD_TIMEOUT`, `COMPOSE_UP_ARGS` | Read by Vault or the client, not by the backend. The offline variant bakes `COMPOSE_UP_ARGS="--pull never"`. Not secrets. |

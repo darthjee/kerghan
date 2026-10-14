@@ -88,14 +88,40 @@ Revokes the cookie's refresh token server-side (when present) and always clears 
 | --- | --- |
 | Controller | `AuthController` |
 | Auth | `@Public()` |
-| Request | `refresh_token` cookie (no body) |
-| Success response | `{ loggedIn, isAdmin }` |
+| Request | `refresh_token` cookie (no body); the client IP (for automatic login) |
+| Success response | `{ loggedIn, isAdmin }`; sets the session cookies on an automatic login |
 | HTTP status | `201` (Nest's `POST` default), always |
 
-Reports whether the cookie's refresh token identifies an active session, without mutating
-anything server-side. A missing cookie answers `{ loggedIn: false, isAdmin: false }` without a
-database lookup. A `loggedIn: false` answer clears the three session cookies, so the readable
-`logged_in` marker can't outlive the session.
+Reports whether the cookie's refresh token identifies an active session. It never revokes
+anything. Without automatic login, a missing cookie answers `{ loggedIn: false, isAdmin: false }`
+without a database lookup. A `loggedIn: false` answer clears the three session cookies, so the
+readable `logged_in` marker can't outlive the session.
+
+**Automatic login.** When `KERGHAN_DEFAULT_USER_ALWAYS_AUTHENTICATED` is on (see
+[Default user](../../modules/auth/default-user.md#automatic-login)), a caller with **no valid
+session** from an **allowed client IP** is logged in as the default user:
+
+- **No valid session** means the `refresh_token` cookie is missing, unknown, expired or revoked
+  (including a session revoked from another device). The access token is never read. A valid
+  refresh cookie wins and follows the flow above unchanged, whoever its user is.
+- **Allowed client IP** is the IP resolved through `KERGHAN_TRUSTED_PROXY_HOPS` (the same
+  handling as `POST /auth/authorization-requests.json`), checked against
+  `KERGHAN_DEFAULT_USER_ALLOWED_IPS` (loopback only by default).
+- **Body:** exactly `{ "loggedIn": true, "isAdmin": <boolean> }`, with `isAdmin` from the default
+  user. No extra field and no automatic-login indicator.
+- **Cookies:** the same three session cookies `login.json` sets, through the same
+  `setSessionCookies` helper (see [Session cookies](#session-cookies)).
+- **Session:** a regular session, `keepSignedIn: false`, with the regular refresh TTL (never the
+  persistent one). It is listed in `sessions/mine.json` like any password-login session and can
+  be revoked the same way. No new columns or fields. When it expires, the next `status.json`
+  simply logs in again.
+- **Disallowed IP or feature off:** byte-for-byte the unauthenticated response,
+  `201 { "loggedIn": false, "isAdmin": false }` with the session cookies cleared. Nothing hints
+  that the feature exists.
+- **Caching:** unchanged, `@CachePolicy(CacheClass.Never)` (`X-Skip-Cache: true`), see
+  [Shared behavior](#shared-behavior).
+- While automatic login is on, every boot logs a warning naming the default username and the
+  effective allowlist (never the password).
 
 ### `POST /auth/authorization-requests.json`
 
@@ -241,6 +267,36 @@ intentional: it only happens when the client's refresh-token cookie is already i
 refresh fails too and the client logs out (unlike `authorize.json`, which uses `400` for its
 business rejections precisely to avoid that path).
 
+## Default user `409` (`DEFAULT_USER_MANAGED`)
+
+While the default-user feature is enabled (`KERGHAN_DEFAULT_USER_ENABLED` or
+`KERGHAN_DEFAULT_USER_ALWAYS_AUTHENTICATED`), a write of a managed field (`username`, `email`,
+`newPassword`) of the default user is refused. Rules, order of checks and rationale:
+[Edit blocking](../../modules/auth/default-user.md#edit-blocking).
+
+| Route | Default-user behavior |
+| --- | --- |
+| `PATCH /auth/account.json` | `409` when the body contains any managed field, even with the stored value. Runs right after the `400` "no field present" check, before the lockout (`423`) and the `currentPassword` check; never counts as a failed attempt and leaves an existing lockout untouched. |
+| `POST /auth/recover.json` | Unchanged `200 { sent: true }`, as for an unknown email. No token is created and no email is sent. |
+| `POST /auth/reset-password.json` | Token errors first, unchanged. A valid token for the default user → `409`; the password is unchanged and the token is not consumed. |
+| `POST /admin/users/:id/edit.json`, `recovery-link.json`, `send-recovery-email.json` | `409` after the `404` for an unknown id; nothing is written, no token created, no email sent. See [the Auth module](../../modules/auth.md#admin-tool-routes-admincontroller-admin-prefix). |
+
+Response body (the standard shape from `http-exception.filter.ts`, no `error.details`):
+
+```json
+{
+  "error": {
+    "code": "DEFAULT_USER_MANAGED",
+    "message": "This user is managed by environment configuration and cannot be edited"
+  },
+  "statusCode": 409,
+  "timestamp": "<ISO 8601>"
+}
+```
+
+The message is the same on every route and never names the variables or their values. With the
+feature off, every route answers as before.
+
 ## Shared behavior
 
 All thirteen routes above (the five classic ones, the five device-authorization ones and the
@@ -260,7 +316,8 @@ See [API Caching](../../architecture/caching.md) for the general strategy.
 Every session-minting response (login, register, refresh and the winning
 `POST /auth/authorization-requests/:uuid/poll.json`) goes through the shared `respondWithSession`
 helper (`auth/auth-response.ts`), which calls `setSessionCookies` (`auth/auth-cookies.ts`), so
-the response bodies/cookies cannot drift apart. All three cookies are `Secure` and
+the response bodies/cookies cannot drift apart. An automatic login on `status.json` calls
+`setSessionCookies` directly, so it sets the same cookies. All three cookies are `Secure` and
 `SameSite=Strict`:
 
 | Name | httpOnly | Path | Value | maxAge |
