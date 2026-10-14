@@ -9,8 +9,8 @@
 # Persistent settings (port, variant, runtime, stop-timeout, image-tag,
 # auto-login, bind) are read from the optional ~/.kerghan/config (flat
 # key=value, see config.example); CLI flags override it, built-in defaults fill
-# the rest. It is only loaded by up, down and reset, so a broken config never
-# blocks the other commands.
+# the rest. It is only loaded by up, down, reset and update-env, so a broken
+# config never blocks the other commands.
 #
 # Dependencies on the host: vault, docker and openssl.
 #
@@ -76,6 +76,7 @@ Commands:
   status                          show the instance state
   compose <args>                  run docker compose inside the instance (e.g. compose exec mysql sh)
   reset                           wipe all data (removes $VOLUME), asks for confirmation
+  update-env                      add missing variables to ~/.kerghan/kerghan.env (keeps existing values)
   version                         print the version
   help                            print this help
 
@@ -780,6 +781,75 @@ cmd_reset() {
   echo "Kerghan data wiped; $ENV_FILE was kept."
 }
 
+# env_file_has_key <key> - kerghan.env has any line for <key>: KEY=value,
+# KEY= (empty) or a bare KEY line, indented or not (the same rule as
+# refuse_client_managed_keys).
+env_file_has_key() {
+  grep -qE "^[[:space:]]*$1(=|[[:space:]]*\$)" "$ENV_FILE" 2>/dev/null
+}
+
+# cmd_update_env - appends to an existing kerghan.env every key from
+# DEFAULT_ENV_KEYS it has no line for, with the values a new installation gets
+# (default_env_value). Present keys are never changed and never duplicated; a
+# blank one only gets a warning. Never prints the generated values, and never
+# touches Docker except the read-only volume check when the file is missing.
+cmd_update_env() {
+  [ "$#" -eq 0 ] || usage_error "unknown option '$1'"
+  load_config
+
+  if [ ! -e "$ENV_FILE" ]; then
+    error "$ENV_FILE does not exist"
+    if volume_exists; then
+      hint "the data volume $VOLUME exists: restore kerghan.env from your backup (the data was written with its secrets), or run 'kerghan reset' to start from scratch"
+    else
+      hint "run 'kerghan up' to create a new installation"
+    fi
+    exit 1
+  fi
+
+  local key missing="" blank_credential=false
+  # shellcheck disable=SC2086 # DEFAULT_ENV_KEYS is a space-separated list
+  for key in $DEFAULT_ENV_KEYS; do
+    if ! env_file_has_key "$key"; then
+      missing="$missing $key"
+    elif ! env_file_sets "$key"; then
+      warn "$ENV_FILE has a blank $key; left as it is"
+      case "$key" in
+        KERGHAN_DEFAULT_USER_USERNAME | KERGHAN_DEFAULT_USER_EMAIL | KERGHAN_DEFAULT_USER_PASSWORD)
+          blank_credential=true
+          ;;
+      esac
+    fi
+  done
+  if [ "$blank_credential" = "true" ]; then
+    hint "'kerghan up' still treats the default user as missing until KERGHAN_DEFAULT_USER_USERNAME, KERGHAN_DEFAULT_USER_EMAIL and KERGHAN_DEFAULT_USER_PASSWORD have values"
+  fi
+
+  if [ -z "$missing" ]; then
+    echo "$ENV_FILE is up to date; nothing was added."
+    return 0
+  fi
+
+  local content
+  # shellcheck disable=SC2086 # $missing is a space-separated list of keys
+  content="$(default_env_lines $missing)"
+  {
+    if [ -s "$ENV_FILE" ] && [ -n "$(tail -c1 "$ENV_FILE")" ]; then
+      echo
+    fi
+    printf '%s\n' "$content"
+  } >>"$ENV_FILE"
+  chmod 600 "$ENV_FILE"
+
+  echo "Added to $ENV_FILE:$missing"
+  case " $missing " in
+    *" KERGHAN_DEFAULT_USER_PASSWORD "*)
+      echo "The password of the 'admin' user is in $ENV_FILE."
+      ;;
+  esac
+  echo "Run 'kerghan down && kerghan up' to apply the change."
+}
+
 main() {
   if [ "$#" -eq 0 ]; then
     usage_error
@@ -793,6 +863,7 @@ main() {
     status) cmd_status ${@+"$@"} ;;
     compose) cmd_compose ${@+"$@"} ;;
     reset) cmd_reset ${@+"$@"} ;;
+    update-env) cmd_update_env ${@+"$@"} ;;
     version) cmd_version ${@+"$@"} ;;
     help | -h | --help) usage ;;
     *) usage_error "unknown command '$cmd'" ;;
