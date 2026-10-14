@@ -23,7 +23,10 @@ Kerghan ships as two public Docker images, plus a client and an installer:
 - **`install.sh`**: installs the client, and the `vault` CLI when it is missing
   (`standalone/install.sh`).
 
-The goal is one artifact that runs all of Kerghan for self-hosting and local use.
+The goal is one artifact that runs all of Kerghan for self-hosting and local use. Out of the
+box, a new installation opens already logged in as an admin: the client writes a
+[default user](modules/auth/default-user.md) to `kerghan.env` and turns automatic login on,
+published on `127.0.0.1` only (see [`auto-login` and `bind`](#config-format)).
 
 ### Why Vault
 
@@ -169,6 +172,12 @@ vault logs|status|compose --name kerghan ...
   a line for either key (also indented, empty, or a bare `KEY` line, which Docker reads from the
   environment), `up` fails (exit 1, nothing started or recreated) with an error naming the keys
   and a hint to remove the lines and use `auto-login` / `bind` instead.
+- The `KERGHAN_DEFAULT_USER_ALLOWED_IPS` value is loopback plus the private ranges
+  (`DEFAULT_USER_ALLOWED_IPS` in `bin/kerghan`). The allowlist is not the exposure guard:
+  **`bind=127.0.0.1` is**. With the default bind, only processes on the host can reach the port
+  at all. It stays the full private-range list, not just the observed gateway, because the
+  address the backend sees depends on the host's Docker networking (see
+  [Effective client IP](#effective-client-ip)).
 - `vault` always runs from `~/.kerghan`, so a stray `.vaultrc` or `.vault.env` in the user's
   working directory cannot change the instance.
 
@@ -305,9 +314,13 @@ bind=                 # host IPv4 address; default depends on auto-login
 - **`auto-login` and `bind`:** with auto-login on, anyone who can reach the port is logged in as
   `admin`, so `bind` (default `127.0.0.1`) is the real exposure guard. Auto-login on with a
   non-loopback `bind` (outside `127.0.0.0/8`, for example `bind=0.0.0.0`) prints a warning but
-  still starts. With auto-login off, log in as `admin` with the password in `kerghan.env`;
-  sessions created by automatic login stay valid until they expire. IPv6 bind addresses are not
-  supported. Full design: [default-user/standalone.md](specs/default-user/standalone.md).
+  still starts. The warning says anyone who can reach the port is logged in as admin, with a hint to
+  use `--no-auto-login` or `bind=127.0.0.1`. With auto-login off, log in as `admin` with the
+  password in `kerghan.env`; sessions created by automatic login stay valid until they expire.
+  Only IPv4 bind addresses (four `0-255` octets) are accepted: Docker needs IPv6 host addresses in
+  brackets, and IPv6 is not supported. The user-facing URL stays `http://localhost:<port>` with
+  any bind. Backend behavior and security rules:
+  [Default user and automatic login](modules/auth/default-user.md).
 - **Which commands read it:** only `up`, `down`, `reset` and `update-env` load the file, before any side effect
   (in `reset`, before the confirmation prompt). `version`, `help`, `logs`, `status` and `compose`
   never read it, so a broken config does not block them.
@@ -415,6 +428,40 @@ default `FRONTEND_BASE_URL=http://localhost:<port>` makes `OriginGuard` trust th
 also gives the backend the base URL for password-reset links and the GitHub callback URLs. Plain
 `docker run` users set it themselves.
 
+### Effective client IP
+
+Automatic login depends on the client IP the backend sees. The path of a host request is: host,
+port published by the outer Docker daemon, the Vault container, port published by the inner
+Docker daemon, Tent, backend. Tent's `SetClientIpMiddleware` overwrites `X-Forwarded-For` with its
+own `REMOTE_ADDR` (one entry), and the backend reads it with `KERGHAN_TRUSTED_PROXY_HOPS` at its
+default of `1`, so the backend sees exactly the address Tent's socket sees. That is why
+`KERGHAN_TRUSTED_PROXY_HOPS` is not passed to the stack.
+
+Measured by #371 (2026-10-14, Docker Desktop for macOS, arm64) with `darthjee/vault:0.1.0`
+running a probe inner service published like Tent (`ports: ["80:80"]`):
+
+| Outer publish | Request from | Address seen by the inner service |
+|---|---|---|
+| `127.0.0.1:<port>:80` (default bind) | host, `127.0.0.1` | `172.17.0.1`, the outer daemon's bridge gateway |
+| `0.0.0.0:<port>:80` | host, `127.0.0.1` or its LAN address | `172.64.155.209`, a non-private address |
+
+- The inner daemon forwards with iptables DNAT, so it keeps the source address the outer daemon
+  hands to the Vault container. The effective IP therefore depends on the outer host's Docker
+  networking, not on the image.
+- With the default bind, the effective IP is inside `172.16.0.0/12`, so a fresh installation logs
+  in automatically from the host.
+- With `bind=0.0.0.0` on that host, every request (even from the host itself) arrived from
+  `172.64.155.209`, outside the allowlist, so automatic login would not happen there. The cause
+  was not confirmed (Docker Desktop's port forwarder for all-interface binds, or something on that
+  machine).
+- With `127.0.0.1` published, the host's LAN address could not reach the port (connection
+  refused).
+
+The allowlist stays the full private-range list rather than `172.17.0.1`: only one host type was
+measured, and the outer gateway changes with the Docker setup (a Linux daemon with a custom `bip`
+or `default-address-pools`, other Docker Desktop settings). The items not verified yet are listed
+under [Caveats](#caveats).
+
 ## Images and versioning
 
 | Image | Built from | Tags |
@@ -458,6 +505,18 @@ The CI jobs that build and publish the images and the client assets (`release-ke
   `127.0.0.1` by routing to the container's address. The default `bind=127.0.0.1` is the guard for
   automatic login, so on Linux use Docker Engine 28.0 or later (check with
   `docker version --format '{{.Server.Version}}'`), or turn automatic login off.
+- **Effective client IP only measured on Docker Desktop for macOS.** The
+  [Effective client IP](#effective-client-ip) findings are not verified yet for (tracked in
+  [#384](https://github.com/darthjee/kerghan/issues/384)):
+  - a Linux host with native Docker, with and without Sysbox;
+  - a full end-to-end check with a `kerghan-standalone` image that contains the default-user
+    backend (`status.json` reports `admin` from the host browser with the default settings); only
+    the network path was measured;
+  - Linux with `bind=0.0.0.0`: LAN clients are expected to reach the inner service through DNAT
+    with their real, often private, address, which is inside the allowlist. This is why the
+    non-loopback warning exists and why `bind` is the real guard;
+  - the "not reachable from other interfaces" check of the default bind, repeated on Linux with
+    Docker Engine 28 or later (see the Docker Engine caveat above).
 - **Back up `~/.kerghan/kerghan.env`.** Losing it logs everyone out and makes the stored
   integration credentials unreadable (they are encrypted with `KERGHAN_INTEGRATIONS_KEY`). Without
   it, `kerghan up` refuses to start until the file is restored or the data is wiped with

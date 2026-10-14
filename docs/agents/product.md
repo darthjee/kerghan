@@ -58,7 +58,30 @@ Decided by #295; the full definition is in the
 - **Credential storage boundary**: integrations are the only allowed way to store GitHub
   credentials. Any other way still needs its own product decision.
 
+## Default user
+
+Decided by epic #366; the full definition is in
+[Default user and automatic login](modules/auth/default-user.md).
+
+- **What it is**: an optional user defined by environment variables (`KERGHAN_DEFAULT_USER_*`),
+  created or synchronized at every boot. The environment is its source of truth, so its
+  username, email, password and admin flag cannot be edited through the API (`409`), and its
+  password cannot be recovered or reset. Off by default.
+- **Automatic login** (optional, a second flag): a browser with no valid session is logged in
+  as the default user when the frontend calls `status.json`, with a real session. It is limited
+  to an IP allowlist (loopback only by default) and refuses to boot in production
+  (`STAGE=production`) without an explicit opt-in.
+- **Audience**: aimed at the [standalone distribution](standalone.md), where a fresh
+  installation opens already logged in as an admin, published on loopback only. Turning it on in
+  a production deployment (for example Render) is not planned.
+- **Not included**: more than one default user, removing the user when the feature is turned
+  off, and changes to the demo-user seed.
+
 ## Deferred (future, not current scope)
+
+- **Default-user indicator in the frontend**: hiding logout or showing that the session came
+  from an automatic login, and disabling the inputs the environment manages. Not built; the
+  frontend sees a normal logged-in user.
 
 - **Opt-in issue persistence**: persisting fetched issues to MySQL, only when a user opts in
   (e.g. for history/trend views). Not built.

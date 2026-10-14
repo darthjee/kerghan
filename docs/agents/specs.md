@@ -45,8 +45,7 @@ file changes.
 
 ## Active specs
 
-- **Default user** — [specs/default-user/](specs/default-user/README.md): an
-  environment-configured default user, with optional automatic login in `status.json`. Epic #366.
+none
 
 When no feature is in progress, this list reads "none".
 
@@ -58,3 +57,4 @@ Features whose specs were folded into the permanent docs, and where their defini
 |---------|----------------|------------------|
 | Integrations (GitHub credentials) | [modules/integrations.md](modules/integrations.md) (encryption at rest: its *Security* section) | #295 |
 | Standalone distribution | [standalone.md](standalone.md); `README.md` "Run Kerghan standalone"; [environment-variables.md](environment-variables.md) "Standalone"; [architecture/infra.md](architecture/infra.md) (release jobs, Render image deploy); [folder-structure.md](folder-structure.md) | #336 |
+| Default user | [modules/auth/default-user.md](modules/auth/default-user.md) (boot sync, edit blocking, automatic login, security); [backend/routes/auth.md](backend/routes/auth.md) (`status.json` automatic login, `409 DEFAULT_USER_MANAGED`); [environment-variables.md](environment-variables.md) section 1 (variables, boot validation) and section 5 (standalone); [standalone.md](standalone.md) (`auto-login`, `bind`, `update-env`, effective client IP); [product.md](product.md#default-user) | #366 |

@@ -36,7 +36,9 @@ cookie always wins. Remove the fallback (`RefreshFallbackDto` and the marked bra
 `user` is always `{ id, username, email, isAdmin }` — `passwordDigest` is never serialized. `isAdmin`
 is the only way the frontend can learn whether the logged-in user is an admin, since the
 `access_token` cookie is `httpOnly`. `/auth/status.json`'s `isAdmin` is resolved from the token
-row's user when `loggedIn` is `true`, and is always `false` when `loggedIn` is `false`.
+row's user when `loggedIn` is `true`, and is always `false` when `loggedIn` is `false`. When
+automatic login is on, `status.json` can also log a caller with no valid session in as the
+default user; see [Default user](#default-user).
 
 ### Admin tool routes (`AdminController`, `/admin` prefix)
 
@@ -61,6 +63,12 @@ calls `MailService.sendEmailTemplate(...)` directly and synchronously (not the f
 `password-recovery.requested` event self-service uses), so the admin gets a real
 `sent: true`/`false` result instead of a always-`true` response — `sent: false` covers both a
 disabled mail transport and a thrown send error, never a `500`.
+
+While the [default user](#default-user) feature is enabled, `POST /admin/users/:id/edit.json`
+(`AdminService#editUser`), `recovery-link.json` and `send-recovery-email.json` answer
+`409 DEFAULT_USER_MANAGED` when `:id` is the default user (after the usual `404` for an unknown
+id), and change nothing. See
+[Edit blocking](auth/default-user.md#edit-blocking).
 
 All four routes are `@CachePolicy(CacheClass.Never)` (controller level), so they send
 `X-Skip-Cache: true` and `Cache-Control: no-store` on the response. Tent's `default_proxy` rule
@@ -321,6 +329,17 @@ directly against the database:
 UPDATE auth_users SET is_admin = true WHERE username = '<username>';
 ```
 
+## Default user
+
+An optional, environment-configured default user (`KERGHAN_DEFAULT_USER_*`, read only by
+`DefaultUserConfig`): created or synchronized at boot by `DefaultUserService`, with its managed
+fields (username, email, password, admin flag) blocked from API edits (`409
+DEFAULT_USER_MANAGED`), and an optional automatic login in `POST /auth/status.json` for allowed
+client IPs. Off by default; aimed at the standalone distribution. Product decision: #366.
+
+Full definition, including the security warnings (admin access, IP allowlist, production guard):
+[Default user and automatic login](auth/default-user.md).
+
 ## `user.registered` event
 
 `AuthService#register` fires `user.registered` (via `EventEmitter2`) with a
@@ -362,3 +381,5 @@ already-responded `/auth/recover.json` request.
   plus the global `JwtGuard`/`AdminGuard` pair registered as `APP_GUARD`s: unauthenticated (`401`)
   and authenticated-non-admin (`403`) rejection on all three routes, an admin caller's documented
   response shapes, `404` for an unknown user id, and `X-Skip-Cache: true` on every response.
+- Default user and automatic login: see
+  [Default user → Testing](auth/default-user.md#testing).
