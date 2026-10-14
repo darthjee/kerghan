@@ -306,31 +306,57 @@ volume_exists() {
   docker volume inspect "$VOLUME" >/dev/null 2>&1
 }
 
-# ensure_env_file - generates kerghan.env (mode 600) when it does not exist.
-# Never touches an existing file.
-#
-# Besides the two secrets it writes the default user (admin, with a generated
-# 48-character hex password, so it is easy to type when auto-login is off).
-# KERGHAN_DEFAULT_USER_ALWAYS_AUTHENTICATED and KERGHAN_DEFAULT_USER_ALLOWED_IPS
-# are not written: the client passes them on every up (auto-login and bind).
+# DEFAULT_ENV_KEYS - the keys a new kerghan.env gets, in write order. Shared by
+# ensure_env_file and update-env (cmd_update_env), so the two cannot drift
+# apart; default_env_value produces each value. It must never contain
+# KERGHAN_DEFAULT_USER_ALWAYS_AUTHENTICATED or KERGHAN_DEFAULT_USER_ALLOWED_IPS:
+# the client passes them on every up (auto-login and bind).
+DEFAULT_ENV_KEYS="KERGHAN_SECRET_KEY KERGHAN_INTEGRATIONS_KEY KERGHAN_DEFAULT_USER_ENABLED KERGHAN_DEFAULT_USER_USERNAME KERGHAN_DEFAULT_USER_EMAIL KERGHAN_DEFAULT_USER_PASSWORD KERGHAN_DEFAULT_USER_ADMIN"
+
+# default_env_value <key> - prints the value a new kerghan.env gets for <key>:
+# a fresh secret for the two secrets, a generated 48-character hex password for
+# the default user (easy to type when auto-login is off), and fixed values for
+# the rest.
+default_env_value() {
+  case "$1" in
+    KERGHAN_SECRET_KEY | KERGHAN_INTEGRATIONS_KEY) openssl rand -base64 32 ;;
+    KERGHAN_DEFAULT_USER_PASSWORD) openssl rand -hex 24 ;;
+    KERGHAN_DEFAULT_USER_ENABLED | KERGHAN_DEFAULT_USER_ADMIN) echo true ;;
+    KERGHAN_DEFAULT_USER_USERNAME) echo admin ;;
+    KERGHAN_DEFAULT_USER_EMAIL) echo admin@kerghan.local ;;
+    *)
+      error "no default value for $1"
+      return 1
+      ;;
+  esac
+}
+
+# default_env_lines <key>... - prints a `KEY=value` line for each key, from
+# default_env_value. Every value is generated before anything is printed, so a
+# failing openssl call prints nothing.
+default_env_lines() {
+  local key value lines=""
+  for key in "$@"; do
+    # Explicit: bash clears set -e inside command substitutions.
+    value="$(default_env_value "$key")" || return 1
+    lines="$lines$key=$value
+"
+  done
+  printf '%s' "$lines"
+}
+
+# ensure_env_file - generates kerghan.env (mode 600) when it does not exist,
+# with every key in DEFAULT_ENV_KEYS (the two secrets and the default user).
+# Never touches an existing file; 'kerghan update-env' adds missing keys to one.
 ensure_env_file() {
   [ -e "$ENV_FILE" ] && return 0
-  local secret_key integrations_key admin_password
-  secret_key="$(openssl rand -base64 32)"
-  integrations_key="$(openssl rand -base64 32)"
-  admin_password="$(openssl rand -hex 24)"
+  local content
+  # shellcheck disable=SC2086 # DEFAULT_ENV_KEYS is a space-separated list
+  content="$(default_env_lines $DEFAULT_ENV_KEYS)"
   mkdir -p "$KERGHAN_HOME"
   (
     umask 077
-    {
-      echo "KERGHAN_SECRET_KEY=$secret_key"
-      echo "KERGHAN_INTEGRATIONS_KEY=$integrations_key"
-      echo "KERGHAN_DEFAULT_USER_ENABLED=true"
-      echo "KERGHAN_DEFAULT_USER_USERNAME=admin"
-      echo "KERGHAN_DEFAULT_USER_EMAIL=admin@kerghan.local"
-      echo "KERGHAN_DEFAULT_USER_PASSWORD=$admin_password"
-      echo "KERGHAN_DEFAULT_USER_ADMIN=true"
-    } >"$ENV_FILE"
+    printf '%s\n' "$content" >"$ENV_FILE"
   )
   chmod 600 "$ENV_FILE"
   echo "Generated secrets in $ENV_FILE; back this file up (losing it logs everyone out and makes stored integration credentials unreadable). It also holds the password of the 'admin' user, for manual login."
