@@ -15,6 +15,15 @@ load helpers/setup
   [[ "$output" != *"Kerghan is running"* ]]
 }
 
+@test "a port conflict on the default 127.0.0.1 bind also triggers the -p hint" {
+  write_env_file
+  export STUB_VAULT_UP_EXIT=125
+  export STUB_VAULT_UP_STDERR="Error: Bind for 127.0.0.1:3000 failed: port is already allocated"
+  run "$KERGHAN" up
+  [ "$status" -eq 125 ]
+  assert_output_contains "kerghan: hint: use 'kerghan up -p <port>'"
+}
+
 @test "Vault's own 'choose another host port' hint also triggers the -p hint" {
   write_env_file
   export STUB_VAULT_UP_EXIT=1

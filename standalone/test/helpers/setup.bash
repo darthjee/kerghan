@@ -27,6 +27,18 @@ NEWER_VERSION="$_major.$((_minor + 1)).0"
 # IMAGE - the online image the CLI runs by default.
 IMAGE="$IMAGE_REPO:$CURRENT_VERSION"
 
+# ALLOWED_IPS - the KERGHAN_DEFAULT_USER_ALLOWED_IPS value the client passes.
+ALLOWED_IPS="127.0.0.1,::1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16"
+
+# default_user_args <true|false> - the -e words for the client-managed
+# default-user variables, as they appear in the vault up line.
+default_user_args() {
+  echo "-e KERGHAN_DEFAULT_USER_ALWAYS_AUTHENTICATED=$1 -e KERGHAN_DEFAULT_USER_ALLOWED_IPS=$ALLOWED_IPS"
+}
+
+# DEFAULT_USER_ARGS - the default-user -e words with auto-login on (default).
+DEFAULT_USER_ARGS="$(default_user_args true)"
+
 setup() {
   TEST_ROOT="$(mktemp -d "$BATS_TMPDIR/kerghan-test.XXXXXX")"
   export HOME="$TEST_ROOT/home"

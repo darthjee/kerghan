@@ -38,6 +38,17 @@ DEFAULT_PORT=3000
 DEFAULT_VARIANT=online
 DEFAULT_RUNTIME=auto
 DEFAULT_STOP_TIMEOUT=60
+DEFAULT_AUTO_LOGIN=true
+# The default bind depends on auto-login: loopback when it is on, every
+# interface when it is off.
+DEFAULT_BIND_AUTO_LOGIN=127.0.0.1
+DEFAULT_BIND_NO_AUTO_LOGIN=0.0.0.0
+# Passed as KERGHAN_DEFAULT_USER_ALLOWED_IPS on every up. A host request
+# reaches the backend through two Docker port publishings (host -> Vault ->
+# inner Docker -> Tent), so it arrives from a Docker gateway address that
+# varies between hosts: loopback plus the private ranges. The real exposure
+# guard is bind=127.0.0.1.
+DEFAULT_USER_ALLOWED_IPS="127.0.0.1,::1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16"
 # The default image tag is KERGHAN_VERSION.
 
 KERGHAN_HOME="${HOME}/.kerghan"
@@ -50,6 +61,8 @@ CFG_VARIANT=""
 CFG_RUNTIME=""
 CFG_STOP_TIMEOUT=""
 CFG_IMAGE_TAG=""
+CFG_AUTO_LOGIN=""
+CFG_BIND=""
 
 usage() {
   cat <<USAGE
@@ -154,6 +167,38 @@ valid_image_tag() {
   [ "${#1}" -le 128 ]
 }
 
+valid_bool() {
+  case "$1" in
+    true | false) return 0 ;;
+  esac
+  return 1
+}
+
+# valid_bind <address> - an IPv4 address: four dot-separated 0-255 octets.
+# IPv6 host addresses are not supported (Docker needs them in brackets).
+valid_bind() {
+  case "$1" in
+    '' | *[!0-9.]* | .* | *. | *..*) return 1 ;;
+  esac
+  local a b c d rest octet
+  IFS=. read -r a b c d rest <<ADDRESS
+$1
+ADDRESS
+  [ -n "$a" ] && [ -n "$b" ] && [ -n "$c" ] && [ -n "$d" ] && [ -z "$rest" ] || return 1
+  for octet in "$a" "$b" "$c" "$d"; do
+    [ "${#octet}" -le 3 ] || return 1
+    [ "$((10#$octet))" -le 255 ] || return 1
+  done
+}
+
+# is_loopback <address> - the address is in 127.0.0.0/8.
+is_loopback() {
+  case "$1" in
+    127.*) return 0 ;;
+  esac
+  return 1
+}
+
 # trim <string> - prints the string without surrounding whitespace.
 trim() {
   local s="$1"
@@ -178,6 +223,8 @@ load_config() {
   CFG_RUNTIME=""
   CFG_STOP_TIMEOUT=""
   CFG_IMAGE_TAG=""
+  CFG_AUTO_LOGIN=""
+  CFG_BIND=""
   [ -e "$CONFIG_FILE" ] || return 0
   if [ ! -r "$CONFIG_FILE" ] || [ -d "$CONFIG_FILE" ]; then
     error "$CONFIG_FILE: cannot be read"
@@ -222,6 +269,14 @@ load_config() {
         [ -z "$value" ] || valid_image_tag "$value" ||
           config_invalid "$n" "$key" "$value" "a Docker image tag, without the -offline suffix"
         CFG_IMAGE_TAG="$value"
+        ;;
+      auto-login)
+        [ -z "$value" ] || valid_bool "$value" || config_invalid "$n" "$key" "$value" "true or false"
+        CFG_AUTO_LOGIN="$value"
+        ;;
+      bind)
+        [ -z "$value" ] || valid_bind "$value" || config_invalid "$n" "$key" "$value" "an IPv4 address"
+        CFG_BIND="$value"
         ;;
       *)
         warn "$CONFIG_FILE:$n: unknown key '$key' (ignored)"
@@ -335,6 +390,7 @@ compare_number() {
 
 cmd_up() {
   local flag_offline=false flag_port="" flag_port_set=false foreground=false
+  local flag_auto_login="" flag_bind="" flag_bind_set=false
   while [ "$#" -gt 0 ]; do
     case "$1" in
       --offline) flag_offline=true ;;
@@ -342,6 +398,14 @@ cmd_up() {
         [ "$#" -ge 2 ] || usage_error "option '$1' requires a value"
         flag_port="$2"
         flag_port_set=true
+        shift
+        ;;
+      --auto-login) flag_auto_login=true ;;
+      --no-auto-login) flag_auto_login=false ;;
+      --bind)
+        [ "$#" -ge 2 ] || usage_error "option '$1' requires a value"
+        flag_bind="$2"
+        flag_bind_set=true
         shift
         ;;
       -f) foreground=true ;;
@@ -352,6 +416,9 @@ cmd_up() {
   if [ "$flag_port_set" = "true" ]; then
     valid_port "$flag_port" || usage_error "invalid port '$flag_port' (expected 1-65535)"
   fi
+  if [ "$flag_bind_set" = "true" ]; then
+    valid_bind "$flag_bind" || usage_error "invalid bind address '$flag_bind' (expected an IPv4 address)"
+  fi
 
   # Resolve: flag > ~/.kerghan/config > default. Before any side effect.
   load_config
@@ -359,6 +426,16 @@ cmd_up() {
   local offline=false
   if [ "$flag_offline" = "true" ] || [ "${CFG_VARIANT:-$DEFAULT_VARIANT}" = "offline" ]; then
     offline=true
+  fi
+  local auto_login="${flag_auto_login:-${CFG_AUTO_LOGIN:-$DEFAULT_AUTO_LOGIN}}"
+  local default_bind="$DEFAULT_BIND_NO_AUTO_LOGIN"
+  if [ "$auto_login" = "true" ]; then
+    default_bind="$DEFAULT_BIND_AUTO_LOGIN"
+  fi
+  local bind="${flag_bind:-${CFG_BIND:-$default_bind}}"
+  if [ "$auto_login" = "true" ] && ! is_loopback "$bind"; then
+    warn "automatic login is on and the port is published on $bind: anyone who can reach it is logged in as admin"
+    hint "use 'kerghan up --no-auto-login' or set bind=127.0.0.1 in ~/.kerghan/config to restrict it"
   fi
 
   local image
@@ -392,7 +469,7 @@ cmd_up() {
   fi
 
   # 4. Start it.
-  up_instance "$image" "$port" "$foreground"
+  up_instance "$image" "$port" "$foreground" "$bind" "$auto_login"
 }
 
 # recreate_reason <current image> <wanted image> <current port> <wanted port>
@@ -464,15 +541,22 @@ recreate_reason() {
   fi
 }
 
-# up_instance <image> <port> <foreground> - runs `vault up`, keeping Vault's
-# stderr and adding a hint on a port conflict.
+# up_instance <image> <port> <foreground> <bind> <auto-login> - runs
+# `vault up`, keeping Vault's stderr and adding a hint on a port conflict.
+#
+# The port is published on <bind> only. KERGHAN_DEFAULT_USER_ALWAYS_AUTHENTICATED
+# and KERGHAN_DEFAULT_USER_ALLOWED_IPS are always passed with -e, which Docker
+# gives precedence over --env-file, so auto-login stays the single source of
+# truth even when kerghan.env sets them.
 up_instance() {
-  local image="$1" port="$2" foreground="$3"
-  local args=(--image "$image" --env-file "$ENV_FILE" -p "$port:80")
+  local image="$1" port="$2" foreground="$3" bind="$4" auto_login="$5"
+  local args=(--image "$image" --env-file "$ENV_FILE" -p "$bind:$port:80")
   local extra
   while IFS= read -r extra; do
     args+=("$extra")
   done < <(frontend_base_url_args "$port")
+  args+=(-e "KERGHAN_DEFAULT_USER_ALWAYS_AUTHENTICATED=$auto_login")
+  args+=(-e "KERGHAN_DEFAULT_USER_ALLOWED_IPS=$DEFAULT_USER_ALLOWED_IPS")
   args+=(--runtime "$(effective_runtime)" --stop-timeout "$(effective_stop_timeout)")
   if [ "$foreground" = "true" ]; then
     args+=(-f)
