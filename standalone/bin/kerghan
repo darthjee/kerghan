@@ -28,7 +28,7 @@
 # instance name, image or env.
 set -euo pipefail
 
-KERGHAN_VERSION="0.7.0"
+KERGHAN_VERSION="0.8.0"
 
 IMAGE_REPO="darthjee/kerghan-standalone"
 INSTANCE="kerghan"
