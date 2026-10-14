@@ -94,10 +94,16 @@ this is a deliberate choice by the user.
 ## Client-managed variables
 
 The client always passes `-e KERGHAN_DEFAULT_USER_ALWAYS_AUTHENTICATED=<auto-login>` and
-`-e KERGHAN_DEFAULT_USER_ALLOWED_IPS=<allowlist>` on `vault up`, after `--env-file`. Docker gives
-`-e` precedence over `--env-file`, so these override any value in `kerghan.env`: `auto-login` and
-`bind` stay the single source of truth. This differs from `FRONTEND_BASE_URL`, which the client
-only injects when `kerghan.env` lacks it.
+`-e KERGHAN_DEFAULT_USER_ALLOWED_IPS=<allowlist>` on `vault up`, after `--env-file`, so
+`auto-login` and `bind` stay the single source of truth.
+
+`kerghan.env` must not set either of them. If it did, the key would appear twice in the container
+environment, and which copy wins along the Docker, Vault and inner compose chain is not certain.
+So when `kerghan.env` has a line for either key (also indented, with an empty value, or a bare
+`KEY` line, which Docker's env-file reads from the environment), `kerghan up` refuses to start:
+exit 1, an error naming the key(s), and a hint to remove the line(s) and use `auto-login` / `bind`
+instead. The check runs before the running instance is compared, so nothing is stopped either.
+This differs from `FRONTEND_BASE_URL`, which the client only injects when `kerghan.env` lacks it.
 
 ## Allowlist value
 
@@ -178,7 +184,8 @@ Implemented by #372.
 - `bind` resolution: flag over config over default; default `127.0.0.1` with automatic login on and
   `0.0.0.0` with it off; invalid values fail (config with the line number, flag with a usage error).
 - `KERGHAN_DEFAULT_USER_ALWAYS_AUTHENTICATED` and `KERGHAN_DEFAULT_USER_ALLOWED_IPS` are always
-  passed with `-e` after `--env-file`, even when `kerghan.env` sets them.
+  passed with `-e` after `--env-file`; a `kerghan.env` that sets either one makes `up` fail without
+  starting or recreating anything.
 - A changed `auto-login`, a changed `bind`, and an instance started without the variable each
   recreate the instance and keep the data volume; unchanged settings are a no-op.
 - The warning appears for automatic login with a non-loopback bind, and not otherwise; `up` still

@@ -76,14 +76,47 @@ up_line() {
   [ ! -e "$ENV_FILE" ]
 }
 
-@test "the client-managed -e values come after --env-file even when kerghan.env sets them" {
-  write_env_file "KERGHAN_DEFAULT_USER_ALWAYS_AUTHENTICATED=false" \
-    "KERGHAN_DEFAULT_USER_ALLOWED_IPS=203.0.113.7"
+@test "up refuses a kerghan.env that sets KERGHAN_DEFAULT_USER_ALWAYS_AUTHENTICATED" {
+  write_env_file "KERGHAN_DEFAULT_USER_ALWAYS_AUTHENTICATED=false"
+  run "$KERGHAN" up
+  [ "$status" -eq 1 ]
+  assert_output_contains "kerghan: error: $ENV_FILE sets KERGHAN_DEFAULT_USER_ALWAYS_AUTHENTICATED, which the client manages itself"
+  assert_output_contains "kerghan: hint: remove the line(s) from kerghan.env; use auto-login"
+  [ -z "$(vault_calls)" ]
+  # kerghan.env is left as it is.
+  grep -qx 'KERGHAN_DEFAULT_USER_ALWAYS_AUTHENTICATED=false' "$ENV_FILE"
+}
+
+@test "up refuses a kerghan.env that sets KERGHAN_DEFAULT_USER_ALLOWED_IPS" {
+  write_env_file "KERGHAN_DEFAULT_USER_ALLOWED_IPS=203.0.113.7"
+  run "$KERGHAN" up --no-auto-login
+  [ "$status" -eq 1 ]
+  assert_output_contains "kerghan: error: $ENV_FILE sets KERGHAN_DEFAULT_USER_ALLOWED_IPS, which the client manages itself"
+  [ -z "$(vault_calls)" ]
+}
+
+@test "up names both client-managed keys, even indented, empty or bare" {
+  write_env_file "  KERGHAN_DEFAULT_USER_ALWAYS_AUTHENTICATED=" "KERGHAN_DEFAULT_USER_ALLOWED_IPS"
+  run "$KERGHAN" up
+  [ "$status" -eq 1 ]
+  assert_output_contains "sets KERGHAN_DEFAULT_USER_ALWAYS_AUTHENTICATED KERGHAN_DEFAULT_USER_ALLOWED_IPS, which"
+  [ -z "$(vault_calls)" ]
+}
+
+@test "up refuses the client-managed keys before recreating a running instance" {
+  write_env_file "KERGHAN_DEFAULT_USER_ALWAYS_AUTHENTICATED=true"
+  export STUB_RUNNING_IMAGE="$IMAGE_REPO:$OLDER_VERSION"
+  run "$KERGHAN" up
+  [ "$status" -eq 1 ]
+  [ -z "$(vault_calls)" ]
+}
+
+@test "commented-out or prefixed client-managed keys are not refused" {
+  write_env_file "# KERGHAN_DEFAULT_USER_ALWAYS_AUTHENTICATED=false" \
+    "MY_KERGHAN_DEFAULT_USER_ALLOWED_IPS=1.2.3.4" "KERGHAN_DEFAULT_USER_ALLOWED_IPS_NOTE=x"
   run "$KERGHAN" up
   [ "$status" -eq 0 ]
   [ "$(vault_calls)" = "$(up_line 127.0.0.1 true)" ]
-  # kerghan.env is left as it is.
-  grep -qx 'KERGHAN_DEFAULT_USER_ALWAYS_AUTHENTICATED=false' "$ENV_FILE"
 }
 
 @test "KERGHAN_DEFAULT_USER_ALLOWED_IPS is passed with auto-login off too" {

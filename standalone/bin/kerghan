@@ -352,6 +352,24 @@ has_default_user_credentials() {
     env_file_sets KERGHAN_DEFAULT_USER_PASSWORD
 }
 
+# refuse_client_managed_keys - exits 1 when kerghan.env sets a variable the
+# client passes itself on every up (auto-login and bind). The value would
+# then reach the container twice, and which copy wins along the Docker,
+# Vault and inner compose chain is not guaranteed. A bare `KEY` line counts
+# too: Docker's env-file reads it from the environment.
+refuse_client_managed_keys() {
+  local key found=""
+  for key in KERGHAN_DEFAULT_USER_ALWAYS_AUTHENTICATED KERGHAN_DEFAULT_USER_ALLOWED_IPS; do
+    if grep -qE "^[[:space:]]*$key(=|[[:space:]]*\$)" "$ENV_FILE" 2>/dev/null; then
+      found="$found $key"
+    fi
+  done
+  [ -n "$found" ] || return 0
+  error "$ENV_FILE sets${found}, which the client manages itself"
+  hint "remove the line(s) from kerghan.env; use auto-login (--[no-]auto-login) and bind (--bind) instead"
+  exit 1
+}
+
 # frontend_base_url_args <port> - prints `-e FRONTEND_BASE_URL=...` (one word
 # per line) unless kerghan.env sets FRONTEND_BASE_URL itself.
 frontend_base_url_args() {
@@ -507,6 +525,7 @@ cmd_up() {
 
   # 2. Secrets.
   ensure_env_file
+  refuse_client_managed_keys
 
   # A kerghan.env from before #371 has no default user: the backend refuses
   # to boot with KERGHAN_DEFAULT_USER_ALWAYS_AUTHENTICATED=true and no
@@ -629,9 +648,9 @@ recreate_reason() {
 # `vault up`, keeping Vault's stderr and adding a hint on a port conflict.
 #
 # The port is published on <bind> only. KERGHAN_DEFAULT_USER_ALWAYS_AUTHENTICATED
-# and KERGHAN_DEFAULT_USER_ALLOWED_IPS are always passed with -e, which Docker
-# gives precedence over --env-file, so auto-login stays the single source of
-# truth even when kerghan.env sets them.
+# and KERGHAN_DEFAULT_USER_ALLOWED_IPS are always passed with -e, so auto-login
+# is the single source of truth (cmd_up refuses a kerghan.env that sets them,
+# see refuse_client_managed_keys).
 up_instance() {
   local image="$1" port="$2" foreground="$3" bind="$4" auto_login="$5"
   local args=(--image "$image" --env-file "$ENV_FILE" -p "$bind:$port:80")

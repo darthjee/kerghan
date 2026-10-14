@@ -159,8 +159,12 @@ vault logs|status|compose --name kerghan ...
 - `--runtime` and `--stop-timeout` come from the config (defaults `auto` and `60`). The stop
   timeout is passed on every `down`: `kerghan down`, the `down` before a recreation, and `reset`.
 - `KERGHAN_DEFAULT_USER_ALWAYS_AUTHENTICATED` and `KERGHAN_DEFAULT_USER_ALLOWED_IPS` are always
-  passed with `-e`, which takes precedence over `--env-file`, so `auto-login` stays the single
-  source of truth even when `kerghan.env` sets them (unlike `FRONTEND_BASE_URL`).
+  passed with `-e`, so `auto-login` stays the single source of truth. `kerghan.env` must not set
+  them (unlike `FRONTEND_BASE_URL`): the value would reach the container twice, and which copy
+  wins along the Docker, Vault and inner compose chain is not guaranteed. When `kerghan.env` has
+  a line for either key (also indented, empty, or a bare `KEY` line, which Docker reads from the
+  environment), `up` fails (exit 1, nothing started or recreated) with an error naming the keys
+  and a hint to remove the lines and use `auto-login` / `bind` instead.
 - `vault` always runs from `~/.kerghan`, so a stray `.vaultrc` or `.vault.env` in the user's
   working directory cannot change the instance.
 
