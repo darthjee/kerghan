@@ -336,6 +336,22 @@ ensure_env_file() {
   echo "Generated secrets in $ENV_FILE; back this file up (losing it logs everyone out and makes stored integration credentials unreadable). It also holds the password of the 'admin' user, for manual login."
 }
 
+# env_file_sets <key> - kerghan.env has a <key>= line with a non-blank value
+# (Docker's env-file parser ignores leading whitespace on the line).
+env_file_sets() {
+  grep -qE "^[[:space:]]*$1=.*[^[:space:]]" "$ENV_FILE" 2>/dev/null
+}
+
+# has_default_user_credentials - kerghan.env sets the default user's username,
+# email and password, which the backend requires whenever
+# KERGHAN_DEFAULT_USER_ALWAYS_AUTHENTICATED is true (it refuses to boot
+# otherwise). A kerghan.env created before #371 has none of them.
+has_default_user_credentials() {
+  env_file_sets KERGHAN_DEFAULT_USER_USERNAME &&
+    env_file_sets KERGHAN_DEFAULT_USER_EMAIL &&
+    env_file_sets KERGHAN_DEFAULT_USER_PASSWORD
+}
+
 # frontend_base_url_args <port> - prints `-e FRONTEND_BASE_URL=...` (one word
 # per line) unless kerghan.env sets FRONTEND_BASE_URL itself.
 frontend_base_url_args() {
@@ -475,16 +491,8 @@ cmd_up() {
   if [ "$flag_offline" = "true" ] || [ "${CFG_VARIANT:-$DEFAULT_VARIANT}" = "offline" ]; then
     offline=true
   fi
-  local auto_login="${flag_auto_login:-${CFG_AUTO_LOGIN:-$DEFAULT_AUTO_LOGIN}}"
-  local default_bind="$DEFAULT_BIND_NO_AUTO_LOGIN"
-  if [ "$auto_login" = "true" ]; then
-    default_bind="$DEFAULT_BIND_AUTO_LOGIN"
-  fi
-  local bind="${flag_bind:-${CFG_BIND:-$default_bind}}"
-  if [ "$auto_login" = "true" ] && ! is_loopback "$bind"; then
-    warn "automatic login is on and the port is published on $bind: anyone who can reach it is logged in as admin"
-    hint "use 'kerghan up --no-auto-login' or set bind=127.0.0.1 in ~/.kerghan/config to restrict it"
-  fi
+  # Explicit auto-login (flag or config); empty when the default applies.
+  local explicit_auto_login="${flag_auto_login:-$CFG_AUTO_LOGIN}"
 
   local image
   image="$(image_ref "$offline" "${CFG_IMAGE_TAG:-$KERGHAN_VERSION}")"
@@ -499,6 +507,30 @@ cmd_up() {
 
   # 2. Secrets.
   ensure_env_file
+
+  # A kerghan.env from before #371 has no default user: the backend refuses
+  # to boot with KERGHAN_DEFAULT_USER_ALWAYS_AUTHENTICATED=true and no
+  # credentials, so the default auto-login falls back to false there (the
+  # pre-#371 behaviour) and an explicit auto-login=true is refused.
+  local auto_login="${explicit_auto_login:-$DEFAULT_AUTO_LOGIN}"
+  if [ "$auto_login" = "true" ] && ! has_default_user_credentials; then
+    if [ -n "$explicit_auto_login" ]; then
+      error "automatic login needs the default user, but $ENV_FILE has no KERGHAN_DEFAULT_USER_USERNAME, KERGHAN_DEFAULT_USER_EMAIL and KERGHAN_DEFAULT_USER_PASSWORD"
+      hint "add the KERGHAN_DEFAULT_USER_* values to kerghan.env, or use 'kerghan up --no-auto-login' (or auto-login=false in ~/.kerghan/config)"
+      exit 1
+    fi
+    auto_login=false
+    echo "Automatic login is off: $ENV_FILE has no default user. To turn it on, add the KERGHAN_DEFAULT_USER_* values to kerghan.env."
+  fi
+  local default_bind="$DEFAULT_BIND_NO_AUTO_LOGIN"
+  if [ "$auto_login" = "true" ]; then
+    default_bind="$DEFAULT_BIND_AUTO_LOGIN"
+  fi
+  local bind="${flag_bind:-${CFG_BIND:-$default_bind}}"
+  if [ "$auto_login" = "true" ] && ! is_loopback "$bind"; then
+    warn "automatic login is on and the port is published on $bind: anyone who can reach it is logged in as admin"
+    hint "use 'kerghan up --no-auto-login' or set bind=127.0.0.1 in ~/.kerghan/config to restrict it"
+  fi
 
   # 3. Compare with the running instance (FRONTEND_BASE_URL is added by
   # up_instance).

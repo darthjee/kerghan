@@ -109,7 +109,8 @@ bash install.sh
    `KERGHAN_VERSION`).
 2. Run `kerghan up`. When the running instance uses an older image than the new client, the client
    recreates it (`down`, then `up`) with the new image. The data volume is kept, and the backend
-   runs the pending migrations on boot.
+   runs the pending migrations on boot. An installation whose `kerghan.env` predates the default
+   user keeps automatic login off and the port on every interface (see [Secrets](#secrets)).
 
 **Downgrades are not supported** (an older image against a newer schema). When the running
 instance uses a newer image than the client (or than `image-tag`), `kerghan up` prints a warning
@@ -173,6 +174,16 @@ client creates `~/.kerghan/` and writes `kerghan.env` (mode 600) with `KERGHAN_S
 `openssl rand -hex 24`, used for a manual login when `auto-login` is off) and
 `KERGHAN_DEFAULT_USER_ADMIN=true`. It never regenerates or rewrites an existing file, so an
 installation created by an older client has no default user in its `kerghan.env`.
+
+The backend refuses to boot with automatic login on and no default-user credentials. So when
+`kerghan.env` lacks a non-blank `KERGHAN_DEFAULT_USER_USERNAME`, `KERGHAN_DEFAULT_USER_EMAIL` or
+`KERGHAN_DEFAULT_USER_PASSWORD` (a pre-#371 file):
+
+- with `auto-login` not set (no flag, no config value), `up` resolves it to `false`, so `bind`
+  defaults to `0.0.0.0` (the pre-#371 behavior), and prints a notice that automatic login needs
+  the `KERGHAN_DEFAULT_USER_*` values in `kerghan.env`;
+- with `auto-login=true` set by `--auto-login` or the config, `up` fails (exit 1, nothing started)
+  with an error and a hint to add those values or turn automatic login off.
 
 `up` refuses to start (exit 1, no container created) when `kerghan.env` is missing but the
 `vault-kerghan-data` volume exists: the data was written with secrets that are gone. The hint
@@ -240,7 +251,7 @@ bind=                 # host IPv4 address; default depends on auto-login
 | `runtime` | `auto` \| `sysbox` \| `privileged` | `auto` (Sysbox when installed, else `--privileged`) | none | `--runtime` on `up` |
 | `stop-timeout` | seconds, positive integer | `60` | none | `--stop-timeout` on `up` and every `down` |
 | `image-tag` | a Docker tag, or empty | the tag pinned in the client | none | the image tag |
-| `auto-login` | `true` \| `false` | `true` | `--auto-login`, `--no-auto-login` | `-e KERGHAN_DEFAULT_USER_ALWAYS_AUTHENTICATED` |
+| `auto-login` | `true` \| `false` | `true` (`false` when `kerghan.env` has no default user, see [Secrets](#secrets)) | `--auto-login`, `--no-auto-login` | `-e KERGHAN_DEFAULT_USER_ALWAYS_AUTHENTICATED` |
 | `bind` | an IPv4 address | `127.0.0.1` with auto-login on, `0.0.0.0` with it off | `--bind ADDRESS` | the host IP in `-p <bind>:<port>:80` |
 
 - **Precedence:** command-line flag, then `~/.kerghan/config`, then the default. `--offline`

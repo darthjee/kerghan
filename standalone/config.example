@@ -47,6 +47,9 @@
 # When off, log in manually as admin with the KERGHAN_DEFAULT_USER_PASSWORD
 # generated in ~/.kerghan/kerghan.env. Sessions created by automatic login stay
 # valid until they expire after you turn it off.
+# Needs the KERGHAN_DEFAULT_USER_* values in kerghan.env: a kerghan.env created
+# by an older client has none, so the default is then false, and setting it to
+# true makes `kerghan up` fail until you add them.
 # Overridden by `kerghan up --auto-login` / `kerghan up --no-auto-login`.
 #auto-login=true
 

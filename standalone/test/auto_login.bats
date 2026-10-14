@@ -92,3 +92,59 @@ up_line() {
   [ "$status" -eq 0 ]
   vault_calls | grep -qF -- "-e KERGHAN_DEFAULT_USER_ALLOWED_IPS=$ALLOWED_IPS --runtime"
 }
+
+@test "a pre-#371 kerghan.env turns the default auto-login off, on 0.0.0.0, with a notice" {
+  write_legacy_env_file
+  run "$KERGHAN" up
+  [ "$status" -eq 0 ]
+  [ "$(vault_calls)" = "$(up_line 0.0.0.0 false)" ]
+  assert_output_contains "Automatic login is off: $ENV_FILE has no default user"
+  assert_output_contains "add the KERGHAN_DEFAULT_USER_* values to kerghan.env"
+  [[ "$output" != *warning* ]]
+  # kerghan.env is left as it is.
+  [ "$(grep -c '^KERGHAN_DEFAULT_USER_' "$ENV_FILE")" -eq 0 ]
+}
+
+@test "a pre-#371 kerghan.env still honours bind= from the file" {
+  write_legacy_env_file
+  write_config "bind=127.0.0.1"
+  run "$KERGHAN" up
+  [ "$status" -eq 0 ]
+  [ "$(vault_calls)" = "$(up_line 127.0.0.1 false)" ]
+}
+
+@test "a kerghan.env missing only the password counts as having no default user" {
+  write_legacy_env_file "KERGHAN_DEFAULT_USER_USERNAME=admin" \
+    "KERGHAN_DEFAULT_USER_EMAIL=admin@kerghan.local" "KERGHAN_DEFAULT_USER_PASSWORD= "
+  run "$KERGHAN" up
+  [ "$status" -eq 0 ]
+  [ "$(vault_calls)" = "$(up_line 0.0.0.0 false)" ]
+  assert_output_contains "Automatic login is off"
+}
+
+@test "a pre-#371 kerghan.env with --auto-login fails without starting" {
+  write_legacy_env_file
+  run "$KERGHAN" up --auto-login
+  [ "$status" -eq 1 ]
+  assert_output_contains "kerghan: error: automatic login needs the default user, but $ENV_FILE has no KERGHAN_DEFAULT_USER_USERNAME"
+  assert_output_contains "kerghan: hint: add the KERGHAN_DEFAULT_USER_* values to kerghan.env"
+  [ -z "$(vault_calls)" ]
+}
+
+@test "a pre-#371 kerghan.env with auto-login=true in the file fails without starting" {
+  write_legacy_env_file
+  write_config "auto-login=true"
+  export STUB_RUNNING_IMAGE="$IMAGE" STUB_RUNNING_HOST_IP="" STUB_RUNNING_ENV=""
+  run "$KERGHAN" up
+  [ "$status" -eq 1 ]
+  assert_output_contains "kerghan: error: automatic login needs the default user"
+  [ -z "$(vault_calls)" ]
+}
+
+@test "a pre-#371 kerghan.env with --no-auto-login starts without the notice" {
+  write_legacy_env_file
+  run "$KERGHAN" up --no-auto-login
+  [ "$status" -eq 0 ]
+  [ "$(vault_calls)" = "$(up_line 0.0.0.0 false)" ]
+  [[ "$output" != *"Automatic login is off"* ]]
+}

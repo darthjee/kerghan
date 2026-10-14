@@ -60,8 +60,21 @@ teardown() {
   rm -rf "$TEST_ROOT"
 }
 
-# write_env_file [extra lines...] - an existing kerghan.env.
+# write_env_file [extra lines...] - an existing kerghan.env with the default
+# user (as written by the current client).
 write_env_file() {
+  write_legacy_env_file \
+    "KERGHAN_DEFAULT_USER_ENABLED=true" \
+    "KERGHAN_DEFAULT_USER_USERNAME=admin" \
+    "KERGHAN_DEFAULT_USER_EMAIL=admin@kerghan.local" \
+    "KERGHAN_DEFAULT_USER_PASSWORD=existing-password-0123456789abcdef" \
+    "KERGHAN_DEFAULT_USER_ADMIN=true" \
+    ${@+"$@"}
+}
+
+# write_legacy_env_file [extra lines...] - an existing kerghan.env created
+# before #371: the two secrets only, no default user.
+write_legacy_env_file() {
   mkdir -p "$HOME/.kerghan"
   {
     echo "KERGHAN_SECRET_KEY=existing-secret"

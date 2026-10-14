@@ -51,10 +51,24 @@ to `kerghan.env`: the client passes them on every `up` (see
   the container.
 - A changed value recreates the instance on the next `kerghan up`, keeping the data volume, like
   the other settings that recreate it. The running value is read from the container environment;
-  a missing one (an instance started by an older client) counts as `false`, so upgrading the
-  client recreates the instance with automatic login on.
+  a missing one (an instance started by an older client) counts as `false`.
+- **`kerghan.env` without the default user.** The backend refuses to boot when
+  `KERGHAN_DEFAULT_USER_ALWAYS_AUTHENTICATED=true` and the username, email or password is missing
+  (`DefaultUserConfig`). A `kerghan.env` created before #371 has none of them, and the client never
+  rewrites it. So when `kerghan.env` lacks a non-blank `KERGHAN_DEFAULT_USER_USERNAME`,
+  `KERGHAN_DEFAULT_USER_EMAIL` or `KERGHAN_DEFAULT_USER_PASSWORD`:
+  - `auto-login` not set (no flag, no config value): it resolves to `false`, so `bind` defaults to
+    `0.0.0.0` and the instance behaves as before #371; `up` prints a notice that automatic login
+    needs the `KERGHAN_DEFAULT_USER_*` values in `kerghan.env` (see
+    [Existing installations](#existing-installations));
+  - `auto-login=true` set by flag or config: `up` fails with an error and a hint, and starts
+    nothing, rather than starting a backend that cannot boot.
 
-Out of the box, a standalone installation therefore opens already logged in as an admin.
+  Upgrading the client therefore leaves an existing installation with automatic login off (and,
+  since the running instance has no value, which counts as `false`, does not recreate it for
+  this).
+
+Out of the box, a new standalone installation therefore opens already logged in as an admin.
 
 ## `bind`
 
@@ -159,6 +173,8 @@ Implemented by #372.
   characters, and mode 600; it does not contain the client-managed variables.
 - `auto-login` resolution: flag over config over default (`true`), translated into
   `KERGHAN_DEFAULT_USER_ALWAYS_AUTHENTICATED`; invalid config values fail with the line number.
+- A `kerghan.env` without the default user: the default `auto-login` resolves to `false` (bind
+  `0.0.0.0`) with a notice; an explicit `auto-login=true` (flag or config) fails without starting.
 - `bind` resolution: flag over config over default; default `127.0.0.1` with automatic login on and
   `0.0.0.0` with it off; invalid values fail (config with the line number, flag with a usage error).
 - `KERGHAN_DEFAULT_USER_ALWAYS_AUTHENTICATED` and `KERGHAN_DEFAULT_USER_ALLOWED_IPS` are always

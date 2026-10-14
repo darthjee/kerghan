@@ -97,3 +97,13 @@ KERGHAN_DEFAULT_USER_ALWAYS_AUTHENTICATED=true"
   assert_output_contains "upgrading $IMAGE_REPO:$OLDER_VERSION -> $IMAGE"
   assert_recreated 127.0.0.1 true
 }
+
+@test "a pre-#371 instance with a pre-#371 kerghan.env is left running" {
+  write_legacy_env_file
+  export STUB_VOLUME_EXISTS=1 STUB_RUNNING_IMAGE="$IMAGE" STUB_RUNNING_PORT=3000 \
+    STUB_RUNNING_HOST_IP="" STUB_RUNNING_ENV=""
+  run "$KERGHAN" up
+  [ "$status" -eq 0 ]
+  assert_output_contains "Kerghan is already running"
+  [ -z "$(vault_calls)" ]
+}
