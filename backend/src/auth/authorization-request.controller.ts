@@ -9,7 +9,7 @@ import { PollAuthorizationRequestDto } from './dto/poll-authorization-request.dt
 import type { AccessTokenPayload } from '../core/access-token-payload.js';
 import { CacheClass } from '../core/cache-class.js';
 import { CachePolicy } from '../core/cache-policy.decorator.js';
-import { DEFAULT_TRUSTED_PROXY_HOPS, extractClientRequestInfo } from '../core/client-request.js';
+import { extractClientRequestInfo, parseTrustedProxyHops } from '../core/client-request.js';
 import { CurrentUser } from '../core/current-user.decorator.js';
 import { Public } from '../core/public.decorator.js';
 
@@ -144,6 +144,6 @@ export class AuthorizationRequestController {
   }
 
   #trustedProxyHops(): number {
-    return Number(this.configService.get('KERGHAN_TRUSTED_PROXY_HOPS') ?? DEFAULT_TRUSTED_PROXY_HOPS);
+    return parseTrustedProxyHops(this.configService.get('KERGHAN_TRUSTED_PROXY_HOPS'));
   }
 }

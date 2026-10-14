@@ -331,6 +331,18 @@ describe('AuthController', () => {
 
         expect(authService.status).toHaveBeenCalledWith(undefined, '10.0.0.5');
       });
+
+      it.each(['abc', '', '-1', '1.5'])(
+        'falls back to the default hop count for an invalid KERGHAN_TRUSTED_PROXY_HOPS (%p), never the leftmost hop',
+        async (raw) => {
+          const configService = { get: jest.fn((key: string) => (key === 'KERGHAN_TRUSTED_PROXY_HOPS' ? raw : undefined)) };
+          const req = requestWith({}, { headers: { 'x-forwarded-for': '127.0.0.1, 203.0.113.9' } });
+
+          await buildController({ configService }).status(req, res as unknown as Response);
+
+          expect(authService.status).toHaveBeenCalledWith(undefined, '203.0.113.9');
+        },
+      );
     });
   });
 });

@@ -1,5 +1,5 @@
 import type { Request } from 'express';
-import { DEFAULT_TRUSTED_PROXY_HOPS, extractClientRequestInfo } from '../client-request.js';
+import { DEFAULT_TRUSTED_PROXY_HOPS, extractClientRequestInfo, parseTrustedProxyHops } from '../client-request.js';
 
 /**
  * Builds a minimal fake Express `Request`, only populating the pieces
@@ -102,5 +102,67 @@ describe('extractClientRequestInfo', () => {
 
       expect(extractClientRequestInfo(req).ip).toBe('5.6.7.8');
     });
+  });
+
+  describe('with an invalid trusted-hop count', () => {
+    it.each([
+      ['NaN', Number.NaN],
+      ['negative', -1],
+      ['fractional', 1.5],
+      ['Infinity', Number.POSITIVE_INFINITY],
+    ])('treats a %s count as the default, never picking the leftmost entry', (_label, hops) => {
+      const req = fakeRequest({ forwardedFor: '1.2.3.4, 5.6.7.8' });
+
+      expect(extractClientRequestInfo(req, hops).ip).toBe('5.6.7.8');
+    });
+  });
+
+  describe('with a trusted-hop count of 0', () => {
+    it('selects no hop when x-forwarded-for is present (documented legacy behavior)', () => {
+      const req = fakeRequest({ forwardedFor: '1.2.3.4, 5.6.7.8', remoteAddress: '10.0.0.1' });
+
+      expect(extractClientRequestInfo(req, 0).ip).toBeUndefined();
+    });
+
+    it('still falls back to the socket address when x-forwarded-for is absent', () => {
+      const req = fakeRequest({ remoteAddress: '10.0.0.1' });
+
+      expect(extractClientRequestInfo(req, 0).ip).toBe('10.0.0.1');
+    });
+  });
+});
+
+describe('parseTrustedProxyHops', () => {
+  it.each([
+    ['0', 0],
+    ['1', 1],
+    ['2', 2],
+    [' 3 ', 3],
+  ])('accepts the non-negative integer string %p', (raw, expected) => {
+    expect(parseTrustedProxyHops(raw)).toBe(expected);
+  });
+
+  it.each([
+    ['unset', undefined],
+    ['null', null],
+    ['empty', ''],
+    ['blank', '   '],
+    ['non-numeric', 'abc'],
+    ['NaN', 'NaN'],
+    ['negative', '-1'],
+    ['fractional', '1.5'],
+    ['exponent', '1e1'],
+    ['hex', '0x2'],
+    ['unsafe integer', '99999999999999999999'],
+  ])('falls back to the default for a(n) %s value', (_label, raw) => {
+    expect(parseTrustedProxyHops(raw)).toBe(DEFAULT_TRUSTED_PROXY_HOPS);
+  });
+
+  it('accepts a valid number as-is', () => {
+    expect(parseTrustedProxyHops(2)).toBe(2);
+  });
+
+  it.each([Number.NaN, -1, 1.5])('falls back to the default for the invalid number %p', (raw) => {
+    expect(parseTrustedProxyHops(raw)).toBe(DEFAULT_TRUSTED_PROXY_HOPS);
   });
 });

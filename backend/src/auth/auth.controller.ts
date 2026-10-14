@@ -14,7 +14,7 @@ import { AuthService } from './auth.service.js';
 import type { AccessTokenPayload } from '../core/access-token-payload.js';
 import { CacheClass } from '../core/cache-class.js';
 import { CachePolicy } from '../core/cache-policy.decorator.js';
-import { DEFAULT_TRUSTED_PROXY_HOPS, extractClientRequestInfo } from '../core/client-request.js';
+import { extractClientRequestInfo, parseTrustedProxyHops } from '../core/client-request.js';
 import { CurrentUser } from '../core/current-user.decorator.js';
 import { Public } from '../core/public.decorator.js';
 import { LoginDto } from './dto/login.dto.js';
@@ -29,8 +29,10 @@ import { UpdateAccountDto } from './dto/update-account.dto.js';
  * `AuthService`. `login`/`register`/`refresh`/`logout`/`status` are all
  * `@Public()`: the first four exist precisely to establish or renew
  * credentials, and `status` exists to let an already-logged-out client
- * check its session without one — so all of them must stay reachable
- * without an already-valid access token. `@CachePolicy(CacheClass.Never)` is
+ * check its session without one — and, with no active session, may also log
+ * the caller in automatically as the default user (allowlisted client IPs
+ * only) — so all of them must stay reachable without an already-valid
+ * access token. `@CachePolicy(CacheClass.Never)` is
  * applied once at the controller level so Tent's proxy never caches — and
  * cross-serves — a login/session response between users, and browsers never
  * store it either. No route overrides it: every route here is a write that
@@ -196,7 +198,8 @@ export class AuthController {
    * session.
    * @param {Request} req - Carries the `refresh_token` cookie and the client IP.
    * @param {Response} res - Used to set or clear the session cookies.
-   * @returns {Promise<object>} `{ loggedIn: boolean, isAdmin: boolean }`, always `200`.
+   * @returns {Promise<object>} `{ loggedIn: boolean, isAdmin: boolean }`, always
+   *   `201` (Nest's default for `POST`; no `@HttpCode` override).
    */
   @Public()
   @Post('status.json')
@@ -214,6 +217,6 @@ export class AuthController {
   }
 
   #trustedProxyHops(): number {
-    return Number(this.configService.get('KERGHAN_TRUSTED_PROXY_HOPS') ?? DEFAULT_TRUSTED_PROXY_HOPS);
+    return parseTrustedProxyHops(this.configService.get('KERGHAN_TRUSTED_PROXY_HOPS'));
   }
 }
