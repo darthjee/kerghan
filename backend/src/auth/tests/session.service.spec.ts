@@ -7,6 +7,8 @@ import { repoMock, RepoMock } from './repo-mock.test-support.js';
 describe('SessionService', () => {
   let refreshTokenRepository: RepoMock<RefreshToken> & { find: jest.Mock };
   let tokenService: { hashToken: jest.Mock };
+  let queryBuilder: Record<string, jest.Mock>;
+  let userRepository: { createQueryBuilder: jest.Mock };
   let service: SessionService;
 
   const startedAt = new Date('2026-10-01T00:00:00Z');
@@ -31,7 +33,64 @@ describe('SessionService', () => {
       hashToken: jest.fn((token: string) => `hashed:${token}`),
     };
 
-    service = new SessionService(refreshTokenRepository as never, tokenService as never);
+    queryBuilder = {};
+    ['innerJoin', 'select', 'where', 'andWhere'].forEach((method) => {
+      queryBuilder[method] = jest.fn(() => queryBuilder);
+    });
+    queryBuilder.getOne = jest.fn();
+    userRepository = { createQueryBuilder: jest.fn(() => queryBuilder) };
+
+    service = new SessionService(refreshTokenRepository as never, tokenService as never, userRepository as never);
+  });
+
+  describe('findActiveSessionUser', () => {
+    it('joins the session row to its user on user_id', async () => {
+      queryBuilder.getOne.mockResolvedValue(null);
+
+      await service.findActiveSessionUser('session-a');
+
+      expect(userRepository.createQueryBuilder).toHaveBeenCalledWith('user');
+      expect(queryBuilder.innerJoin).toHaveBeenCalledWith(RefreshToken, 'session', 'session.userId = user.id');
+      expect(queryBuilder.select).toHaveBeenCalledWith(['user.id', 'user.username', 'user.isAdmin']);
+    });
+
+    it('filters on the session UUID, unrevoked and unexpired', async () => {
+      const before = Date.now();
+
+      queryBuilder.getOne.mockResolvedValue(null);
+
+      await service.findActiveSessionUser('session-a');
+
+      expect(queryBuilder.where).toHaveBeenCalledWith('session.sessionUuid = :sid', { sid: 'session-a' });
+      expect(queryBuilder.andWhere).toHaveBeenCalledWith('session.revokedAt IS NULL');
+      expect(queryBuilder.andWhere).toHaveBeenCalledWith('session.expiresAt > :now', { now: expect.any(Date) });
+
+      const [, { now }] = queryBuilder.andWhere.mock.calls.find(([sql]) => sql === 'session.expiresAt > :now');
+
+      expect(now.getTime()).toBeGreaterThanOrEqual(before);
+    });
+
+    it('maps the joined user to a session user', async () => {
+      queryBuilder.getOne.mockResolvedValue({ id: 7, username: 'darthjee', isAdmin: true, email: 'x@y.z' });
+
+      await expect(service.findActiveSessionUser('session-a')).resolves.toEqual({
+        id: 7,
+        username: 'darthjee',
+        isAdmin: true,
+      });
+    });
+
+    it('resolves with null when no active session matches', async () => {
+      queryBuilder.getOne.mockResolvedValue(null);
+
+      await expect(service.findActiveSessionUser('unknown')).resolves.toBeNull();
+    });
+
+    it('propagates a database error', async () => {
+      queryBuilder.getOne.mockRejectedValue(new Error('db down'));
+
+      await expect(service.findActiveSessionUser('session-a')).rejects.toThrow('db down');
+    });
   });
 
   describe('listActive', () => {

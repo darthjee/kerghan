@@ -12,6 +12,7 @@ import { AuthorizationRequestController } from './authorization-request.controll
 import { AuthorizationRequestService } from './authorization-request.service.js';
 import { DefaultUserConfig } from './default-user.config.js';
 import { DefaultUserService } from './default-user.service.js';
+import { SESSION_LOOKUP } from '../core/session-lookup.js';
 import { MailModule } from '../mail/mail.module.js';
 import { AccountEditLockout } from './entities/account-edit-lockout.entity.js';
 import { AuthorizationRequest } from './entities/authorization-request.entity.js';
@@ -30,7 +31,10 @@ import { UserUpdateService } from './user-update.service.js';
  * lazy-loaded), per the issue's module classification. Exports `AuthService`
  * for other modules' direct-DI reads, per the hybrid inter-module
  * communication pattern (a module never writes to another module's tables;
- * reads happen only through the exported service).
+ * reads happen only through the exported service). Also provides and
+ * exports Core's `SESSION_LOOKUP` (implemented by `SessionService`), so the
+ * global `JwtGuard` can check each request's session without `core/`
+ * importing `auth/`.
  */
 @Module({
   imports: [
@@ -57,6 +61,7 @@ import { UserUpdateService } from './user-update.service.js';
     AuthorizationRequestAbuseGuardService,
     PasswordRecoveryRequestedListener,
     DefaultUserService,
+    { provide: SESSION_LOOKUP, useExisting: SessionService },
     {
       provide: DefaultUserConfig,
       inject: [ConfigService],
@@ -64,7 +69,7 @@ import { UserUpdateService } from './user-update.service.js';
         DefaultUserConfig.fromConfigService(configService),
     },
   ],
-  exports: [AuthService],
+  exports: [AuthService, SESSION_LOOKUP],
 })
 // NestJS module classes are intentionally empty; all behavior lives in @Module().
 // eslint-disable-next-line @typescript-eslint/no-extraneous-class
