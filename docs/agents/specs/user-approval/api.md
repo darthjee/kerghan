@@ -62,7 +62,7 @@ Extends the existing contract ([Auth routes](../../backend/routes/auth.md#post-a
 |---|---|---|
 | Active session, user `approved` | `{ loggedIn: true, isAdmin }` (unchanged) | unchanged |
 | Active session, user `pending` | `{ loggedIn: false, isAdmin: false, status: "pending" }` | **kept**: the session must survive to pick up approval without a new login |
-| Active session, user `denied` (should not happen: deny revokes every session) | treated as no valid session: falls through to the next row's flow (including automatic login), so the answer is byte-for-byte what an anonymous caller gets | cleared, unless automatic login sets new ones |
+| Active session, user `denied` (should not happen: deny revokes every session) | treated as no valid session: falls through to the next row's flow (including automatic login), so the answer is byte-for-byte what an anonymous caller gets | cleared, unless automatic login sets new ones; the presented token, if still active (racing the deny), is revoked with `admin_denied`, as on `refresh.json` |
 | No valid session (including a denied user, whose sessions were revoked) | existing flow: automatic login when enabled and the IP is allowed, otherwise `{ loggedIn: false, isAdmin: false }` | as today |
 
 - `status` appears **only** for `pending`. Logged-out and denied stay byte-for-byte the
@@ -83,6 +83,11 @@ Extends the existing contract ([Auth routes](../../backend/routes/auth.md#post-a
   revokes every active token, but a rotation or winning poll racing the deny's bulk revoke can
   insert a new active row after it; this check stops such a session from rotating on.
 - **`approved`:** unchanged.
+
+Order of checks: the existing token checks run first, unchanged (unknown / expired → `401`; a
+revoked `rotated` token → replay detection; any other revoked token → plain `401`). The status
+check applies only to a token that passed them (still active), so replay detection is never
+skipped for a denied user.
 
 ### `POST /auth/recover.json`
 
@@ -178,8 +183,8 @@ with the gate, the user is logged out everywhere on their next request. Also app
 user is already `denied`.
 
 Any admin may deny any other user, **other admins included**: only oneself and the default user
-are protected (decision #389). An admin who could be denied by a peer can already be demoted by
-the same people (DB or default-user config), so no extra rule is added.
+are protected (decision #389). This is accepted: through the API, one admin can deny every other
+non-default admin, and the only way back is a DB change.
 
 The default-user check applies while the default-user feature is enabled, with the same
 identification (by id, `DefaultUserService#assertNotDefaultUser`) as
