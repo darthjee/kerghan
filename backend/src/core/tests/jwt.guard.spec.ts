@@ -196,3 +196,72 @@ describe('JwtGuard', () => {
     });
   });
 });
+
+describe('JwtGuard session gate', () => {
+  const OTHER_SID = '6f9619ff-8b86-4d01-b42d-00c04fc964ff';
+
+  let sessionLookup: ReturnType<typeof sessionLookupDouble>;
+  let guard: JwtGuard;
+
+  function signClaims(claims: Record<string, unknown>): string {
+    return new JwtService({ secret: CURRENT_KEY }).sign(claims, { expiresIn: 60 });
+  }
+
+  beforeEach(() => {
+    sessionLookup = sessionLookupDouble();
+    guard = buildGuard({ KERGHAN_SECRET_KEY: CURRENT_KEY }, CURRENT_KEY, sessionLookup);
+  });
+
+  it('looks the session up by the token\'s sid', async () => {
+    await run(guard, sign(CURRENT_KEY));
+
+    expect(sessionLookup.findActiveSessionUser).toHaveBeenCalledWith(SID);
+  });
+
+  it('builds request.user from the looked-up user, not the token claims', async () => {
+    sessionLookup.findActiveSessionUser.mockResolvedValue({ id: 42, username: 'renamed', isAdmin: true });
+
+    const { request } = await run(guard, signClaims({ ...PAYLOAD, username: 'stale', isAdmin: false }));
+
+    expect(request.user).toEqual({ sub: 42, sid: SID, username: 'renamed', isAdmin: true });
+  });
+
+  it('rejects a token whose session is not active', async () => {
+    await expect(run(guard, signClaims({ ...PAYLOAD, sid: OTHER_SID }))).rejects.toThrow(INVALID);
+  });
+
+  it('rejects a token whose session belongs to another user', async () => {
+    sessionLookup.findActiveSessionUser.mockResolvedValue({ id: 7, username: 'other', isAdmin: false });
+
+    await expect(run(guard, sign(CURRENT_KEY))).rejects.toThrow(INVALID);
+  });
+
+  it.each([
+    ['without sid', { sub: 42, username: 'darthjee', isAdmin: false }],
+    ['with a numeric sid', { ...PAYLOAD, sid: 12345 }],
+    ['with an object sid', { ...PAYLOAD, sid: { $ne: null } }],
+    ['with a non-UUID sid', { ...PAYLOAD, sid: 'not-a-uuid' }],
+    ['with a UUID-prefixed sid', { ...PAYLOAD, sid: `${SID}' OR 1=1` }],
+    ['with a string sub', { ...PAYLOAD, sub: '42' }],
+    ['with a non-integer sub', { ...PAYLOAD, sub: 42.5 }],
+    ['without sub', { sid: SID, username: 'darthjee', isAdmin: false }],
+  ])('rejects a validly signed token %s without looking anything up', async (_label, claims) => {
+    await expect(run(guard, signClaims(claims))).rejects.toThrow(INVALID);
+    expect(sessionLookup.findActiveSessionUser).not.toHaveBeenCalled();
+  });
+
+  it('answers every gate rejection with the exact invalid-token message', async () => {
+    const rejection = await run(guard, signClaims({ ...PAYLOAD, sid: OTHER_SID })).catch((error: unknown) => error);
+
+    expect(rejection).toBeInstanceOf(UnauthorizedException);
+    expect((rejection as UnauthorizedException).getResponse()).toEqual(INVALID.getResponse());
+  });
+
+  it('propagates a lookup error instead of answering 401', async () => {
+    const failure = new Error('db down');
+
+    sessionLookup.findActiveSessionUser.mockRejectedValue(failure);
+
+    await expect(run(guard, sign(CURRENT_KEY))).rejects.toBe(failure);
+  });
+});

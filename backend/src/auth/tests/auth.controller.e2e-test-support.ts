@@ -1,4 +1,7 @@
 import { Controller, Get, INestApplication } from '@nestjs/common';
+import type { AccessTokenPayload } from '../../core/access-token-payload.js';
+import { AdminOnly } from '../../core/admin-only.decorator.js';
+import { CurrentUser } from '../../core/current-user.decorator.js';
 import { Public } from '../../core/public.decorator.js';
 import { PasswordResetToken } from '../entities/password-reset-token.entity.js';
 import { RefreshToken } from '../entities/refresh-token.entity.js';
@@ -10,11 +13,24 @@ import { createInMemoryRepo, matchesCondition } from './support/in-memory-repo.j
 export { createInMemoryRepo, loginAs, loginCookie, matchesCondition, registerUser };
 
 // Throwaway controller used only to exercise the global `JwtGuard` — the
-// Auth module's own routes are all `@Public()` by design.
+// Auth module's own routes are all `@Public()` by design. `me` echoes
+// `@CurrentUser()` and `admin` is `@AdminOnly()` (enforced only when the app
+// is built with `adminGuard: true`), so specs can observe `request.user`.
 @Controller('protected')
 export class ProtectedTestController {
   @Get()
   ping(): { ok: boolean } {
+    return { ok: true };
+  }
+
+  @Get('me')
+  me(@CurrentUser() user: AccessTokenPayload): AccessTokenPayload {
+    return user;
+  }
+
+  @AdminOnly()
+  @Get('admin')
+  admin(): { ok: boolean } {
     return { ok: true };
   }
 }
