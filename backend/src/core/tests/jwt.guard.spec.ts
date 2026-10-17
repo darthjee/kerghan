@@ -4,9 +4,19 @@ import { ConfigService } from '@nestjs/config';
 import { Reflector } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
 import { JwtGuard } from '../jwt.guard.js';
+import type { SessionLookup, SessionUser } from '../session-lookup.js';
 
 const CURRENT_KEY = 'current-key';
-const PAYLOAD = { sub: 42, username: 'darthjee', isAdmin: false };
+const SID = '1b4e28ba-2fa1-4d2e-8f3a-9c1d2e3f4a5b';
+const PAYLOAD = { sub: 42, sid: SID, username: 'darthjee', isAdmin: false };
+const SESSION_USER: SessionUser = { id: 42, username: 'darthjee', isAdmin: false };
+
+// Default `SessionLookup` double: knows only the `SID` session, owned by user 42.
+function sessionLookupDouble(): SessionLookup & { findActiveSessionUser: jest.Mock } {
+  return {
+    findActiveSessionUser: jest.fn(async (sid: string) => (sid === SID ? SESSION_USER : null)),
+  };
+}
 
 function contextFor(request: Record<string, unknown>): ExecutionContext {
   return {
@@ -16,7 +26,11 @@ function contextFor(request: Record<string, unknown>): ExecutionContext {
   } as unknown as ExecutionContext;
 }
 
-function buildGuard(env: Record<string, string>, jwtSecret: string | undefined = CURRENT_KEY): JwtGuard {
+function buildGuard(
+  env: Record<string, string>,
+  jwtSecret: string | undefined = CURRENT_KEY,
+  sessionLookup: SessionLookup = sessionLookupDouble(),
+): JwtGuard {
   const jwtService = new JwtService({ secret: jwtSecret });
   const reflector = { getAllAndOverride: jest.fn().mockReturnValue(false) };
   const configService = { get: jest.fn((key: string) => env[key]) };
@@ -25,6 +39,7 @@ function buildGuard(env: Record<string, string>, jwtSecret: string | undefined =
     jwtService,
     reflector as unknown as Reflector,
     configService as unknown as ConfigService,
+    sessionLookup,
   );
 }
 
@@ -59,9 +74,9 @@ function signedWithEmptySecret(): string {
   return `${unsignedPart}.${signature}`;
 }
 
-function run(guard: JwtGuard, token?: string): { result: boolean; request: Record<string, unknown> } {
+async function run(guard: JwtGuard, token?: string): Promise<{ result: boolean; request: Record<string, unknown> }> {
   const request: Record<string, unknown> = { cookies: token ? { access_token: token } : {} };
-  const result = guard.canActivate(contextFor(request));
+  const result = await guard.canActivate(contextFor(request));
   return { result, request };
 }
 
@@ -78,42 +93,42 @@ describe('JwtGuard', () => {
       });
     });
 
-    it('accepts a token signed with the current key', () => {
-      const { result, request } = run(guard, sign(CURRENT_KEY));
+    it('accepts a token signed with the current key', async () => {
+      const { result, request } = await run(guard, sign(CURRENT_KEY));
 
       expect(result).toBe(true);
       expect(request.user).toMatchObject(PAYLOAD);
     });
 
-    it.each(['old-key-1', 'old-key-2'])('accepts a token signed with previous key %s', (key) => {
-      const { result, request } = run(guard, sign(key));
+    it.each(['old-key-1', 'old-key-2'])('accepts a token signed with previous key %s', async (key) => {
+      const { result, request } = await run(guard, sign(key));
 
       expect(result).toBe(true);
       expect(request.user).toMatchObject(PAYLOAD);
     });
 
-    it('rejects a token signed with an unknown key', () => {
-      expect(() => run(guard, sign('unknown-key'))).toThrow(INVALID);
+    it('rejects a token signed with an unknown key', async () => {
+      await expect(run(guard, sign('unknown-key'))).rejects.toThrow(INVALID);
     });
 
-    it('rejects an expired token signed with a previous key', () => {
-      expect(() => run(guard, expired('old-key-1'))).toThrow(INVALID);
+    it('rejects an expired token signed with a previous key', async () => {
+      await expect(run(guard, expired('old-key-1'))).rejects.toThrow(INVALID);
     });
 
-    it('rejects an expired token signed with the current key', () => {
-      expect(() => run(guard, expired(CURRENT_KEY))).toThrow(INVALID);
+    it('rejects an expired token signed with the current key', async () => {
+      await expect(run(guard, expired(CURRENT_KEY))).rejects.toThrow(INVALID);
     });
 
-    it('rejects a malformed token', () => {
-      expect(() => run(guard, 'not-a-jwt')).toThrow(INVALID);
+    it('rejects a malformed token', async () => {
+      await expect(run(guard, 'not-a-jwt')).rejects.toThrow(INVALID);
     });
 
-    it('rejects an unsigned alg:none token', () => {
-      expect(() => run(guard, unsigned())).toThrow(INVALID);
+    it('rejects an unsigned alg:none token', async () => {
+      await expect(run(guard, unsigned())).rejects.toThrow(INVALID);
     });
 
-    it('rejects an HS256 token signed with an empty-string secret', () => {
-      expect(() => run(guard, signedWithEmptySecret())).toThrow(INVALID);
+    it('rejects an HS256 token signed with an empty-string secret', async () => {
+      await expect(run(guard, signedWithEmptySecret())).rejects.toThrow(INVALID);
     });
   });
 
@@ -124,19 +139,19 @@ describe('JwtGuard', () => {
       guard = buildGuard({ KERGHAN_SECRET_KEY: CURRENT_KEY });
     });
 
-    it('accepts a token signed with the current key', () => {
-      const { result, request } = run(guard, sign(CURRENT_KEY));
+    it('accepts a token signed with the current key', async () => {
+      const { result, request } = await run(guard, sign(CURRENT_KEY));
 
       expect(result).toBe(true);
       expect(request.user).toMatchObject(PAYLOAD);
     });
 
-    it('rejects a token signed with any other key', () => {
-      expect(() => run(guard, sign('old-key-1'))).toThrow(INVALID);
+    it('rejects a token signed with any other key', async () => {
+      await expect(run(guard, sign('old-key-1'))).rejects.toThrow(INVALID);
     });
 
-    it('rejects a request without an access token', () => {
-      expect(() => run(guard)).toThrow(new UnauthorizedException('Missing access token'));
+    it('rejects a request without an access token', async () => {
+      await expect(run(guard)).rejects.toThrow(new UnauthorizedException('Missing access token'));
     });
   });
 
@@ -150,21 +165,21 @@ describe('JwtGuard', () => {
       guard = buildGuard({ KERGHAN_SECRET_KEY: '' }, jwtSecret);
     });
 
-    it('rejects a token signed with some other key', () => {
-      expect(() => run(guard, sign('some-other-key'))).toThrow(INVALID);
+    it('rejects a token signed with some other key', async () => {
+      await expect(run(guard, sign('some-other-key'))).rejects.toThrow(INVALID);
     });
 
-    it('rejects an unsigned alg:none token', () => {
-      expect(() => run(guard, unsigned())).toThrow(INVALID);
+    it('rejects an unsigned alg:none token', async () => {
+      await expect(run(guard, unsigned())).rejects.toThrow(INVALID);
     });
 
-    it('rejects an HS256 token signed with an empty-string secret', () => {
-      expect(() => run(guard, signedWithEmptySecret())).toThrow(INVALID);
+    it('rejects an HS256 token signed with an empty-string secret', async () => {
+      await expect(run(guard, signedWithEmptySecret())).rejects.toThrow(INVALID);
     });
   });
 
   describe('on a @Public() route', () => {
-    it('allows the request without verifying anything', () => {
+    it('allows the request without verifying anything', async () => {
       const jwtService = new JwtService({ secret: CURRENT_KEY });
       const verify = jest.spyOn(jwtService, 'verify');
       const reflector = { getAllAndOverride: jest.fn().mockReturnValue(true) };
@@ -173,9 +188,10 @@ describe('JwtGuard', () => {
         jwtService,
         reflector as unknown as Reflector,
         configService as unknown as ConfigService,
+        sessionLookupDouble(),
       );
 
-      expect(guard.canActivate(contextFor({ cookies: {} }))).toBe(true);
+      await expect(guard.canActivate(contextFor({ cookies: {} }))).resolves.toBe(true);
       expect(verify).not.toHaveBeenCalled();
     });
   });

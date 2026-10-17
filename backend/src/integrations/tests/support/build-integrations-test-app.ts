@@ -4,7 +4,7 @@ import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { EventEmitterModule } from '@nestjs/event-emitter';
-import { JwtModule, JwtService } from '@nestjs/jwt';
+import { JwtModule } from '@nestjs/jwt';
 import { Test } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import cookieParser from 'cookie-parser';
@@ -28,12 +28,15 @@ import { PasswordResetToken } from '../../../auth/entities/password-reset-token.
 import { RefreshToken } from '../../../auth/entities/refresh-token.entity.js';
 import { User } from '../../../auth/entities/user.entity.js';
 import { createInMemoryRepo } from '../../../auth/tests/support/in-memory-repo.js';
+import { InMemorySessionLookup } from '../../../auth/tests/support/in-memory-session-lookup.js';
+import { TokenService } from '../../../auth/token.service.js';
 import { AdminGuard } from '../../../core/admin.guard.js';
 import { CachePolicyInterceptor } from '../../../core/cache-policy.interceptor.js';
 import { HttpExceptionFilter } from '../../../core/http-exception.filter.js';
 import { JwtGuard } from '../../../core/jwt.guard.js';
 import { LoggingModule } from '../../../core/logging.module.js';
 import { OriginGuard } from '../../../core/origin.guard.js';
+import { SESSION_LOOKUP } from '../../../core/session-lookup.js';
 import { createConsoleSpies, ConsoleSpies } from '../../../core/tests/console-spies.test-support.js';
 import { IntegrationCredentialLockout } from '../../entities/integration-credential-lockout.entity.js';
 import { IntegrationGithubAppState } from '../../entities/integration-github-app-state.entity.js';
@@ -121,6 +124,7 @@ export async function buildIntegrationsTestApp(options: IntegrationsTestAppOptio
 
   const guard = new InMemoryCredentialAbuseGuard(TEST_MAX_ATTEMPTS);
   const userRepo = createInMemoryRepo<User>();
+  const refreshTokenRepo = createInMemoryRepo<RefreshToken>();
 
   const moduleRef = await Test.createTestingModule({
     imports: [
@@ -141,7 +145,8 @@ export async function buildIntegrationsTestApp(options: IntegrationsTestAppOptio
   })
     .overrideProvider(ConfigService).useValue({ get: (key: string, fallback?: unknown) => config[key] ?? fallback })
     .overrideProvider(getRepositoryToken(User)).useValue(userRepo)
-    .overrideProvider(getRepositoryToken(RefreshToken)).useValue(createInMemoryRepo<RefreshToken>())
+    .overrideProvider(getRepositoryToken(RefreshToken)).useValue(refreshTokenRepo)
+    .overrideProvider(SESSION_LOOKUP).useValue(new InMemorySessionLookup(userRepo.rows, refreshTokenRepo.rows))
     .overrideProvider(getRepositoryToken(PasswordResetToken)).useValue(createInMemoryRepo<PasswordResetToken>())
     .overrideProvider(getRepositoryToken(AuthorizationRequest)).useValue(createInMemoryRepo<AuthorizationRequest>())
     .overrideProvider(getRepositoryToken(AccountEditLockout)).useValue(createInMemoryRepo<AccountEditLockout>())
@@ -160,15 +165,16 @@ export async function buildIntegrationsTestApp(options: IntegrationsTestAppOptio
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
   await app.init();
 
-  // Users are seeded directly and their access tokens signed with the app's own `JwtService`
-  // (exactly what a login issues), skipping bcrypt so each test app builds fast.
-  const jwtService = app.get(JwtService);
+  // Users are seeded directly (skipping bcrypt so each test app builds fast) and their sessions
+  // minted through `TokenService#issueTokens` (exactly what a login issues), so each access
+  // token is bound to a real, active session that `JwtGuard`'s session gate accepts.
+  const tokenService = app.get(TokenService);
   const [owner, intruder, admin] = await Promise.all(
     [['darthjee', false], ['intruder', false], ['boss', true]].map(async ([username, isAdmin]) => {
       const user = await userRepo.save(userRepo.create({ username: username as string, isAdmin: isAdmin as boolean }));
-      const token = jwtService.sign({ sub: user.id, username: user.username, isAdmin: user.isAdmin });
+      const { accessToken } = await tokenService.issueTokens(user);
 
-      return `access_token=${token}`;
+      return `access_token=${accessToken}`;
     }),
   );
 
