@@ -76,11 +76,12 @@ describe('TokenService', () => {
       expect(result.refreshTokenExpiresAt).toBe(saved.expiresAt);
     });
 
-    it('signs the access token with the user sub, username and isAdmin claims', async () => {
+    it('signs the access token with the user sub, sid, username and isAdmin claims', async () => {
       await service.issueTokens(user);
 
       expect(jwtService.sign).toHaveBeenCalledWith({
         sub: 7,
+        sid: expect.any(String),
         username: 'darthjee',
         isAdmin: false,
       });
@@ -165,6 +166,23 @@ describe('TokenService', () => {
       const [first, second] = refreshTokenRepository.save.mock.calls.map(([row]) => row.sessionUuid);
 
       expect(first).not.toBe(second);
+    });
+
+    it('signs a sid equal to the saved row\'s sessionUuid for a new session', async () => {
+      await service.issueTokens(user);
+
+      const row = refreshTokenRepository.save.mock.calls[0][0];
+
+      expect(jwtService.sign.mock.calls[0][0].sid).toBe(row.sessionUuid);
+    });
+
+    it('signs the carried session\'s sessionUuid as sid on rotation', async () => {
+      await service.issueTokens(user, false, { sessionUuid: 'existing-session', startedAt: new Date() });
+
+      const row = refreshTokenRepository.save.mock.calls[0][0];
+
+      expect(jwtService.sign.mock.calls[0][0].sid).toBe('existing-session');
+      expect(row.sessionUuid).toBe('existing-session');
     });
 
     it('copies the given session identity onto the new row', async () => {

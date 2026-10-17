@@ -51,7 +51,8 @@ export interface StatusResult {
 }
 
 /**
- * Session minting for the Auth module: signs the stateless access-token JWT,
+ * Session minting for the Auth module: signs the access-token JWT (bound to
+ * its session through the `sid` claim),
  * and persists a SHA-256-hashed rotating refresh token. Split out of `AuthService` so the
  * device-authorization flow can mint a login session byte-for-byte identical
  * to a password login without duplicating the logic (the two paths cannot
@@ -104,7 +105,9 @@ export class TokenService {
 
   /**
    * Mints a fresh login session for the given user: signs the access-token
-   * JWT (`{ sub, username, isAdmin }`), persists a new SHA-256-hashed
+   * JWT (`{ sub, sid, username, isAdmin }`, where `sid` is the session's
+   * `sessionUuid` — the same value saved on the row, so `JwtGuard` can bind
+   * the access token to its session), persists a new SHA-256-hashed
    * `RefreshToken` row (`revokedAt: null`, carrying `keepSignedIn`, with the
    * persistent TTL when `keepSignedIn` is `true` and the regular TTL
    * otherwise). Shared by the
@@ -128,8 +131,10 @@ export class TokenService {
     keepSignedIn = false,
     session?: SessionIdentity,
   ): Promise<AuthResult> {
+    const sessionUuid = session?.sessionUuid ?? randomUUID();
     const accessToken = this.jwtService.sign({
       sub: user.id,
+      sid: sessionUuid,
       username: user.username,
       isAdmin: user.isAdmin,
     });
@@ -146,7 +151,7 @@ export class TokenService {
         revokedAt: null,
         revokedReason: null,
         keepSignedIn,
-        sessionUuid: session?.sessionUuid ?? randomUUID(),
+        sessionUuid,
         startedAt: session?.startedAt ?? new Date(),
       }),
     );
