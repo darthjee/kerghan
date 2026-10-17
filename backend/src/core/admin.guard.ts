@@ -7,8 +7,10 @@ import { readBooleanMetadata } from './boolean-metadata.js';
 /**
  * Global guard enforcing `@AdminOnly()`-annotated routes, independent of
  * any feature module (per the issue's "Core" module classification). Reads
- * the `isAdmin` claim off `request.user`, already populated by `JwtGuard` —
- * this guard never re-verifies the JWT itself, so it must be registered as
+ * `isAdmin` off `request.user`, already populated by `JwtGuard` from the
+ * session's current user row (not the JWT's signed claim), so a demotion
+ * applies on the next request — this guard never re-verifies the JWT
+ * itself, so it must be registered as
  * an `APP_GUARD` *after* `JwtGuard` in `AppModule`. Routes without
  * `@AdminOnly()` metadata are unaffected (no-op).
  */
