@@ -45,7 +45,9 @@ file changes.
 
 ## Active specs
 
-none
+| Feature | Specs | Product decision |
+|---------|-------|------------------|
+| User approval (optional admin approval of new registrations) | [specs/user-approval/README.md](specs/user-approval/README.md) | #389 |
 
 When no feature is in progress, this list reads "none".
 
