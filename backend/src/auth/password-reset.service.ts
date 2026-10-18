@@ -9,7 +9,7 @@ import { DefaultUserService } from './default-user.service.js';
 import { RecoverDto } from './dto/recover.dto.js';
 import { ResetPasswordDto } from './dto/reset-password.dto.js';
 import { PasswordResetToken } from './entities/password-reset-token.entity.js';
-import { User } from './entities/user.entity.js';
+import { User, UserStatus } from './entities/user.entity.js';
 import { PasswordRecoveryRequestedEvent } from './events/password-recovery-requested.event.js';
 import { LoggerService } from '../core/logger.service.js';
 import { hashToken } from '../core/token-hash.js';
@@ -71,7 +71,8 @@ export class PasswordResetService {
    * enumeration-safety contract (see `docs/agents/product.md`). The default
    * user (while enabled) is treated like an unknown email: no token, no
    * event, no email, so the response never reveals which email belongs to
-   * the environment-managed user.
+   * the environment-managed user. A `denied` user is treated (and logged)
+   * exactly like an unknown email too.
    * @param {RecoverDto} dto - Carries the email to look up.
    * @returns {Promise<void>} Resolves once the (possible) token/event have
    *   been created, whether or not the email matched an account.
@@ -81,7 +82,7 @@ export class PasswordResetService {
 
     const user = await this.userRepository.findOneBy({ email: dto.email });
 
-    if (!user) {
+    if (!user || user.status === UserStatus.DENIED) {
       this.logger.info('password recovery user not found', {
         context: 'PasswordResetService',
         email: dto.email,
@@ -154,11 +155,14 @@ export class PasswordResetService {
    * and marks the token used (so it can't be replayed). Every rejection
    * reason (unknown token, already-used token, expired token) collapses
    * into the same generic error, per the issue's uniform-error contract —
-   * the client never learns which case it hit.
+   * the client never learns which case it hit. A valid token of a `denied`
+   * user is rejected with that same error (password unchanged, token not
+   * consumed); a `pending` user resets normally and stays `pending`.
    * @param {ResetPasswordDto} dto - Carries the token and the new password.
    * @returns {Promise<number>} The ID of the user whose password was reset,
    *   so the caller (`AuthService`) can revoke that user's other sessions.
-   * @throws {BadRequestException} When the token is unknown, already used, or expired.
+   * @throws {BadRequestException} When the token is unknown, already used, or
+   *   expired, or belongs to a denied user.
    * @throws {ConflictException} `409 DEFAULT_USER_MANAGED` when a valid
    *   token belongs to the default user — the password is unchanged and the
    *   token is not consumed.
@@ -167,6 +171,12 @@ export class PasswordResetService {
     const tokenRow = await this.#findActiveToken(dto.token);
 
     this.defaultUserService.assertNotDefaultUser(tokenRow.userId);
+
+    const user = await this.userRepository.findOneBy({ id: tokenRow.userId });
+
+    if (user?.status === UserStatus.DENIED) {
+      throw new BadRequestException('Invalid or expired token');
+    }
 
     const passwordDigest = await bcrypt.hash(dto.password, 10);
 
