@@ -92,7 +92,8 @@ export default class HeaderController {
    * in the `logged_in` hint cookie before it is read.
    * Skips the network call entirely when the `logged_in` hint cookie is absent — that is
    * unambiguously "logged out". When the backend reports the session is no longer active, it
-   * clears the cookies itself, so no client-side clearing is needed.
+   * clears the cookies itself, so no client-side clearing is needed. A `status: "pending"` answer
+   * (account awaiting an administrator's approval) is announced as `pending: true`.
    *
    * @returns {Promise<void>} Resolves once the status check finishes.
    */
@@ -100,12 +101,12 @@ export default class HeaderController {
     await this.migrateIfNeeded(); // TODO(#324-migration): drop with migrateIfNeeded.
 
     if (!AuthSession.isLoggedIn()) {
-      AuthEvents.emit(false, false);
+      AuthEvents.emit(false, false, false);
       return;
     }
 
-    const { loggedIn, isAdmin } = await this.client.status();
+    const { loggedIn, isAdmin, status } = await this.client.status();
 
-    AuthEvents.emit(loggedIn, isAdmin);
+    AuthEvents.emit(loggedIn, isAdmin, status === 'pending');
   }
 }

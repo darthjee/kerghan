@@ -152,13 +152,13 @@ describe('HeaderController', () => {
       spyOn(AuthSession, 'takeLegacyToken').and.returnValue(null);
     });
 
-    it('emits false/false without calling the backend when the hint cookie is absent', async () => {
+    it('emits false/false/false without calling the backend when the hint cookie is absent', async () => {
       spyOn(AuthSession, 'isLoggedIn').and.returnValue(false);
 
       await controller.checkStatus();
 
       expect(client.status).not.toHaveBeenCalled();
-      expect(AuthEvents.emit).toHaveBeenCalledWith(false, false);
+      expect(AuthEvents.emit).toHaveBeenCalledWith(false, false, false);
     });
 
     it('emits the backend-confirmed state and admin flag when the hint cookie is present', async () => {
@@ -168,7 +168,7 @@ describe('HeaderController', () => {
       await controller.checkStatus();
 
       expect(client.status).toHaveBeenCalledWith();
-      expect(AuthEvents.emit).toHaveBeenCalledWith(true, true);
+      expect(AuthEvents.emit).toHaveBeenCalledWith(true, true, false);
     });
 
     it('emits false when the backend reports the session is no longer active', async () => {
@@ -177,7 +177,25 @@ describe('HeaderController', () => {
 
       await controller.checkStatus();
 
-      expect(AuthEvents.emit).toHaveBeenCalledWith(false, false);
+      expect(AuthEvents.emit).toHaveBeenCalledWith(false, false, false);
+    });
+
+    it('emits the pending state with loggedIn and isAdmin false on a status: "pending" answer', async () => {
+      spyOn(AuthSession, 'isLoggedIn').and.returnValue(true);
+      client.status.and.resolveTo({ loggedIn: false, isAdmin: false, status: 'pending' });
+
+      await controller.checkStatus();
+
+      expect(AuthEvents.emit).toHaveBeenCalledWith(false, false, true);
+    });
+
+    it('emits pending: false for any status other than "pending"', async () => {
+      spyOn(AuthSession, 'isLoggedIn').and.returnValue(true);
+      client.status.and.resolveTo({ loggedIn: true, isAdmin: false, status: 'approved' });
+
+      await controller.checkStatus();
+
+      expect(AuthEvents.emit).toHaveBeenCalledWith(true, false, false);
     });
 
     it('runs the migration before reading the hint cookie', async () => {
@@ -192,7 +210,7 @@ describe('HeaderController', () => {
       await controller.checkStatus();
 
       expect(order).toEqual(['migrate', 'isLoggedIn']);
-      expect(AuthEvents.emit).toHaveBeenCalledWith(true, false);
+      expect(AuthEvents.emit).toHaveBeenCalledWith(true, false, false);
     });
   });
 });

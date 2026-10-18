@@ -25,7 +25,7 @@ describe('AuthEvents', () => {
 
         expect(handler).toHaveBeenCalled();
         expect(handler.calls.mostRecent().args[0].type).toBe('auth:changed');
-        expect(handler.calls.mostRecent().args[0].detail).toEqual({ loggedIn: true, isAdmin: true });
+        expect(handler.calls.mostRecent().args[0].detail).toEqual({ loggedIn: true, isAdmin: true, pending: false });
       } finally {
         AuthEvents.unsubscribe(handler);
       }
@@ -40,7 +40,7 @@ describe('AuthEvents', () => {
         AuthEvents.emit(false);
 
         expect(handler).toHaveBeenCalled();
-        expect(handler.calls.mostRecent().args[0].detail).toEqual({ loggedIn: false, isAdmin: false });
+        expect(handler.calls.mostRecent().args[0].detail).toEqual({ loggedIn: false, isAdmin: false, pending: false });
       } finally {
         AuthEvents.unsubscribe(handler);
       }
@@ -54,7 +54,22 @@ describe('AuthEvents', () => {
       try {
         AuthEvents.emit(true);
 
-        expect(handler.calls.mostRecent().args[0].detail).toEqual({ loggedIn: true, isAdmin: false });
+        expect(handler.calls.mostRecent().args[0].detail).toEqual({ loggedIn: true, isAdmin: false, pending: false });
+      } finally {
+        AuthEvents.unsubscribe(handler);
+      }
+    });
+
+    it('carries the given pending flag', () => {
+      const handler = jasmine.createSpy('handler');
+
+      AuthEvents.subscribe(handler);
+
+      try {
+        AuthEvents.emit(false, false, true);
+
+        expect(handler.calls.mostRecent().args[0].detail)
+          .toEqual({ loggedIn: false, isAdmin: false, pending: true });
       } finally {
         AuthEvents.unsubscribe(handler);
       }
