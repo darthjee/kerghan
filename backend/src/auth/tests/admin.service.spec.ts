@@ -1,9 +1,10 @@
-import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, NotFoundException, UnprocessableEntityException } from '@nestjs/common';
 import { ILike } from 'typeorm';
+import { ErrorCodes } from '../../core/error-codes.js';
 import { MailService } from '../../mail/mail.service.js';
-import { AdminService } from '../admin.service.js';
+import { AdminService, CANNOT_DENY_SELF_MESSAGE, USER_NOT_PENDING_MESSAGE } from '../admin.service.js';
 import { AuthService } from '../auth.service.js';
-import { User } from '../entities/user.entity.js';
+import { User, UserStatus } from '../entities/user.entity.js';
 import { PasswordResetService } from '../password-reset.service.js';
 import { TokenService } from '../token.service.js';
 import { UserUpdateService } from '../user-update.service.js';
@@ -17,12 +18,14 @@ import {
 type UserRepoMock = {
   find: jest.Mock;
   findOneBy: jest.Mock;
+  update: jest.Mock;
 };
 
 function userRepoMock(): UserRepoMock {
   return {
     find: jest.fn(),
     findOneBy: jest.fn(),
+    update: jest.fn(),
   };
 }
 
@@ -358,6 +361,136 @@ describe('AdminService', () => {
         await expect(service.editUser(404, { username: 'new-username' })).rejects.toThrow(
           NotFoundException,
         );
+      });
+    });
+  });
+
+  describe('approve / deny', () => {
+    let rows: Map<number, User>;
+
+    // A stateful stand-in for the repository: `findOneBy` reads the current
+    // row (a copy, like a fresh DB read) and `update` applies the partial to
+    // every row matching all criteria, resolving `{ affected }`.
+    function seed(...users: Partial<User>[]): void {
+      rows = new Map(users.map((user) => [user.id as number, { ...user } as User]));
+      userRepository.findOneBy.mockImplementation(async ({ id }: { id: number }) => {
+        const row = rows.get(id);
+
+        return row ? { ...row } : null;
+      });
+      userRepository.update.mockImplementation(async (criteria: Partial<User>, partial: Partial<User>) => {
+        const matching = [...rows.values()].filter((row) =>
+          Object.entries(criteria).every(([key, value]) => (row as never)[key] === value),
+        );
+        matching.forEach((row) => Object.assign(row, partial));
+
+        return { affected: matching.length };
+      });
+    }
+
+    async function expectUnprocessable(promise: Promise<unknown>, code: string, message: string): Promise<void> {
+      const error = await promise.then(
+        () => { throw new Error('expected a 422 rejection'); },
+        (rejection: unknown) => rejection,
+      );
+
+      expect(error).toBeInstanceOf(UnprocessableEntityException);
+      expect((error as UnprocessableEntityException).getResponse()).toEqual({ code, message });
+    }
+
+    describe('approveUser', () => {
+      describe('when the user is pending', () => {
+        beforeEach(() => seed({ id: 1, status: UserStatus.PENDING }));
+
+        it('approves the user and returns the reloaded row', async () => {
+          await expect(service.approveUser(1)).resolves.toEqual(expect.objectContaining({ id: 1, status: 'approved' }));
+          expect(rows.get(1)!.status).toBe('approved');
+        });
+
+        it('guards the write on the pending status', async () => {
+          await service.approveUser(1);
+
+          expect(userRepository.update).toHaveBeenCalledWith({ id: 1, status: 'pending' }, { status: 'approved' });
+        });
+
+        it('leaves the user\'s sessions untouched', async () => {
+          await service.approveUser(1);
+
+          expect(tokenService.revokeUserTokens).not.toHaveBeenCalled();
+        });
+      });
+
+      it.each([UserStatus.APPROVED, UserStatus.DENIED])(
+        'rejects a %s user with 422 USER_NOT_PENDING, changing nothing',
+        async (status) => {
+          seed({ id: 1, status });
+
+          await expectUnprocessable(service.approveUser(1), ErrorCodes.USER_NOT_PENDING, USER_NOT_PENDING_MESSAGE);
+          expect(rows.get(1)!.status).toBe(status);
+        },
+      );
+
+      it('rejects with 422 when the user stops being pending before the write (concurrent deny)', async () => {
+        seed({ id: 1, status: UserStatus.PENDING });
+        userRepository.update.mockResolvedValueOnce({ affected: 0 });
+
+        await expectUnprocessable(service.approveUser(1), ErrorCodes.USER_NOT_PENDING, USER_NOT_PENDING_MESSAGE);
+      });
+
+      it('rejects an unknown user with NotFoundException', async () => {
+        seed();
+
+        await expect(service.approveUser(404)).rejects.toThrow(NotFoundException);
+        expect(userRepository.update).not.toHaveBeenCalled();
+      });
+    });
+
+    describe('denyUser', () => {
+      const adminId = 9;
+
+      it.each([UserStatus.PENDING, UserStatus.APPROVED, UserStatus.DENIED])(
+        'denies a %s user and revokes its tokens with admin_denied',
+        async (status) => {
+          seed({ id: 1, status }, { id: adminId, status: UserStatus.APPROVED });
+
+          await expect(service.denyUser(1, adminId)).resolves.toEqual(expect.objectContaining({ id: 1, status: 'denied' }));
+          expect(rows.get(1)!.status).toBe('denied');
+          expect(tokenService.revokeUserTokens).toHaveBeenCalledWith(1, 'admin_denied');
+        },
+      );
+
+      it('rejects an unknown user with NotFoundException, revoking nothing', async () => {
+        seed();
+
+        await expect(service.denyUser(404, adminId)).rejects.toThrow(NotFoundException);
+        expect(userRepository.update).not.toHaveBeenCalled();
+        expect(tokenService.revokeUserTokens).not.toHaveBeenCalled();
+      });
+
+      it('rejects the caller\'s own account with 422 CANNOT_DENY_SELF, changing nothing', async () => {
+        seed({ id: adminId, status: UserStatus.APPROVED });
+
+        await expectUnprocessable(service.denyUser(adminId, adminId), ErrorCodes.CANNOT_DENY_SELF, CANNOT_DENY_SELF_MESSAGE);
+        expect(rows.get(adminId)!.status).toBe('approved');
+        expect(tokenService.revokeUserTokens).not.toHaveBeenCalled();
+      });
+
+      describe('when the target is the default user (feature enabled)', () => {
+        beforeEach(() => {
+          service = buildService(defaultUserServiceDouble(7));
+          seed({ id: 7, status: UserStatus.APPROVED });
+        });
+
+        it('rejects with 409 DEFAULT_USER_MANAGED, changing nothing', async () => {
+          await expectDefaultUserManaged(service.denyUser(7, adminId));
+
+          expect(rows.get(7)!.status).toBe('approved');
+          expect(tokenService.revokeUserTokens).not.toHaveBeenCalled();
+        });
+
+        it('answers 409 rather than 422 when the caller is also the default user', async () => {
+          await expectDefaultUserManaged(service.denyUser(7, 7));
+        });
       });
     });
   });
