@@ -9,6 +9,7 @@ import { RefreshToken } from '../entities/refresh-token.entity.js';
 import { User } from '../entities/user.entity.js';
 import { PasswordResetService } from '../password-reset.service.js';
 import { TokenService } from '../token.service.js';
+import { UserApprovalConfig } from '../user-approval.config.js';
 import { repoMock, RepoMock } from './repo-mock.test-support.js';
 
 describe('AuthService', () => {
@@ -23,7 +24,20 @@ describe('AuthService', () => {
   let eventEmitter: { emit: jest.Mock };
   let passwordResetService: { recover: jest.Mock; resetPassword: jest.Mock };
   let defaultUserService: { autoLogin: jest.Mock };
+  let userApprovalConfig: UserApprovalConfig;
   let service: AuthService;
+
+  function buildService(): AuthService {
+    return new AuthService(
+      userRepository as never,
+      refreshTokenRepository as never,
+      tokenService as unknown as TokenService,
+      eventEmitter as unknown as EventEmitter2,
+      passwordResetService as unknown as PasswordResetService,
+      defaultUserService as unknown as DefaultUserService,
+      userApprovalConfig,
+    );
+  }
 
   const activeToken = {
     id: 10,
@@ -65,14 +79,9 @@ describe('AuthService', () => {
     passwordResetService = { recover: jest.fn(), resetPassword: jest.fn() };
     defaultUserService = { autoLogin: jest.fn().mockResolvedValue(null) };
 
-    service = new AuthService(
-      userRepository as never,
-      refreshTokenRepository as never,
-      tokenService as unknown as TokenService,
-      eventEmitter as unknown as EventEmitter2,
-      passwordResetService as unknown as PasswordResetService,
-      defaultUserService as unknown as DefaultUserService,
-    );
+    userApprovalConfig = new UserApprovalConfig(false);
+
+    service = buildService();
   });
 
   describe('login', () => {
@@ -214,6 +223,27 @@ describe('AuthService', () => {
 
         expect(passwordDigest).not.toBe('my-password');
         await expect(bcrypt.compare('my-password', passwordDigest)).resolves.toBe(true);
+      });
+
+      it('creates the user approved when approval is not required', async () => {
+        await service.register({ username: 'darthjee', email: 'darthjee@example.com', password: 'my-password' });
+
+        expect(userRepository.create.mock.calls[0][0]).toEqual(expect.objectContaining({ status: 'approved' }));
+      });
+
+      it('creates the user pending, still minting a session, when approval is required', async () => {
+        userApprovalConfig = new UserApprovalConfig(true);
+        service = buildService();
+
+        const result = await service.register({
+          username: 'darthjee',
+          email: 'darthjee@example.com',
+          password: 'my-password',
+        });
+
+        expect(userRepository.create.mock.calls[0][0]).toEqual(expect.objectContaining({ status: 'pending' }));
+        expect(result.accessToken).toBe('signed-access-token');
+        expect(tokenService.issueTokens).toHaveBeenCalledWith(expect.objectContaining({ status: 'pending' }), false);
       });
 
       it('emits a user.registered event with the created user', async () => {

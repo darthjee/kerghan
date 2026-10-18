@@ -1,10 +1,9 @@
-import { ConflictException, Injectable, UnauthorizedException } from '@nestjs/common';
+import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { InjectRepository } from '@nestjs/typeorm';
 import bcrypt from 'bcryptjs';
-import { IsNull, Not, Repository } from 'typeorm';
+import { IsNull, Repository } from 'typeorm';
 import { DefaultUserService } from './default-user.service.js';
-import { ErrorCodes } from '../core/error-codes.js';
 import { LoginDto } from './dto/login.dto.js';
 import { RecoverDto } from './dto/recover.dto.js';
 import { RegisterDto } from './dto/register.dto.js';
@@ -15,11 +14,10 @@ import { User } from './entities/user.entity.js';
 import { UserRegisteredEvent } from './events/user-registered.event.js';
 import { PasswordResetService } from './password-reset.service.js';
 import { TokenService, type AuthResult, type StatusResult } from './token.service.js';
+import { UserApprovalConfig } from './user-approval.config.js';
+import { assertAvailable, assertFieldAvailable } from './user-availability.js';
 
 export type { AuthResult, StatusResult };
-
-// Specific error code attached to the `409` thrown when a field's value is taken.
-const TAKEN_CODES = { username: ErrorCodes.USERNAME_TAKEN, email: ErrorCodes.EMAIL_TAKEN } as const;
 
 /**
  * Auth module business logic: credential verification, registration,
@@ -37,6 +35,7 @@ export class AuthService {
   private readonly eventEmitter: EventEmitter2;
   private readonly passwordResetService: PasswordResetService;
   private readonly defaultUserService: DefaultUserService;
+  private readonly userApprovalConfig: UserApprovalConfig;
 
   /**
    * @param {Repository<User>} userRepository - The Auth module's user repository.
@@ -45,6 +44,7 @@ export class AuthService {
    * @param {EventEmitter2} eventEmitter - Fires the `user.registered` event.
    * @param {PasswordResetService} passwordResetService - Recovery/reset logic (`recover`/`resetPassword`).
    * @param {DefaultUserService} defaultUserService - `status()`'s automatic login as the default user.
+   * @param {UserApprovalConfig} userApprovalConfig - Decides the status of new registrations.
    */
   constructor(
     @InjectRepository(User) userRepository: Repository<User>,
@@ -53,6 +53,7 @@ export class AuthService {
       eventEmitter: EventEmitter2,
       passwordResetService: PasswordResetService,
       defaultUserService: DefaultUserService,
+      userApprovalConfig: UserApprovalConfig,
   ) {
     this.userRepository = userRepository;
     this.refreshTokenRepository = refreshTokenRepository;
@@ -60,17 +61,21 @@ export class AuthService {
     this.eventEmitter = eventEmitter;
     this.passwordResetService = passwordResetService;
     this.defaultUserService = defaultUserService;
+    this.userApprovalConfig = userApprovalConfig;
   }
 
   /**
    * Registers a new user and immediately logs them in (issues tokens),
-   * per the issue's JWT flow ("issued on login/register/refresh").
+   * per the issue's JWT flow ("issued on login/register/refresh"). The user
+   * is created `pending` when `KERGHAN_USER_APPROVAL_REQUIRED` is on,
+   * `approved` otherwise; the session is minted either way (a pending
+   * session is blocked by the gate until an admin approves).
    * @param {RegisterDto} dto - The registration payload.
    * @returns {Promise<AuthResult>} The created user plus access/refresh tokens.
    * @throws {ConflictException} When the username/email are already taken (`USERNAME_TAKEN`/`EMAIL_TAKEN`).
    */
   async register(dto: RegisterDto): Promise<AuthResult> {
-    await this.#assertAvailable(dto.username, dto.email);
+    await assertAvailable(this.userRepository, dto.username, dto.email);
 
     const passwordDigest = await bcrypt.hash(dto.password, 10);
     const user = await this.userRepository.save(
@@ -79,6 +84,7 @@ export class AuthService {
         email: dto.email,
         passwordDigest,
         isAdmin: false,
+        status: this.userApprovalConfig.registrationStatus(),
       }),
     );
 
@@ -215,8 +221,8 @@ export class AuthService {
   /**
    * Checks that a username/email are available for a user to claim,
    * excluding that user's own row (so "changing" a field to its current
-   * value never false-positives). Used by `AccountService`; kept separate
-   * from `#assertAvailable` for its distinct error messages.
+   * value never false-positives). Used by `AccountService`/`AdminService`;
+   * kept separate from registration's check for its distinct error messages.
    * @param {number} excludeUserId - Id of the user updating their account, excluded from the lookup.
    * @param {string} [username] - Candidate username, when being changed.
    * @param {string} [email] - Candidate email, when being changed.
@@ -230,39 +236,11 @@ export class AuthService {
     email?: string,
   ): Promise<void> {
     if (username) {
-      await this.#assertFieldAvailable('username', username, excludeUserId, 'Username already in use');
+      await assertFieldAvailable(this.userRepository, 'username', username, excludeUserId, 'Username already in use');
     }
 
     if (email) {
-      await this.#assertFieldAvailable('email', email, excludeUserId, 'Email already in use');
-    }
-  }
-
-  async #assertAvailable(username: string, email: string): Promise<void> {
-    const existing = await this.userRepository.findOne({
-      where: [{ username }, { email }],
-    });
-
-    if (!existing) {
-      return;
-    }
-
-    const field = existing.username === username ? 'username' : 'email';
-    throw new ConflictException({ code: TAKEN_CODES[field], message: `${field} is not available` });
-  }
-
-  async #assertFieldAvailable(
-    field: 'username' | 'email',
-    value: string,
-    excludeUserId: number,
-    message: string,
-  ): Promise<void> {
-    const existing = await this.userRepository.findOne({
-      where: { [field]: value, id: Not(excludeUserId) },
-    });
-
-    if (existing) {
-      throw new ConflictException({ code: TAKEN_CODES[field], message });
+      await assertFieldAvailable(this.userRepository, 'email', email, excludeUserId, 'Email already in use');
     }
   }
 
