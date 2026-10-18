@@ -35,8 +35,8 @@ interface SessionClaims {
 /**
  * Global guard verifying the JWT access token on every request, independent
  * of any feature module (per the issue's "Core" module classification), and
- * acting as the per-request session gate (rules 1 to 3 of
- * `docs/agents/specs/user-approval/security.md`). Reads the token from the
+ * acting as the per-request session gate (rules 1 to 3 of the "Session
+ * lookup" in `docs/agents/modules/auth.md`). Reads the token from the
  * httpOnly `access_token` cookie set by the Auth module. Routes (or
  * controllers) annotated with `@Public()` skip verification entirely.
  *

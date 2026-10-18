@@ -25,9 +25,33 @@ session routes; all three controllers are thin delegation layers.
 | Auth | `@Public()` |
 | Request body | `LoginDto` — `{ username: string, password: string, keepSignedIn?: boolean }` |
 | Success response | `{ user }` + sets the session cookies (see "Session cookies" below) |
-| HTTP status | `200` (default) |
+| HTTP status | `200` (default); `401` for an unknown username or a wrong password; `403 USER_DENIED` for a denied user with the right password |
 
-`user` is `{ id, username, email }` — `passwordDigest` is never serialized.
+`user` is `{ id, username, email, isAdmin }` — `passwordDigest` is never serialized.
+
+Order of checks ([user status](../../modules/auth/user-approval.md#status-model)):
+
+1. Unknown username or wrong password → the existing `401`, whatever the status.
+2. Correct password, user `denied` → **`403 USER_DENIED`**, no session minted, no cookie set.
+3. Correct password, user `pending` → the normal `200 { user }` with a session, which the
+   session gate blocks until an admin approves.
+4. Correct password, user `approved` → unchanged.
+
+**Why the status is checked after the password:** the denied status must not be probed without
+the password. `USER_DENIED` body (the standard error shape):
+
+```json
+{
+  "error": {
+    "code": "USER_DENIED",
+    "message": "This account has been denied access"
+  },
+  "statusCode": 403,
+  "timestamp": "<ISO 8601>"
+}
+```
+
+A `403` does not trigger `ApiClient`'s refresh-and-retry (only `401` does).
 
 `keepSignedIn` is a strict optional boolean (omitted → `false`; any non-boolean such as `"true"`
 or `1` → `400`). `true` mints a persistent refresh token (`KERGHAN_PERSISTENT_REFRESH_TOKEN_TTL_MS`,
@@ -43,7 +67,11 @@ default 30 days) whose flag is carried over on every refresh; see `docs/agents/m
 | Success response | `{ user }` + sets the session cookies |
 | HTTP status | `200` (default) |
 
-Creates a new `auth_users` record, then issues tokens identically to login.
+Creates a new `auth_users` record, then issues tokens identically to login. The new user's
+`status` comes from `KERGHAN_USER_APPROVAL_REQUIRED` (off → `approved`, on → `pending`; see
+[User approval](../../modules/auth/user-approval.md#configuration)). The response and cookies are
+the same for every status, so a pending user holds a session, blocked by the session gate, that
+becomes usable as soon as an admin approves.
 
 ### `POST /auth/refresh.json`
 
@@ -63,6 +91,23 @@ reason `replay_detected`, forcing re-login everywhere); a token revoked for any 
 effects — so a revoked device's routine refresh (or an attacker replaying its stolen token)
 can't log the user out of their other sessions. See `revoked_reason` in
 [the Auth module](../../modules/auth.md#entities-auth_-table-prefix).
+
+User status ([User approval](../../modules/auth/user-approval.md#explicit-exceptions)):
+
+- **`pending`:** the session keeps rotating normally, so it stays alive and becomes usable as
+  soon as the user is approved. The access tokens it mints are blocked by the session gate
+  meanwhile.
+- **`denied`:** the presented token is rejected with the plain `401` (cookies cleared, no replay
+  detection), and that token, still active, is revoked with `admin_denied`. **Why:** deny
+  already revokes every active token, but a rotation or winning poll racing the deny's bulk
+  revoke can insert a new active row after it; this check stops such a session from rotating
+  on.
+- **`approved`:** unchanged.
+
+Order of checks: the existing token checks run first, unchanged (unknown or expired → `401`; a
+revoked `rotated` token → replay detection; any other revoked token → plain `401`). The status
+check applies only to a token that passed them (still active), so replay detection is never
+skipped for a denied user.
 
 The body fallback exists only so a frontend still holding a pre-#324 token in `localStorage`
 (key `kerghan_refresh_token`) can migrate it into the cookie with one refresh. It lives in one
@@ -89,13 +134,28 @@ Revokes the cookie's refresh token server-side (when present) and always clears 
 | Controller | `AuthController` |
 | Auth | `@Public()` |
 | Request | `refresh_token` cookie (no body); the client IP (for automatic login) |
-| Success response | `{ loggedIn, isAdmin }`; sets the session cookies on an automatic login |
+| Success response | `{ loggedIn, isAdmin }`, plus `status: "pending"` for a pending user; sets the session cookies on an automatic login |
 | HTTP status | `201` (Nest's `POST` default), always |
 
-Reports whether the cookie's refresh token identifies an active session. It never revokes
-anything. Without automatic login, a missing cookie answers `{ loggedIn: false, isAdmin: false }`
-without a database lookup. A `loggedIn: false` answer clears the three session cookies, so the
-readable `logged_in` marker can't outlive the session.
+Reports whether the cookie's refresh token identifies an active session. Without automatic
+login, a missing cookie answers `{ loggedIn: false, isAdmin: false }` without a database lookup.
+A `loggedIn: false` answer clears the three session cookies, so the readable `logged_in` marker
+can't outlive the session — except the pending answer below.
+
+By the session user's [status](../../modules/auth/user-approval.md#status-model):
+
+| Caller | Body | Session cookies |
+| --- | --- | --- |
+| Active session, user `approved` | `{ loggedIn: true, isAdmin }` | unchanged |
+| Active session, user `pending` | `{ loggedIn: false, isAdmin: false, status: "pending" }` | **kept** |
+| Active session, user `denied` (should not happen: deny revokes every session) | treated as no valid session (next row), so byte-for-byte what an anonymous caller gets | cleared, unless automatic login sets new ones; the presented token, still active (racing the deny), is revoked with `admin_denied`, as on `refresh.json` |
+| No valid session | automatic login when enabled and the IP is allowed (below), otherwise `{ loggedIn: false, isAdmin: false }` | cleared, or set by automatic login |
+
+- `status` appears **only** for `pending`. A logged-out or denied caller gets byte-for-byte the
+  unauthenticated response, so nothing reveals that an account is denied.
+- The pending answer is the one `loggedIn: false` answer that keeps the session cookies. **Why:**
+  the session must survive so the user can pick up an approval without logging in again.
+- Revoking a denied user's token is the only write `status.json` makes.
 
 **Automatic login.** When `KERGHAN_DEFAULT_USER_ALWAYS_AUTHENTICATED` is on (see
 [Default user](../../modules/auth/default-user.md#automatic-login)), a caller with **no valid
@@ -103,7 +163,9 @@ session** from an **allowed client IP** is logged in as the default user:
 
 - **No valid session** means the `refresh_token` cookie is missing, unknown, expired or revoked
   (including a session revoked from another device). The access token is never read. A valid
-  refresh cookie wins and follows the flow above unchanged, whoever its user is.
+  refresh cookie wins and follows the flow above unchanged, whoever its user is: a pending
+  user's own session wins over automatic login, while a denied user's session counts as no
+  valid session. The default user is always `approved`.
 - **Allowed client IP** is the IP resolved through `KERGHAN_TRUSTED_PROXY_HOPS` (the same
   handling as `POST /auth/authorization-requests.json`), checked against
   `KERGHAN_DEFAULT_USER_ALLOWED_IPS` (loopback only by default).
@@ -156,6 +218,11 @@ reuses `respondWithSession` (see "Session cookies" below), the same session shap
 login/register/refresh. Every other poll of an already-claimed request gets `{ status: 'logged'
 }`, no credentials.
 
+Right before minting, the winning poll re-checks the status on the freshly loaded user row. A
+user who is no longer `approved` gets `{ status: 'denied' }`, no `user` and no cookies, and the
+request moves `logged → denied` (see the
+[status machine](../../modules/auth.md#status-machine)).
+
 ### `POST /auth/authorization-requests/mine.json`
 
 | Property | Value |
@@ -182,7 +249,8 @@ comes from `req.user.sub`, populated by `JwtGuard`.
 Re-verifies the caller's own current password before approving a request raised against their
 own username. Every business rejection — missing row, wrong owner, wrong status, expired, wrong
 password, or locked out by the cool-off guard — collapses into the same `400`, never `401`/`403`,
-so `ApiClient`'s refresh-and-retry logic is never triggered by a business rejection.
+so `ApiClient`'s refresh-and-retry logic is never triggered by a business rejection. A pending
+or denied caller never reaches the endpoint: the session gate answers `401` first.
 
 ### `POST /auth/authorization-requests/:uuid/deny.json`
 
@@ -236,14 +304,16 @@ Revokes one of the caller's sessions (its unrevoked token, `revokedReason` `user
 `:uuid` is validated by `ParseUUIDPipe` accepting any UUID version (sessions backfilled by the
 migration carry MySQL `UUID()` v1 IDs); a malformed value answers `400`. An unknown session and
 another user's session both answer the same `404`, so existence never leaks. Revoking the
-current session is allowed and behaves like a logoff (the access-token cookie is left alone and
-expires on its own; the client's next refresh gets `401`, which clears the session cookies). The revoked session's later
+current session is allowed and behaves like a logoff (the access-token cookie is left alone, but
+the next authenticated request gets `401`, and the client's refresh then gets `401` too, which
+clears the session cookies). The revoked session's later
 refresh attempts get a plain `401` without triggering replay detection.
 
-**Revocation stops the refresh token only.** Access tokens are stateless JWTs not tracked
-server-side, so a revoked session's already-issued access token stays valid until it expires —
-`KERGHAN_ACCESS_TOKEN_TTL_MS`, 15 minutes by default. This applies to both session-revoke
-routes.
+**Revocation applies on the next request.** The session gate in `JwtGuard` checks that the
+access token's `sid` names an active session on every request, so a revoked session's
+access token is refused on its next request, even before it expires (see
+[Session lookup](../../modules/auth.md#jwtrefresh-token-flow)). This applies to both
+session-revoke routes.
 
 ### `POST /auth/sessions/revoke-others.json`
 
@@ -297,6 +367,26 @@ Response body (the standard shape from `http-exception.filter.ts`, no `error.det
 The message is the same on every route and never names the variables or their values. With the
 feature off, every route answers as before.
 
+## User status
+
+Every user has a `status` (`pending`, `approved`, `denied`); only `approved` users pass the
+session gate. Model, rules and rationale:
+[User approval](../../modules/auth/user-approval.md). The per-route effects are under each route
+above, plus these two password-recovery routes:
+
+| Route | Status behavior |
+| --- | --- |
+| `POST /auth/recover.json` | Always `200 { sent: true }`, the same observable answer for every status. `approved` and `pending`: unchanged (token created, email sent), so a pending user may reset their password. `denied`: treated like an unknown email, no token created and no email sent. |
+| `POST /auth/reset-password.json` | Token errors first, unchanged, then the default user's `409`. A valid token for a `denied` user → the same generic `400` (`Invalid or expired token`) as an unknown or expired token; the password is unchanged and the token is **not consumed** (it simply expires). This covers tokens issued before the deny. A valid token for a `pending` user resets the password as usual; the user stays `pending`. |
+
+New error codes (`backend/src/core/error-codes.ts`), attached at the throw site:
+
+| Code | Status | Where |
+| --- | --- | --- |
+| `USER_DENIED` | `403` | `POST /auth/login.json`, correct password on a denied user (above) |
+| `USER_NOT_PENDING` | `422` | `POST /admin/users/:id/approve.json` on a non-pending user ([Admin tool routes](../../modules/auth.md#admin-tool-routes-admincontroller-admin-prefix)) |
+| `CANNOT_DENY_SELF` | `422` | `POST /admin/users/:id/deny.json` on the caller's own id ([Admin tool routes](../../modules/auth.md#admin-tool-routes-admincontroller-admin-prefix)) |
+
 ## Shared behavior
 
 All thirteen routes above (the five classic ones, the five device-authorization ones and the
@@ -331,7 +421,8 @@ the frontend decide, without a request, whether to show the logged-in UI optimis
 
 `clearSessionCookies` clears all three, each with the same `path`/`secure`/`sameSite` it was set
 with (browsers ignore a clear on a different path). It runs on `logoff.json`, on a `401` from
-`refresh.json` and on a `status.json` answering `loggedIn: false`.
+`refresh.json` and on a `status.json` answering `loggedIn: false` (except the pending answer,
+which keeps them).
 
 ## Source files
 
@@ -351,4 +442,7 @@ with (browsers ignore a clear on a different path). It runs on `logoff.json`, on
 | `auth/dto/poll-authorization-request.dto.ts` | `PollAuthorizationRequestDto` validation |
 | `auth/dto/authorize-authorization-request.dto.ts` | `AuthorizeAuthorizationRequestDto` validation |
 | `auth/session.controller.ts` | Session-management route definitions |
-| `auth/session.service.ts` | Session business logic (listActive, revoke, revokeOthers) |
+| `auth/session.service.ts` | Session business logic (listActive, revoke, revokeOthers) and `findActiveSessionUser`, the session lookup behind `JwtGuard` |
+| `core/jwt.guard.ts` | Global access-token guard and session gate (`sid` claim, active session, `approved` user) |
+| `auth/user-approval.config.ts` | `UserApprovalConfig`, the only reader of `KERGHAN_USER_APPROVAL_REQUIRED` |
+| `auth/password-reset.service.ts` | Recover/reset business logic, including the denied-user rules |
