@@ -167,7 +167,7 @@ describe('AuthController (e2e)', () => {
       });
     });
 
-    it('answers a denied user\'s right password with 403 USER_DENIED and no cookies', async () => {
+    it('answers a denied user\'s right password with 403 USER_DENIED, no cookies and no caching', async () => {
       setStatus('denied');
 
       const response = await loginAs(ctx.app);
@@ -178,6 +178,8 @@ describe('AuthController (e2e)', () => {
         message: 'This account has been denied access',
       });
       expect(setCookieHeaders(response)).toEqual([]);
+      expect(response.headers['x-skip-cache']).toBe('true');
+      expect(response.headers['cache-control']).toBe('no-store');
     });
 
     it('logs a pending user in normally, with session cookies', async () => {
