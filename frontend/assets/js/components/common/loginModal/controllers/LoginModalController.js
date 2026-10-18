@@ -4,6 +4,7 @@ import LoginModalEvents from '../../../../client/LoginModalEvents.js';
 import AuthorizationRequestPoller from '../../../../utils/polling/AuthorizationRequestPoller.js';
 import { validateRegistration, validateResetPassword } from '../../../../utils/validation/formValidators.js';
 import { redirectHome } from '../../../../utils/routing/redirects.js';
+import LoginErrorMessages from './LoginErrorMessages.js';
 
 /** Every field any mode can hold; switching modes resets to exactly this. */
 const INITIAL_FIELDS = {
@@ -130,7 +131,8 @@ export default class LoginModalController {
 
   /**
    * Password-mode submit: authenticate against the backend, converging on the shared success
-   * handler, or set a submit-error message on failure — same shape as today's `LoginController`.
+   * handler, or set a submit-error message on failure (mapped by {@link LoginErrorMessages}, so
+   * a `403 USER_DENIED` shows the denied message).
    *
    * @param {{username: string, password: string, keepSignedIn: boolean}} fields - Current form
    *   field values; `keepSignedIn` is forwarded to the login request.
@@ -143,7 +145,7 @@ export default class LoginModalController {
       await this.client.login(fields);
       await this.#handleSuccess();
     } catch (error) {
-      this.setSubmitError(error.message);
+      this.setSubmitError(LoginErrorMessages.forLogin(error));
     }
   }
 
