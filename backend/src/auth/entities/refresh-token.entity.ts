@@ -23,6 +23,8 @@ export const RevokedReason = {
   ADMIN_PASSWORD_CHANGE: 'admin_password_change',
   /** Revoked because a rotated token was replayed (compromise response). */
   REPLAY_DETECTED: 'replay_detected',
+  /** Revoked because the user was denied (by an admin, or racing a deny). */
+  ADMIN_DENIED: 'admin_denied',
 } as const;
 
 export type RevokedReason = typeof RevokedReason[keyof typeof RevokedReason];
