@@ -55,16 +55,23 @@ function renderMyAccountDropdown() {
 
 /**
  * Render the Login/Register/Recover links when logged out, or the Logout action (plus, for an
- * admin, the Admin Users link, and the "My account" dropdown) when logged in.
+ * admin, the Admin Users link, and the "My account" dropdown) when logged in. Renders nothing
+ * while the account awaits approval: no logged-in menu, and no Login link (the session exists,
+ * the awaiting-approval view offers "Log out").
  *
+ * @param {boolean} pending - Whether the account awaits an administrator's approval.
  * @param {boolean} isLoggedIn - Whether a session is currently active.
  * @param {boolean} isAdmin - Whether the current session belongs to an admin user.
  * @param {Function} onLogout - Click handler for the Logout link, used when logged in.
  * @param {Function} onOpenLogin - Called with a mode string (`'password'` / `'register'` /
  *   `'recover'`) to open the login modal, used by the Login/Register/Recover links.
- * @returns {React.ReactElement} The rendered auth nav links.
+ * @returns {React.ReactElement|null} The rendered auth nav links, or `null` while pending.
  */
-function renderAuthLinks(isLoggedIn, isAdmin, onLogout, onOpenLogin) {
+function renderAuthLinks(pending, isLoggedIn, isAdmin, onLogout, onOpenLogin) {
+  if (pending) {
+    return null;
+  }
+
   if (isLoggedIn) {
     return (
       <>
@@ -97,9 +104,11 @@ const HeaderHelper = {
    * @param {Function} onOpenLogin - Called with a mode string (`'password'` / `'register'` /
    *   `'recover'`) to open the login modal, used by the Login/Register/Recover links when
    *   logged out.
+   * @param {boolean} [pending] - Whether the account awaits an administrator's approval; hides
+   *   every auth link.
    * @returns {React.ReactElement} The rendered navigation bar.
    */
-  render(isLoggedIn, isAdmin, onLogout, onOpenLogin) {
+  render(isLoggedIn, isAdmin, onLogout, onOpenLogin, pending = false) {
     return (
       <Navbar bg="light" expand="md">
         <Container fluid>
@@ -107,7 +116,7 @@ const HeaderHelper = {
           <Navbar.Toggle aria-controls="header-navbar" />
           <Navbar.Collapse id="header-navbar">
             <Nav className="me-auto">
-              {renderAuthLinks(isLoggedIn, isAdmin, onLogout, onOpenLogin)}
+              {renderAuthLinks(pending, isLoggedIn, isAdmin, onLogout, onOpenLogin)}
             </Nav>
           </Navbar.Collapse>
         </Container>

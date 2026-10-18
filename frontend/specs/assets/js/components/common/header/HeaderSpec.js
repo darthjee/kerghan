@@ -20,13 +20,19 @@ describe('Header', () => {
     expect(markup).toContain('page content');
   });
 
+  it('does not render the awaiting-approval view initially', () => {
+    const markup = renderToStaticMarkup(React.createElement(Header, null));
+
+    expect(markup).not.toContain('Awaiting approval');
+  });
+
   it('passes the logged-out state to HeaderHelper by default', () => {
     spyOn(AuthSession, 'isLoggedIn').and.returnValue(false);
     spyOn(HeaderHelper, 'render').and.callThrough();
 
     renderToStaticMarkup(React.createElement(Header, null));
 
-    expect(HeaderHelper.render).toHaveBeenCalledWith(false, false, jasmine.any(Function), jasmine.any(Function));
+    expect(HeaderHelper.render).toHaveBeenCalledWith(false, false, jasmine.any(Function), jasmine.any(Function), false);
   });
 
   it('passes the logged-in state to HeaderHelper when the logged_in hint cookie is present', () => {
@@ -35,7 +41,7 @@ describe('Header', () => {
 
     renderToStaticMarkup(React.createElement(Header, null));
 
-    expect(HeaderHelper.render).toHaveBeenCalledWith(true, false, jasmine.any(Function), jasmine.any(Function));
+    expect(HeaderHelper.render).toHaveBeenCalledWith(true, false, jasmine.any(Function), jasmine.any(Function), false);
   });
 
   it('logs out and prevents the default navigation when the logout handler fires', async () => {
