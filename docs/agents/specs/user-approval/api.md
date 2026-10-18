@@ -148,7 +148,10 @@ Never the password digest, tokens or sessions.
 - `status` is optional, one of `pending`, `approved`, `denied` (`@IsIn` on `SearchUsersDto`); any
   other value → `400 VALIDATION_FAILED` (existing `ValidationPipe` path).
 - Combinable with `q`: both filters apply (AND). Absent `status` → every status.
-- Response: `{ users: [ <user item> ] }`, still unpaginated.
+- Response: `{ users: [ <user item> ], currentUserId }`, still unpaginated. `currentUserId` is
+  the calling admin's own id (`@CurrentUser().sub`): it lets the admin page hide deny on the
+  caller's own row (`status.json` exposes no user id). Admin-only, it discloses nothing the admin
+  does not already know.
 
 ### `POST /admin/users/:id/approve.json`
 
@@ -220,7 +223,8 @@ to send.
 - **Other admin routes:** `edit.json`, `recovery-link.json` and `send-recovery-email.json` on a
   denied user behave as for any user and leave `status` `denied`.
 - **Search:** `status` filter alone and combined with `q`; invalid `status` →
-  `400 VALIDATION_FAILED`; items carry `status` and no secret fields.
+  `400 VALIDATION_FAILED`; items carry `status` and no secret fields; `currentUserId` is the
+  caller's id.
 - **Approve:** `403` for a non-admin, `404`, `422 USER_NOT_PENDING` from `approved` and `denied`,
   `200` from `pending`.
 - **Deny:** `403` for a non-admin, `404`, `409` on the default user, `422 CANNOT_DENY_SELF`,

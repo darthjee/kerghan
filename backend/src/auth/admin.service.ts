@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, UnprocessableEntityException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { ILike, Repository } from 'typeorm';
 import { assertAnyFieldPresent, hasManagedField } from './assert-any-field-present.js';
@@ -6,11 +6,18 @@ import { AuthService } from './auth.service.js';
 import { DefaultUserService } from './default-user.service.js';
 import { AdminUpdateUserDto } from './dto/admin-update-user.dto.js';
 import { RevokedReason } from './entities/refresh-token.entity.js';
-import { User } from './entities/user.entity.js';
+import { User, UserStatus } from './entities/user.entity.js';
 import { PasswordResetService } from './password-reset.service.js';
 import { TokenService } from './token.service.js';
 import { UserUpdateService } from './user-update.service.js';
+import { ErrorCodes } from '../core/error-codes.js';
 import { MailService } from '../mail/mail.service.js';
+
+/** Message of the `422 USER_NOT_PENDING` refusal from `AdminService#approveUser`. */
+export const USER_NOT_PENDING_MESSAGE = 'Only pending users can be approved';
+
+/** Message of the `422 CANNOT_DENY_SELF` refusal from `AdminService#denyUser`. */
+export const CANNOT_DENY_SELF_MESSAGE = 'You cannot deny your own account';
 
 /**
  * The admin tool's business logic: user lookup, and admin-triggered
@@ -64,20 +71,28 @@ export class AdminService {
   }
 
   /**
-   * Looks up accounts, optionally filtered by a search term.
+   * Looks up accounts, optionally filtered by a search term and/or an
+   * approval status (both combine with AND).
    * @param {string} [q] - When present, matches case-insensitively against
    *   `username` or `email`; when absent, every account is returned (no
    *   pagination, per #41's scope).
+   * @param {UserStatus} [status] - When present, only accounts in that
+   *   approval status are returned; when absent, every status is.
    * @returns {Promise<User[]>} The matching users, `passwordDigest` included
    *   (serialization to the public shape happens in the controller).
    */
-  searchUsers(q?: string): Promise<User[]> {
+  searchUsers(q?: string, status?: UserStatus): Promise<User[]> {
+    const statusCondition = status ? { status } : {};
+
     if (!q) {
-      return this.userRepository.find();
+      return status ? this.userRepository.find({ where: statusCondition }) : this.userRepository.find();
     }
 
     return this.userRepository.find({
-      where: [{ username: ILike(`%${q}%`) }, { email: ILike(`%${q}%`) }],
+      where: [
+        { username: ILike(`%${q}%`), ...statusCondition },
+        { email: ILike(`%${q}%`), ...statusCondition },
+      ],
     });
   }
 
@@ -167,6 +182,65 @@ export class AdminService {
     if (dto.newPassword) {
       await this.tokenService.revokeUserTokens(user.id, RevokedReason.ADMIN_PASSWORD_CHANGE);
     }
+
+    return this.#findUserOrThrow(userId);
+  }
+
+  /**
+   * Approves a pending account so it passes the session gate. Only a
+   * `pending` user can be approved; the write is guarded on the `pending`
+   * status so a concurrent deny can never be overwritten by an approve.
+   * The user's sessions are left untouched.
+   * @param {number} userId - The id of the user to approve.
+   * @returns {Promise<User>} The user's resulting row (`status: 'approved'`).
+   * @throws {NotFoundException} When no user matches `userId`.
+   * @throws {UnprocessableEntityException} `422 USER_NOT_PENDING` when the
+   *   user is not `pending` (nothing changes).
+   */
+  async approveUser(userId: number): Promise<User> {
+    const user = await this.#findUserOrThrow(userId);
+    const { affected } = await this.userRepository.update(
+      { id: user.id, status: UserStatus.PENDING },
+      { status: UserStatus.APPROVED },
+    );
+
+    if (!affected) {
+      throw new UnprocessableEntityException({
+        code: ErrorCodes.USER_NOT_PENDING,
+        message: USER_NOT_PENDING_MESSAGE,
+      });
+    }
+
+    return this.#findUserOrThrow(userId);
+  }
+
+  /**
+   * Denies an account from any status (a no-op on an already denied user),
+   * then revokes every one of its active refresh tokens with reason
+   * `admin_denied`, signing it out everywhere. Checks run in this order:
+   * `404`, default user `409`, self `422`.
+   * @param {number} userId - The id of the user to deny.
+   * @param {number} callerId - The calling admin's own id.
+   * @returns {Promise<User>} The user's resulting row (`status: 'denied'`).
+   * @throws {NotFoundException} When no user matches `userId`.
+   * @throws {ConflictException} `409 DEFAULT_USER_MANAGED` when `userId` is
+   *   the default user (nothing changes).
+   * @throws {UnprocessableEntityException} `422 CANNOT_DENY_SELF` when
+   *   `userId` is the caller (nothing changes).
+   */
+  async denyUser(userId: number, callerId: number): Promise<User> {
+    const user = await this.#findUserOrThrow(userId);
+    this.defaultUserService.assertNotDefaultUser(user.id);
+
+    if (user.id === callerId) {
+      throw new UnprocessableEntityException({
+        code: ErrorCodes.CANNOT_DENY_SELF,
+        message: CANNOT_DENY_SELF_MESSAGE,
+      });
+    }
+
+    await this.userRepository.update({ id: user.id }, { status: UserStatus.DENIED });
+    await this.tokenService.revokeUserTokens(user.id, RevokedReason.ADMIN_DENIED);
 
     return this.#findUserOrThrow(userId);
   }

@@ -58,7 +58,8 @@ On the existing admin users page (`frontend/assets/js/components/resources/admin
 - **Deny** action (reject a pending user, ban an approved one), behind a confirmation, since it
   is final and logs the user out everywhere.
 - **No action offered where the API would refuse it:** no deny on the admin's own row, no approve
-  on a non-pending user, no action on a `denied` user. The admin user item carries no
+  on a non-pending user, no action on a `denied` user. The admin's own row is the one whose `id`
+  equals `currentUserId` from the last `search.json` response. The admin user item carries no
   default-user marker (a read-side default-user indicator is out of scope, see
   [Default user](../../modules/auth/default-user.md#out-of-scope)), so deny is offered on the
   default user's row like any other and its `409 DEFAULT_USER_MANAGED` message is shown.

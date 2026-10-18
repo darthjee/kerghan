@@ -7,12 +7,17 @@ describe('AdminUsersHelper', () => {
     onQueryChange: jasmine.createSpy('onQueryChange'),
     onGenerateLink: jasmine.createSpy('onGenerateLink').and.returnValue(jasmine.createSpy('handler')),
     onSendEmail: jasmine.createSpy('onSendEmail').and.returnValue(jasmine.createSpy('handler')),
+    onStatusChange: jasmine.createSpy('onStatusChange'),
+    onApprove: jasmine.createSpy('onApprove').and.returnValue(jasmine.createSpy('handler')),
+    onDeny: jasmine.createSpy('onDeny').and.returnValue(jasmine.createSpy('handler')),
   });
   const buildState = (overrides = {}) => ({
     query: '',
+    status: '',
     users: [],
     rowResults: {},
     searchError: null,
+    currentUserId: null,
     ...overrides,
   });
 
@@ -25,6 +30,20 @@ describe('AdminUsersHelper', () => {
       const page = renderPage(buildState());
 
       expect(page.contains('Search by username or email')).toBeTrue();
+    });
+
+    it('renders the status filter with every option', () => {
+      const page = renderPage(buildState());
+
+      expect(page.containsTag('select')).withContext('select').toBeTrue();
+      expect(page.containsInOrder('>All<', '>Pending<', '>Approved<', '>Denied<'))
+        .withContext('options').toBeTrue();
+    });
+
+    it('selects the current status filter', () => {
+      const page = renderPage(buildState({ status: 'pending' }));
+
+      expect(page.contains('<option value="pending" selected="">')).toBeTrue();
     });
 
     it('renders the search error alert when present', () => {
@@ -49,7 +68,55 @@ describe('AdminUsersHelper', () => {
     describe('with search results', () => {
       const users = [{
         id: 1, username: 'foo', email: 'foo@example.com', isAdmin: true, createdAt: '2026-01-01',
+        status: 'pending',
       }];
+
+      it('renders the status column', () => {
+        const page = renderPage(buildState({ users }));
+
+        expect(page.containsElement('th', 'Status')).withContext('header').toBeTrue();
+        expect(page.containsElement('td', 'pending')).withContext('cell').toBeTrue();
+      });
+
+      it('renders Approve and Deny for a pending user', () => {
+        const handlers = buildHandlers();
+        const page = renderPage(buildState({ users, currentUserId: 99 }), handlers);
+
+        expect(page.containsElement('button', 'Approve')).withContext('Approve').toBeTrue();
+        expect(page.containsElement('button', 'Deny')).withContext('Deny').toBeTrue();
+        expect(handlers.onApprove).toHaveBeenCalledWith(1);
+        expect(handlers.onDeny).toHaveBeenCalledWith(1);
+      });
+
+      it('renders Deny but not Approve for an approved user', () => {
+        const page = renderPage(buildState({ users: [{ ...users[0], status: 'approved' }] }));
+
+        expect(page.containsElement('button', 'Approve')).withContext('Approve').toBeFalse();
+        expect(page.containsElement('button', 'Deny')).withContext('Deny').toBeTrue();
+      });
+
+      it('renders no review action for a denied user', () => {
+        const page = renderPage(buildState({ users: [{ ...users[0], status: 'denied' }] }));
+
+        expect(page.containsElement('button', 'Approve')).withContext('Approve').toBeFalse();
+        expect(page.containsElement('button', 'Deny')).withContext('Deny').toBeFalse();
+      });
+
+      it('hides Deny on the calling admin\'s own row', () => {
+        const page = renderPage(buildState({
+          users: [{ ...users[0], status: 'approved' }], currentUserId: 1,
+        }));
+
+        expect(page.containsElement('button', 'Deny')).toBeFalse();
+      });
+
+      it('renders a 409 / 422 review error message against the row', () => {
+        const page = renderPage(buildState({
+          users, rowResults: { 1: { error: 'The default user is managed by configuration' } },
+        }));
+
+        expect(page.contains('The default user is managed by configuration')).toBeTrue();
+      });
 
       it('renders a row per user', () => {
         const page = renderPage(buildState({ users }));

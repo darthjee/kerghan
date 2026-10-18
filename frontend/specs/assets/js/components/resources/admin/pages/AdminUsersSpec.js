@@ -14,13 +14,16 @@ describe('AdminUsers', () => {
     expect(page.contains('admin-users')).toBeTrue();
     expect(AdminUsersHelper.render).toHaveBeenCalledWith(
       {
-        query: '', users: [], rowResults: {}, searchError: null,
+        query: '', status: '', users: [], rowResults: {}, searchError: null, currentUserId: null,
       },
       jasmine.objectContaining({
         onSubmit: jasmine.any(Function),
         onQueryChange: jasmine.any(Function),
+        onStatusChange: jasmine.any(Function),
         onGenerateLink: jasmine.any(Function),
         onSendEmail: jasmine.any(Function),
+        onApprove: jasmine.any(Function),
+        onDeny: jasmine.any(Function),
       }),
     );
   });
@@ -33,7 +36,43 @@ describe('AdminUsers', () => {
     await handlers.onSubmit(fakeEvent);
 
     expect(fakeEvent.preventDefault).toHaveBeenCalled();
-    expect(AdminUsersController.prototype.handleSearch).toHaveBeenCalledWith('');
+    expect(AdminUsersController.prototype.handleSearch).toHaveBeenCalledWith('', undefined);
+  });
+
+  ['pending', 'approved', 'denied'].forEach((status) => {
+    it(`searches with the "${status}" status when the filter changes to it`, async () => {
+      spyOn(AdminUsersController.prototype, 'handleSearch').and.resolveTo();
+      const handlers = renderCapturingHandlers(AdminUsers, AdminUsersHelper);
+
+      await handlers.onStatusChange({ target: { value: status } });
+
+      expect(AdminUsersController.prototype.handleSearch).toHaveBeenCalledWith('', status);
+    });
+  });
+
+  it('searches every status when the filter changes to "all"', async () => {
+    spyOn(AdminUsersController.prototype, 'handleSearch').and.resolveTo();
+    const handlers = renderCapturingHandlers(AdminUsers, AdminUsersHelper);
+
+    await handlers.onStatusChange({ target: { value: '' } });
+
+    expect(AdminUsersController.prototype.handleSearch).toHaveBeenCalledWith('', undefined);
+  });
+
+  it('delegates approve clicks to the controller for the given user id', async () => {
+    spyOn(AdminUsersController.prototype, 'handleApprove').and.resolveTo();
+    const handlers = renderCapturingHandlers(AdminUsers, AdminUsersHelper);
+    await handlers.onApprove(42)();
+
+    expect(AdminUsersController.prototype.handleApprove).toHaveBeenCalledWith(42);
+  });
+
+  it('delegates deny clicks to the controller for the given user id', async () => {
+    spyOn(AdminUsersController.prototype, 'handleDeny').and.resolveTo();
+    const handlers = renderCapturingHandlers(AdminUsers, AdminUsersHelper);
+    await handlers.onDeny(42)();
+
+    expect(AdminUsersController.prototype.handleDeny).toHaveBeenCalledWith(42);
   });
 
   it('delegates generate-link clicks to the controller for the given user id', async () => {

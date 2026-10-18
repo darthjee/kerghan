@@ -71,10 +71,36 @@ describe('AdminController default user (e2e)', () => {
         await post(cookie, `/admin/users/${userId('darthjee')}/edit.json`, { username: 'renamed' }).expect(201);
       });
 
+      it('answers 409 to deny.json, changing nothing and revoking no token', async () => {
+        await accessCookieFor(ctx.app, 'admin');
+        const defaultUser = ctx.userRepo.rows.find((row) => row.username === 'admin') as User;
+        const statusBefore = defaultUser.status;
+
+        expectDefaultUserManagedBody(await post(cookie, `/admin/users/${defaultUser.id}/deny.json`));
+        expect(defaultUser.status).toBe(statusBefore);
+        expect(ctx.refreshTokenRepo.rows.filter((row) => row.userId === defaultUser.id)).not.toHaveLength(0);
+        expect(ctx.refreshTokenRepo.rows.filter((row) => row.revokedAt)).toEqual([]);
+      });
+
+      it('still answers 404 to deny.json for an unknown id', async () => {
+        await post(cookie, '/admin/users/9999/deny.json').expect(404);
+      });
+
+      it('still denies other users', async () => {
+        await post(cookie, `/admin/users/${userId('darthjee')}/deny.json`).expect(200);
+        expect(ctx.userRepo.rows.find((row) => row.username === 'darthjee')!.status).toBe('denied');
+      });
+
       it('still mints recovery links for other users', async () => {
         await post(cookie, `/admin/users/${userId('darthjee')}/recovery-link.json`).expect(201);
         expect(ctx.passwordResetTokenRepo.rows).toHaveLength(1);
       });
+    });
+
+    it('answers 409 (not 422) when the default user denies itself', async () => {
+      const cookie = await accessCookieFor(ctx.app, 'admin');
+
+      expectDefaultUserManagedBody(await post(cookie, `/admin/users/${userId('admin')}/deny.json`));
     });
 
     it('blocks the default user editing itself as an admin', async () => {
