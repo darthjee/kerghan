@@ -66,7 +66,8 @@ Decided by epic #366; the full definition is in
 - **What it is**: an optional user defined by environment variables (`KERGHAN_DEFAULT_USER_*`),
   created or synchronized at every boot. The environment is its source of truth, so its
   username, email, password and admin flag cannot be edited through the API (`409`), and its
-  password cannot be recovered or reset. Off by default.
+  password cannot be recovered or reset. Its approval status is managed too: always `approved`,
+  and an admin cannot deny it (`409`). Off by default.
 - **Automatic login** (optional, a second flag): a browser with no valid session is logged in
   as the default user when the frontend calls `status.json`, with a real session. It is limited
   to an IP allowlist (loopback only by default) and refuses to boot in production
@@ -76,6 +77,22 @@ Decided by epic #366; the full definition is in
   a production deployment (for example Render) is not planned.
 - **Not included**: more than one default user, removing the user when the feature is turned
   off, and changes to the demo-user seed.
+
+## User approval
+
+Decided by epic #389; the full definition is in
+[User approval](modules/auth/user-approval.md).
+
+- **What it is**: every user has a status, `pending`, `approved` or `denied`, and only approved
+  users can use Kerghan. The optional `KERGHAN_USER_APPROVAL_REQUIRED` flag (off by default)
+  makes new registrations start `pending` until an admin approves them. The flag never changes
+  existing users.
+- **Admin review**: always available, whatever the flag says. Admins filter users by status,
+  approve pending users, and deny any account except their own and the default user (reject a
+  pending user, ban an approved one). Any admin may deny another admin (an accepted risk).
+- **`denied` is final**: there is no un-deny. A denied user is logged out everywhere on the next
+  request, and is told they were denied only when logging in with the right password.
+- **Not included**: notifications, pagination of the admin listing, un-deny.
 
 ## Deferred (future, not current scope)
 

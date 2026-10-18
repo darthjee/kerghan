@@ -62,6 +62,9 @@ set). IPv6 zone ids (`fe80::1%eth0`) are malformed entries.
   email, password and admin flag.
 - **The user exists:** it overwrites the email, password and admin flag with the configured
   values.
+- **Either way,** it sets `status` to `approved` (see
+  [User approval](user-approval.md#default-user)), so a default user denied directly in the DB
+  is approved again on the next boot.
 - It records the **id** of the row it created or matched (see
   [Identifying the default user](#identifying-the-default-user)) and logs
   `default user synchronized` with that id.
@@ -103,13 +106,17 @@ blocked.
 
 - **Managed fields:** `username`, `email`, `newPassword` (the fields of `UserFieldChangesDto`;
   `hasManagedField` in `assert-any-field-present.ts`), plus the admin flag if an endpoint ever
-  edits it. This list is the single source of truth.
+  edits it. This list is the single source of truth for editable fields. The approval `status`
+  is managed too: boot sync forces it to `approved`, and `POST /admin/users/:id/deny.json`
+  answers `409 DEFAULT_USER_MANAGED` for the default user (after the `404` for an unknown id,
+  before `CANNOT_DENY_SELF`); see [User approval → Default user](user-approval.md#default-user).
 - **Endpoints:**
   - `PATCH /auth/account.json` (self-edit, `AccountService.updateAccount`);
   - `POST /admin/users/:id/edit.json` (admin edit, `AdminService.editUser`);
   - `POST /auth/recover.json` and `POST /auth/reset-password.json` (`PasswordResetService`);
   - `POST /admin/users/:id/recovery-link.json` and
     `POST /admin/users/:id/send-recovery-email.json` (`AdminService`);
+  - `POST /admin/users/:id/deny.json` (`AdminService.denyUser`, the `status` field);
   - any future write path (see [Future write paths](#future-write-paths)).
 
 A blocked write answers `409 DEFAULT_USER_MANAGED` with the message
@@ -238,8 +245,11 @@ None of these endpoints has an abuse guard, so there is no counter interaction.
 ### Future write paths
 
 - No endpoint edits `is_admin` today; only boot sync writes it.
+- `status` is written only by boot sync (forced `approved`) and by the admin approve and deny
+  routes; deny is refused for the default user, and approve never applies (it is always
+  `approved`, so approve answers `422 USER_NOT_PENDING`).
 - Any future endpoint or flow that writes a managed field of the default user (`username`,
-  `email`, the password, or the admin flag) must apply the same block (`409 DEFAULT_USER_MANAGED`,
+  `email`, the password, the admin flag, or `status`) must apply the same block (`409 DEFAULT_USER_MANAGED`,
   same message and body, before any write) while `isEnabled()` is true. The only exception is a
   public endpoint that must not reveal which user is the default one: it follows the
   `recover.json` precedent (answer as for an unknown user, do nothing).
@@ -274,7 +284,9 @@ What stays unchanged:
   An expired access token mid-session is renewed through the normal `refresh.json` flow.
 - **Logout** clears the session as usual; the next `status.json` logs in as the default user
   again.
-- **`status.json` stays passive:** it never revokes anything, on any path.
+- **`status.json` stays passive** on every automatic-login path: it never revokes anything
+  there. Its only write is revoking a denied user's still-active token (`admin_denied`), see
+  [Auth routes](../../backend/routes/auth.md#post-authstatusjson).
 
 ### Boot warning
 

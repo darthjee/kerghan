@@ -142,6 +142,17 @@ Login nav link when logged out, or a Logout action when logged in. Logging out c
 `AccountsClient.logout` (the backend clears the session cookies) and redirects home regardless of
 whether the request succeeded.
 
+**Pending approval.** When [user approval](../modules/auth/user-approval.md) applies, the
+`AuthEvents` bus also carries a `pending` flag (with `loggedIn` and `isAdmin` both `false`), set
+from `status.json`'s `status: "pending"` by `client/AuthStatus.js`. After a successful register
+or login the frontend re-checks `status.json` instead of assuming a logged-in state, and while
+pending `components/common/awaitingApproval/` replaces the app content with an awaiting-approval
+view ("Check again", "Log out", re-check on window focus, no timer polling). A
+`403 USER_DENIED` from `login.json` shows a denied message in the login modal; `ApiClient` never
+refreshes and retries on a `403`. The admin users page uses `client/AdminClient.js`'s
+`searchUsers(q, status)`, `approveUser` and `denyUser`. Details:
+[User approval → Frontend](../modules/auth/user-approval.md#frontend).
+
 ## API errors
 
 Any non-`401` failure from `client/ApiClient.js` rejects with a `client/ApiError.js`, built from

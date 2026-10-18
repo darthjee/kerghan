@@ -20,7 +20,7 @@ routing convention (`docs/agents/architecture/backend.md`):
 | `POST /auth/register.json` | `{ username, email, password }` | `{ user }` + session cookies |
 | `POST /auth/refresh.json` | — (`refresh_token` cookie; temporary `{ refreshToken? }` fallback, `TODO(#324-migration)`) | `{ user }` + session cookies; `401` clears them |
 | `DELETE /auth/logoff.json` | — (`refresh_token` cookie) | `204 No Content`, clears the session cookies |
-| `POST /auth/status.json` | — (`refresh_token` cookie) | `{ loggedIn, isAdmin }`; `loggedIn: false` clears the session cookies |
+| `POST /auth/status.json` | — (`refresh_token` cookie) | `{ loggedIn, isAdmin }`, plus `status: "pending"` for a [pending user](auth/user-approval.md); `loggedIn: false` clears the session cookies, except for a pending user |
 
 The *session cookies* (all `Secure` + `SameSite=Strict`, set/cleared only through
 `auth/auth-cookies.ts`) are the httpOnly `access_token` (`Path=/`, access-token TTL), the
@@ -44,18 +44,35 @@ default user; see [Default user](#default-user).
 
 Every route below requires the default `JwtGuard` behavior (no `@Public()`) plus `@AdminOnly()`
 (applied once at the controller level) — see "Admin authorization" below for what that enforces.
-All three are `@CachePolicy(CacheClass.Never)` (controller level), so they send
+All of them are `@CachePolicy(CacheClass.Never)` (controller level), so they send
 `X-Skip-Cache: true` and `Cache-Control: no-store`, for the same cross-caller-caching reason as
-the routes above.
+the routes above. They are always available, whatever `KERGHAN_USER_APPROVAL_REQUIRED` says.
 
 | Route | Body | Response |
 |---|---|---|
-| `POST /admin/users/search.json` | `{ q? }` | `{ users: [{ id, username, email, isAdmin, createdAt }] }` |
+| `POST /admin/users/search.json` | `{ q?, status? }` | `{ users: [{ id, username, email, isAdmin, createdAt, status }], currentUserId }` |
+| `POST /admin/users/:id/edit.json` | `{ username?, email?, newPassword? }` | `{ user }` (same item shape) |
+| `POST /admin/users/:id/approve.json` | — | `{ user }` (same item shape), status `approved` |
+| `POST /admin/users/:id/deny.json` | — | `{ user }` (same item shape), status `denied` |
 | `POST /admin/users/:id/recovery-link.json` | — | `{ resetUrl }` |
 | `POST /admin/users/:id/send-recovery-email.json` | — | `{ sent }` |
 
+An admin user item never carries the password digest, tokens or sessions.
+
 `search.json` matches `q` case-insensitively against `username`/`email` (TypeORM `ILike` on
-both, `where: [...]`); an absent/empty `q` returns every account, unpaginated. The other two
+both, `where: [...]`); an absent/empty `q` returns every account, unpaginated. `status`
+(optional, one of `pending`, `approved`, `denied`, `@IsIn` on `SearchUsersDto`; any other value
+→ `400 VALIDATION_FAILED`) filters by approval status and combines with `q` (AND). An absent
+`status` returns every status. `currentUserId` is the calling admin's own id
+(`@CurrentUser().sub`): it lets the admin page hide deny on the caller's own row, since
+`status.json` exposes no user id. It discloses nothing the admin does not already know.
+
+`approve.json` (`AdminService#approveUser`) answers `404` for an unknown id and
+`422 USER_NOT_PENDING` when the user is not `pending`. `deny.json` (`AdminService#denyUser`)
+answers `404`, then `409 DEFAULT_USER_MANAGED` for the default user, then
+`422 CANNOT_DENY_SELF` for the caller's own id. On success it revokes every active refresh
+token of the user (`admin_denied`). Full rules and rationale:
+[User approval → Admin review](auth/user-approval.md#admin-review). The other two
 routes both mint a fresh `PasswordResetToken` via `PasswordResetService#issueToken` (shared with
 self-service `recover()`) for the given `:id`, never invalidating that user's other outstanding
 tokens, and `404`s when `:id` doesn't match an account. `send-recovery-email.json` additionally
@@ -70,7 +87,7 @@ While the [default user](#default-user) feature is enabled, `POST /admin/users/:
 id), and change nothing. See
 [Edit blocking](auth/default-user.md#edit-blocking).
 
-All four routes are `@CachePolicy(CacheClass.Never)` (controller level), so they send
+All six admin routes are `@CachePolicy(CacheClass.Never)` (controller level), so they send
 `X-Skip-Cache: true` and `Cache-Control: no-store` on the response. Tent's `default_proxy` rule
 caches any 2xx `*.json` response keyed only by query string, regardless of HTTP method — since
 these POST routes carry no query string, an uncapped response could otherwise be cached after
@@ -91,7 +108,11 @@ table, the accepted residual risks and the rules future changes must keep.
 ## Entities (`auth_` table prefix)
 
 - `auth_users` (`entities/user.entity.ts`) — `id`, `username` (unique), `email` (unique),
-  `passwordDigest`, `isAdmin` (boolean, default `false`), `createdAt`, `updatedAt`.
+  `passwordDigest`, `isAdmin` (boolean, default `false`), `status` (`varchar(16)`, NOT NULL, no
+  default: one of `pending`, `approved`, `denied`, the `UserStatus` constants; always set
+  explicitly by the service that creates the row, so no implicit default can silently grant
+  access), `createdAt`, `updatedAt`. Only `approved` users pass the session gate; transitions,
+  migration backfill and seeds: [User approval → Status model](auth/user-approval.md#status-model).
 - `auth_refresh_tokens` (`entities/refresh-token.entity.ts`) — `id`, `tokenHash` (SHA-256 of the
   token, unique — the plaintext value is returned to the client once and never stored),
   `userId` (logical FK), `issuedAt`, `expiresAt`, `revokedAt`, `revokedReason` (`revoked_reason`,
@@ -142,12 +163,58 @@ rather than an edit to the seed migration's `INSERT`, since the seed migration r
   `docs/agents/environment-variables.md`. Expiry is configurable via `KERGHAN_ACCESS_TOKEN_TTL_MS` (milliseconds;
   defaults to `900000`, 15 minutes, when unset) — see `docs/agents/environment-variables.md`. Set
   as an `httpOnly` + `Secure` + `SameSite=Strict` cookie (`access_token`), whose `maxAge` is
-  driven by the same env var — never returned in the response body. The payload also carries an
-  `isAdmin` claim (`core/access-token-payload.ts`'s `AccessTokenPayload`), read straight off
-  `request.user` by the global `AdminGuard` with no per-request DB lookup — see "Admin
-  authorization" below. It is (re)issued on every login/register/refresh, so a role change (an
-  admin demotion, in particular) takes effect on that user's next refresh — and immediately for
-  anything that re-logs in — rather than instantly.
+  driven by the same env var — never returned in the response body. The payload
+  (`core/access-token-payload.ts`'s `AccessTokenPayload`) carries `sub` (the user id), `sid`,
+  `username` and `isAdmin`. **`sid`** is the `sessionUuid` of the refresh-token session the
+  token was minted for (see "Sessions" below). Every path that mints an access token sets it:
+  login, register, refresh, the winning device-authorization poll and the automatic login on
+  `status.json`. `username` and `isAdmin` are still signed into the token, but they are not
+  trusted for authorization: `request.user` comes from the database (see "Session lookup"
+  below).
+- **Session lookup (`JwtGuard`)**: on every request that is not `@Public()`, after the
+  signature and expiry check, `JwtGuard` (`core/jwt.guard.ts`) validates the claims and looks
+  the session up through Core's `SESSION_LOOKUP` token, which the Auth module implements with
+  `SessionService#findActiveSessionUser`. It allows the request only when:
+  1. an **active** (not revoked, not expired) refresh-token row has `session_uuid = sid`;
+  2. that row's `userId` equals `sub`;
+  3. the user's status is `approved` — **always**, whatever `KERGHAN_USER_APPROVAL_REQUIRED`
+     says (see [User approval](auth/user-approval.md)).
+
+  **Claim validation** runs before the query: unless `sid` is a string holding a well-formed
+  UUID and `sub` is an integer, the token is invalid. A non-string claim never reaches the
+  query. The lookup is **one indexed query** per authenticated request (`session_uuid` is
+  indexed), an in-module join of `auth_refresh_tokens` to `auth_users`. A database error
+  propagates (`500`). Rotation keeps the session valid: `refresh.json` copies `session_uuid`
+  onto the replacement token, so the `sid` keeps matching.
+
+  **Same `401` for every rejection.** No row, a `userId` mismatch, a non-approved user, and a
+  missing or malformed `sid` all throw the same `UnauthorizedException`
+  (`Invalid or expired access token`) as a bad signature or an expired token, with no
+  status-specific code. **Why:** a rejection must not be told apart from an invalid or expired
+  token, so the gate never reveals that an account is pending or denied, or that a session was
+  revoked. (A request with no `access_token` cookie at all still gets the different
+  `Missing access token` message.)
+
+  **`request.user` from the database.** After the lookup, `JwtGuard` sets `request.user` to
+  `{ sub, sid, username, isAdmin }` built from the **joined user row**, not from the JWT claims,
+  with no extra query. `AdminGuard` and `@CurrentUser()` are unchanged and always see current
+  values.
+
+  **Tokens without `sid` get `401`**, with no legacy path. This logs no one out: the session is
+  the refresh-token row, which a deploy does not touch. On a `401`, the frontend's `ApiClient`
+  refreshes (`POST /auth/refresh.json`) and retries the request once, and the refresh mints a
+  `sid`-bearing token for the same session. Device-authorization sessions use the same cookies
+  and refresh flow. Only a client that never refreshes on `401` sees a single `401` after such
+  a deploy. **Rejected alternative:** accepting `sid`-less tokens with a user-id-only lookup
+  until they expire. It would be a temporary second path to remove later, and it would let
+  those tokens skip the session-revocation check for up to one access-token TTL, for no
+  user-visible benefit.
+
+  **Immediate effects.** Because the gate checks the session and the user on every request,
+  these apply on the **next request**, not after the access-token TTL: an admin deny, logout,
+  a session revoke, revoke-others, the password-change revocations, an admin demotion (today
+  through the default-user boot sync driven by `KERGHAN_DEFAULT_USER_ADMIN`, or a manual DB
+  change) and a username change.
 - **Refresh token**: a random 48-byte hex string, set as the httpOnly `refresh_token` cookie
   (`Path=/auth`, `maxAge` = the row's `expiresAt - now`, exposed by `TokenService#issueTokens`
   as `AuthResult.refreshTokenExpiresAt`) — never returned in a response body — and persisted
@@ -176,8 +243,11 @@ rather than an edit to the seed migration's `INSERT`, since the seed migration r
 - **Revocation reasons** (`RevokedReason` in `entities/refresh-token.entity.ts`), set by every
   revocation path: `rotated` (`AuthService#refresh`), `logout` (`AuthService#logout`),
   `user_revoked` (`SessionService#revoke`/`#revokeOthers`), `password_change` (My Account),
-  `password_reset` (recovery reset), `admin_password_change` (`AdminService#editUser`) and
-  `replay_detected` (the replay response above). Only `rotated` triggers replay detection.
+  `password_reset` (recovery reset), `admin_password_change` (`AdminService#editUser`),
+  `replay_detected` (the replay response above) and `admin_denied` (`AdminService#denyUser`
+  for every active token of the user, and `refresh.json` / `status.json` for a denied user's
+  token that is still active, e.g. one minted by a rotation racing the deny). Only `rotated`
+  triggers replay detection, so `admin_denied` never does.
   `TokenService#revokeUserTokens(userId, reason, keepRefreshToken?)` takes the reason
   explicitly. Rows already revoked when the column was added were backfilled as `rotated`
   (`database/migrations/20261005120018-auth-add-refresh-tokens-revoked-reason.ts`): rotation
@@ -190,9 +260,9 @@ rather than an edit to the seed migration's `INSERT`, since the seed migration r
 - **Logout**: `DELETE /auth/logoff.json` sets `revokedAt` (reason `logout`) on the matching
   refresh token — only if it is still unrevoked, so logging out with an already-rotated token
   never overwrites its `rotated` reason — and clears all three session cookies. It reads the
-  token from the `refresh_token` cookie and answers `204` even without one. The access token itself stays valid (stateless JWT, not
-  tracked server-side) until its own expiry — logout guarantees the *refresh* path is closed,
-  not instant access-token revocation.
+  token from the `refresh_token` cookie and answers `204` even without one. Once the session is
+  revoked, its access token is refused by the session lookup on the next request, even if it
+  has not expired yet.
 - **Password change**: every successful password change revokes refresh tokens through
   `TokenService#revokeUserTokens`:
   - A password-recovery reset (`POST /auth/reset-password.json`) revokes all of the user's
@@ -205,7 +275,8 @@ rather than an edit to the seed migration's `INSERT`, since the seed migration r
     (fail safe). Username/email-only changes and failed attempts revoke nothing.
   - An admin password edit (`AdminService#editUser` with `newPassword`) revokes all of the target
     user's tokens, including the admin's own when they edit their own account.
-  - Same caveat as logout: access tokens that were already issued stay valid until they expire.
+  - As with logout, the access tokens of every revoked session are refused on their next
+    request; the kept session's access token keeps working.
 - **Sessions**: `SessionService` (`session.service.ts`) and the thin `SessionController`
   (`session.controller.ts`, default `JwtGuard`, `@CachePolicy(CacheClass.Never)`) let a user
   list their active sessions (`POST /auth/sessions/mine.json`), revoke one by its
@@ -215,12 +286,13 @@ rather than an edit to the seed migration's `INSERT`, since the seed migration r
   active tokens; every session route reads the current session from that cookie, with no body; the current session is kept by `sessionUuid`, not token hash, so a concurrent
   rotation isn't revoked). `:uuid` is validated with `ParseUUIDPipe` (any version; `400` when
   malformed). Revoked tokens get reason `user_revoked`, so their later refresh is a plain `401`
-  without replay detection. Revoking a session stops its refresh token only: its access-token
-  JWT stays valid until it expires (`KERGHAN_ACCESS_TOKEN_TTL_MS`, 15 minutes by default).
-  Every query is scoped to the caller's `userId`. See [Auth routes](../backend/routes/auth.md#sessions).
+  without replay detection. A revoked session's access token is refused on its next request
+  by the session lookup (see above), not after `KERGHAN_ACCESS_TOKEN_TTL_MS`. Every query is scoped to the caller's `userId`. See [Auth routes](../backend/routes/auth.md#sessions).
 - **Registration also logs in**: `POST /auth/register.json` issues a token pair immediately on
   success, same as login/refresh (per the issue's "issued on login/register/refresh" flow) —
-  there's no separate "register, then log in" round trip.
+  there's no separate "register, then log in" round trip. This holds for a `pending`
+  registration too: the session exists but the gate blocks it until an admin approves (see
+  [User approval](auth/user-approval.md)).
 
 ## Device-authorization flow
 
@@ -274,6 +346,16 @@ expiry (an `open` poll past its `expiresAt`) and the abuse-guard's open-cap evic
 "Hardening limits" below) — both flip an `open` row straight to `expired` without ever visiting
 `approved`.
 
+`logged → denied` covers a user who is no longer `approved` when the session would be minted
+(e.g. denied by an admin between `authorize` and `poll`, or between the claim and the mint).
+After the claim, the winning poll loads the user row and re-checks its status right before
+minting (`AuthorizationRequestService#issueSessionFor`). A non-approved user never gets a
+session: a conditional `UPDATE ... WHERE status = 'logged'` flips the request to `denied` and
+the poll answers `{ status: "denied" }`, with no `user` and no cookies. A deny that lands after
+the tokens were minted is covered by the deny's revocation and the session lookup.
+`authorize.json` itself needs no status check: it is authenticated, so the gate answers a
+non-approved caller with `401` before the endpoint runs.
+
 ### Poll-token contract
 
 Mirrors refresh-token hashing: `create` mints a random poll token, returns it once in the
@@ -311,7 +393,8 @@ from `AuthModule`, an internal collaborator only. Exact defaults/env vars are ca
 Routes (or whole controllers) requiring an admin account are annotated `@AdminOnly()`
 (`core/admin-only.decorator.ts`), enforced by the global `AdminGuard` (`core/admin.guard.ts`),
 registered as an `APP_GUARD` right after `JwtGuard`. `AdminGuard` never re-verifies the JWT — it
-just reads the `isAdmin` claim off `request.user`, already populated by `JwtGuard`. Routes
+just reads `isAdmin` off `request.user`, which `JwtGuard` builds from the session's user row in
+the database (not from the signed claim), so a demotion applies on the next request. Routes
 without `@AdminOnly()` metadata are unaffected. An unauthenticated request already gets `401`
 from `JwtGuard`; `@AdminOnly()` plus an authenticated non-admin gets `403` from `AdminGuard`.
 `@AdminOnly()` and `@Public()` on the same route are contradictory — `@Public()` skips `JwtGuard`,
@@ -339,6 +422,16 @@ client IPs. Off by default; aimed at the standalone distribution. Product decisi
 
 Full definition, including the security warnings (admin access, IP allowlist, production guard):
 [Default user and automatic login](auth/default-user.md).
+
+## User approval
+
+Every user has a `status` (`pending`, `approved` or `denied`), and only `approved` users pass
+the session gate. The optional `KERGHAN_USER_APPROVAL_REQUIRED` flag (off by default) makes new
+registrations start `pending` until an admin approves them; admins can always approve pending
+users and deny any account, and `denied` is final. Product decision: #389.
+
+Full definition, including the status-aware auth endpoints, non-disclosure rules, admin review
+and the frontend: [User approval](auth/user-approval.md).
 
 ## `user.registered` event
 
@@ -379,7 +472,13 @@ already-responded `/auth/recover.json` request.
 - `auth/tests/admin.controller.e2e-spec.ts` — e2e specs, built via the shared `buildTestApp({
   adminGuard: true, registerDefaultUser: false })` from `auth.controller.e2e-test-support.ts`,
   plus the global `JwtGuard`/`AdminGuard` pair registered as `APP_GUARD`s: unauthenticated (`401`)
-  and authenticated-non-admin (`403`) rejection on all three routes, an admin caller's documented
+  and authenticated-non-admin (`403`) rejection on every admin route, an admin caller's documented
   response shapes, `404` for an unknown user id, and `X-Skip-Cache: true` on every response.
+- `core/tests/jwt.guard.spec.ts` (unit) and `auth/tests/auth.controller.session-gate.e2e-spec.ts`
+  (e2e) — the session lookup: active session of `sub`, revoked/expired/unknown/foreign sessions,
+  missing or malformed `sid` and `sub`, rotation, `request.user` from the DB (demotion, username
+  change), immediate revocation after logoff and session revoke, and rule 3 (pending and denied
+  users blocked, a pending session let through once approved).
 - Default user and automatic login: see
   [Default user → Testing](auth/default-user.md#testing).
+- User approval: see [User approval → Testing](auth/user-approval.md#testing).

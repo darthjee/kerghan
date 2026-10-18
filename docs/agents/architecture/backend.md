@@ -144,7 +144,11 @@ reshape it into the standard error body.
 `core/jwt.guard.ts` is registered as a global `APP_GUARD` in `AppModule`, so every route requires
 a valid access token by default. Routes that must stay reachable without one (`/health.json`,
 `/ready.json`, and the Auth module's own `login.json`/`register.json`/`refresh.json`/`logoff.json`) opt out with
-`@Public()`. `JwtModule` itself is registered with `{ global: true }` in `AppModule` — without
+`@Public()`. Beyond the signature check, it is also the per-request session gate: the token's
+`sid` must name an active session of its `sub`, whose user is `approved`, looked up through
+Core's `SESSION_LOOKUP` token (implemented by the Auth module), and `request.user` is built
+from that user row — see `docs/agents/modules/auth.md`'s "JWT/refresh-token flow".
+`JwtModule` itself is registered with `{ global: true }` in `AppModule` — without
 that, only modules that import `JwtModule` directly (not just `AuthModule`) can inject
 `JwtService`, which broke `AuthService`'s constructor resolution the first time this was wired up.
 
@@ -156,7 +160,8 @@ already being populated by `JwtGuard`). It is a no-op unless the route (or contr
 annotated `@AdminOnly()` (`core/admin-only.decorator.ts`), in which case it requires
 `request.user.isAdmin === true`, throwing `403 Forbidden` otherwise — it never re-verifies the
 JWT itself. See `docs/agents/modules/auth.md`'s "Admin authorization" section for the
-`isAdmin` claim/provisioning details.
+`isAdmin` provisioning details (`request.user.isAdmin` comes from the database, not the JWT
+claim).
 
 ## Error responses
 
