@@ -128,6 +128,76 @@ describe('AdminController (e2e)', () => {
         expect(response.body.users).toHaveLength(1);
         expect(response.body.users[0]).toEqual(expect.objectContaining({ username: 'darthjee' }));
       });
+
+      describe('with a status filter', () => {
+        beforeEach(() => {
+          ctx.userRepo.rows.find((row) => row.id === targetUserId)!.status = 'pending';
+        });
+
+        it('returns only users in that status', async () => {
+          const response = await request(ctx.app.getHttpServer())
+            .post('/admin/users/search.json')
+            .set('Cookie', [adminCookie])
+            .send({ status: 'pending' })
+            .expect(201);
+
+          expect(response.body.users).toEqual([
+            expect.objectContaining({ id: targetUserId, status: 'pending' }),
+          ]);
+        });
+
+        it('combines the status filter with q (AND)', async () => {
+          const matching = await request(ctx.app.getHttpServer())
+            .post('/admin/users/search.json')
+            .set('Cookie', [adminCookie])
+            .send({ q: 'darth', status: 'pending' })
+            .expect(201);
+          const notMatching = await request(ctx.app.getHttpServer())
+            .post('/admin/users/search.json')
+            .set('Cookie', [adminCookie])
+            .send({ q: 'obi', status: 'pending' })
+            .expect(201);
+
+          expect(matching.body.users).toEqual([expect.objectContaining({ username: 'darthjee' })]);
+          expect(notMatching.body.users).toEqual([]);
+        });
+      });
+
+      it('rejects an unknown status with 400 VALIDATION_FAILED', async () => {
+        const response = await request(ctx.app.getHttpServer())
+          .post('/admin/users/search.json')
+          .set('Cookie', [adminCookie])
+          .send({ status: 'banned' });
+
+        expect(response.status).toBe(400);
+        expect(response.body.error.code).toBe(ErrorCodes.VALIDATION_FAILED);
+      });
+
+      describe('the response shape', () => {
+        let response: request.Response;
+
+        beforeEach(async () => {
+          response = await request(ctx.app.getHttpServer())
+            .post('/admin/users/search.json')
+            .set('Cookie', [adminCookie])
+            .send({})
+            .expect(201);
+        });
+
+        it('carries each user\'s status and no secret fields', () => {
+          response.body.users.forEach((user: Record<string, unknown>) => {
+            expect(Object.keys(user).sort()).toEqual(
+              ['createdAt', 'email', 'id', 'isAdmin', 'status', 'username'],
+            );
+          });
+        });
+
+        it('returns the calling admin\'s id as currentUserId', () => {
+          const adminRow = ctx.userRepo.rows.find((row) => row.username === 'obi-wan')!;
+
+          expect(response.body.currentUserId).toBe(adminRow.id);
+        });
+      });
     });
 
     describe('POST /admin/users/:id/recovery-link.json', () => {
@@ -212,6 +282,7 @@ describe('AdminController (e2e)', () => {
               email: 'darthjee-renamed@example.com',
               isAdmin: false,
               createdAt: expect.any(String),
+              status: 'approved',
             }),
           });
         });

@@ -82,6 +82,31 @@ describe('AdminService', () => {
         });
       });
     });
+
+    describe('when only a status is given', () => {
+      it('filters by that status', async () => {
+        const users = [{ id: 1, status: 'pending' } as User];
+        userRepository.find.mockResolvedValue(users);
+
+        await expect(service.searchUsers(undefined, 'pending')).resolves.toBe(users);
+        expect(userRepository.find).toHaveBeenCalledWith({ where: { status: 'pending' } });
+      });
+    });
+
+    describe('when both a query and a status are given', () => {
+      it('ANDs the status into every username/email branch', async () => {
+        userRepository.find.mockResolvedValue([]);
+
+        await service.searchUsers('darth', 'denied');
+
+        expect(userRepository.find).toHaveBeenCalledWith({
+          where: [
+            { username: ILike('%darth%'), status: 'denied' },
+            { email: ILike('%darth%'), status: 'denied' },
+          ],
+        });
+      });
+    });
   });
 
   describe('generateRecoveryLink', () => {

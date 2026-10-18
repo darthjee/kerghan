@@ -6,7 +6,7 @@ import { AuthService } from './auth.service.js';
 import { DefaultUserService } from './default-user.service.js';
 import { AdminUpdateUserDto } from './dto/admin-update-user.dto.js';
 import { RevokedReason } from './entities/refresh-token.entity.js';
-import { User } from './entities/user.entity.js';
+import { User, UserStatus } from './entities/user.entity.js';
 import { PasswordResetService } from './password-reset.service.js';
 import { TokenService } from './token.service.js';
 import { UserUpdateService } from './user-update.service.js';
@@ -64,20 +64,28 @@ export class AdminService {
   }
 
   /**
-   * Looks up accounts, optionally filtered by a search term.
+   * Looks up accounts, optionally filtered by a search term and/or an
+   * approval status (both combine with AND).
    * @param {string} [q] - When present, matches case-insensitively against
    *   `username` or `email`; when absent, every account is returned (no
    *   pagination, per #41's scope).
+   * @param {UserStatus} [status] - When present, only accounts in that
+   *   approval status are returned; when absent, every status is.
    * @returns {Promise<User[]>} The matching users, `passwordDigest` included
    *   (serialization to the public shape happens in the controller).
    */
-  searchUsers(q?: string): Promise<User[]> {
+  searchUsers(q?: string, status?: UserStatus): Promise<User[]> {
+    const statusCondition = status ? { status } : {};
+
     if (!q) {
-      return this.userRepository.find();
+      return status ? this.userRepository.find({ where: statusCondition }) : this.userRepository.find();
     }
 
     return this.userRepository.find({
-      where: [{ username: ILike(`%${q}%`) }, { email: ILike(`%${q}%`) }],
+      where: [
+        { username: ILike(`%${q}%`), ...statusCondition },
+        { email: ILike(`%${q}%`), ...statusCondition },
+      ],
     });
   }
 
