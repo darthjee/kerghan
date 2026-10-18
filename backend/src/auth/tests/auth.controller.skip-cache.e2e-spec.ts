@@ -47,5 +47,20 @@ describe('AuthController (e2e)', () => {
       expect(response.headers['x-skip-cache']).toBe('true');
       expect(response.headers['cache-control']).toBe('no-store');
     });
+
+    it('is set on the status response answering a pending user', async () => {
+      const login = await loginAs(ctx.app);
+
+      ctx.userRepo.rows[0].status = 'pending';
+
+      const response = await request(ctx.app.getHttpServer())
+        .post('/auth/status.json')
+        .set('Cookie', [refreshCookie(login)])
+        .expect(201);
+
+      expect(response.body).toEqual({ loggedIn: false, isAdmin: false, status: 'pending' });
+      expect(response.headers['x-skip-cache']).toBe('true');
+      expect(response.headers['cache-control']).toBe('no-store');
+    });
   });
 });
