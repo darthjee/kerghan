@@ -3,7 +3,9 @@ import type { Request } from 'express';
 import type { AccessTokenPayload } from './access-token-payload.js';
 
 /**
- * Reads the authenticated user off the request, populated by `JwtGuard`.
+ * Reads the authenticated user off the request, populated by `JwtGuard`
+ * from the session's current user row (`{ sub, sid, username, isAdmin }`;
+ * `username`/`isAdmin` are current DB values, not the JWT's claims).
  * Exported separately from the `@CurrentUser()` decorator itself so the
  * unit spec can call it directly, without booting a full Nest pipeline.
  * On protected routes `JwtGuard` already guarantees `request.user` is set
@@ -12,7 +14,7 @@ import type { AccessTokenPayload } from './access-token-payload.js';
  * caller never gets a silent `undefined` instead of a clear failure.
  * @param {unknown} _data - Unused; required by `createParamDecorator`'s signature.
  * @param {ExecutionContext} context - The current execution context.
- * @returns {AccessTokenPayload} The authenticated user's token payload.
+ * @returns {AccessTokenPayload} The authenticated user.
  */
 export const getCurrentUser = (_data: unknown, context: ExecutionContext): AccessTokenPayload => {
   const request = context.switchToHttp().getRequest<Request>();

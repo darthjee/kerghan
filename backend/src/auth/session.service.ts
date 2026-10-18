@@ -1,7 +1,9 @@
 import { Injectable, NotFoundException, UnauthorizedException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { IsNull, MoreThan, Not, Repository } from 'typeorm';
+import { SessionLookup, SessionUser } from '../core/session-lookup.js';
 import { RefreshToken, RevokedReason } from './entities/refresh-token.entity.js';
+import { User } from './entities/user.entity.js';
 import { TokenService } from './token.service.js';
 
 /**
@@ -22,25 +24,57 @@ export interface ActiveSession {
  * refresh tokens sharing a `sessionUuid`; since rotation revokes the
  * presented token, an active session is exactly one non-revoked, unexpired
  * `auth_refresh_tokens` row. Every query is scoped to the caller's `userId`,
- * so another user's session is indistinguishable from a missing one. Not
- * exported from `AuthModule` — an internal collaborator only. Depends only on
- * injected repositories/services — never reads env vars or global state.
+ * so another user's session is indistinguishable from a missing one.
+ *
+ * Also implements Core's `SessionLookup` (`findActiveSessionUser`), which
+ * `JwtGuard` uses on every authenticated request; `AuthModule` exports it
+ * only under the `SESSION_LOOKUP` token, never as `SessionService` itself.
+ * Depends only on injected repositories/services — never reads env vars or
+ * global state.
  */
 @Injectable()
-export class SessionService {
+export class SessionService implements SessionLookup {
   private readonly refreshTokenRepository: Repository<RefreshToken>;
   private readonly tokenService: TokenService;
+  private readonly userRepository: Repository<User>;
 
   /**
    * @param {Repository<RefreshToken>} refreshTokenRepository - The refresh-token repository.
    * @param {TokenService} tokenService - Hashes presented tokens.
+   * @param {Repository<User>} userRepository - The user repository, joined
+   *   to the session row by `findActiveSessionUser`.
    */
   constructor(
     @InjectRepository(RefreshToken) refreshTokenRepository: Repository<RefreshToken>,
       tokenService: TokenService,
+    @InjectRepository(User) userRepository: Repository<User>,
   ) {
     this.refreshTokenRepository = refreshTokenRepository;
     this.tokenService = tokenService;
+    this.userRepository = userRepository;
+  }
+
+  /**
+   * Loads the user of the active (non-revoked, unexpired) session `sid`, in
+   * one query over the indexed `session_uuid` joined to `auth_users` on the
+   * row's `user_id` (an in-module join: both tables belong to Auth). Since
+   * the join is on `user_id`, the returned `id` is the session row's
+   * `userId`. A database error propagates.
+   * @param {string} sid - The session UUID (the access token's `sid` claim).
+   * @returns {Promise<SessionUser | null>} The session's user, or `null`
+   *   when no active session has that UUID.
+   */
+  async findActiveSessionUser(sid: string): Promise<SessionUser | null> {
+    const user = await this.userRepository
+      .createQueryBuilder('user')
+      .innerJoin(RefreshToken, 'session', 'session.userId = user.id')
+      .select(['user.id', 'user.username', 'user.isAdmin'])
+      .where('session.sessionUuid = :sid', { sid })
+      .andWhere('session.revokedAt IS NULL')
+      .andWhere('session.expiresAt > :now', { now: new Date() })
+      .getOne();
+
+    return user ? { id: user.id, username: user.username, isAdmin: user.isAdmin } : null;
   }
 
   /**
@@ -71,8 +105,9 @@ export class SessionService {
   /**
    * Revokes one of the user's sessions (its unrevoked token, reason
    * `user_revoked`). Revoking the current session is allowed and behaves
-   * like a logoff. Only the refresh token is revoked: the session's
-   * already-issued access-token JWT stays valid until it expires.
+   * like a logoff. Revoking the session's refresh token also ends its
+   * access tokens: `JwtGuard` rejects any token whose session is no longer
+   * active.
    * @param {number} userId - The caller's own user ID.
    * @param {string} sessionUuid - The session to revoke.
    * @returns {Promise<void>} Resolves once the session is revoked.

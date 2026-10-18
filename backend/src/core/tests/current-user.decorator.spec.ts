@@ -12,7 +12,7 @@ function contextFor(request: Record<string, unknown>): ExecutionContext {
 
 describe('getCurrentUser', () => {
   describe('when the request has an authenticated user', () => {
-    const user: AccessTokenPayload = { sub: 1, username: 'darthjee', isAdmin: false };
+    const user: AccessTokenPayload = { sub: 1, sid: '1b4e28ba-2fa1-4d2e-8f3a-9c1d2e3f4a5b', username: 'darthjee', isAdmin: false };
 
     it('returns the user unchanged', () => {
       expect(getCurrentUser(undefined, contextFor({ user }))).toBe(user);
