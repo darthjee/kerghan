@@ -231,7 +231,7 @@ describe('AuthController', () => {
       };
       const controller = buildController({ accountService });
       const dto = { currentPassword: 'my-password', username: 'new-username' };
-      const currentUser = { sub: 1, username: 'darthjee', isAdmin: false };
+      const currentUser = { sub: 1, sid: '1b4e28ba-2fa1-4d2e-8f3a-9c1d2e3f4a5b', username: 'darthjee', isAdmin: false };
 
       const result = await controller.updateAccount(dto, currentUser, requestWith({ refresh_token: 'cookie-token' }));
 
@@ -244,7 +244,7 @@ describe('AuthController', () => {
       const controller = buildController({ accountService });
       const dto = { currentPassword: 'my-password', newPassword: 'new-password' };
 
-      await controller.updateAccount(dto, { sub: 1, username: 'darthjee', isAdmin: false }, requestWith());
+      await controller.updateAccount(dto, { sub: 1, sid: '1b4e28ba-2fa1-4d2e-8f3a-9c1d2e3f4a5b', username: 'darthjee', isAdmin: false }, requestWith());
 
       expect(accountService.updateAccount).toHaveBeenCalledWith(1, dto, undefined);
     });
