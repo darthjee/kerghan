@@ -1,4 +1,4 @@
-import { Body, Controller, Param, ParseIntPipe, Post } from '@nestjs/common';
+import { Body, Controller, HttpCode, HttpStatus, Param, ParseIntPipe, Post } from '@nestjs/common';
 import { AdminService } from './admin.service.js';
 import { AdminUpdateUserDto } from './dto/admin-update-user.dto.js';
 import { SearchUsersDto } from './dto/search-users.dto.js';
@@ -10,7 +10,8 @@ import { CachePolicy } from '../core/cache-policy.decorator.js';
 import { CurrentUser } from '../core/current-user.decorator.js';
 
 /**
- * Admin-only routes for #41's user-lookup/password-recovery tool — thin,
+ * Admin-only routes for #41's user-lookup/password-recovery tool and #393's
+ * user approval review (approve / deny) — thin,
  * delegating all business logic to `AdminService`. Every route requires the
  * default `JwtGuard` behavior (no `@Public()`) plus `@AdminOnly()`, applied
  * once at the controller level since every route here needs it. `@CachePolicy(CacheClass.Never)`
@@ -29,6 +30,37 @@ export class AdminController {
    */
   constructor(adminService: AdminService) {
     this.adminService = adminService;
+  }
+
+  /**
+   * `POST /admin/users/:id/approve.json`. Approves a `pending` account.
+   * @param {number} id - The id of the user to approve.
+   * @returns {Promise<object>} `{ user: { id, username, email, isAdmin, createdAt, status } }`.
+   */
+  @Post('users/:id/approve.json')
+  @HttpCode(HttpStatus.OK)
+  async approve(@Param('id', ParseIntPipe) id: number): Promise<object> {
+    const user = await this.adminService.approveUser(id);
+
+    return { user: this.#serializeUser(user) };
+  }
+
+  /**
+   * `POST /admin/users/:id/deny.json`. Denies an account from any status and
+   * signs it out everywhere.
+   * @param {number} id - The id of the user to deny.
+   * @param {AccessTokenPayload} currentUser - The calling admin, who may not deny themselves.
+   * @returns {Promise<object>} `{ user: { id, username, email, isAdmin, createdAt, status } }`.
+   */
+  @Post('users/:id/deny.json')
+  @HttpCode(HttpStatus.OK)
+  async deny(
+    @Param('id', ParseIntPipe) id: number,
+      @CurrentUser() currentUser: AccessTokenPayload,
+  ): Promise<object> {
+    const user = await this.adminService.denyUser(id, currentUser.sub);
+
+    return { user: this.#serializeUser(user) };
   }
 
   /**
