@@ -88,6 +88,7 @@ services:
       - KERGHAN_GITHUB_APP_PRIVATE_KEY
       - KERGHAN_PREVIOUS_SECRET_KEYS
       - KERGHAN_PREVIOUS_INTEGRATIONS_KEYS
+      - KERGHAN_USER_APPROVAL_REQUIRED
       # Default user. The kerghan client generates ENABLED, USERNAME, EMAIL,
       # PASSWORD and ADMIN in kerghan.env on a new installation, and passes
       # ALWAYS_AUTHENTICATED and ALLOWED_IPS with -e on every up.
