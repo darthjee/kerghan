@@ -1,6 +1,7 @@
 import AccountsClient from '../../../../client/AccountsClient.js';
 import AuthSession from '../../../../client/AuthSession.js';
 import AuthEvents from '../../../../client/AuthEvents.js';
+import AuthStatus from '../../../../client/AuthStatus.js';
 import LoginModalEvents from '../../../../client/LoginModalEvents.js';
 import { redirectHome } from '../../../../utils/routing/redirects.js';
 
@@ -93,7 +94,8 @@ export default class HeaderController {
    * Skips the network call entirely when the `logged_in` hint cookie is absent — that is
    * unambiguously "logged out". When the backend reports the session is no longer active, it
    * clears the cookies itself, so no client-side clearing is needed. A `status: "pending"` answer
-   * (account awaiting an administrator's approval) is announced as `pending: true`.
+   * (account awaiting an administrator's approval) is announced as `pending: true`, via
+   * {@link AuthStatus.refresh}.
    *
    * @returns {Promise<void>} Resolves once the status check finishes.
    */
@@ -105,8 +107,6 @@ export default class HeaderController {
       return;
     }
 
-    const { loggedIn, isAdmin, status } = await this.client.status();
-
-    AuthEvents.emit(loggedIn, isAdmin, status === 'pending');
+    await AuthStatus.refresh(this.client);
   }
 }

@@ -34,9 +34,10 @@ describe('LoginModalController', () => {
     setResultPanel = jasmine.createSpy('setResultPanel');
     setDeviceExpiresAt = jasmine.createSpy('setDeviceExpiresAt');
     client = jasmine.createSpyObj('client', [
-      'login', 'register', 'recover', 'resetPassword',
+      'login', 'register', 'status', 'recover', 'resetPassword',
       'createAuthorizationRequest', 'pollAuthorizationRequest',
     ]);
+    client.status.and.resolveTo({ loggedIn: true, isAdmin: true });
     spyOn(AuthEvents, 'emit');
     spyOn(LoginModalEvents, 'close');
     installFakeWindow({ location: { hash: '' } });
@@ -100,7 +101,7 @@ describe('LoginModalController', () => {
 
       expect(setSubmitError).toHaveBeenCalledWith(null);
       expect(client.login).toHaveBeenCalledWith(passwordFields);
-      expect(AuthEvents.emit).toHaveBeenCalledOnceWith(true, true);
+      expect(AuthEvents.emit).toHaveBeenCalledOnceWith(true, true, false);
       expect(LoginModalEvents.close).toHaveBeenCalledTimes(1);
       expect(globalThis.window.location.hash).toBe('/');
     });
@@ -120,7 +121,7 @@ describe('LoginModalController', () => {
       await build().handleSubmit('bogus', passwordFields);
 
       expect(client.login).toHaveBeenCalledWith(passwordFields);
-      expect(AuthEvents.emit).toHaveBeenCalledOnceWith(true, false);
+      expect(AuthEvents.emit).toHaveBeenCalledOnceWith(true, true, false);
       expect(LoginModalEvents.close).toHaveBeenCalledTimes(1);
     });
   });
@@ -140,7 +141,7 @@ describe('LoginModalController', () => {
 
       expect(setFieldErrors).toHaveBeenCalledWith({});
       expect(client.register).toHaveBeenCalledWith(registerFields);
-      expect(AuthEvents.emit).toHaveBeenCalledOnceWith(true, false);
+      expect(AuthEvents.emit).toHaveBeenCalledOnceWith(true, true, false);
       expect(LoginModalEvents.close).toHaveBeenCalledTimes(1);
       expect(globalThis.window.location.hash).toBe('/');
     });
@@ -262,7 +263,7 @@ describe('LoginModalController', () => {
       jasmine.clock().tick(5000);
       await flush();
 
-      expect(AuthEvents.emit).toHaveBeenCalledOnceWith(true, true);
+      expect(AuthEvents.emit).toHaveBeenCalledOnceWith(true, true, false);
       expect(LoginModalEvents.close).toHaveBeenCalledTimes(1);
       expect(globalThis.window.location.hash).toBe('/');
     });
@@ -284,8 +285,7 @@ describe('LoginModalController', () => {
 
     it('shows the notFound panel and stops the poller on a 404', async () => {
       client.createAuthorizationRequest.and.resolveTo(request);
-      const error = new Error('not found');
-      error.status = 404;
+      const error = Object.assign(new Error('not found'), { status: 404 });
       client.pollAuthorizationRequest.and.rejectWith(error);
       const controller = build();
 

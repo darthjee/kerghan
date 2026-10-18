@@ -1,5 +1,5 @@
 import AccountsClient from '../../../../client/AccountsClient.js';
-import AuthEvents from '../../../../client/AuthEvents.js';
+import AuthStatus from '../../../../client/AuthStatus.js';
 import LoginModalEvents from '../../../../client/LoginModalEvents.js';
 import AuthorizationRequestPoller from '../../../../utils/polling/AuthorizationRequestPoller.js';
 import { validateRegistration, validateResetPassword } from '../../../../utils/validation/formValidators.js';
@@ -140,7 +140,8 @@ export default class LoginModalController {
     this.setSubmitError(null);
 
     try {
-      this.#handleSuccess(await this.client.login(fields));
+      await this.client.login(fields);
+      await this.#handleSuccess();
     } catch (error) {
       this.setSubmitError(error.message);
     }
@@ -168,7 +169,8 @@ export default class LoginModalController {
     this.setSubmitError(null);
 
     try {
-      this.#handleSuccess(await this.client.register(fields));
+      await this.client.register(fields);
+      await this.#handleSuccess();
     } catch (error) {
       this.setSubmitError(error.message);
     }
@@ -251,7 +253,7 @@ export default class LoginModalController {
 
     this.poller = new AuthorizationRequestPoller({
       uuid, pollToken, expiresAt, client: this.client,
-      onApproved: (result) => this.#handleSuccess(result),
+      onApproved: () => this.#handleSuccess().catch((error) => this.setSubmitError(error.message)),
       onRejected: (status) => this.#handleDeviceRejection(status),
     });
     this.poller.start();
@@ -270,16 +272,15 @@ export default class LoginModalController {
   }
 
   /**
-   * Shared success path for Password / Register / approved-device flows: the refresh token is
-   * already persisted by the `AccountsClient` call, so announce the new logged-in auth state,
-   * close the modal, and redirect home.
+   * Shared success path for Password / Register / approved-device flows: the session cookies are
+   * already set by the `AccountsClient` call, so re-check `status.json` via
+   * {@link AuthStatus.refresh} (announcing the logged-in or awaiting-approval state from its
+   * answer), close the modal, and redirect home.
    *
-   * @param {{user: {isAdmin: boolean}}} result - The successful login/register/approval
-   *   response.
-   * @returns {void} Nothing.
+   * @returns {Promise<void>} Resolves once the status re-check finishes.
    */
-  #handleSuccess(result) {
-    AuthEvents.emit(true, result.user.isAdmin);
+  async #handleSuccess() {
+    await AuthStatus.refresh(this.client);
     LoginModalEvents.close();
     redirectHome();
   }
