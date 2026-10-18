@@ -1,4 +1,4 @@
-import { BadRequestException, ConflictException, HttpException, UnauthorizedException } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException, HttpException, UnauthorizedException } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import bcrypt from 'bcryptjs';
 import { IsNull } from 'typeorm';
@@ -19,6 +19,7 @@ describe('AuthService', () => {
     issueTokens: jest.Mock;
     hashToken: jest.Mock;
     revokeUserTokens: jest.Mock;
+    revokeToken: jest.Mock;
     findActiveToken: jest.Mock;
   };
   let eventEmitter: { emit: jest.Mock };
@@ -73,6 +74,7 @@ describe('AuthService', () => {
       })),
       hashToken: jest.fn((token: string) => `hashed:${token}`),
       revokeUserTokens: jest.fn().mockResolvedValue(undefined),
+      revokeToken: jest.fn().mockResolvedValue(undefined),
       findActiveToken: jest.fn().mockResolvedValue(null),
     };
     eventEmitter = { emit: jest.fn() };
@@ -131,6 +133,40 @@ describe('AuthService', () => {
         await service.login({ username: 'darthjee', password: 'correct-password', keepSignedIn: true });
 
         expect(tokenService.issueTokens).toHaveBeenCalledWith(user, true);
+      });
+    });
+
+    describe('when the user is pending and the password matches', () => {
+      it('mints a session as usual', async () => {
+        userRepository.findOneBy.mockResolvedValue({ ...user, status: 'pending' });
+
+        const result = await service.login({ username: 'darthjee', password: 'correct-password' });
+
+        expect(result.accessToken).toBe('signed-access-token');
+        expect(tokenService.issueTokens).toHaveBeenCalled();
+      });
+    });
+
+    describe('when the user is denied', () => {
+      beforeEach(() => {
+        userRepository.findOneBy.mockResolvedValue({ ...user, status: 'denied' });
+      });
+
+      it('rejects the right password with 403 USER_DENIED and mints nothing', async () => {
+        const error = await service.login({ username: 'darthjee', password: 'correct-password' }).catch((e: unknown) => e);
+
+        expect(error).toBeInstanceOf(ForbiddenException);
+        expect((error as ForbiddenException).getResponse()).toEqual({
+          code: ErrorCodes.USER_DENIED,
+          message: 'This account has been denied access',
+        });
+        expect(tokenService.issueTokens).not.toHaveBeenCalled();
+      });
+
+      it('rejects a wrong password with the usual 401', async () => {
+        await expect(service.login({ username: 'darthjee', password: 'wrong-password' }))
+          .rejects.toThrow(UnauthorizedException);
+        expect(tokenService.issueTokens).not.toHaveBeenCalled();
       });
     });
 
@@ -372,6 +408,52 @@ describe('AuthService', () => {
       });
     });
 
+    describe('when the refresh token belongs to a pending user', () => {
+      it('rotates as usual', async () => {
+        refreshTokenRepository.findOneBy.mockResolvedValue(activeToken);
+        userRepository.findOneBy.mockResolvedValue({ ...user, status: 'pending' });
+
+        await service.refresh('a-refresh-token');
+
+        expect(tokenService.issueTokens).toHaveBeenCalledWith(expect.objectContaining({ id: 1 }), false, activeSession);
+        expect(tokenService.revokeToken).not.toHaveBeenCalled();
+      });
+    });
+
+    describe('when the refresh token belongs to a denied user', () => {
+      beforeEach(() => {
+        refreshTokenRepository.findOneBy.mockResolvedValue(activeToken);
+        userRepository.findOneBy.mockResolvedValue({ ...user, status: 'denied' });
+      });
+
+      it('revokes the presented token as admin_denied and rejects with the plain 401', async () => {
+        await expect(service.refresh('a-refresh-token'))
+          .rejects.toThrow(new UnauthorizedException('Invalid or expired refresh token'));
+
+        expect(tokenService.revokeToken).toHaveBeenCalledWith(10, 'admin_denied');
+        expect(tokenService.issueTokens).not.toHaveBeenCalled();
+        expect(refreshTokenRepository.update).not.toHaveBeenCalled();
+      });
+
+      it('does not trigger replay detection', async () => {
+        await service.refresh('a-refresh-token').catch(() => undefined);
+
+        expect(tokenService.revokeUserTokens).not.toHaveBeenCalled();
+      });
+    });
+
+    describe('when a rotated token of a denied user is replayed', () => {
+      it('still triggers replay detection', async () => {
+        stubRevokedRefreshToken('rotated');
+        userRepository.findOneBy.mockResolvedValue({ ...user, status: 'denied' });
+
+        await expect(service.refresh('a-refresh-token')).rejects.toThrow(UnauthorizedException);
+
+        expect(tokenService.revokeUserTokens).toHaveBeenCalledWith(1, 'replay_detected');
+        expect(tokenService.revokeToken).not.toHaveBeenCalled();
+      });
+    });
+
     describe('when the token is revoked concurrently before the rotation write', () => {
       beforeEach(() => {
         refreshTokenRepository.findOneBy.mockResolvedValue(activeToken);
@@ -595,6 +677,53 @@ describe('AuthService', () => {
         await service.status('a-refresh-token');
 
         expectNothingRevoked();
+      });
+    });
+
+    describe('when the active token belongs to a pending user', () => {
+      beforeEach(() => {
+        tokenService.findActiveToken.mockResolvedValue(activeToken);
+        userRepository.findOneBy.mockResolvedValue({ ...user, status: 'pending' });
+        defaultUserService.autoLogin.mockResolvedValue(autoSession);
+      });
+
+      it('resolves with loggedIn: false and status: pending, never logging in automatically', async () => {
+        await expect(service.status('a-refresh-token', '127.0.0.1'))
+          .resolves.toEqual({ loggedIn: false, isAdmin: false, status: 'pending' });
+        expect(defaultUserService.autoLogin).not.toHaveBeenCalled();
+      });
+
+      it('does not mutate anything', async () => {
+        await service.status('a-refresh-token');
+
+        expectNothingRevoked();
+        expect(tokenService.revokeToken).not.toHaveBeenCalled();
+      });
+    });
+
+    describe('when the active token belongs to a denied user', () => {
+      beforeEach(() => {
+        tokenService.findActiveToken.mockResolvedValue(activeToken);
+        userRepository.findOneBy.mockResolvedValue({ ...user, status: 'denied' });
+      });
+
+      it('revokes the presented token as admin_denied', async () => {
+        await service.status('a-refresh-token', '127.0.0.1');
+
+        expect(tokenService.revokeToken).toHaveBeenCalledWith(10, 'admin_denied');
+      });
+
+      it('answers like an anonymous caller when automatic login does not apply', async () => {
+        await expect(service.status('a-refresh-token', '127.0.0.1'))
+          .resolves.toEqual({ loggedIn: false, isAdmin: false });
+        expect(defaultUserService.autoLogin).toHaveBeenCalledWith('127.0.0.1');
+      });
+
+      it('falls through to automatic login when it applies', async () => {
+        defaultUserService.autoLogin.mockResolvedValue(autoSession);
+
+        await expect(service.status('a-refresh-token', '127.0.0.1'))
+          .resolves.toEqual({ loggedIn: true, isAdmin: true, session: autoSession });
       });
     });
 

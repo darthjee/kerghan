@@ -1,6 +1,6 @@
 import request from 'supertest';
 import { loginAs, useTestApp } from './auth.controller.e2e-test-support.js';
-import { findSetCookie } from './support/auth-requests.js';
+import { findSetCookie, setCookieHeaders } from './support/auth-requests.js';
 import { expectErrorBody } from './support/error-body.js';
 import { ErrorCodes } from '../../core/error-codes.js';
 
@@ -149,6 +149,46 @@ describe('AuthController (e2e)', () => {
       const cookie = findSetCookie(response, 'access_token');
 
       expect(cookie).toMatch(/Max-Age=900\b/);
+    });
+  });
+
+  describe('login by user status', () => {
+    function setStatus(status: 'pending' | 'denied'): void {
+      ctx.userRepo.rows[0].status = status;
+    }
+
+    it('answers a denied user\'s wrong password with the usual 401', async () => {
+      setStatus('denied');
+
+      expectErrorBody(await loginAs(ctx.app, 'darthjee', 'wrong-password'), {
+        status: 401,
+        code: ErrorCodes.UNAUTHORIZED,
+        message: 'Invalid username or password',
+      });
+    });
+
+    it('answers a denied user\'s right password with 403 USER_DENIED and no cookies', async () => {
+      setStatus('denied');
+
+      const response = await loginAs(ctx.app);
+
+      expectErrorBody(response, {
+        status: 403,
+        code: ErrorCodes.USER_DENIED,
+        message: 'This account has been denied access',
+      });
+      expect(setCookieHeaders(response)).toEqual([]);
+    });
+
+    it('logs a pending user in normally, with session cookies', async () => {
+      setStatus('pending');
+
+      const response = await loginAs(ctx.app).expect(201);
+
+      expect(response.body.user).toEqual(expect.objectContaining({ username: 'darthjee' }));
+      expect(response.body.user).not.toHaveProperty('status');
+      expect(findSetCookie(response, 'access_token')).toBeDefined();
+      expect(findSetCookie(response, 'refresh_token')).toBeDefined();
     });
   });
 });

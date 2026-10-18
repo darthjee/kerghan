@@ -300,6 +300,17 @@ describe('TokenService', () => {
     });
   });
 
+  describe('revokeToken', () => {
+    it('revokes the row by id, only while it is still unrevoked', async () => {
+      await service.revokeToken(10, 'admin_denied');
+
+      expect(refreshTokenRepository.update).toHaveBeenCalledWith(
+        { id: 10, revokedAt: IsNull() },
+        { revokedAt: expect.any(Date), revokedReason: 'admin_denied' },
+      );
+    });
+  });
+
   describe('revokeUserTokens', () => {
     it('revokes every unrevoked token of the user when no keep token is given', async () => {
       await service.revokeUserTokens(7, 'logout');

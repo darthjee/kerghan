@@ -195,7 +195,8 @@ export class AuthController {
    * through `KERGHAN_TRUSTED_PROXY_HOPS`); its session cookies are then set
    * exactly as `login.json` sets them. A `loggedIn: false` answer clears the
    * session cookies so the frontend's `logged_in` marker can't outlive the
-   * session.
+   * session — except for a pending user (`status: 'pending'` in the body),
+   * whose cookies are kept so the awaiting-approval view can log out.
    * @param {Request} req - Carries the `refresh_token` cookie and the client IP.
    * @param {Response} res - Used to set or clear the session cookies.
    * @returns {Promise<object>} `{ loggedIn: boolean, isAdmin: boolean }`, always
@@ -205,15 +206,15 @@ export class AuthController {
   @Post('status.json')
   async status(@Req() req: Request, @Res({ passthrough: true }) res: Response): Promise<object> {
     const { ip } = extractClientRequestInfo(req, this.#trustedProxyHops());
-    const { loggedIn, isAdmin, session } = await this.authService.status(readRefreshToken(req), ip);
+    const { loggedIn, isAdmin, session, status } = await this.authService.status(readRefreshToken(req), ip);
 
     if (session) {
       setSessionCookies(res, session, this.configService);
-    } else if (!loggedIn) {
+    } else if (!loggedIn && !status) {
       clearSessionCookies(res);
     }
 
-    return { loggedIn, isAdmin };
+    return status ? { loggedIn, isAdmin, status } : { loggedIn, isAdmin };
   }
 
   #trustedProxyHops(): number {

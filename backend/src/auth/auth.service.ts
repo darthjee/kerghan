@@ -1,16 +1,17 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { ForbiddenException, Injectable, UnauthorizedException } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { InjectRepository } from '@nestjs/typeorm';
 import bcrypt from 'bcryptjs';
 import { IsNull, Repository } from 'typeorm';
 import { DefaultUserService } from './default-user.service.js';
+import { ErrorCodes } from '../core/error-codes.js';
 import { LoginDto } from './dto/login.dto.js';
 import { RecoverDto } from './dto/recover.dto.js';
 import { RegisterDto } from './dto/register.dto.js';
 import { ResetPasswordDto } from './dto/reset-password.dto.js';
 import { compareOrDummy } from './dummy-digest.js';
 import { RefreshToken, RevokedReason } from './entities/refresh-token.entity.js';
-import { User } from './entities/user.entity.js';
+import { User, UserStatus } from './entities/user.entity.js';
 import { UserRegisteredEvent } from './events/user-registered.event.js';
 import { PasswordResetService } from './password-reset.service.js';
 import { TokenService, type AuthResult, type StatusResult } from './token.service.js';
@@ -100,11 +101,20 @@ export class AuthService {
    * Verifies a username/password pair and issues a fresh token pair,
    * persistent (longer refresh TTL) only when `dto.keepSignedIn` is `true`.
    * @param {LoginDto} dto - The login credentials and optional `keepSignedIn` flag.
+   * A `pending` user gets a session like anyone else (the gate blocks it);
+   * a `denied` user with the right password gets `403 USER_DENIED` and no
+   * tokens — only after the password check, so a wrong password is the same
+   * `401` whatever the status.
    * @returns {Promise<AuthResult>} The authenticated user plus access/refresh tokens.
    * @throws {UnauthorizedException} When the username is unknown or the password is wrong.
+   * @throws {ForbiddenException} When the credentials are right but the user is `denied` (`USER_DENIED`).
    */
   async login(dto: LoginDto): Promise<AuthResult> {
     const user = await this.#validateCredentials(dto.username, dto.password);
+
+    if (user.status === UserStatus.DENIED) {
+      throw new ForbiddenException({ code: ErrorCodes.USER_DENIED, message: 'This account has been denied access' });
+    }
 
     return this.tokenService.issueTokens(user, dto.keepSignedIn ?? false);
   }
@@ -132,7 +142,10 @@ export class AuthService {
    * expired gets a plain 401 with no side effects, so a revoked device's
    * token can't force-logout the user's other sessions. The rotation write
    * only matches a still-unrevoked row, so losing a race to a concurrent
-   * revocation or refresh is a plain 401 with no tokens issued.
+   * revocation or refresh is a plain 401 with no tokens issued. A `denied`
+   * user's active token is revoked (`admin_denied`) and answered with the
+   * same plain 401 (after replay detection, which stays first); a `pending`
+   * user's token rotates as usual.
    * @param {string} refreshToken - The refresh token presented by the client.
    * @returns {Promise<AuthResult>} The user plus the newly issued token pair.
    * @throws {UnauthorizedException} When the token is unknown, expired, or already revoked.
@@ -143,6 +156,12 @@ export class AuthService {
 
     if (!user) {
       throw new UnauthorizedException('Invalid refresh token');
+    }
+
+    if (user.status === UserStatus.DENIED) {
+      await this.tokenService.revokeToken(tokenRow.id, RevokedReason.ADMIN_DENIED);
+
+      throw new UnauthorizedException('Invalid or expired refresh token');
     }
 
     const { affected } = await this.refreshTokenRepository.update(
@@ -192,30 +211,34 @@ export class AuthService {
   }
 
   /**
-   * Reports whether a refresh token identifies an active session, never
-   * revoking anything (see `TokenService#findActiveToken`).
-   * With no active session, tries the automatic login as the default user
-   * (see `DefaultUserService#autoLogin`).
+   * Reports whether a refresh token identifies an active session (see
+   * `TokenService#findActiveToken`). A `denied` user's token is revoked
+   * (`admin_denied`, the only write) and treated as no session; with no
+   * session, tries the automatic login (`DefaultUserService#autoLogin`).
    * @param {string} [refreshToken] - The refresh token presented by the client (absent: no lookup).
    * @param {string} [clientIp] - The resolved client IP, checked against the default-user allowlist.
    * @returns {Promise<StatusResult>} `{ loggedIn: true, isAdmin }` from the
    *   token's user when active; `{ loggedIn: true, isAdmin, session }` on an
-   *   automatic login; `{ loggedIn: false, isAdmin: false }` otherwise.
+   *   automatic login; `{ loggedIn: false, isAdmin: false, status: 'pending' }`
+   *   for a pending user; `{ loggedIn: false, isAdmin: false }` otherwise.
    */
   async status(refreshToken?: string, clientIp = ''): Promise<StatusResult> {
     const tokenRow = await this.tokenService.findActiveToken(refreshToken);
+    const user = tokenRow ? await this.userRepository.findOneBy({ id: tokenRow.userId }) : null;
 
-    if (!tokenRow) {
-      const session = await this.defaultUserService.autoLogin(clientIp);
-
-      return session
-        ? { loggedIn: true, isAdmin: session.user.isAdmin, session }
-        : { loggedIn: false, isAdmin: false };
+    if (tokenRow && user?.status === UserStatus.DENIED) {
+      await this.tokenService.revokeToken(tokenRow.id, RevokedReason.ADMIN_DENIED);
+    } else if (tokenRow && user?.status === UserStatus.PENDING) {
+      return { loggedIn: false, isAdmin: false, status: UserStatus.PENDING };
+    } else if (tokenRow) {
+      return { loggedIn: true, isAdmin: user?.isAdmin ?? false };
     }
 
-    const user = await this.userRepository.findOneBy({ id: tokenRow.userId });
+    const session = await this.defaultUserService.autoLogin(clientIp);
 
-    return { loggedIn: true, isAdmin: user?.isAdmin ?? false };
+    return session
+      ? { loggedIn: true, isAdmin: session.user.isAdmin, session }
+      : { loggedIn: false, isAdmin: false };
   }
 
   /**

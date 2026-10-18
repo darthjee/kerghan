@@ -280,6 +280,18 @@ describe('AuthController', () => {
       });
     });
 
+    describe('when the service reports a pending user', () => {
+      it('responds with { loggedIn: false, isAdmin: false, status: "pending" }, keeping the cookies', async () => {
+        authService.status.mockResolvedValue({ loggedIn: false, isAdmin: false, status: 'pending' });
+
+        const result = await buildController().status(requestWith({ refresh_token: 'a-refresh-token' }), res as unknown as Response);
+
+        expect(result).toEqual({ loggedIn: false, isAdmin: false, status: 'pending' });
+        expect(res.cookie).not.toHaveBeenCalled();
+        expect(res.clearCookie).not.toHaveBeenCalled();
+      });
+    });
+
     describe('when the cookie is absent', () => {
       it('asks the service with an undefined token', async () => {
         authService.status.mockResolvedValue({ loggedIn: false, isAdmin: false });
