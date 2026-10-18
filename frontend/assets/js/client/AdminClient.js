@@ -9,15 +9,42 @@ import pickDefined from './pickDefined.js';
  */
 const AdminClient = {
   /**
-   * Search user accounts by username/email.
+   * Search user accounts by username/email, optionally narrowed to one approval status. `q`
+   * and `status` are only included in the request body when defined; an omitted `status`
+   * lists every status.
    *
    * @param {string} [q] - Search term matched against `username`/`email`; omit to list every
    *   account.
+   * @param {'pending'|'approved'|'denied'} [status] - Approval status to filter by; omit for
+   *   every status.
    * @returns {Promise<{users: Array<{id: number, username: string, email: string,
-   *   isAdmin: boolean, createdAt: string}>}>} The matching accounts.
+   *   isAdmin: boolean, createdAt: string, status: string}>, currentUserId: number}>} The
+   *   matching accounts and the calling admin's own id.
    */
-  async searchUsers(q) {
-    return ApiClient.postJson('/admin/users/search.json', { q });
+  async searchUsers(q, status) {
+    return ApiClient.postJson('/admin/users/search.json', pickDefined({ q, status }));
+  },
+
+  /**
+   * Approve a pending user, letting them log in.
+   *
+   * @param {number} userId - The target user's numeric id.
+   * @returns {Promise<{user: {id: number, username: string, email: string, isAdmin: boolean,
+   *   createdAt: string, status: string}}>} The updated account.
+   */
+  async approveUser(userId) {
+    return ApiClient.postJson(`/admin/users/${userId}/approve.json`, {});
+  },
+
+  /**
+   * Deny a user (from any status), blocking them from logging in.
+   *
+   * @param {number} userId - The target user's numeric id.
+   * @returns {Promise<{user: {id: number, username: string, email: string, isAdmin: boolean,
+   *   createdAt: string, status: string}}>} The updated account.
+   */
+  async denyUser(userId) {
+    return ApiClient.postJson(`/admin/users/${userId}/deny.json`, {});
   },
 
   /**
@@ -53,7 +80,7 @@ const AdminClient = {
    * @param {{username?: string, email?: string, newPassword?: string}} fields - The fields to
    *   update.
    * @returns {Promise<{user: {id: number, username: string, email: string, isAdmin: boolean,
-   *   createdAt: string}}>} The updated account.
+   *   createdAt: string, status: string}}>} The updated account.
    */
   async editUser(userId, { username, email, newPassword }) {
     return ApiClient.postJson(
