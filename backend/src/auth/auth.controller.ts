@@ -188,9 +188,10 @@ export class AuthController {
 
   /**
    * `POST /auth/status.json`. Reports whether the `refresh_token` cookie
-   * still identifies an active session, never revoking anything — used for
-   * mount-time login-state confirmation (e.g. the frontend header). With no
-   * active session, `AuthService#status` may log the caller in as the
+   * still identifies an active session — used for mount-time login-state
+   * confirmation (e.g. the frontend header). A `denied` user's token is
+   * revoked (`admin_denied`, the only write) and treated as no session. With
+   * no active session, `AuthService#status` may log the caller in as the
    * default user (automatic login, allowlisted client IPs only, resolved
    * through `KERGHAN_TRUSTED_PROXY_HOPS`); its session cookies are then set
    * exactly as `login.json` sets them. A `loggedIn: false` answer clears the
