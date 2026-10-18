@@ -171,7 +171,7 @@ export async function buildIntegrationsTestApp(options: IntegrationsTestAppOptio
   const tokenService = app.get(TokenService);
   const [owner, intruder, admin] = await Promise.all(
     [['darthjee', false], ['intruder', false], ['boss', true]].map(async ([username, isAdmin]) => {
-      const user = await userRepo.save(userRepo.create({ username: username as string, isAdmin: isAdmin as boolean }));
+      const user = await userRepo.save(userRepo.create({ username: username as string, isAdmin: isAdmin as boolean, status: 'approved' }));
       const { accessToken } = await tokenService.issueTokens(user);
 
       return `access_token=${accessToken}`;

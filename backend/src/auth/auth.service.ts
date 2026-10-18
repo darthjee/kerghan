@@ -1,8 +1,8 @@
-import { ConflictException, Injectable, UnauthorizedException } from '@nestjs/common';
+import { ForbiddenException, Injectable, UnauthorizedException } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { InjectRepository } from '@nestjs/typeorm';
 import bcrypt from 'bcryptjs';
-import { IsNull, Not, Repository } from 'typeorm';
+import { IsNull, Repository } from 'typeorm';
 import { DefaultUserService } from './default-user.service.js';
 import { ErrorCodes } from '../core/error-codes.js';
 import { LoginDto } from './dto/login.dto.js';
@@ -11,15 +11,14 @@ import { RegisterDto } from './dto/register.dto.js';
 import { ResetPasswordDto } from './dto/reset-password.dto.js';
 import { compareOrDummy } from './dummy-digest.js';
 import { RefreshToken, RevokedReason } from './entities/refresh-token.entity.js';
-import { User } from './entities/user.entity.js';
+import { User, UserStatus } from './entities/user.entity.js';
 import { UserRegisteredEvent } from './events/user-registered.event.js';
 import { PasswordResetService } from './password-reset.service.js';
 import { TokenService, type AuthResult, type StatusResult } from './token.service.js';
+import { UserApprovalConfig } from './user-approval.config.js';
+import { assertAvailable, assertFieldAvailable } from './user-availability.js';
 
 export type { AuthResult, StatusResult };
-
-// Specific error code attached to the `409` thrown when a field's value is taken.
-const TAKEN_CODES = { username: ErrorCodes.USERNAME_TAKEN, email: ErrorCodes.EMAIL_TAKEN } as const;
 
 /**
  * Auth module business logic: credential verification, registration,
@@ -37,6 +36,7 @@ export class AuthService {
   private readonly eventEmitter: EventEmitter2;
   private readonly passwordResetService: PasswordResetService;
   private readonly defaultUserService: DefaultUserService;
+  private readonly userApprovalConfig: UserApprovalConfig;
 
   /**
    * @param {Repository<User>} userRepository - The Auth module's user repository.
@@ -45,6 +45,7 @@ export class AuthService {
    * @param {EventEmitter2} eventEmitter - Fires the `user.registered` event.
    * @param {PasswordResetService} passwordResetService - Recovery/reset logic (`recover`/`resetPassword`).
    * @param {DefaultUserService} defaultUserService - `status()`'s automatic login as the default user.
+   * @param {UserApprovalConfig} userApprovalConfig - Decides the status of new registrations.
    */
   constructor(
     @InjectRepository(User) userRepository: Repository<User>,
@@ -53,6 +54,7 @@ export class AuthService {
       eventEmitter: EventEmitter2,
       passwordResetService: PasswordResetService,
       defaultUserService: DefaultUserService,
+      userApprovalConfig: UserApprovalConfig,
   ) {
     this.userRepository = userRepository;
     this.refreshTokenRepository = refreshTokenRepository;
@@ -60,17 +62,21 @@ export class AuthService {
     this.eventEmitter = eventEmitter;
     this.passwordResetService = passwordResetService;
     this.defaultUserService = defaultUserService;
+    this.userApprovalConfig = userApprovalConfig;
   }
 
   /**
    * Registers a new user and immediately logs them in (issues tokens),
-   * per the issue's JWT flow ("issued on login/register/refresh").
+   * per the issue's JWT flow ("issued on login/register/refresh"). The user
+   * is created `pending` when `KERGHAN_USER_APPROVAL_REQUIRED` is on,
+   * `approved` otherwise; the session is minted either way (a pending
+   * session is blocked by the gate until an admin approves).
    * @param {RegisterDto} dto - The registration payload.
    * @returns {Promise<AuthResult>} The created user plus access/refresh tokens.
    * @throws {ConflictException} When the username/email are already taken (`USERNAME_TAKEN`/`EMAIL_TAKEN`).
    */
   async register(dto: RegisterDto): Promise<AuthResult> {
-    await this.#assertAvailable(dto.username, dto.email);
+    await assertAvailable(this.userRepository, dto.username, dto.email);
 
     const passwordDigest = await bcrypt.hash(dto.password, 10);
     const user = await this.userRepository.save(
@@ -79,6 +85,7 @@ export class AuthService {
         email: dto.email,
         passwordDigest,
         isAdmin: false,
+        status: this.userApprovalConfig.registrationStatus(),
       }),
     );
 
@@ -94,11 +101,20 @@ export class AuthService {
    * Verifies a username/password pair and issues a fresh token pair,
    * persistent (longer refresh TTL) only when `dto.keepSignedIn` is `true`.
    * @param {LoginDto} dto - The login credentials and optional `keepSignedIn` flag.
+   * A `pending` user gets a session like anyone else (the gate blocks it);
+   * a `denied` user with the right password gets `403 USER_DENIED` and no
+   * tokens — only after the password check, so a wrong password is the same
+   * `401` whatever the status.
    * @returns {Promise<AuthResult>} The authenticated user plus access/refresh tokens.
    * @throws {UnauthorizedException} When the username is unknown or the password is wrong.
+   * @throws {ForbiddenException} When the credentials are right but the user is `denied` (`USER_DENIED`).
    */
   async login(dto: LoginDto): Promise<AuthResult> {
     const user = await this.#validateCredentials(dto.username, dto.password);
+
+    if (user.status === UserStatus.DENIED) {
+      throw new ForbiddenException({ code: ErrorCodes.USER_DENIED, message: 'This account has been denied access' });
+    }
 
     return this.tokenService.issueTokens(user, dto.keepSignedIn ?? false);
   }
@@ -126,7 +142,10 @@ export class AuthService {
    * expired gets a plain 401 with no side effects, so a revoked device's
    * token can't force-logout the user's other sessions. The rotation write
    * only matches a still-unrevoked row, so losing a race to a concurrent
-   * revocation or refresh is a plain 401 with no tokens issued.
+   * revocation or refresh is a plain 401 with no tokens issued. A `denied`
+   * user's active token is revoked (`admin_denied`) and answered with the
+   * same plain 401 (after replay detection, which stays first); a `pending`
+   * user's token rotates as usual.
    * @param {string} refreshToken - The refresh token presented by the client.
    * @returns {Promise<AuthResult>} The user plus the newly issued token pair.
    * @throws {UnauthorizedException} When the token is unknown, expired, or already revoked.
@@ -137,6 +156,12 @@ export class AuthService {
 
     if (!user) {
       throw new UnauthorizedException('Invalid refresh token');
+    }
+
+    if (user.status === UserStatus.DENIED) {
+      await this.tokenService.revokeToken(tokenRow.id, RevokedReason.ADMIN_DENIED);
+
+      throw new UnauthorizedException('Invalid or expired refresh token');
     }
 
     const { affected } = await this.refreshTokenRepository.update(
@@ -186,37 +211,41 @@ export class AuthService {
   }
 
   /**
-   * Reports whether a refresh token identifies an active session, never
-   * revoking anything (see `TokenService#findActiveToken`).
-   * With no active session, tries the automatic login as the default user
-   * (see `DefaultUserService#autoLogin`).
+   * Reports whether a refresh token identifies an active session (see
+   * `TokenService#findActiveToken`). A `denied` user's token is revoked
+   * (`admin_denied`, the only write) and treated as no session; with no
+   * session, tries the automatic login (`DefaultUserService#autoLogin`).
    * @param {string} [refreshToken] - The refresh token presented by the client (absent: no lookup).
    * @param {string} [clientIp] - The resolved client IP, checked against the default-user allowlist.
    * @returns {Promise<StatusResult>} `{ loggedIn: true, isAdmin }` from the
    *   token's user when active; `{ loggedIn: true, isAdmin, session }` on an
-   *   automatic login; `{ loggedIn: false, isAdmin: false }` otherwise.
+   *   automatic login; `{ loggedIn: false, isAdmin: false, status: 'pending' }`
+   *   for a pending user; `{ loggedIn: false, isAdmin: false }` otherwise.
    */
   async status(refreshToken?: string, clientIp = ''): Promise<StatusResult> {
     const tokenRow = await this.tokenService.findActiveToken(refreshToken);
+    const user = tokenRow ? await this.userRepository.findOneBy({ id: tokenRow.userId }) : null;
 
-    if (!tokenRow) {
-      const session = await this.defaultUserService.autoLogin(clientIp);
-
-      return session
-        ? { loggedIn: true, isAdmin: session.user.isAdmin, session }
-        : { loggedIn: false, isAdmin: false };
+    if (tokenRow && user?.status === UserStatus.DENIED) {
+      await this.tokenService.revokeToken(tokenRow.id, RevokedReason.ADMIN_DENIED);
+    } else if (tokenRow && user?.status === UserStatus.PENDING) {
+      return { loggedIn: false, isAdmin: false, status: UserStatus.PENDING };
+    } else if (tokenRow) {
+      return { loggedIn: true, isAdmin: user?.isAdmin ?? false };
     }
 
-    const user = await this.userRepository.findOneBy({ id: tokenRow.userId });
+    const session = await this.defaultUserService.autoLogin(clientIp);
 
-    return { loggedIn: true, isAdmin: user?.isAdmin ?? false };
+    return session
+      ? { loggedIn: true, isAdmin: session.user.isAdmin, session }
+      : { loggedIn: false, isAdmin: false };
   }
 
   /**
    * Checks that a username/email are available for a user to claim,
    * excluding that user's own row (so "changing" a field to its current
-   * value never false-positives). Used by `AccountService`; kept separate
-   * from `#assertAvailable` for its distinct error messages.
+   * value never false-positives). Used by `AccountService`/`AdminService`;
+   * kept separate from registration's check for its distinct error messages.
    * @param {number} excludeUserId - Id of the user updating their account, excluded from the lookup.
    * @param {string} [username] - Candidate username, when being changed.
    * @param {string} [email] - Candidate email, when being changed.
@@ -230,39 +259,11 @@ export class AuthService {
     email?: string,
   ): Promise<void> {
     if (username) {
-      await this.#assertFieldAvailable('username', username, excludeUserId, 'Username already in use');
+      await assertFieldAvailable(this.userRepository, 'username', username, excludeUserId, 'Username already in use');
     }
 
     if (email) {
-      await this.#assertFieldAvailable('email', email, excludeUserId, 'Email already in use');
-    }
-  }
-
-  async #assertAvailable(username: string, email: string): Promise<void> {
-    const existing = await this.userRepository.findOne({
-      where: [{ username }, { email }],
-    });
-
-    if (!existing) {
-      return;
-    }
-
-    const field = existing.username === username ? 'username' : 'email';
-    throw new ConflictException({ code: TAKEN_CODES[field], message: `${field} is not available` });
-  }
-
-  async #assertFieldAvailable(
-    field: 'username' | 'email',
-    value: string,
-    excludeUserId: number,
-    message: string,
-  ): Promise<void> {
-    const existing = await this.userRepository.findOne({
-      where: { [field]: value, id: Not(excludeUserId) },
-    });
-
-    if (existing) {
-      throw new ConflictException({ code: TAKEN_CODES[field], message });
+      await assertFieldAvailable(this.userRepository, 'email', email, excludeUserId, 'Email already in use');
     }
   }
 

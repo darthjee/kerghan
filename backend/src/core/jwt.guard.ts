@@ -35,7 +35,7 @@ interface SessionClaims {
 /**
  * Global guard verifying the JWT access token on every request, independent
  * of any feature module (per the issue's "Core" module classification), and
- * acting as the per-request session gate (rules 1 and 2 of
+ * acting as the per-request session gate (rules 1 to 3 of
  * `docs/agents/specs/user-approval/security.md`). Reads the token from the
  * httpOnly `access_token` cookie set by the Auth module. Routes (or
  * controllers) annotated with `@Public()` skip verification entirely.
@@ -49,7 +49,9 @@ interface SessionClaims {
  * UUID string and its `sub` an integer (tokens without `sid`, minted before
  * the claim existed, are rejected with no legacy path); the session `sid`
  * must then be active (looked up through the injected `SESSION_LOOKUP`,
- * implemented by the Auth module) and belong to `sub`. Every rejection
+ * implemented by the Auth module), belong to `sub`, and its user must be
+ * `approved` (rule 3, enforced by the lookup itself, always — whatever
+ * `KERGHAN_USER_APPROVAL_REQUIRED` says). Every rejection
  * throws the same `UnauthorizedException` as an invalid signature; a lookup
  * error propagates (`500`). `request.user` is built from the session's user
  * row, never from the signed `username`/`isAdmin` claims, so `AdminGuard`

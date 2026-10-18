@@ -8,7 +8,7 @@ import { LoggerService } from '../core/logger.service.js';
 import { getNumberConfig } from '../core/numeric-config.js';
 import { hashToken } from '../core/token-hash.js';
 import { RefreshToken, RevokedReason } from './entities/refresh-token.entity.js';
-import { User } from './entities/user.entity.js';
+import { User, UserStatus } from './entities/user.entity.js';
 
 // Default regular refresh-token lifetime (7 days, in milliseconds) used when
 // `KERGHAN_REFRESH_TOKEN_TTL_MS` is unset, non-numeric or not positive.
@@ -48,6 +48,8 @@ export interface StatusResult {
   loggedIn: boolean;
   isAdmin: boolean;
   session?: AuthResult;
+  /** Present (always `'pending'`) only for an active session of a pending user. */
+  status?: typeof UserStatus.PENDING;
 }
 
 /**
@@ -215,6 +217,17 @@ export class TokenService {
       : { userId, revokedAt: IsNull() };
 
     await this.refreshTokenRepository.update(criteria, { revokedAt: new Date(), revokedReason: reason });
+  }
+
+  /**
+   * Revokes one refresh-token row by id, only while it is still unrevoked
+   * (an already-revoked row keeps its original reason).
+   * @param {number} id - The refresh-token row's id.
+   * @param {RevokedReason} reason - Why the token is revoked.
+   * @returns {Promise<void>} Resolves once the (possible) write is done.
+   */
+  async revokeToken(id: number, reason: RevokedReason): Promise<void> {
+    await this.refreshTokenRepository.update({ id, revokedAt: IsNull() }, { revokedAt: new Date(), revokedReason: reason });
   }
 
   #refreshTokenTtlMs(keepSignedIn: boolean): number {

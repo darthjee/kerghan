@@ -45,6 +45,7 @@ describe('AccountService', () => {
       email: 'darthjee@example.com',
       passwordDigest: await bcrypt.hash('current-password', 4),
       isAdmin: false,
+      status: 'approved',
     } as User;
 
     userRepository = repoMock<User>();

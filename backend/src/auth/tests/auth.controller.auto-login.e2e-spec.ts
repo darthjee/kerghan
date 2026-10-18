@@ -179,6 +179,34 @@ describe('AuthController automatic login (e2e)', () => {
       });
     });
 
+    describe('with a valid refresh cookie of a denied user', () => {
+      it('revokes it admin_denied and logs in automatically as the default user', async () => {
+        const token = refreshTokenOf(await loginAs(ctx.app).expect(201));
+        const [row] = ctx.refreshTokenRepo.rows;
+        darthjee().status = 'denied';
+
+        const response = await status(ctx.app, [refreshCookieFor(token)]).expect(201);
+
+        expect(response.body).toEqual({ loggedIn: true, isAdmin: true });
+        expect(findSetCookie(response, 'logged_in')).toMatch(/^logged_in=1;/);
+        expect(row.revokedReason).toBe(RevokedReason.ADMIN_DENIED);
+        expect(ctx.refreshTokenRepo.rows.at(-1)).toMatchObject({ userId: defaultUser().id });
+      });
+    });
+
+    describe('with a valid refresh cookie of a pending user', () => {
+      it('answers status: pending, keeping the session and never logging in automatically', async () => {
+        const token = refreshTokenOf(await loginAs(ctx.app).expect(201));
+        darthjee().status = 'pending';
+
+        const response = await status(ctx.app, [refreshCookieFor(token)]).expect(201);
+
+        expect(response.body).toEqual({ loggedIn: false, isAdmin: false, status: 'pending' });
+        expect(setCookieHeaders(response)).toEqual([]);
+        expect(ctx.refreshTokenRepo.rows).toHaveLength(1);
+      });
+    });
+
     describe('with a valid refresh cookie', () => {
       it('keeps an explicit login as another user, issuing no session', async () => {
         const token = refreshTokenOf(await loginAs(ctx.app).expect(201));

@@ -37,6 +37,34 @@ describe('AuthController (e2e)', () => {
       expect(response.body).toEqual({ sent: true });
     });
 
+    it.each(['approved', 'pending', 'denied'] as const)(
+      'responds the same 200 { sent: true } for a %s account',
+      async (status) => {
+        ctx.userRepo.rows[0].status = status;
+
+        const response = await request(ctx.app.getHttpServer())
+          .post('/auth/recover.json')
+          .send({ email: 'darthjee@example.com' })
+          .expect(200);
+
+        expect(response.body).toEqual({ sent: true });
+      },
+    );
+
+    it('creates no token and emits no event for a denied account', async () => {
+      ctx.userRepo.rows[0].status = 'denied';
+      const listener = jest.fn();
+      ctx.app.get(EventEmitter2).on('password-recovery.requested', listener);
+
+      await request(ctx.app.getHttpServer())
+        .post('/auth/recover.json')
+        .send({ email: 'darthjee@example.com' })
+        .expect(200);
+
+      expect(ctx.passwordResetTokenRepo.rows).toHaveLength(0);
+      expect(listener).not.toHaveBeenCalled();
+    });
+
     it('creates a password-reset token only when the email matches an account', async () => {
       await request(ctx.app.getHttpServer())
         .post('/auth/recover.json')
@@ -157,6 +185,37 @@ describe('AuthController (e2e)', () => {
         .post('/auth/reset-password.json')
         .send({ token, password: 'brand-new-password' })
         .expect(200);
+    });
+
+    describe('by user status', () => {
+      function resetWith(token: string): request.Test {
+        return request(ctx.app.getHttpServer())
+          .post('/auth/reset-password.json')
+          .send({ token, password: 'brand-new-password' });
+      }
+
+      it('rejects a denied user\'s valid token exactly like an unknown one, changing nothing', async () => {
+        const token = await requestRecoveryToken('darthjee@example.com');
+        const user = ctx.userRepo.rows[0];
+        const digest = user.passwordDigest;
+        user.status = 'denied';
+
+        const response = await resetWith(token);
+
+        expectErrorBody(response, { status: 400, code: ErrorCodes.BAD_REQUEST, message: 'Invalid or expired token' });
+        expect(user.passwordDigest).toBe(digest);
+        expect(ctx.passwordResetTokenRepo.rows.at(-1)?.usedAt).toBeNull();
+      });
+
+      it('lets a pending user reset, staying pending', async () => {
+        const token = await requestRecoveryToken('darthjee@example.com');
+        ctx.userRepo.rows[0].status = 'pending';
+
+        await resetWith(token).expect(200, { reset: true });
+
+        expect(ctx.userRepo.rows[0].status).toBe('pending');
+        await loginAs(ctx.app, 'darthjee', 'brand-new-password').expect(201);
+      });
     });
   });
 });

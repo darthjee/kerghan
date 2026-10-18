@@ -20,8 +20,10 @@ export interface SessionUser {
 /**
  * Loads the user behind an access token's session (`sid` claim), used by
  * `JwtGuard` on every authenticated request. Implementations must return a
- * user only for an **active** session — its refresh-token row not revoked
- * and not expired — and `null` otherwise. A storage error must propagate
+ * user only for an **active** session of an **`approved`** user — its
+ * refresh-token row not revoked and not expired, its user's status
+ * `approved` — and `null` otherwise (a `pending` or `denied` user's session
+ * included). A storage error must propagate
  * (never be turned into `null`), so the guard answers `500`, not `401`.
  */
 export interface SessionLookup {
@@ -29,7 +31,7 @@ export interface SessionLookup {
    * Finds the user of the active session identified by `sid`.
    * @param {string} sid - The session UUID (the access token's `sid` claim).
    * @returns {Promise<SessionUser | null>} The session's user, or `null`
-   *   when no active session has that UUID.
+   *   when no active session of an approved user has that UUID.
    */
   findActiveSessionUser(sid: string): Promise<SessionUser | null>;
 }

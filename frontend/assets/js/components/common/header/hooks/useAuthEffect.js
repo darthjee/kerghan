@@ -1,6 +1,8 @@
 import { useEffect } from 'react';
 import AuthEvents from '../../../../client/AuthEvents.js';
 
+const noop = () => undefined;
+
 /**
  * Build the mount-time auth effect: subscribes to the shared `AuthEvents` bus (so any live
  * `AuthEvents.emit(...)` — from a login, a logout, or any other future component — updates
@@ -12,11 +14,11 @@ import AuthEvents from '../../../../client/AuthEvents.js';
  * {@link module:components/AppController}'s `buildEffect()`.
  *
  * @param {{checkStatus: Function}} controller - Controller exposing a `checkStatus()` method.
- * @param {{setLoggedIn: Function, setIsAdmin: Function}} setters - React state setters for the
- *   current auth state.
+ * @param {{setLoggedIn: Function, setIsAdmin: Function, setPending: Function}} setters - React
+ *   state setters for the current auth state; `setPending` (awaiting-approval flag) is optional.
  * @returns {Function} Effect callback, returning a cleanup function.
  */
-export function buildAuthEffect(controller, { setLoggedIn, setIsAdmin }) {
+export function buildAuthEffect(controller, { setLoggedIn, setIsAdmin, setPending = noop }) {
   return () => {
     let mounted = true;
 
@@ -25,6 +27,7 @@ export function buildAuthEffect(controller, { setLoggedIn, setIsAdmin }) {
 
       setLoggedIn(Boolean(event.detail?.loggedIn));
       setIsAdmin(Boolean(event.detail?.isAdmin));
+      setPending(Boolean(event.detail?.pending));
     };
 
     AuthEvents.subscribe(handleAuthChanged);
@@ -43,8 +46,8 @@ export function buildAuthEffect(controller, { setLoggedIn, setIsAdmin }) {
  * behavior.
  *
  * @param {{checkStatus: Function}} controller - Controller exposing a `checkStatus()` method.
- * @param {{setLoggedIn: Function, setIsAdmin: Function}} setters - React state setters for the
- *   current auth state.
+ * @param {{setLoggedIn: Function, setIsAdmin: Function, setPending: Function}} setters - React
+ *   state setters for the current auth state; `setPending` (awaiting-approval flag) is optional.
  * @returns {void} Nothing.
  */
 export default function useAuthEffect(controller, setters) {

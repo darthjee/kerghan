@@ -21,7 +21,8 @@ describe('LoginModalController keepSignedIn', () => {
 
   beforeEach(() => {
     setFields = jasmine.createSpy('setFields');
-    client = jasmine.createSpyObj('client', ['login', 'register', 'createAuthorizationRequest']);
+    client = jasmine.createSpyObj('client', ['login', 'register', 'status', 'createAuthorizationRequest']);
+    client.status.and.resolveTo({ loggedIn: true, isAdmin: false });
     spyOn(AuthEvents, 'emit');
     spyOn(LoginModalEvents, 'close');
     installFakeWindow({ location: { hash: '' } });
@@ -79,7 +80,7 @@ describe('LoginModalController keepSignedIn', () => {
         keepSignedIn: true,
       });
 
-      const [, body] = ApiClient.postJson.calls.mostRecent().args;
+      const [, body] = ApiClient.postJson.calls.first().args;
 
       expect(ApiClient.postJson).toHaveBeenCalledWith('/auth/register.json', jasmine.any(Object));
       expect(Object.keys(body)).not.toContain('keepSignedIn');

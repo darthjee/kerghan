@@ -301,4 +301,104 @@ describe('AuthController (e2e)', () => {
       expect(response.headers['x-skip-cache']).toBe('true');
     });
   });
+
+  describe('by user status', () => {
+    function setStatus(status: 'pending' | 'denied'): void {
+      ctx.userRepo.rows[0].status = status;
+    }
+
+    function presentedRow(): (typeof ctx.refreshTokenRepo.rows)[number] {
+      return ctx.refreshTokenRepo.rows[ctx.refreshTokenRepo.rows.length - 1];
+    }
+
+    describe('refresh', () => {
+      it('rotates a pending user\'s token as usual', async () => {
+        const token = refreshTokenOf(await loginAs(ctx.app));
+
+        setStatus('pending');
+
+        const refreshed = await refresh(token).expect(201);
+
+        expect(refreshTokenOf(refreshed)).not.toBe(token);
+      });
+
+      it('answers a denied user\'s active token with 401, clearing cookies and revoking it admin_denied', async () => {
+        await loginAs(ctx.app);
+        const otherRow = presentedRow();
+        const token = refreshTokenOf(await loginAs(ctx.app));
+        const row = presentedRow();
+
+        setStatus('denied');
+
+        const response = await refresh(token).expect(401);
+
+        expectSessionCookiesCleared(response);
+        expect(row.revokedReason).toBe('admin_denied');
+        expect(ctx.refreshTokenRepo.rows.map((r) => r.revokedReason)).not.toContain('replay_detected');
+        expect(otherRow.revokedAt).toBeNull();
+      });
+
+      it('still treats a denied user\'s replayed rotated token as theft', async () => {
+        const token = refreshTokenOf(await loginAs(ctx.app));
+
+        await refresh(token).expect(201);
+        setStatus('denied');
+
+        await refresh(token).expect(401);
+
+        expect(ctx.refreshTokenRepo.rows.map((row) => row.revokedReason)).toContain('replay_detected');
+      });
+    });
+
+    describe('status check', () => {
+      it('answers a pending user with status: pending, keeping the cookies', async () => {
+        const token = refreshTokenOf(await loginAs(ctx.app));
+
+        setStatus('pending');
+
+        const response = await status(token).expect(201);
+
+        expect(response.body).toEqual({ loggedIn: false, isAdmin: false, status: 'pending' });
+        expect(setCookieHeaders(response)).toEqual([]);
+        expect(presentedRow().revokedAt).toBeNull();
+      });
+
+      it('answers a denied user exactly like an anonymous caller, revoking the token admin_denied', async () => {
+        const token = refreshTokenOf(await loginAs(ctx.app));
+        const row = presentedRow();
+
+        setStatus('denied');
+
+        const denied = await status(token).expect(201);
+        const anonymous = await status().expect(201);
+
+        expect(denied.body).toEqual(anonymous.body);
+        expect(denied.body).not.toHaveProperty('status');
+        expect(setCookieHeaders(denied)).toEqual(setCookieHeaders(anonymous));
+        expectSessionCookiesCleared(denied);
+        expect(row.revokedReason).toBe('admin_denied');
+      });
+
+      it('never includes status for an approved user', async () => {
+        const token = refreshTokenOf(await loginAs(ctx.app));
+
+        const response = await status(token).expect(201);
+
+        expect(response.body).not.toHaveProperty('status');
+      });
+    });
+
+    describe('logout', () => {
+      it('logs a pending user out, clearing the cookies and revoking the token', async () => {
+        const token = refreshTokenOf(await loginAs(ctx.app));
+
+        setStatus('pending');
+
+        const response = await logoff(token).expect(204);
+
+        expectSessionCookiesCleared(response);
+        expect(presentedRow().revokedReason).toBe('logout');
+      });
+    });
+  });
 });

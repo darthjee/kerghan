@@ -24,6 +24,7 @@ import { PasswordResetService } from './password-reset.service.js';
 import { SessionController } from './session.controller.js';
 import { SessionService } from './session.service.js';
 import { TokenService } from './token.service.js';
+import { UserApprovalConfig } from './user-approval.config.js';
 import { UserUpdateService } from './user-update.service.js';
 
 /**
@@ -67,6 +68,12 @@ import { UserUpdateService } from './user-update.service.js';
       inject: [ConfigService],
       useFactory: (configService: ConfigService): DefaultUserConfig =>
         DefaultUserConfig.fromConfigService(configService),
+    },
+    {
+      provide: UserApprovalConfig,
+      inject: [ConfigService],
+      useFactory: (configService: ConfigService): UserApprovalConfig =>
+        UserApprovalConfig.fromConfigService(configService),
     },
   ],
   exports: [AuthService, SESSION_LOOKUP],

@@ -26,6 +26,7 @@ describe('UserUpdateService', () => {
       email: 'darthjee@example.com',
       passwordDigest: originalDigest,
       isAdmin: false,
+      status: 'approved',
     } as User;
 
     userRepository = repoMock<User>();

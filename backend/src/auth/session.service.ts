@@ -3,7 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { IsNull, MoreThan, Not, Repository } from 'typeorm';
 import { SessionLookup, SessionUser } from '../core/session-lookup.js';
 import { RefreshToken, RevokedReason } from './entities/refresh-token.entity.js';
-import { User } from './entities/user.entity.js';
+import { User, UserStatus } from './entities/user.entity.js';
 import { TokenService } from './token.service.js';
 
 /**
@@ -57,12 +57,14 @@ export class SessionService implements SessionLookup {
   /**
    * Loads the user of the active (non-revoked, unexpired) session `sid`, in
    * one query over the indexed `session_uuid` joined to `auth_users` on the
-   * row's `user_id` (an in-module join: both tables belong to Auth). Since
-   * the join is on `user_id`, the returned `id` is the session row's
-   * `userId`. A database error propagates.
+   * row's `user_id` (an in-module join: both tables belong to Auth). Only an
+   * `approved` user is returned (gate rule 3): a `pending` or `denied`
+   * user's session resolves to `null`, whatever `KERGHAN_USER_APPROVAL_REQUIRED`
+   * says. Since the join is on `user_id`, the returned `id` is the session
+   * row's `userId`. A database error propagates.
    * @param {string} sid - The session UUID (the access token's `sid` claim).
    * @returns {Promise<SessionUser | null>} The session's user, or `null`
-   *   when no active session has that UUID.
+   *   when no active session of an approved user has that UUID.
    */
   async findActiveSessionUser(sid: string): Promise<SessionUser | null> {
     const user = await this.userRepository
@@ -72,6 +74,7 @@ export class SessionService implements SessionLookup {
       .where('session.sessionUuid = :sid', { sid })
       .andWhere('session.revokedAt IS NULL')
       .andWhere('session.expiresAt > :now', { now: new Date() })
+      .andWhere('user.status = :status', { status: UserStatus.APPROVED })
       .getOne();
 
     return user ? { id: user.id, username: user.username, isAdmin: user.isAdmin } : null;

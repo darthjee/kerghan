@@ -87,7 +87,7 @@ describe('AuthorizationRequestService', () => {
     });
 
     describe('when the request is approved', () => {
-      const user = { id: 1, username: 'darthjee', email: 'darthjee@example.com' } as User;
+      const user = { id: 1, username: 'darthjee', email: 'darthjee@example.com', status: 'approved' } as User;
 
       beforeEach(() => {
         ctx.authorizationRequestRepository.findOneBy.mockResolvedValue({ ...baseRow, status: 'approved' });
@@ -145,6 +145,37 @@ describe('AuthorizationRequestService', () => {
           const result = await ctx.service.poll('uuid-1', 'poll-token');
 
           expect(result).toEqual({ status: 'approved', authResult });
+        });
+      });
+
+      describe.each(['pending', 'denied'] as const)('and the user turned %s after the claim, before the mint', (status) => {
+        let builder: ReturnType<typeof queryBuilderMock>;
+
+        beforeEach(() => {
+          builder = queryBuilderMock({ affected: 1 });
+          ctx.authorizationRequestRepository.createQueryBuilder.mockReturnValue(builder);
+          ctx.userRepository.findOneBy.mockResolvedValue({ ...user, status });
+        });
+
+        it('returns { status: "denied" } with no credentials', async () => {
+          await expect(ctx.service.poll('uuid-1', 'poll-token')).resolves.toEqual({ status: 'denied' });
+        });
+
+        it('mints no session and emits no logged event', async () => {
+          await ctx.service.poll('uuid-1', 'poll-token');
+
+          expect(ctx.tokenService.issueTokens).not.toHaveBeenCalled();
+          expect(ctx.eventEmitter.emit).not.toHaveBeenCalledWith('authorization-request.logged', expect.anything());
+        });
+
+        it('turns the claimed request denied through a guarded logged → denied UPDATE', async () => {
+          await ctx.service.poll('uuid-1', 'poll-token');
+
+          expect(builder.set).toHaveBeenLastCalledWith({ status: 'denied', resolvedAt: expect.any(Date) });
+          expect(builder.where).toHaveBeenLastCalledWith('uuid = :uuid AND status = :status', {
+            uuid: 'uuid-1',
+            status: 'logged',
+          });
         });
       });
 

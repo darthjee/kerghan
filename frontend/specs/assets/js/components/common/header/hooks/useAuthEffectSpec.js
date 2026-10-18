@@ -6,6 +6,7 @@ describe('useAuthEffect', () => {
   let controller;
   let setLoggedIn;
   let setIsAdmin;
+  let setPending;
   let setters;
 
   beforeEach(() => {
@@ -17,7 +18,8 @@ describe('useAuthEffect', () => {
     controller.checkStatus.and.resolveTo();
     setLoggedIn = jasmine.createSpy('setLoggedIn');
     setIsAdmin = jasmine.createSpy('setIsAdmin');
-    setters = { setLoggedIn, setIsAdmin };
+    setPending = jasmine.createSpy('setPending');
+    setters = { setLoggedIn, setIsAdmin, setPending };
     spyOn(AuthEvents, 'subscribe').and.callThrough();
     spyOn(AuthEvents, 'unsubscribe').and.callThrough();
   });
@@ -46,6 +48,24 @@ describe('useAuthEffect', () => {
 
       expect(setLoggedIn).toHaveBeenCalledWith(true);
       expect(setIsAdmin).toHaveBeenCalledWith(true);
+      expect(setPending).toHaveBeenCalledWith(false);
+    });
+
+    it('updates pending state when AuthEvents emits a pending change', () => {
+      buildAuthEffect(controller, setters)();
+
+      AuthEvents.emit(false, false, true);
+
+      expect(setLoggedIn).toHaveBeenCalledWith(false);
+      expect(setIsAdmin).toHaveBeenCalledWith(false);
+      expect(setPending).toHaveBeenCalledWith(true);
+    });
+
+    it('works without a setPending setter', () => {
+      buildAuthEffect(controller, { setLoggedIn, setIsAdmin })();
+
+      expect(() => AuthEvents.emit(false, false, true)).not.toThrow();
+      expect(setLoggedIn).toHaveBeenCalledWith(false);
     });
 
     it('unsubscribes from AuthEvents on cleanup', () => {
@@ -68,6 +88,7 @@ describe('useAuthEffect', () => {
 
       expect(setLoggedIn).not.toHaveBeenCalled();
       expect(setIsAdmin).not.toHaveBeenCalled();
+      expect(setPending).not.toHaveBeenCalled();
     });
   });
 });

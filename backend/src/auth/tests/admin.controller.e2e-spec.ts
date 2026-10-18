@@ -221,6 +221,19 @@ describe('AdminController (e2e)', () => {
         });
       });
 
+      it('never changes the user\'s status', async () => {
+        const target = ctx.userRepo.rows.find((row) => row.id === targetUserId)!;
+        target.status = 'denied';
+
+        await request(ctx.app.getHttpServer())
+          .post(`/admin/users/${targetUserId}/edit.json`)
+          .set('Cookie', [adminCookie])
+          .send({ username: 'darthjee-renamed', newPassword: 'brand-new-password' })
+          .expect(201);
+
+        expect(target.status).toBe('denied');
+      });
+
       it('responds 404 for an unknown user id', async () => {
         await request(ctx.app.getHttpServer())
           .post('/admin/users/999999/edit.json')

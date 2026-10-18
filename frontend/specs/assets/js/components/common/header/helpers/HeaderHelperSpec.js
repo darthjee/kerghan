@@ -39,6 +39,24 @@ describe('HeaderHelper', () => {
     expect(markupOf(false, false)).toContain('href="#/"');
   });
 
+  describe('when pending approval', () => {
+    const pendingMarkup = () => renderToStaticMarkup(
+      React.createElement('div', null, HeaderHelper.render(false, false, onLogout, onOpenLogin, true)),
+    );
+
+    it('still renders the brand link to home', () => {
+      expect(pendingMarkup()).toContain('Kerghan');
+    });
+
+    it('renders no logged-in menu and no login links', () => {
+      const markup = pendingMarkup();
+
+      ['My account', 'Logout', 'Admin Users', 'Login', 'Register', 'Recover'].forEach((label) => {
+        expect(markup).not.toContain(label);
+      });
+    });
+  });
+
   describe('when logged out', () => {
     it('renders a Login link that opens the modal in password mode', () => {
       const markup = markupOf(false, false);

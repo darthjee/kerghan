@@ -6,7 +6,7 @@ import { DefaultUserConfig } from './default-user.config.js';
 import { ErrorCodes } from '../core/error-codes.js';
 import { LoggerService } from '../core/logger.service.js';
 import { RevokedReason } from './entities/refresh-token.entity.js';
-import { User } from './entities/user.entity.js';
+import { User, UserStatus } from './entities/user.entity.js';
 import { TokenService, type AuthResult } from './token.service.js';
 
 /**
@@ -66,8 +66,9 @@ export class DefaultUserService implements OnApplicationBootstrap {
 
   /**
    * Nest lifecycle hook: when the feature is enabled, creates or updates the
-   * default user to match the configuration and records its id. A no-op
-   * when disabled.
+   * default user to match the configuration and records its id. The
+   * default user is always `approved` (a pending or denied one is approved
+   * again, without revoking its sessions). A no-op when disabled.
    * @returns {Promise<void>} Resolves once the default user is synchronized.
    * @throws {Error} When the configured email belongs to another user,
    *   aborting boot.
@@ -176,6 +177,7 @@ export class DefaultUserService implements OnApplicationBootstrap {
           email: this.config.email(),
           passwordDigest: await bcrypt.hash(this.config.password(), 10),
           isAdmin: this.config.isAdmin(),
+          status: UserStatus.APPROVED,
         }),
       );
     } catch (error) {
@@ -204,6 +206,7 @@ export class DefaultUserService implements OnApplicationBootstrap {
 
     user.email = this.config.email();
     user.isAdmin = this.config.isAdmin();
+    user.status = UserStatus.APPROVED;
 
     if (passwordChanged) {
       user.passwordDigest = await bcrypt.hash(this.config.password(), 10);

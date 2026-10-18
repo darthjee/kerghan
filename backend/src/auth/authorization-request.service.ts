@@ -10,9 +10,10 @@ import type {
   OpenAuthorizationRequest,
   PollResult,
 } from './authorization-request-result.js';
+import { guardedTransition } from './authorization-request-transition.js';
 import { compareOrDummy } from './dummy-digest.js';
 import { AuthorizationRequest } from './entities/authorization-request.entity.js';
-import { User } from './entities/user.entity.js';
+import { User, UserStatus } from './entities/user.entity.js';
 import { AuthorizationRequestApprovedEvent } from './events/authorization-request-approved.event.js';
 import { AuthorizationRequestCreatedEvent } from './events/authorization-request-created.event.js';
 import { AuthorizationRequestDeniedEvent } from './events/authorization-request-denied.event.js';
@@ -128,6 +129,8 @@ export class AuthorizationRequestService {
    * indistinguishable — both throw `NotFoundException`. An `open` request past its `expiresAt` is
    * lazily flipped to `expired`. An `approved` request is claimed atomically: only the first poll
    * to win the guarded `UPDATE` mints a session; every other poll gets `{ status: 'logged' }`.
+   * The user is re-checked before the mint: a no-longer-`approved` user turns the claimed request
+   * `denied` (guarded `logged → denied`) and gets `{ status: 'denied' }`, with no session.
    * @param {string} uuid - The authorization request's UUID.
    * @param {string} pollToken - The plaintext poll token issued by `create()`.
    * @returns {Promise<PollResult>} The current status, with a freshly issued
@@ -245,18 +248,12 @@ export class AuthorizationRequestService {
   }
 
   async #claim(request: AuthorizationRequest): Promise<PollResult> {
-    const result = await this.authorizationRequestRepository
-      .createQueryBuilder()
-      .update()
-      .set({ status: 'logged', loggedAt: () => 'CURRENT_TIMESTAMP' })
-      .where('uuid = :uuid AND status = :status', { uuid: request.uuid, status: 'approved' })
-      .execute();
+    const claimed = await guardedTransition(this.authorizationRequestRepository, request.uuid, 'approved', {
+      status: 'logged',
+      loggedAt: () => 'CURRENT_TIMESTAMP',
+    });
 
-    if (result.affected !== 1) {
-      return { status: 'logged' };
-    }
-
-    return this.#issueSessionFor(request);
+    return claimed ? this.#issueSessionFor(request) : { status: 'logged' };
   }
 
   async #issueSessionFor(request: AuthorizationRequest): Promise<PollResult> {
@@ -264,6 +261,12 @@ export class AuthorizationRequestService {
 
     if (!user) {
       return { status: 'logged' };
+    }
+
+    if (user.status !== UserStatus.APPROVED) {
+      await guardedTransition(this.authorizationRequestRepository, request.uuid, 'logged', { status: 'denied', resolvedAt: new Date() });
+
+      return { status: 'denied' };
     }
 
     const authResult = await this.tokenService.issueTokens(user, request.keepSignedIn);

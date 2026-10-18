@@ -45,7 +45,7 @@ describe('DefaultUserService', () => {
     );
 
   const seedUser = async (attrs: Partial<User>): Promise<User> =>
-    userRepo.save(userRepo.create({ isAdmin: false, ...attrs }));
+    userRepo.save(userRepo.create({ isAdmin: false, status: 'approved', ...attrs }));
 
   beforeEach(() => {
     userRepo = createInMemoryRepo<User>();
@@ -70,6 +70,12 @@ describe('DefaultUserService', () => {
         const [user] = userRepo.rows;
         expect(user).toMatchObject({ username: 'admin', email: 'admin@kerghan.local', isAdmin: true });
         await expect(bcrypt.compare(PASSWORD, user.passwordDigest)).resolves.toBe(true);
+      });
+
+      it('creates it approved', async () => {
+        await buildService().onApplicationBootstrap();
+
+        expect(userRepo.rows[0].status).toBe('approved');
       });
 
       it('records the created row id', async () => {
@@ -108,6 +114,15 @@ describe('DefaultUserService', () => {
 
         expect(existing).toMatchObject({ email: 'admin@kerghan.local', isAdmin: true });
         expect(userRepo.rows).toHaveLength(2);
+      });
+
+      it.each(['pending', 'denied'] as const)('forces a %s default user back to approved, revoking nothing', async (status) => {
+        existing.status = status;
+
+        await buildService().onApplicationBootstrap();
+
+        expect(existing.status).toBe('approved');
+        expect(tokenService.revokeUserTokens).not.toHaveBeenCalled();
       });
 
       it('overwrites the admin flag to false when not configured as admin', async () => {

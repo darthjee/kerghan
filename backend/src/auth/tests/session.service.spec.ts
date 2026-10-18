@@ -70,6 +70,14 @@ describe('SessionService', () => {
       expect(now.getTime()).toBeGreaterThanOrEqual(before);
     });
 
+    it('only matches an approved user (gate rule 3)', async () => {
+      queryBuilder.getOne.mockResolvedValue(null);
+
+      await service.findActiveSessionUser('session-a');
+
+      expect(queryBuilder.andWhere).toHaveBeenCalledWith('user.status = :status', { status: 'approved' });
+    });
+
     it('maps the joined user to a session user', async () => {
       queryBuilder.getOne.mockResolvedValue({ id: 7, username: 'darthjee', isAdmin: true, email: 'x@y.z' });
 

@@ -107,6 +107,40 @@ describe('PasswordResetService', () => {
       });
     });
 
+    describe('when the email matches a pending account', () => {
+      it('creates a token and emits the event as usual', async () => {
+        userRepository.findOneBy.mockResolvedValue({ ...user, status: 'pending' } as User);
+
+        await service.recover({ email: 'darthjee@example.com' });
+
+        expect(passwordResetTokenRepository.save).toHaveBeenCalled();
+        expect(eventEmitter.emit).toHaveBeenCalledWith('password-recovery.requested', expect.anything());
+      });
+    });
+
+    describe('when the email matches a denied account', () => {
+      beforeEach(() => {
+        userRepository.findOneBy.mockResolvedValue({ ...user, status: 'denied' } as User);
+      });
+
+      it('resolves like an unknown email, creating no token and emitting no event', async () => {
+        await expect(service.recover({ email: 'darthjee@example.com' })).resolves.toBeUndefined();
+
+        expect(passwordResetTokenRepository.save).not.toHaveBeenCalled();
+        expect(eventEmitter.emit).not.toHaveBeenCalled();
+      });
+
+      it('logs it as "user not found", with no user id', async () => {
+        await service.recover({ email: 'darthjee@example.com' });
+
+        expect(logger.info).toHaveBeenCalledWith('password recovery user not found', {
+          context: 'PasswordResetService',
+          email: 'darthjee@example.com',
+        });
+        expect(logger.info).not.toHaveBeenCalledWith('password recovery user found', expect.anything());
+      });
+    });
+
     describe('when the email does not match an account', () => {
       beforeEach(() => {
         userRepository.findOneBy.mockResolvedValue(null);
@@ -291,6 +325,37 @@ describe('PasswordResetService', () => {
         expect(passwordResetTokenRepository.update).toHaveBeenCalledWith(10, {
           usedAt: expect.any(Date),
         });
+      });
+    });
+
+    describe('when the active token belongs to a denied user', () => {
+      beforeEach(() => {
+        passwordResetTokenRepository.findOneBy.mockResolvedValue(activeToken);
+        userRepository.findOneBy.mockResolvedValue({ id: 1, status: 'denied' } as User);
+      });
+
+      it('rejects with the uniform invalid-token error', async () => {
+        await expect(service.resetPassword({ token: 'a-token', password: 'new-password' }))
+          .rejects.toThrow(new BadRequestException('Invalid or expired token'));
+      });
+
+      it('changes no password and leaves the token unused', async () => {
+        await service.resetPassword({ token: 'a-token', password: 'new-password' }).catch(() => undefined);
+
+        expect(userRepository.update).not.toHaveBeenCalled();
+        expect(passwordResetTokenRepository.update).not.toHaveBeenCalled();
+      });
+    });
+
+    describe('when the active token belongs to a pending user', () => {
+      it('resets the password without touching the status', async () => {
+        passwordResetTokenRepository.findOneBy.mockResolvedValue(activeToken);
+        userRepository.findOneBy.mockResolvedValue({ id: 1, status: 'pending' } as User);
+
+        await expect(service.resetPassword({ token: 'a-token', password: 'new-password' })).resolves.toBe(1);
+
+        expect(userRepository.findOneBy).toHaveBeenCalledWith({ id: 1 });
+        expect(userRepository.update).toHaveBeenCalledWith(1, { passwordDigest: expect.any(String) });
       });
     });
 

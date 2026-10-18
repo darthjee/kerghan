@@ -4,6 +4,7 @@ import LogoutError from './LogoutError.jsx';
 import HeaderController from './controllers/HeaderController.js';
 import useAuthEffect from './hooks/useAuthEffect.js';
 import AuthSession from '../../../client/AuthSession.js';
+import AwaitingApprovalGate from '../awaitingApproval/AwaitingApprovalGate.jsx';
 
 /**
  * Application header, wrapping the current page's content. Shows a Login link when logged
@@ -14,18 +15,23 @@ import AuthSession from '../../../client/AuthSession.js';
  * `checkStatus()` first migrates any legacy `localStorage` refresh token, then confirms the state
  * against the backend. `isAdmin` always starts `false` — there is no synchronous local check for
  * admin status, so it is only known once `checkStatus()` resolves. A failed logout keeps the
- * user logged in and shows a {@link LogoutError} banner so they can retry.
+ * user logged in and shows a {@link LogoutError} banner so they can retry. While the account
+ * awaits an administrator's approval (`pending`, from the same bus), the nav shows no auth links
+ * and the page content is replaced by the awaiting-approval view (via
+ * {@link AwaitingApprovalGate}).
  *
  * @param {object} props - Component props.
  * @param {React.ReactNode} [props.children] - Current page content, rendered below the nav bar.
- * @returns {React.ReactElement} The rendered header and page content.
+ * @returns {React.ReactElement} The rendered header and page content (or awaiting-approval
+ *   view).
  */
 export default function Header({ children }) {
   const controller = useMemo(() => new HeaderController(), []);
   const [loggedIn, setLoggedIn] = useState(AuthSession.isLoggedIn());
   const [isAdmin, setIsAdmin] = useState(false);
+  const [pending, setPending] = useState(false);
   const [logoutError, setLogoutError] = useState(null);
-  const setters = useMemo(() => ({ setLoggedIn, setIsAdmin }), []);
+  const setters = useMemo(() => ({ setLoggedIn, setIsAdmin, setPending }), []);
 
   useAuthEffect(controller, setters);
 
@@ -38,9 +44,9 @@ export default function Header({ children }) {
 
   return (
     <>
-      {HeaderHelper.render(loggedIn, isAdmin, handleLogout, handleOpenLogin)}
+      {HeaderHelper.render(loggedIn, isAdmin, handleLogout, handleOpenLogin, pending)}
       <LogoutError message={logoutError} />
-      {children}
+      <AwaitingApprovalGate pending={pending}>{children}</AwaitingApprovalGate>
     </>
   );
 }

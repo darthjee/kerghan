@@ -131,6 +131,46 @@ describe('AuthorizationRequestController (e2e)', () => {
       });
     });
 
+    describe('by approver status', () => {
+      function ownerRow(): { status: string } {
+        return ctx.userRepo.rows.find((row) => row.username === 'darthjee') as { status: string };
+      }
+
+      it('answers a pending approver\'s authorize with 401, leaving the request open', async () => {
+        const { uuid } = await createAuthorizationRequest(ctx.app, 'darthjee');
+        ownerRow().status = 'pending';
+
+        await request(ctx.app.getHttpServer())
+          .post(`/auth/authorization-requests/${uuid}/authorize.json`)
+          .set('Cookie', [ownerCookie])
+          .send({ password: 'my-password' })
+          .expect(401);
+
+        expect(ctx.authorizationRequestRepo.rows.find((row) => row.uuid === uuid)?.status).toBe('open');
+      });
+
+      it('answers the poll with { status: "denied" } and no cookies when the user is denied after authorize', async () => {
+        const { uuid, pollToken } = await createAuthorizationRequest(ctx.app, 'darthjee');
+
+        await request(ctx.app.getHttpServer())
+          .post(`/auth/authorization-requests/${uuid}/authorize.json`)
+          .set('Cookie', [ownerCookie])
+          .send({ password: 'my-password' })
+          .expect(201);
+
+        ownerRow().status = 'denied';
+
+        const poll = await request(ctx.app.getHttpServer())
+          .post(`/auth/authorization-requests/${uuid}/poll.json`)
+          .send({ pollToken })
+          .expect(201);
+
+        expect(poll.body).toEqual({ status: 'denied' });
+        expect(poll.headers['set-cookie']).toBeUndefined();
+        expect(ctx.authorizationRequestRepo.rows.find((row) => row.uuid === uuid)?.status).toBe('denied');
+      });
+    });
+
     describe('deny', () => {
       it('rejects an unauthenticated call with 401', async () => {
         const { uuid } = await createAuthorizationRequest(ctx.app, 'darthjee');

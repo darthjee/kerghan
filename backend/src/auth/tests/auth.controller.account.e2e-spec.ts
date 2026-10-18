@@ -44,6 +44,15 @@ describe('AuthController (e2e)', () => {
       });
     });
 
+    it('never changes the caller\'s status', async () => {
+      const cookie = await loginCookie(ctx.app);
+
+      await patchAccount(cookie, { currentPassword: 'my-password', username: 'new-username', newPassword: 'brand-new-password' })
+        .expect(200);
+
+      expect(ctx.userRepo.rows[0].status).toBe('approved');
+    });
+
     it('rejects the wrong current password without changing the account', async () => {
       const cookie = await loginCookie(ctx.app);
 
