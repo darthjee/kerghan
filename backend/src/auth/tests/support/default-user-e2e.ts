@@ -40,7 +40,8 @@ export function useDefaultUserApp(options: BuildAuthTestAppOptions): BuildAuthTe
 }
 
 // Seeds a user row directly, standing in for a row created by an earlier
-// boot (or by registration), with `password` hashed.
+// boot (or by registration), with `password` hashed. `approved` unless
+// `attrs` says otherwise.
 export async function seedUser(
   userRepo: UserRepo,
   attrs: Partial<User> & { password?: string },
@@ -49,6 +50,7 @@ export async function seedUser(
 
   return userRepo.save(userRepo.create({
     isAdmin: false,
+    status: 'approved',
     passwordDigest: await bcrypt.hash(password, 4),
     ...rest,
   }));
