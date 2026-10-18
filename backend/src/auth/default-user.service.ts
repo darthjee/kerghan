@@ -66,8 +66,9 @@ export class DefaultUserService implements OnApplicationBootstrap {
 
   /**
    * Nest lifecycle hook: when the feature is enabled, creates or updates the
-   * default user to match the configuration and records its id. A no-op
-   * when disabled.
+   * default user to match the configuration and records its id. The
+   * default user is always `approved` (a pending or denied one is approved
+   * again, without revoking its sessions). A no-op when disabled.
    * @returns {Promise<void>} Resolves once the default user is synchronized.
    * @throws {Error} When the configured email belongs to another user,
    *   aborting boot.

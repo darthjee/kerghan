@@ -96,6 +96,7 @@ describe('AuthService', () => {
         email: 'darthjee@example.com',
         passwordDigest: await bcrypt.hash('correct-password', 4),
         isAdmin: false,
+        status: 'approved',
       } as User;
     });
 
@@ -372,6 +373,7 @@ describe('AuthService', () => {
       username: 'darthjee',
       email: 'darthjee@example.com',
       isAdmin: false,
+      status: 'approved',
     } as User;
 
     describe('when the refresh token is active', () => {
@@ -629,8 +631,8 @@ describe('AuthService', () => {
   });
 
   describe('status', () => {
-    const user = { id: 1, username: 'darthjee', email: 'darthjee@example.com', isAdmin: false } as User;
-    const defaultUser = { id: 99, username: 'admin', email: 'admin@kerghan.local', isAdmin: true } as User;
+    const user = { id: 1, username: 'darthjee', email: 'darthjee@example.com', isAdmin: false, status: 'approved' } as User;
+    const defaultUser = { id: 99, username: 'admin', email: 'admin@kerghan.local', isAdmin: true, status: 'approved' } as User;
     const autoSession = {
       user: defaultUser,
       accessToken: 'auto-access-token',
