@@ -6,7 +6,7 @@ A tool for monitoring github issues
 [![Codacy Badge](https://app.codacy.com/project/badge/Grade/fb47154bedbb42799e51d50f51f87054)](https://app.codacy.com/gh/darthjee/kerghan/dashboard?utm_source=gh&utm_medium=referral&utm_content=&utm_campaign=Badge_grade)
 [![Codacy Badge](https://app.codacy.com/project/badge/Coverage/fb47154bedbb42799e51d50f51f87054)](https://app.codacy.com/gh/darthjee/kerghan/dashboard?utm_source=gh&utm_medium=referral&utm_content=&utm_campaign=Badge_coverage)
 
-![majora](https://raw.githubusercontent.com/darthjee/majora/master/majora.png)
+![kerghan](https://raw.githubusercontent.com/darthjee/kerghan/main/kerghan.png)
 
 **Current Version:** [0.8.1](https://github.com/darthjee/kerghan/releases/tag/0.8.1)
 
@@ -17,21 +17,29 @@ A tool for monitoring github issues
 Kerghan is a GitHub issue monitoring/dashboard app. Users log in (a lightweight Kerghan account,
 not GitHub OAuth) and choose which repos/orgs to monitor — that selection is the only thing the
 backend persists. Issue data itself is fetched live, on demand, by the frontend calling GitHub's
-public API directly, so the backend stays idle between visits. The driving use case is
+public API directly, so the backend stays idle between visits (stored GitHub integrations exist,
+but issue fetching does not use them yet). The driving use case is
 label-based attention triage — surfacing which of a user's many tracked repos "need my
 attention" in one place. See [docs/agents/flow.md](docs/agents/flow.md) for the full flow.
 
 The application is structured as a NestJS backend and a React single-page application
-frontend, served together through the [Tent](https://github.com/darthjee/tent) reverse proxy —
-the same shape as [Majora](https://github.com/darthjee/majora), the project this one's
-infrastructure was bootstrapped from.
+frontend, served together through the [Tent](https://github.com/darthjee/tent) reverse proxy.
 
 **Status:** the tracked-repo/label-rule data model — the core dashboard/analytics feature — is
-still not built. What does exist: a NestJS/TypeORM backend with a real Auth module
-(username/password login, JWT cookie + rotating refresh token, and a device-authorization flow),
-and a React frontend with a login/register/device-authorization modal, hash-based routing, and a
-full HTTP client layer. See `docs/agents/product.md` for what's decided vs. still open about the
-tracked-repo/label-rule data model.
+still not built. What does exist:
+
+- **Auth** — username/password login, JWT cookie + rotating refresh token, a
+  device-authorization flow, account editing and password reset (with a mail module).
+- **User approval** — optional approval of new registrations, with an admin review to approve
+  or deny users.
+- **Default user** — an optional environment-defined user with automatic login, aimed at the
+  standalone distribution.
+- **Integrations** — GitHub credentials (PAT, OAuth App, GitHub App), encrypted at rest, with
+  key rotation.
+- **Frontend** — a React app with the login/register/device-authorization modal, hash-based
+  routing, and a full HTTP client layer.
+
+See [docs/agents/product.md](docs/agents/product.md) for what's decided vs. still open.
 
 ## Technology Stack
 
@@ -39,7 +47,7 @@ tracked-repo/label-rule data model.
 
 - **Node.js / NestJS** — Application framework
 - **TypeORM** — ORM + migrations
-- **MySQL 8** — Relational database
+- **MySQL** — Relational database
 - **Yarn** — Package manager
 - **Jest + `@swc/jest` + `supertest` + `@nestjs/testing`** — Test suite
 - **ESLint** — Linting
@@ -62,13 +70,15 @@ tracked-repo/label-rule data model.
 
 ```
 kerghan/
-├── backend/              # NestJS/TypeORM backend — Auth module, tracked-repo model still open
+├── backend/              # NestJS/TypeORM backend — auth, user approval, integrations, mail
 ├── frontend/             # React + Vite frontend — login modal + auth flow, dashboard views still to come
 ├── proxy/                # PHP proxy (darthjee/tent) configuration and extensions
 ├── dockerfiles/          # Dockerfiles for each service
 ├── docker_volumes/       # Bind-mounted volumes (static assets, proxy cache)
 ├── navi/                 # Navi cache-warmer configuration
 ├── standalone/           # Standalone distribution: inner stack, kerghan client, installer
+├── bin/                  # Image build/push and release helpers
+├── scripts/              # Deploy (Render), version bump and Navi cache-warming scripts
 ├── docs/                 # Project documentation
 └── docker-compose.yml    # Full stack service definitions
 ```
@@ -187,14 +197,14 @@ make tests
 
 ### Running Tests
 
-Inside the backend shell (`make dev`) or test shell (`make tests`):
+Backend, inside the backend shell (`make dev`) or test shell (`make tests`):
 ```bash
-yarn test        # run Jasmine specs
-yarn coverage    # generate coverage with c8
-yarn lint        # lint source and specs
+yarn test        # run Jest specs
+yarn coverage    # generate coverage with Jest
+yarn lint        # lint src/ (specs live alongside the source)
 ```
 
-Frontend tests (from `frontend/`, or via `docker-compose run kerghan_fe`):
+Frontend, inside a frontend shell (`docker-compose run kerghan_fe /bin/bash`):
 ```bash
 yarn test        # run Jasmine specs
 yarn coverage    # generate coverage with c8
