@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+# Test stub for mv, only put on PATH by the failed-write tests: fails (after
+# logging) when STUB_MV_FAIL=1, otherwise runs the real mv.
+echo "mv $*" >>"$STUB_LOG"
+if [ "${STUB_MV_FAIL:-0}" = "1" ]; then
+  echo "mv: cannot move: simulated failure" >&2
+  exit 1
+fi
+exec /bin/mv "$@"
