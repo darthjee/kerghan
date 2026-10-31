@@ -81,6 +81,7 @@ Commands:
                                   list the settings in ~/.kerghan/config and kerghan.env, or print KEY
   configure [--force] [--unset KEY]... [KEY=VALUE | KEY=-]...
                                   set or unset settings (all or nothing); KEY=- reads the value hidden
+  wizard [--advanced]             set up the settings interactively (--advanced asks every setting)
   version                         print the version
   help                            print this help
 
@@ -1377,20 +1378,48 @@ batch_apply() {
   done
 }
 
+# change_line <key> <old> <new> [generated] - prints one line of the change
+# list: `<key>: <old> -> <new>`, or `<key>: changed` for a secret (`changed
+# (generated)` when [generated] is true), never its value.
+change_line() {
+  if is_secret_key "$1"; then
+    if [ "${4:-}" = "true" ]; then
+      echo "$1: changed (generated)"
+    else
+      echo "$1: changed"
+    fi
+  else
+    echo "$1: $2 -> $3"
+  fi
+}
+
 # batch_report - after batch_apply: the change list and the apply hint on
 # stdout, then the cross-key warnings on stderr; `Nothing changed.` when the
 # batch changed nothing.
 batch_report() {
-  local i=0 key any=false down_up=false password=false
+  local i=0 any=false
+  while [ "$i" -lt "${#BATCH_KEYS[@]}" ]; do
+    if [ "${BATCH_CHANGED[i]}" = "true" ]; then
+      any=true
+      change_line "${BATCH_KEYS[i]}" "${BATCH_OLD[i]}" "${BATCH_NEW[i]}"
+    fi
+    i=$((i + 1))
+  done
+  if [ "$any" != "true" ]; then
+    echo "Nothing changed."
+    return 0
+  fi
+  batch_apply_hint
+}
+
+# batch_apply_hint - after batch_apply, for a batch that changed something:
+# the strongest apply hint and the password note on stdout, then the
+# cross-key warnings on stderr.
+batch_apply_hint() {
+  local i=0 key down_up=false password=false
   while [ "$i" -lt "${#BATCH_KEYS[@]}" ]; do
     key="${BATCH_KEYS[i]}"
     if [ "${BATCH_CHANGED[i]}" = "true" ]; then
-      any=true
-      if is_secret_key "$key"; then
-        echo "$key: changed"
-      else
-        echo "$key: ${BATCH_OLD[i]} -> ${BATCH_NEW[i]}"
-      fi
       case "$key" in
         runtime | stop-timeout) down_up=true ;;
         KERGHAN_DEFAULT_USER_PASSWORD) password=true ;;
@@ -1401,10 +1430,6 @@ batch_report() {
     fi
     i=$((i + 1))
   done
-  if [ "$any" != "true" ]; then
-    echo "Nothing changed."
-    return 0
-  fi
   if [ "$down_up" = "true" ]; then
     echo "Run 'kerghan down && kerghan up' to apply."
   else
@@ -1819,6 +1844,158 @@ read_hidden_value() {
   printf '%s' "$first"
 }
 
+# --- Wizard prompts -----------------------------------------------------------
+# Every prompt goes to stderr and every answer is read from stdin. Nothing is
+# written while the questions run: the answers only live in memory (the batch)
+# until the confirmation, so Ctrl-C and end of input leave both files as they
+# were. Spec: docs/agents/specs/client-config/wizard.md.
+
+# Set by wizard_read, wizard_ask and wizard_password.
+WIZARD_ANSWER=""
+WIZARD_PASSWORD=""      # the new password (empty: keep)
+WIZARD_PASSWORD_MODE="" # keep, generated or typed
+
+# wizard_trap - the Ctrl-C trap of the whole wizard: restores the terminal
+# echo (a hidden password prompt may have turned it off) and exits 130.
+wizard_trap() {
+  trap 'stty echo 2>/dev/null || true; echo >&2; exit 130' INT
+}
+
+# wizard_input_ended - the error for an end of input before the confirmation;
+# exits 1 (nothing has been written).
+wizard_input_ended() {
+  stty echo 2>/dev/null || true
+  echo >&2
+  error "the input ended before the wizard finished; nothing was written"
+  exit 1
+}
+
+# wizard_read <prompt> - prints `<prompt>: ` on stderr and reads one line of
+# stdin into WIZARD_ANSWER. End of input exits 1 (wizard_input_ended).
+wizard_read() {
+  WIZARD_ANSWER=""
+  printf '%s: ' "$1" >&2
+  IFS= read -r WIZARD_ANSWER || wizard_input_ended
+  WIZARD_ANSWER="${WIZARD_ANSWER%$'\r'}"
+}
+
+# is_bool_key <key> - the key takes true / false (y / n in the wizard).
+is_bool_key() {
+  in_list "$1" "auto-login KERGHAN_DEFAULT_USER_ENABLED KERGHAN_DEFAULT_USER_ADMIN"
+}
+
+# wizard_ask <key> <label> <bracket-text> [note] - asks one config or env
+# question, `<label> [<bracket-text>]<note>: `, until the answer is valid, and
+# leaves it in WIZARD_ANSWER, trimmed. An empty answer (Enter) is never
+# invalid: WIZARD_ANSWER is then empty and the caller keeps the bracketed
+# value. For a boolean key y / n are written as true / false. Any other answer
+# is checked with validate_value, which prints why it is refused; the same
+# question is then asked again.
+wizard_ask() {
+  local key="$1" label="$2" bracket="$3" note="${4:-}" answer
+  while true; do
+    wizard_read "$label [$bracket]$note"
+    answer="$(trim "$WIZARD_ANSWER")"
+    if [ -z "$answer" ]; then
+      WIZARD_ANSWER=""
+      return 0
+    fi
+    if is_bool_key "$key"; then
+      case "$(printf '%s' "$answer" | tr '[:upper:]' '[:lower:]')" in
+        y | yes | true) answer=true ;;
+        n | no | false) answer=false ;;
+      esac
+    fi
+    if validate_value "$key" "$answer"; then
+      WIZARD_ANSWER="$answer"
+      return 0
+    fi
+  done
+}
+
+# wizard_hidden_read <prompt> - reads one line with the terminal echo off
+# into WIZARD_ANSWER (the prompt on stderr). End of input exits 1.
+wizard_hidden_read() {
+  WIZARD_ANSWER=""
+  printf '%s: ' "$1" >&2
+  stty -echo 2>/dev/null || true
+  IFS= read -r WIZARD_ANSWER || wizard_input_ended
+  stty echo 2>/dev/null || true
+  echo >&2
+  WIZARD_ANSWER="${WIZARD_ANSWER%$'\r'}"
+}
+
+# wizard_type_password - asks the new password twice with hidden input, until
+# both entries match and it has at least PASSWORD_MIN_LENGTH characters; sets
+# WIZARD_PASSWORD. The value never appears in a message.
+wizard_type_password() {
+  local first
+  while true; do
+    wizard_hidden_read "New password"
+    first="$WIZARD_ANSWER"
+    wizard_hidden_read "New password (again)"
+    if [ "$first" != "$WIZARD_ANSWER" ]; then
+      echo "The two values do not match; try again." >&2
+      continue
+    fi
+    if [ -z "$first" ]; then
+      error "invalid KERGHAN_DEFAULT_USER_PASSWORD (expected at least $PASSWORD_MIN_LENGTH characters)"
+      continue
+    fi
+    if validate_value KERGHAN_DEFAULT_USER_PASSWORD "$first"; then
+      WIZARD_PASSWORD="$first"
+      return 0
+    fi
+  done
+}
+
+# wizard_password <has-password> - the password question: (k)eep (only when
+# kerghan.env has a password, <has-password> true; then the default),
+# (g)enerate (the generator of up, the default otherwise) or (t)ype. Sets
+# WIZARD_PASSWORD_MODE (keep, generated or typed) and WIZARD_PASSWORD (empty
+# for keep). A generated value is never printed.
+wizard_password() {
+  local has="$1" prompt default answer
+  WIZARD_PASSWORD=""
+  WIZARD_PASSWORD_MODE=""
+  if [ "$has" = "true" ]; then
+    prompt="Default user password: (k)eep, (g)enerate or (t)ype? [k]"
+    default=k
+  else
+    prompt="Default user password: (g)enerate or (t)ype? [g]"
+    default=g
+  fi
+  while true; do
+    wizard_read "$prompt"
+    answer="$(trim "$WIZARD_ANSWER" | tr '[:upper:]' '[:lower:]')"
+    [ -n "$answer" ] || answer="$default"
+    case "$answer" in
+      k | keep)
+        if [ "$has" = "true" ]; then
+          WIZARD_PASSWORD_MODE=keep
+          return 0
+        fi
+        ;;
+      g | generate)
+        # Explicit: bash clears set -e inside command substitutions.
+        WIZARD_PASSWORD="$(default_env_value KERGHAN_DEFAULT_USER_PASSWORD)" || exit 1
+        WIZARD_PASSWORD_MODE=generated
+        return 0
+        ;;
+      t | type)
+        wizard_type_password
+        WIZARD_PASSWORD_MODE=typed
+        return 0
+        ;;
+    esac
+    if [ "$has" = "true" ]; then
+      echo "Answer k, g or t." >&2
+    else
+      echo "Answer g or t." >&2
+    fi
+  done
+}
+
 # configure_list - the listing of `kerghan configure`: both files, with the
 # value and source of every key, secrets masked unless SHOW_SECRETS.
 configure_list() {
@@ -2055,6 +2232,281 @@ configure_check_key() {
   fi
 }
 
+# Set by the wizard questions: the effective value after the question (the
+# answer, or the value that stays when Enter is pressed).
+WIZARD_VALUE=""
+# The effective answers later questions depend on.
+WIZARD_PORT=""
+WIZARD_AUTO_LOGIN=""
+# true when the wizard generated the password (the summary says so).
+WIZARD_GENERATED=false
+
+# wizard_config_default <key> - the value offered for a config key without a
+# valid line: its built-in default; auto-login as up derives it (false when
+# kerghan.env lacks the default user); bind derived from the auto-login answer.
+wizard_config_default() {
+  case "$1" in
+    auto-login)
+      if [ "$ER_EXISTS" = "true" ] && ! env_has_default_user; then
+        echo false
+      else
+        echo "$DEFAULT_AUTO_LOGIN"
+      fi
+      ;;
+    bind)
+      if [ "$WIZARD_AUTO_LOGIN" = "true" ]; then
+        echo "$DEFAULT_BIND_AUTO_LOGIN"
+      else
+        echo "$DEFAULT_BIND_NO_AUTO_LOGIN"
+      fi
+      ;;
+    *) config_default "$1" ;;
+  esac
+}
+
+# wizard_config_question <key> <label> - asks a config question and adds the
+# answer to the batch. The bracket shows the current value, or the default when
+# the key has no line (Enter then writes nothing, so the key stays unset). An
+# invalid current line is shown as invalid with the default offered; Enter
+# then writes the default, which fixes the line. Sets WIZARD_VALUE.
+wizard_config_question() {
+  local key="$1" label="$2" default bracket note="" invalid=false
+  setting_lookup "$key"
+  config_key_index "$key"
+  if [ -n "${CR_BAD_LINE[CKI]}" ]; then
+    invalid=true
+    default="$(wizard_config_default "$key")"
+    note=" (current value '${CR_BAD_VALUE[CKI]}' is invalid)"
+  elif [ "$SETTING_SET" = "true" ]; then
+    default="$SETTING_VALUE"
+  else
+    default="$(wizard_config_default "$key")"
+  fi
+  bracket="$default"
+  if [ "$key" = "bind" ] && { [ "$SETTING_SET" != "true" ] || [ "$invalid" = "true" ]; }; then
+    bracket="$default, derived from auto-login"
+  fi
+  wizard_ask "$key" "$label" "$bracket" "$note"
+  if [ -n "$WIZARD_ANSWER" ]; then
+    batch_add set "$key" "$WIZARD_ANSWER"
+    WIZARD_VALUE="$WIZARD_ANSWER"
+  else
+    if [ "$invalid" = "true" ]; then
+      batch_add set "$key" "$default"
+    fi
+    WIZARD_VALUE="$default"
+  fi
+}
+
+# wizard_env_question <key> <label> - asks an env question and adds the answer
+# to the batch. The bracket shows the value in kerghan.env, `not set` when it
+# has no line, or the value a new file gets when kerghan.env does not exist
+# yet. Enter writes nothing (a new file gets that value when it is created).
+# Sets WIZARD_VALUE.
+wizard_env_question() {
+  local key="$1" label="$2" current="" bracket
+  if [ "$ER_EXISTS" != "true" ]; then
+    # Explicit: bash clears set -e inside command substitutions.
+    current="$(default_env_value "$key")" || exit 1
+    bracket="$current"
+  elif env_key_index "$key"; then
+    if [ "${ER_KINDS[EKI]}" = "bare" ]; then
+      bracket="(from environment)"
+    else
+      current="${ER_VALUES[EKI]}"
+      bracket="${current:-empty}"
+    fi
+  else
+    bracket="not set"
+  fi
+  wizard_ask "$key" "$label" "$bracket"
+  if [ -n "$WIZARD_ANSWER" ]; then
+    batch_add set "$key" "$WIZARD_ANSWER"
+    WIZARD_VALUE="$WIZARD_ANSWER"
+  else
+    WIZARD_VALUE="$current"
+  fi
+}
+
+# wizard_start_checks - the starting state, before the first question: a
+# terminal on stdin, no config line without `=`, and no data volume without
+# kerghan.env. Each failure exits 1. Runs read_settings.
+wizard_start_checks() {
+  local n
+  if ! is_tty; then
+    error "kerghan wizard needs a terminal on stdin"
+    hint "use 'kerghan configure KEY=VALUE...' for scripted changes"
+    exit 1
+  fi
+  read_settings
+  if [ -n "$CR_NOEQ_LINES" ]; then
+    for n in $CR_NOEQ_LINES; do
+      error "$CONFIG_FILE:$n: expected key=value"
+      hint "fix or remove line $n of $CONFIG_FILE by hand"
+    done
+    exit 1
+  fi
+  if [ "$ER_EXISTS" != "true" ] && volume_exists; then
+    # shellcheck disable=SC2088 # the literal ~ is meant for display
+    error "~/.kerghan/kerghan.env is missing but the data volume $VOLUME exists"
+    hint "restore kerghan.env from your backup (the data was written with its secrets), or run 'kerghan reset' to start from scratch"
+    hint "use 'kerghan configure KEY=VALUE...' for config-only changes"
+    exit 1
+  fi
+}
+
+# wizard_asks_config <key> <advanced> - the advanced-only config question of
+# <key> is asked: with --advanced, or when its current line is invalid.
+# batch_validate refuses a batch that leaves an invalid config line in place,
+# so without this a bad `runtime` line (say) would make the write fail after
+# the confirmation; asking it lets Enter fix the line. wizard.md does not
+# cover this case (#405 decision, documented by #406).
+wizard_asks_config() {
+  [ "$2" = "true" ] && return 0
+  config_key_index "$1"
+  [ -n "${CR_BAD_LINE[CKI]}" ]
+}
+
+# wizard_questions <advanced> - asks the questions of wizard.md in table
+# order, filling the batch. Nothing is written.
+wizard_questions() {
+  local advanced="$1" enabled has_password=false
+  wizard_config_question port "Port"
+  WIZARD_PORT="$WIZARD_VALUE"
+  wizard_config_question variant "Image variant (online/offline)"
+  if wizard_asks_config runtime "$advanced"; then
+    wizard_config_question runtime "Docker runtime (auto/sysbox/privileged)"
+  fi
+  if wizard_asks_config stop-timeout "$advanced"; then
+    wizard_config_question stop-timeout "Stop timeout (seconds)"
+  fi
+  if wizard_asks_config image-tag "$advanced"; then
+    wizard_config_question image-tag "Image tag"
+  fi
+  wizard_config_question auto-login "Automatic login (true/false)"
+  WIZARD_AUTO_LOGIN="$WIZARD_VALUE"
+  wizard_config_question bind "Bind address"
+
+  # KERGHAN_DEFAULT_USER_ENABLED: the answer with --advanced, the current
+  # value otherwise (the backend treats anything other than true as off).
+  if [ "$advanced" = "true" ]; then
+    wizard_env_question KERGHAN_DEFAULT_USER_ENABLED "Default user enabled (true/false)"
+    enabled="$WIZARD_VALUE"
+  elif [ "$ER_EXISTS" != "true" ]; then
+    enabled=true
+  elif env_value_set KERGHAN_DEFAULT_USER_ENABLED; then
+    enabled="${ER_VALUES[EKI]}"
+  else
+    enabled=false
+  fi
+
+  # Nothing uses the default user when automatic login is off and the user is
+  # disabled: questions 9-12 are skipped.
+  if [ "$WIZARD_AUTO_LOGIN" = "true" ] || [ "$enabled" = "true" ]; then
+    if [ "$advanced" = "true" ]; then
+      wizard_env_question KERGHAN_DEFAULT_USER_ADMIN "Default user is admin (true/false)"
+    fi
+    wizard_env_question KERGHAN_DEFAULT_USER_USERNAME "Default user username"
+    wizard_env_question KERGHAN_DEFAULT_USER_EMAIL "Default user email"
+    if [ "$ER_EXISTS" = "true" ] && env_value_set KERGHAN_DEFAULT_USER_PASSWORD; then
+      has_password=true
+    fi
+    wizard_password "$has_password"
+    if [ "$WIZARD_PASSWORD_MODE" != "keep" ]; then
+      batch_add set KERGHAN_DEFAULT_USER_PASSWORD "$WIZARD_PASSWORD"
+      if [ "$WIZARD_PASSWORD_MODE" = "generated" ]; then
+        WIZARD_GENERATED=true
+      fi
+    fi
+  fi
+
+  if [ "$advanced" = "true" ]; then
+    if [ "$ER_EXISTS" = "true" ] && env_value_set FRONTEND_BASE_URL; then
+      wizard_env_question FRONTEND_BASE_URL "Public URL"
+    else
+      wizard_ask FRONTEND_BASE_URL "Public URL" "http://localhost:$WIZARD_PORT, derived from port"
+      if [ -n "$WIZARD_ANSWER" ]; then
+        batch_add set FRONTEND_BASE_URL "$WIZARD_ANSWER"
+      fi
+    fi
+  fi
+}
+
+# cmd_wizard - `kerghan wizard [--advanced]`: asks one question per setting,
+# then writes the answers through the shared writer (configure's batch). Never
+# calls vault; the only Docker call is the volume check when kerghan.env is
+# missing.
+cmd_wizard() {
+  local advanced=false
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --advanced) advanced=true ;;
+      -*) usage_error "unknown option '$1'" ;;
+      *) usage_error "unexpected argument '$1'" ;;
+    esac
+    shift
+  done
+
+  wizard_trap
+  wizard_start_checks
+  batch_reset
+  WIZARD_GENERATED=false
+  wizard_questions "$advanced"
+
+  # Every answer was validated as it was given; this also catches what spans
+  # the batch (e.g. an invalid config line), before the confirmation.
+  batch_validate false || exit 1
+  wizard_preview || {
+    echo "Nothing changed."
+    return 0
+  }
+  wizard_confirm || {
+    echo "Nothing written."
+    return 0
+  }
+  batch_apply || exit 1
+  batch_apply_hint
+  if [ "$WIZARD_GENERATED" = "true" ]; then
+    # shellcheck disable=SC2088 # the literal ~ is meant for display
+    echo "The new default user password is in ~/.kerghan/kerghan.env (KERGHAN_DEFAULT_USER_PASSWORD)."
+  fi
+}
+
+# wizard_preview - prints the change list of the batch before anything is
+# written (old value from setting_display, new value from the batch; the
+# wizard only sets values). Returns 1 when nothing would change.
+wizard_preview() {
+  local i=0 any=false key generated
+  while [ "$i" -lt "${#BATCH_KEYS[@]}" ]; do
+    key="${BATCH_KEYS[i]}"
+    if key_changes "$i"; then
+      any=true
+      generated=false
+      if [ "$key" = "KERGHAN_DEFAULT_USER_PASSWORD" ]; then
+        generated="$WIZARD_GENERATED"
+      fi
+      change_line "$key" "$(setting_display "$key")" "${BATCH_VALUES[i]}" "$generated"
+    fi
+    i=$((i + 1))
+  done
+  [ "$any" = "true" ]
+}
+
+# wizard_confirm - asks `Write these changes? [Y/n]` until the answer is
+# Enter / y / yes (returns 0) or n / no (returns 1). End of input exits 1.
+wizard_confirm() {
+  local answer
+  while true; do
+    printf 'Write these changes? [Y/n] ' >&2
+    IFS= read -r answer || wizard_input_ended
+    answer="$(trim "${answer%$'\r'}" | tr '[:upper:]' '[:lower:]')"
+    case "$answer" in
+      '' | y | yes) return 0 ;;
+      n | no) return 1 ;;
+    esac
+  done
+}
+
 main() {
   if [ "$#" -eq 0 ]; then
     usage_error
@@ -2070,6 +2522,7 @@ main() {
     reset) cmd_reset ${@+"$@"} ;;
     update-env) cmd_update_env ${@+"$@"} ;;
     configure) cmd_configure ${@+"$@"} ;;
+    wizard) cmd_wizard ${@+"$@"} ;;
     version) cmd_version ${@+"$@"} ;;
     help | -h | --help) usage ;;
     *) usage_error "unknown command '$cmd'" ;;

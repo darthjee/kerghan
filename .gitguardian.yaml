@@ -28,3 +28,29 @@ secret:
       match: KERGHAN_DEFAULT_USER_PASSWORD=yet-another-pw
     - name: Same configure bats fixture (issue #404), as captured up to the end of the line
       match: yet-another-pw port=3002
+    - name: Standalone client wizard bats fixture password (issue #405) — fake value typed into the wizard only in standalone/test/wizard.bats
+      match: wizard-typed-pw
+    - name: Same wizard bats fixture (issue #405), as captured with its key prefix
+      match: KERGHAN_DEFAULT_USER_PASSWORD=wizard-typed-pw
+    - name: Wizard bats mismatch fixtures (issue #405) — fake values used only to exercise the typed-password mismatch re-ask
+      match: first-try-pw
+    - name: Same wizard bats mismatch fixture (issue #405)
+      match: other-try-pw
+    - name: Wizard bats generated-password assertion (issue #405) — a grep regex for 48 hex characters in standalone/test/wizard.bats, not a password
+      match: "[0-9a-f]{48}$'"
+    - name: Same wizard bats regex (issue #405), as captured without the closing quote
+      match: "[0-9a-f]{48}$"
+    - name: Same wizard bats regex (issue #405), as captured with its key prefix
+      match: "KERGHAN_DEFAULT_USER_PASSWORD=[0-9a-f]{48}$"
+    - name: Same wizard bats regex (issue #405), as captured up to the end of the line
+      match: "[0-9a-f]{48}$' \"$ENV_FILE\""
+    - name: Same wizard bats regex (issue #405), with its key prefix and closing quote
+      match: "KERGHAN_DEFAULT_USER_PASSWORD=[0-9a-f]{48}$'"
+    - name: Same wizard bats regex (issue #405), with its anchor and key prefix
+      match: "^KERGHAN_DEFAULT_USER_PASSWORD=[0-9a-f]{48}$"
+    - name: Same wizard bats regex (issue #405), with its anchor, key prefix and closing quote
+      match: "^KERGHAN_DEFAULT_USER_PASSWORD=[0-9a-f]{48}$'"
+    - name: Same wizard bats regex (issue #405), with its key prefix, up to the end of the line
+      match: "KERGHAN_DEFAULT_USER_PASSWORD=[0-9a-f]{48}$' \"$ENV_FILE\""
+    - name: Same wizard bats regex (issue #405), the character class and count only
+      match: "[0-9a-f]{48}"
