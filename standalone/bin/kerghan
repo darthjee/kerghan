@@ -77,6 +77,10 @@ Commands:
   compose <args>                  run docker compose inside the instance (e.g. compose exec mysql sh)
   reset                           wipe all data (removes $VOLUME), asks for confirmation
   update-env                      add missing variables to ~/.kerghan/kerghan.env (keeps existing values)
+  configure [--show-secrets] [KEY]
+                                  list the settings in ~/.kerghan/config and kerghan.env, or print KEY
+  configure [--force] [--unset KEY]... [KEY=VALUE | KEY=-]...
+                                  set or unset settings (all or nothing); KEY=- reads the value hidden
   version                         print the version
   help                            print this help
 
@@ -1776,6 +1780,277 @@ cmd_update_env() {
   echo "Run 'kerghan down && kerghan up' to apply the change."
 }
 
+# read_hidden_value <key> - prints the value of `KEY=-`: on a TTY (is_tty) it
+# prompts twice on stderr with echo off until both entries match; from a pipe
+# it reads the first line of stdin without its newline (end of input: empty).
+# Ctrl-C exits 130.
+read_hidden_value() {
+  local key="$1" first="" second=""
+  if ! is_tty; then
+    IFS= read -r first || true
+    printf '%s' "$first"
+    return 0
+  fi
+  trap 'stty echo 2>/dev/null || true; echo >&2; exit 130' INT
+  stty -echo 2>/dev/null || true
+  while true; do
+    first=""
+    second=""
+    printf '%s: ' "$key" >&2
+    if ! IFS= read -r first; then
+      echo >&2
+      break
+    fi
+    echo >&2
+    printf '%s (again): ' "$key" >&2
+    if ! IFS= read -r second; then
+      echo >&2
+      first=""
+      break
+    fi
+    echo >&2
+    [ "$first" = "$second" ] && break
+    echo "The two values do not match; try again." >&2
+  done
+  stty echo 2>/dev/null || true
+  trap - INT
+  printf '%s' "$first"
+}
+
+# configure_list - the listing of `kerghan configure`: both files, with the
+# value and source of every key, secrets masked unless SHOW_SECRETS.
+configure_list() {
+  local keys=() values=() sources=() key i n kw=0 vw=0
+  read_settings
+  for n in $CR_NOEQ_LINES; do
+    warn "$CONFIG_FILE:$n: expected key=value"
+  done
+
+  # shellcheck disable=SC2088 # the literal ~ is meant for display
+  echo "config (~/.kerghan/config)"
+  for key in $CONFIG_KEYS; do
+    keys+=("$key")
+  done
+  i=0
+  while [ "$i" -lt "${#CR_UNKNOWN_KEYS[@]}" ]; do
+    keys+=("${CR_UNKNOWN_KEYS[i]}")
+    i=$((i + 1))
+  done
+  i=0
+  while [ "$i" -lt "${#keys[@]}" ]; do
+    setting_lookup "${keys[i]}" || true
+    values[i]="$SETTING_VALUE"
+    sources[i]="$SETTING_SOURCE"
+    i=$((i + 1))
+  done
+  print_rows
+
+  # shellcheck disable=SC2088 # the literal ~ is meant for display
+  echo "env (~/.kerghan/kerghan.env)"
+  if [ "$ER_EXISTS" != "true" ]; then
+    echo "  not created yet: 'kerghan up' (or the first env write) creates it"
+    return 0
+  fi
+  keys=()
+  values=()
+  sources=()
+  for key in $DEFAULT_ENV_KEYS FRONTEND_BASE_URL; do
+    keys+=("$key")
+  done
+  i=0
+  while [ "$i" -lt "${#ER_KEYS[@]}" ]; do
+    if ! in_list "${ER_KEYS[i]}" "$DEFAULT_ENV_KEYS FRONTEND_BASE_URL"; then
+      keys+=("${ER_KEYS[i]}")
+    fi
+    i=$((i + 1))
+  done
+  i=0
+  while [ "$i" -lt "${#keys[@]}" ]; do
+    key="${keys[i]}"
+    if env_key_index "$key"; then
+      SETTING_SOURCE="file"
+      if [ "${ER_KINDS[EKI]}" = "bare" ]; then
+        SETTING_SOURCE="file, from environment"
+        SETTING_VALUE="—"
+      else
+        SETTING_VALUE="$(mask_value "$key" "${ER_VALUES[EKI]}")"
+      fi
+      if is_client_managed_key "$key"; then
+        SETTING_SOURCE="$SETTING_SOURCE, refused (client-managed)"
+      fi
+    else
+      SETTING_VALUE="—"
+      SETTING_SOURCE="not set"
+    fi
+    values[i]="$SETTING_VALUE"
+    sources[i]="$SETTING_SOURCE"
+    i=$((i + 1))
+  done
+  print_rows
+}
+
+# display_width <text> - prints the column width of <text> (the em dash
+# counts as one column whatever the locale).
+display_width() {
+  if [ "$1" = "—" ]; then
+    echo 1
+  else
+    echo "${#1}"
+  fi
+}
+
+# print_rows - prints the keys/values/sources arrays of configure_list as
+# aligned columns (bash dynamic scoping: they are the caller's locals).
+print_rows() {
+  local i=0 kw=0 vw=0 w pad
+  while [ "$i" -lt "${#keys[@]}" ]; do
+    [ "${#keys[i]}" -le "$kw" ] || kw="${#keys[i]}"
+    w="$(display_width "${values[i]}")"
+    [ "$w" -le "$vw" ] || vw="$w"
+    i=$((i + 1))
+  done
+  i=0
+  while [ "$i" -lt "${#keys[@]}" ]; do
+    w="$(display_width "${values[i]}")"
+    pad="$(printf '%*s' "$((vw - w + 2))" '')"
+    printf '  %-*s  %s%s%s\n' "$kw" "${keys[i]}" "${values[i]}" "$pad" "${sources[i]}"
+    i=$((i + 1))
+  done
+}
+
+# configure_read <key> - the single read: the raw value written in the file
+# (an empty line when the default applies), `******** (set)` for a set secret
+# unless SHOW_SECRETS.
+configure_read() {
+  local key="$1" config_keys
+  if ! is_env_key "$key" && ! config_key_index "$key"; then
+    config_keys="$(echo "$CONFIG_KEYS" | sed 's/ /, /g')"
+    error "unknown key '$key' (known config keys: $config_keys)"
+    exit 1
+  fi
+  read_settings
+  setting_lookup "$key" || true
+  if [ -n "$SETTING_RAW" ] && [ "$SHOW_SECRETS" != "true" ] && is_secret_key "$key"; then
+    echo "$MASK (set)"
+  else
+    printf '%s\n' "$SETTING_RAW"
+  fi
+}
+
+# confirm_force - the warning before writing a --force secret, and on a TTY a
+# [y/N] confirmation; exits 1 unless confirmed.
+confirm_force() {
+  local key answer="" i=0 any=false
+  while [ "$i" -lt "${#BATCH_KEYS[@]}" ]; do
+    key="${BATCH_KEYS[i]}"
+    i=$((i + 1))
+    [ "${BATCH_ACTIONS[i - 1]}" = "set" ] && in_list "$key" "$FORCE_KEYS" || continue
+    any=true
+    case "$key" in
+      KERGHAN_SECRET_KEY)
+        warn "changing KERGHAN_SECRET_KEY logs everyone out: it signs every access token"
+        ;;
+      KERGHAN_INTEGRATIONS_KEY)
+        warn "changing KERGHAN_INTEGRATIONS_KEY makes the stored integration credentials unreadable: it encrypts them"
+        ;;
+    esac
+  done
+  [ "$any" = "true" ] || return 0
+  # shellcheck disable=SC2088 # the literal ~ is meant for display
+  hint "back up ~/.kerghan/kerghan.env first"
+  is_tty || return 0
+  printf 'Continue? [y/N] ' >&2
+  IFS= read -r answer || true
+  answer="$(printf '%s' "$answer" | tr '[:upper:]' '[:lower:]')"
+  case "$answer" in
+    y | yes) return 0 ;;
+  esac
+  error "aborted; nothing was written"
+  exit 1
+}
+
+# cmd_configure - `kerghan configure`: list, read one key, or set / unset
+# keys (all or nothing) through the shared writer. Never calls vault; the only
+# Docker call is the volume check when kerghan.env is missing.
+cmd_configure() {
+  local force=false bare="" bare_count=0 stdin_index="" key value i
+  SHOW_SECRETS=false
+  batch_reset
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --show-secrets) SHOW_SECRETS=true ;;
+      --force) force=true ;;
+      --unset)
+        [ "$#" -ge 2 ] || usage_error "option '--unset' requires a key"
+        case "$2" in
+          *=*) usage_error "option '--unset' takes a KEY, not '$2'" ;;
+        esac
+        configure_check_key "$2"
+        batch_add unset "$2"
+        shift
+        ;;
+      -*) usage_error "unknown option '$1'" ;;
+      *=*)
+        key="${1%%=*}"
+        value="${1#*=}"
+        configure_check_key "$key"
+        if [ "$value" = "-" ]; then
+          [ -z "$stdin_index" ] || usage_error "only one KEY=- per call (stdin feeds one value)"
+          stdin_index="${#BATCH_KEYS[@]}"
+        fi
+        batch_add set "$key" "$value"
+        ;;
+      *)
+        configure_check_key "$1"
+        bare="$1"
+        bare_count=$((bare_count + 1))
+        ;;
+    esac
+    shift
+  done
+
+  [ "$bare_count" -le 1 ] || usage_error "only one KEY can be read at a time"
+  if [ "${#BATCH_KEYS[@]}" -eq 0 ]; then
+    [ "$force" != "true" ] || usage_error "option '--force' only applies to changes"
+    if [ "$bare_count" -eq 1 ]; then
+      configure_read "$bare"
+    else
+      configure_list
+    fi
+    return 0
+  fi
+  [ "$bare_count" -eq 0 ] || usage_error "cannot read '$bare' and write in the same call"
+  [ "$SHOW_SECRETS" != "true" ] || usage_error "option '--show-secrets' only applies to listing or reading"
+
+  read_settings
+  if [ -n "$stdin_index" ]; then
+    BATCH_VALUES[stdin_index]="$(read_hidden_value "${BATCH_KEYS[stdin_index]}")"
+  fi
+  i=0
+  while [ "$i" -lt "${#BATCH_KEYS[@]}" ]; do
+    key="${BATCH_KEYS[i]}"
+    if [ "${BATCH_ACTIONS[i]}" = "set" ] && [ "$i" != "$stdin_index" ] && is_secret_key "$key"; then
+      hint "a value given as $key=... may be kept in your shell history and visible in ps; use $key=- to read it hidden"
+    fi
+    i=$((i + 1))
+  done
+  batch_validate "$force" || exit 1
+  confirm_force
+  batch_apply || exit 1
+  batch_report
+}
+
+# configure_check_key <key> - usage error unless <key> is an env or config key
+# name, or when the call already names it.
+configure_check_key() {
+  if ! is_env_key "$1" && ! is_config_key_name "$1"; then
+    usage_error "malformed key '$1' (expected UPPER_CASE for kerghan.env or lower-case for config)"
+  fi
+  if batch_index "$1" || { [ "$bare_count" -gt 0 ] && [ "$bare" = "$1" ]; }; then
+    usage_error "key '$1' given twice"
+  fi
+}
+
 main() {
   if [ "$#" -eq 0 ]; then
     usage_error
@@ -1790,6 +2065,7 @@ main() {
     compose) cmd_compose ${@+"$@"} ;;
     reset) cmd_reset ${@+"$@"} ;;
     update-env) cmd_update_env ${@+"$@"} ;;
+    configure) cmd_configure ${@+"$@"} ;;
     version) cmd_version ${@+"$@"} ;;
     help | -h | --help) usage ;;
     *) usage_error "unknown command '$cmd'" ;;
