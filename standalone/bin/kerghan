@@ -505,6 +505,421 @@ compare_number() {
   fi
 }
 
+# --- Shared config/env writer ---------------------------------------------
+# The layer `kerghan configure` (and `kerghan wizard`) uses to read, validate
+# and write ~/.kerghan/config and ~/.kerghan/kerghan.env. It never calls vault;
+# the only Docker call is volume_exists, when kerghan.env is missing and an env
+# key is written. Specs: docs/agents/specs/client-config/.
+
+# CONFIG_KEYS - the known ~/.kerghan/config keys, in listing order.
+CONFIG_KEYS="port variant runtime stop-timeout image-tag auto-login bind"
+# SECRET_KEYS - masked in the listing, the single read and the change list.
+SECRET_KEYS="KERGHAN_DEFAULT_USER_PASSWORD KERGHAN_SECRET_KEY KERGHAN_INTEGRATIONS_KEY"
+# FORCE_KEYS - only written with --force (stored data depends on them).
+FORCE_KEYS="KERGHAN_SECRET_KEY KERGHAN_INTEGRATIONS_KEY"
+# CLIENT_MANAGED_KEYS - passed by the client on every up; never written.
+CLIENT_MANAGED_KEYS="KERGHAN_DEFAULT_USER_ALWAYS_AUTHENTICATED KERGHAN_DEFAULT_USER_ALLOWED_IPS"
+# PASSWORD_MIN_LENGTH - the backend refuses to boot with a shorter password.
+PASSWORD_MIN_LENGTH=8
+MASK="********"
+# SHOW_SECRETS - true unmasks the secrets (configure --show-secrets).
+SHOW_SECRETS=false
+
+# in_list <word> <space-separated list>
+in_list() {
+  case " $2 " in
+    *" $1 "*) return 0 ;;
+  esac
+  return 1
+}
+
+# is_env_key <key> - [A-Z_][A-Z0-9_]*: routed to kerghan.env.
+is_env_key() {
+  case "$1" in
+    '' | [![:upper:]_]* | *[![:upper:][:digit:]_]*) return 1 ;;
+  esac
+  return 0
+}
+
+# is_config_key_name <key> - [a-z][a-z0-9-]*: routed to config (known or not).
+is_config_key_name() {
+  case "$1" in
+    '' | [![:lower:]]* | *[![:lower:][:digit:]-]*) return 1 ;;
+  esac
+  return 0
+}
+
+is_secret_key() { in_list "$1" "$SECRET_KEYS"; }
+is_client_managed_key() { in_list "$1" "$CLIENT_MANAGED_KEYS"; }
+
+# is_tty - stdin is a terminal. KERGHAN_ASSUME_TTY=true forces it (test-only
+# override, not documented in the usage).
+is_tty() {
+  [ "${KERGHAN_ASSUME_TTY:-}" = "true" ] || [ -t 0 ]
+}
+
+# valid_config_value <key> <value> - the load_config validator for <key>.
+valid_config_value() {
+  case "$1" in
+    port) valid_port "$2" ;;
+    variant) valid_variant "$2" ;;
+    runtime) valid_runtime "$2" ;;
+    stop-timeout) valid_stop_timeout "$2" ;;
+    image-tag) valid_image_tag "$2" ;;
+    auto-login) valid_bool "$2" ;;
+    bind) valid_bind "$2" ;;
+    *) return 1 ;;
+  esac
+}
+
+# config_expected <key> - the "expected" text load_config prints for <key>.
+config_expected() {
+  case "$1" in
+    port) echo "1-65535" ;;
+    variant) echo "online or offline" ;;
+    runtime) echo "auto, sysbox or privileged" ;;
+    stop-timeout) echo "a positive number of seconds" ;;
+    image-tag) echo "a Docker image tag, without the -offline suffix" ;;
+    auto-login) echo "true or false" ;;
+    bind) echo "an IPv4 address" ;;
+  esac
+}
+
+# config_default <key> - the built-in default of a config key (bind has none:
+# it is derived from auto-login, see setting_lookup).
+config_default() {
+  case "$1" in
+    port) echo "$DEFAULT_PORT" ;;
+    variant) echo "$DEFAULT_VARIANT" ;;
+    runtime) echo "$DEFAULT_RUNTIME" ;;
+    stop-timeout) echo "$DEFAULT_STOP_TIMEOUT" ;;
+    image-tag) echo "$KERGHAN_VERSION" ;;
+    auto-login) echo "$DEFAULT_AUTO_LOGIN" ;;
+  esac
+}
+
+# Filled by read_config_file, one entry per CONFIG_KEYS key, in that order.
+CR_EXISTS=false
+CR_COUNT=()     # number of active lines for the key
+CR_VALUE=()     # effective (last) value, trimmed; empty = default
+CR_LINES=()     # line numbers of the active lines, space-separated
+CR_BAD_LINE=()  # first line with an invalid value, or empty
+CR_BAD_VALUE=() # its value
+CR_TEMPLATE=()  # first commented-out `#key=` line, or empty
+CR_NOEQ_LINES=""        # line numbers of lines without `=`
+CR_UNKNOWN_KEYS=()      # unknown keys, in file order (each once)
+CR_UNKNOWN_VALUES=()    # their effective (last) value
+CR_UNKNOWN_LINES=()     # their first line number
+
+# config_key_index <key> - sets CKI to the CONFIG_KEYS index of <key>; returns
+# 1 for an unknown key.
+CKI=0
+config_key_index() {
+  local k i=0
+  for k in $CONFIG_KEYS; do
+    if [ "$k" = "$1" ]; then
+      CKI=$i
+      return 0
+    fi
+    i=$((i + 1))
+  done
+  return 1
+}
+
+# read_config_file - parses CONFIG_FILE into the CR_* globals with the rules of
+# load_config, but never exits on a bad line: invalid values, lines without `=`
+# and unknown keys are recorded instead. A missing file leaves everything empty.
+read_config_file() {
+  local i k
+  CR_EXISTS=false
+  CR_COUNT=()
+  CR_VALUE=()
+  CR_LINES=()
+  CR_BAD_LINE=()
+  CR_BAD_VALUE=()
+  CR_TEMPLATE=()
+  CR_NOEQ_LINES=""
+  CR_UNKNOWN_KEYS=()
+  CR_UNKNOWN_VALUES=()
+  CR_UNKNOWN_LINES=()
+  i=0
+  for k in $CONFIG_KEYS; do
+    CR_COUNT[i]=0
+    CR_VALUE[i]=""
+    CR_LINES[i]=""
+    CR_BAD_LINE[i]=""
+    CR_BAD_VALUE[i]=""
+    CR_TEMPLATE[i]=""
+    i=$((i + 1))
+  done
+  [ -e "$CONFIG_FILE" ] || return 0
+  if [ ! -r "$CONFIG_FILE" ] || [ -d "$CONFIG_FILE" ]; then
+    error "$CONFIG_FILE: cannot be read"
+    exit 1
+  fi
+  CR_EXISTS=true
+
+  local raw line key value n=0 u found
+  while IFS= read -r raw || [ -n "$raw" ]; do
+    n=$((n + 1))
+    line="${raw%%#*}"
+    line="$(trim "$line")"
+    if [ -z "$line" ]; then
+      # A commented-out `#key=...` template line (as in config.example).
+      line="$(trim "$raw")"
+      case "$line" in
+        '#'*=*)
+          key="$(trim "${line#\#}")"
+          key="$(trim "${key%%=*}")"
+          if config_key_index "$key" && [ -z "${CR_TEMPLATE[CKI]}" ]; then
+            CR_TEMPLATE[CKI]=$n
+          fi
+          ;;
+      esac
+      continue
+    fi
+    case "$line" in
+      *=*) ;;
+      *)
+        CR_NOEQ_LINES="$CR_NOEQ_LINES $n"
+        continue
+        ;;
+    esac
+    key="$(trim "${line%%=*}")"
+    value="$(trim "${line#*=}")"
+    if config_key_index "$key"; then
+      CR_COUNT[CKI]=$((CR_COUNT[CKI] + 1))
+      CR_VALUE[CKI]="$value"
+      CR_LINES[CKI]="${CR_LINES[CKI]} $n"
+      if [ -n "$value" ] && ! valid_config_value "$key" "$value" && [ -z "${CR_BAD_LINE[CKI]}" ]; then
+        CR_BAD_LINE[CKI]=$n
+        CR_BAD_VALUE[CKI]="$value"
+      fi
+    else
+      found=false
+      u=0
+      while [ "$u" -lt "${#CR_UNKNOWN_KEYS[@]}" ]; do
+        if [ "${CR_UNKNOWN_KEYS[u]}" = "$key" ]; then
+          CR_UNKNOWN_VALUES[u]="$value"
+          found=true
+          break
+        fi
+        u=$((u + 1))
+      done
+      if [ "$found" = "false" ]; then
+        CR_UNKNOWN_KEYS+=("$key")
+        CR_UNKNOWN_VALUES+=("$value")
+        CR_UNKNOWN_LINES+=("$n")
+      fi
+    fi
+  done <"$CONFIG_FILE"
+}
+
+# Filled by read_env_file, one entry per key, in order of first appearance.
+ER_EXISTS=false
+ER_KEYS=()
+ER_VALUES=() # effective (last) value, literal
+ER_KINDS=()  # value (KEY=value) or bare (KEY: from the host environment)
+ER_LINES=()  # line numbers of every line for the key, space-separated
+
+# env_key_index <key> - sets EKI to the ER_KEYS index of <key>; returns 1 when
+# kerghan.env has no line for it.
+EKI=0
+env_key_index() {
+  local i=0
+  while [ "$i" -lt "${#ER_KEYS[@]}" ]; do
+    if [ "${ER_KEYS[i]}" = "$1" ]; then
+      EKI=$i
+      return 0
+    fi
+    i=$((i + 1))
+  done
+  return 1
+}
+
+# read_env_file - parses ENV_FILE into the ER_* globals with the rules of
+# Docker's env-file parser: a line starting with # (after leading whitespace)
+# is a comment, leading whitespace is ignored, the value is literal (no
+# quoting, no trimming), a bare KEY line comes from the host environment, and
+# the last line for a key wins.
+read_env_file() {
+  ER_EXISTS=false
+  ER_KEYS=()
+  ER_VALUES=()
+  ER_KINDS=()
+  ER_LINES=()
+  [ -e "$ENV_FILE" ] || return 0
+  if [ ! -r "$ENV_FILE" ] || [ -d "$ENV_FILE" ]; then
+    error "$ENV_FILE: cannot be read"
+    exit 1
+  fi
+  ER_EXISTS=true
+
+  local line key value kind n=0
+  while IFS= read -r line || [ -n "$line" ]; do
+    n=$((n + 1))
+    line="${line%$'\r'}"
+    line="${line#"${line%%[![:space:]]*}"}"
+    case "$line" in
+      '' | '#'*) continue ;;
+      *=*)
+        key="${line%%=*}"
+        value="${line#*=}"
+        kind=value
+        ;;
+      *)
+        key="$(trim "$line")"
+        value=""
+        kind=bare
+        ;;
+    esac
+    if env_key_index "$key"; then
+      ER_VALUES[EKI]="$value"
+      ER_KINDS[EKI]="$kind"
+      ER_LINES[EKI]="${ER_LINES[EKI]} $n"
+    else
+      ER_KEYS+=("$key")
+      ER_VALUES+=("$value")
+      ER_KINDS+=("$kind")
+      ER_LINES+=(" $n")
+    fi
+  done <"$ENV_FILE"
+}
+
+# read_settings - reads both files (read_config_file and read_env_file).
+read_settings() {
+  read_config_file
+  read_env_file
+}
+
+# env_value_set <key> - kerghan.env (as read by read_env_file) gives <key> a
+# non-blank value, as env_file_sets checks.
+env_value_set() {
+  env_key_index "$1" || return 1
+  [ "${ER_KINDS[EKI]}" = "value" ] || return 1
+  case "${ER_VALUES[EKI]}" in
+    *[![:space:]]*) return 0 ;;
+  esac
+  return 1
+}
+
+# env_has_default_user - kerghan.env has the default user's credentials (as
+# has_default_user_credentials, from the read_env_file globals).
+env_has_default_user() {
+  env_value_set KERGHAN_DEFAULT_USER_USERNAME &&
+    env_value_set KERGHAN_DEFAULT_USER_EMAIL &&
+    env_value_set KERGHAN_DEFAULT_USER_PASSWORD
+}
+
+# Set by setting_lookup.
+SETTING_VALUE="" # effective value (the default when unset), unmasked
+SETTING_RAW=""   # value written in the file (empty when none): the single read
+SETTING_SOURCE="" # file, default, derived (...), not set, with suffixes
+SETTING_SET=false # the key has a line with a value
+
+# setting_lookup <key> - the effective value and source of a config or env
+# key, from the read_settings globals. Used by the listing, the single read
+# and the wizard defaults. auto-login and bind follow the defaults of `up`.
+setting_lookup() {
+  local key="$1" default
+  SETTING_VALUE=""
+  SETTING_RAW=""
+  SETTING_SOURCE=""
+  SETTING_SET=false
+  if is_env_key "$key"; then
+    if env_key_index "$key"; then
+      SETTING_SOURCE="file"
+      if [ "${ER_KINDS[EKI]}" = "bare" ]; then
+        SETTING_SOURCE="file, from environment"
+      else
+        SETTING_VALUE="${ER_VALUES[EKI]}"
+        SETTING_RAW="$SETTING_VALUE"
+        SETTING_SET=true
+      fi
+      if is_client_managed_key "$key"; then
+        SETTING_SOURCE="$SETTING_SOURCE, refused (client-managed)"
+      fi
+    else
+      SETTING_SOURCE="not set"
+    fi
+    return 0
+  fi
+
+  if ! config_key_index "$key"; then
+    # An unknown config key: only the one found in the file.
+    local u=0
+    while [ "$u" -lt "${#CR_UNKNOWN_KEYS[@]}" ]; do
+      if [ "${CR_UNKNOWN_KEYS[u]}" = "$key" ]; then
+        SETTING_VALUE="${CR_UNKNOWN_VALUES[u]}"
+        SETTING_RAW="$SETTING_VALUE"
+        SETTING_SOURCE="unknown (ignored)"
+        SETTING_SET=true
+        return 0
+      fi
+      u=$((u + 1))
+    done
+    return 1
+  fi
+
+  if [ -n "${CR_VALUE[CKI]}" ]; then
+    SETTING_VALUE="${CR_VALUE[CKI]}"
+    SETTING_RAW="$SETTING_VALUE"
+    SETTING_SOURCE="file"
+    SETTING_SET=true
+    if [ -n "${CR_BAD_LINE[CKI]}" ]; then
+      SETTING_SOURCE="file, invalid"
+    fi
+    return 0
+  fi
+  if [ -n "${CR_BAD_LINE[CKI]}" ]; then
+    # The last line is empty but an earlier one is invalid (load_config fails).
+    SETTING_VALUE="${CR_BAD_VALUE[CKI]}"
+    SETTING_SOURCE="file, invalid"
+    return 0
+  fi
+
+  case "$key" in
+    auto-login)
+      if [ "$ER_EXISTS" = "true" ] && ! env_has_default_user; then
+        SETTING_VALUE=false
+        SETTING_SOURCE="derived (no default user in kerghan.env)"
+      else
+        SETTING_VALUE="$DEFAULT_AUTO_LOGIN"
+        SETTING_SOURCE="default"
+      fi
+      ;;
+    bind)
+      local auto_login
+      setting_lookup auto-login
+      auto_login="$SETTING_VALUE"
+      SETTING_SET=false
+      SETTING_RAW=""
+      if [ "$auto_login" = "true" ]; then
+        SETTING_VALUE="$DEFAULT_BIND_AUTO_LOGIN"
+        SETTING_SOURCE="derived (auto-login on)"
+      else
+        SETTING_VALUE="$DEFAULT_BIND_NO_AUTO_LOGIN"
+        SETTING_SOURCE="derived (auto-login off)"
+      fi
+      ;;
+    *)
+      default="$(config_default "$key")"
+      SETTING_VALUE="$default"
+      SETTING_SOURCE="default"
+      ;;
+  esac
+}
+
+# mask_value <key> <value> - prints <value>, or MASK for a set secret unless
+# SHOW_SECRETS is true.
+mask_value() {
+  if [ -n "$2" ] && [ "$SHOW_SECRETS" != "true" ] && is_secret_key "$1"; then
+    printf '%s' "$MASK"
+  else
+    printf '%s' "$2"
+  fi
+}
+
 cmd_up() {
   local flag_offline=false flag_port="" flag_port_set=false foreground=false
   local flag_auto_login="" flag_bind="" flag_bind_set=false
