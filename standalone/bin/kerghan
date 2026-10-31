@@ -1819,6 +1819,158 @@ read_hidden_value() {
   printf '%s' "$first"
 }
 
+# --- Wizard prompts -----------------------------------------------------------
+# Every prompt goes to stderr and every answer is read from stdin. Nothing is
+# written while the questions run: the answers only live in memory (the batch)
+# until the confirmation, so Ctrl-C and end of input leave both files as they
+# were. Spec: docs/agents/specs/client-config/wizard.md.
+
+# Set by wizard_read, wizard_ask and wizard_password.
+WIZARD_ANSWER=""
+WIZARD_PASSWORD=""      # the new password (empty: keep)
+WIZARD_PASSWORD_MODE="" # keep, generated or typed
+
+# wizard_trap - the Ctrl-C trap of the whole wizard: restores the terminal
+# echo (a hidden password prompt may have turned it off) and exits 130.
+wizard_trap() {
+  trap 'stty echo 2>/dev/null || true; echo >&2; exit 130' INT
+}
+
+# wizard_input_ended - the error for an end of input before the confirmation;
+# exits 1 (nothing has been written).
+wizard_input_ended() {
+  stty echo 2>/dev/null || true
+  echo >&2
+  error "the input ended before the wizard finished; nothing was written"
+  exit 1
+}
+
+# wizard_read <prompt> - prints `<prompt>: ` on stderr and reads one line of
+# stdin into WIZARD_ANSWER. End of input exits 1 (wizard_input_ended).
+wizard_read() {
+  WIZARD_ANSWER=""
+  printf '%s: ' "$1" >&2
+  IFS= read -r WIZARD_ANSWER || wizard_input_ended
+  WIZARD_ANSWER="${WIZARD_ANSWER%$'\r'}"
+}
+
+# is_bool_key <key> - the key takes true / false (y / n in the wizard).
+is_bool_key() {
+  in_list "$1" "auto-login KERGHAN_DEFAULT_USER_ENABLED KERGHAN_DEFAULT_USER_ADMIN"
+}
+
+# wizard_ask <key> <label> <bracket-text> [note] - asks one config or env
+# question, `<label> [<bracket-text>]<note>: `, until the answer is valid, and
+# leaves it in WIZARD_ANSWER, trimmed. An empty answer (Enter) is never
+# invalid: WIZARD_ANSWER is then empty and the caller keeps the bracketed
+# value. For a boolean key y / n are written as true / false. Any other answer
+# is checked with validate_value, which prints why it is refused; the same
+# question is then asked again.
+wizard_ask() {
+  local key="$1" label="$2" bracket="$3" note="${4:-}" answer
+  while true; do
+    wizard_read "$label [$bracket]$note"
+    answer="$(trim "$WIZARD_ANSWER")"
+    if [ -z "$answer" ]; then
+      WIZARD_ANSWER=""
+      return 0
+    fi
+    if is_bool_key "$key"; then
+      case "$(printf '%s' "$answer" | tr '[:upper:]' '[:lower:]')" in
+        y | yes | true) answer=true ;;
+        n | no | false) answer=false ;;
+      esac
+    fi
+    if validate_value "$key" "$answer"; then
+      WIZARD_ANSWER="$answer"
+      return 0
+    fi
+  done
+}
+
+# wizard_hidden_read <prompt> - reads one line with the terminal echo off
+# into WIZARD_ANSWER (the prompt on stderr). End of input exits 1.
+wizard_hidden_read() {
+  WIZARD_ANSWER=""
+  printf '%s: ' "$1" >&2
+  stty -echo 2>/dev/null || true
+  IFS= read -r WIZARD_ANSWER || wizard_input_ended
+  stty echo 2>/dev/null || true
+  echo >&2
+  WIZARD_ANSWER="${WIZARD_ANSWER%$'\r'}"
+}
+
+# wizard_type_password - asks the new password twice with hidden input, until
+# both entries match and it has at least PASSWORD_MIN_LENGTH characters; sets
+# WIZARD_PASSWORD. The value never appears in a message.
+wizard_type_password() {
+  local first
+  while true; do
+    wizard_hidden_read "New password"
+    first="$WIZARD_ANSWER"
+    wizard_hidden_read "New password (again)"
+    if [ "$first" != "$WIZARD_ANSWER" ]; then
+      echo "The two values do not match; try again." >&2
+      continue
+    fi
+    if [ -z "$first" ]; then
+      error "invalid KERGHAN_DEFAULT_USER_PASSWORD (expected at least $PASSWORD_MIN_LENGTH characters)"
+      continue
+    fi
+    if validate_value KERGHAN_DEFAULT_USER_PASSWORD "$first"; then
+      WIZARD_PASSWORD="$first"
+      return 0
+    fi
+  done
+}
+
+# wizard_password <has-password> - the password question: (k)eep (only when
+# kerghan.env has a password, <has-password> true; then the default),
+# (g)enerate (the generator of up, the default otherwise) or (t)ype. Sets
+# WIZARD_PASSWORD_MODE (keep, generated or typed) and WIZARD_PASSWORD (empty
+# for keep). A generated value is never printed.
+wizard_password() {
+  local has="$1" prompt default answer
+  WIZARD_PASSWORD=""
+  WIZARD_PASSWORD_MODE=""
+  if [ "$has" = "true" ]; then
+    prompt="Default user password: (k)eep, (g)enerate or (t)ype? [k]"
+    default=k
+  else
+    prompt="Default user password: (g)enerate or (t)ype? [g]"
+    default=g
+  fi
+  while true; do
+    wizard_read "$prompt"
+    answer="$(trim "$WIZARD_ANSWER" | tr '[:upper:]' '[:lower:]')"
+    [ -n "$answer" ] || answer="$default"
+    case "$answer" in
+      k | keep)
+        if [ "$has" = "true" ]; then
+          WIZARD_PASSWORD_MODE=keep
+          return 0
+        fi
+        ;;
+      g | generate)
+        # Explicit: bash clears set -e inside command substitutions.
+        WIZARD_PASSWORD="$(default_env_value KERGHAN_DEFAULT_USER_PASSWORD)" || exit 1
+        WIZARD_PASSWORD_MODE=generated
+        return 0
+        ;;
+      t | type)
+        wizard_type_password
+        WIZARD_PASSWORD_MODE=typed
+        return 0
+        ;;
+    esac
+    if [ "$has" = "true" ]; then
+      echo "Answer k, g or t." >&2
+    else
+      echo "Answer g or t." >&2
+    fi
+  done
+}
+
 # configure_list - the listing of `kerghan configure`: both files, with the
 # value and source of every key, secrets masked unless SHOW_SECRETS.
 configure_list() {
