@@ -22,3 +22,5 @@ secret:
       match: Sup3r-Secret-Pa$$
     - name: DefaultUserConfig spec too-short password fixture (issue #368) — fake value used only to exercise the minimum-length check and assert it never leaks into errors
       match: Zq9!x
+    - name: Standalone client configure bats fixture password (issue #404) — fake value used only in standalone/test/configure_security.bats to assert configure makes no docker/vault calls
+      match: yet-another-pw
