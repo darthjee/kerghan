@@ -44,3 +44,13 @@ secret:
       match: "KERGHAN_DEFAULT_USER_PASSWORD=[0-9a-f]{48}$"
     - name: Same wizard bats regex (issue #405), as captured up to the end of the line
       match: "[0-9a-f]{48}$' \"$ENV_FILE\""
+    - name: Same wizard bats regex (issue #405), with its key prefix and closing quote
+      match: "KERGHAN_DEFAULT_USER_PASSWORD=[0-9a-f]{48}$'"
+    - name: Same wizard bats regex (issue #405), with its anchor and key prefix
+      match: "^KERGHAN_DEFAULT_USER_PASSWORD=[0-9a-f]{48}$"
+    - name: Same wizard bats regex (issue #405), with its anchor, key prefix and closing quote
+      match: "^KERGHAN_DEFAULT_USER_PASSWORD=[0-9a-f]{48}$'"
+    - name: Same wizard bats regex (issue #405), with its key prefix, up to the end of the line
+      match: "KERGHAN_DEFAULT_USER_PASSWORD=[0-9a-f]{48}$' \"$ENV_FILE\""
+    - name: Same wizard bats regex (issue #405), the character class and count only
+      match: "[0-9a-f]{48}"
