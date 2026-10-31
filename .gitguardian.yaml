@@ -36,3 +36,11 @@ secret:
       match: first-try-pw
     - name: Same wizard bats mismatch fixture (issue #405)
       match: other-try-pw
+    - name: Wizard bats generated-password assertion (issue #405) — a grep regex for 48 hex characters in standalone/test/wizard.bats, not a password
+      match: "[0-9a-f]{48}$'"
+    - name: Same wizard bats regex (issue #405), as captured without the closing quote
+      match: "[0-9a-f]{48}$"
+    - name: Same wizard bats regex (issue #405), as captured with its key prefix
+      match: "KERGHAN_DEFAULT_USER_PASSWORD=[0-9a-f]{48}$"
+    - name: Same wizard bats regex (issue #405), as captured up to the end of the line
+      match: "[0-9a-f]{48}$' \"$ENV_FILE\""
