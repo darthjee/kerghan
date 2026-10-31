@@ -51,9 +51,10 @@ setup() {
   export STUB_LOG="$TEST_ROOT/stub.log"
   : >"$STUB_LOG"
   ENV_FILE="$HOME/.kerghan/kerghan.env"
+  CONFIG_FILE="$HOME/.kerghan/config"
   unset STUB_VOLUME_EXISTS STUB_RUNNING_IMAGE STUB_RUNNING_STATE STUB_RUNNING_PORT \
     STUB_RUNNING_HOST_IP STUB_RUNNING_ENV STUB_RUNNING_ENV_FAIL \
-    STUB_VAULT_UP_EXIT STUB_VAULT_UP_STDERR
+    STUB_VAULT_UP_EXIT STUB_VAULT_UP_STDERR KERGHAN_ASSUME_TTY STUB_MV_FAIL
 }
 
 teardown() {
@@ -133,4 +134,28 @@ write_config() {
   mkdir -p "$HOME/.kerghan"
   CONFIG_FILE="$HOME/.kerghan/config"
   printf '%s\n' "$@" >"$CONFIG_FILE"
+}
+
+# refute_output_contains <text>
+refute_output_contains() {
+  case "$output" in
+    *"$1"*)
+      echo "expected output not to contain: $1" >&2
+      echo "--- output ---" >&2
+      echo "$output" >&2
+      return 1
+      ;;
+  esac
+}
+
+# file_mode <path> - the permission bits of <path> in octal (GNU or BSD stat).
+file_mode() {
+  stat -c '%a' "$1" 2>/dev/null || stat -f '%Lp' "$1"
+}
+
+# make_old <path> - sets the mtime of <path> far in the past, so a later
+# `[ <path> -nt "$TEST_ROOT/old-ref" ]` tells whether it was rewritten.
+make_old() {
+  touch -t 200001010000 "$1"
+  touch -t 200101010000 "$TEST_ROOT/old-ref"
 }

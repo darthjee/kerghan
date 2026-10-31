@@ -77,6 +77,10 @@ Commands:
   compose <args>                  run docker compose inside the instance (e.g. compose exec mysql sh)
   reset                           wipe all data (removes $VOLUME), asks for confirmation
   update-env                      add missing variables to ~/.kerghan/kerghan.env (keeps existing values)
+  configure [--show-secrets] [KEY]
+                                  list the settings in ~/.kerghan/config and kerghan.env, or print KEY
+  configure [--force] [--unset KEY]... [KEY=VALUE | KEY=-]...
+                                  set or unset settings (all or nothing); KEY=- reads the value hidden
   version                         print the version
   help                            print this help
 
@@ -505,6 +509,934 @@ compare_number() {
   fi
 }
 
+# --- Shared config/env writer ---------------------------------------------
+# The layer `kerghan configure` (and `kerghan wizard`) uses to read, validate
+# and write ~/.kerghan/config and ~/.kerghan/kerghan.env. It never calls vault;
+# the only Docker call is volume_exists, when kerghan.env is missing and an env
+# key is written. Specs: docs/agents/specs/client-config/.
+
+# CONFIG_KEYS - the known ~/.kerghan/config keys, in listing order.
+CONFIG_KEYS="port variant runtime stop-timeout image-tag auto-login bind"
+# SECRET_KEYS - masked in the listing, the single read and the change list.
+SECRET_KEYS="KERGHAN_DEFAULT_USER_PASSWORD KERGHAN_SECRET_KEY KERGHAN_INTEGRATIONS_KEY"
+# FORCE_KEYS - only written with --force (stored data depends on them).
+FORCE_KEYS="KERGHAN_SECRET_KEY KERGHAN_INTEGRATIONS_KEY"
+# CLIENT_MANAGED_KEYS - passed by the client on every up; never written.
+CLIENT_MANAGED_KEYS="KERGHAN_DEFAULT_USER_ALWAYS_AUTHENTICATED KERGHAN_DEFAULT_USER_ALLOWED_IPS"
+# PASSWORD_MIN_LENGTH - the backend refuses to boot with a shorter password.
+PASSWORD_MIN_LENGTH=8
+MASK="********"
+# SHOW_SECRETS - true unmasks the secrets (configure --show-secrets).
+SHOW_SECRETS=false
+
+# in_list <word> <space-separated list>
+in_list() {
+  case " $2 " in
+    *" $1 "*) return 0 ;;
+  esac
+  return 1
+}
+
+# is_env_key <key> - [A-Z_][A-Z0-9_]*: routed to kerghan.env.
+is_env_key() {
+  case "$1" in
+    '' | [![:upper:]_]* | *[![:upper:][:digit:]_]*) return 1 ;;
+  esac
+  return 0
+}
+
+# is_config_key_name <key> - [a-z][a-z0-9-]*: routed to config (known or not).
+is_config_key_name() {
+  case "$1" in
+    '' | [![:lower:]]* | *[![:lower:][:digit:]-]*) return 1 ;;
+  esac
+  return 0
+}
+
+is_secret_key() { in_list "$1" "$SECRET_KEYS"; }
+is_client_managed_key() { in_list "$1" "$CLIENT_MANAGED_KEYS"; }
+
+# is_tty - stdin is a terminal. KERGHAN_ASSUME_TTY=true forces it (test-only
+# override, not documented in the usage).
+is_tty() {
+  [ "${KERGHAN_ASSUME_TTY:-}" = "true" ] || [ -t 0 ]
+}
+
+# valid_config_value <key> <value> - the load_config validator for <key>.
+valid_config_value() {
+  case "$1" in
+    port) valid_port "$2" ;;
+    variant) valid_variant "$2" ;;
+    runtime) valid_runtime "$2" ;;
+    stop-timeout) valid_stop_timeout "$2" ;;
+    image-tag) valid_image_tag "$2" ;;
+    auto-login) valid_bool "$2" ;;
+    bind) valid_bind "$2" ;;
+    *) return 1 ;;
+  esac
+}
+
+# config_expected <key> - the "expected" text load_config prints for <key>.
+config_expected() {
+  case "$1" in
+    port) echo "1-65535" ;;
+    variant) echo "online or offline" ;;
+    runtime) echo "auto, sysbox or privileged" ;;
+    stop-timeout) echo "a positive number of seconds" ;;
+    image-tag) echo "a Docker image tag, without the -offline suffix" ;;
+    auto-login) echo "true or false" ;;
+    bind) echo "an IPv4 address" ;;
+  esac
+}
+
+# config_default <key> - the built-in default of a config key (bind has none:
+# it is derived from auto-login, see setting_lookup).
+config_default() {
+  case "$1" in
+    port) echo "$DEFAULT_PORT" ;;
+    variant) echo "$DEFAULT_VARIANT" ;;
+    runtime) echo "$DEFAULT_RUNTIME" ;;
+    stop-timeout) echo "$DEFAULT_STOP_TIMEOUT" ;;
+    image-tag) echo "$KERGHAN_VERSION" ;;
+    auto-login) echo "$DEFAULT_AUTO_LOGIN" ;;
+  esac
+}
+
+# Filled by read_config_file, one entry per CONFIG_KEYS key, in that order.
+CR_EXISTS=false
+CR_COUNT=()     # number of active lines for the key
+CR_VALUE=()     # effective (last) value, trimmed; empty = default
+CR_LINES=()     # line numbers of the active lines, space-separated
+CR_BAD_LINE=()  # first line with an invalid value, or empty
+CR_BAD_VALUE=() # its value
+CR_TEMPLATE=()  # first commented-out `#key=` line, or empty
+CR_NOEQ_LINES=""        # line numbers of lines without `=`
+CR_UNKNOWN_KEYS=()      # unknown keys, in file order (each once)
+CR_UNKNOWN_VALUES=()    # their effective (last) value
+CR_UNKNOWN_LINES=()     # their first line number
+
+# config_key_index <key> - sets CKI to the CONFIG_KEYS index of <key>; returns
+# 1 for an unknown key.
+CKI=0
+config_key_index() {
+  local k i=0
+  for k in $CONFIG_KEYS; do
+    if [ "$k" = "$1" ]; then
+      CKI=$i
+      return 0
+    fi
+    i=$((i + 1))
+  done
+  return 1
+}
+
+# read_config_file - parses CONFIG_FILE into the CR_* globals with the rules of
+# load_config, but never exits on a bad line: invalid values, lines without `=`
+# and unknown keys are recorded instead. A missing file leaves everything empty.
+read_config_file() {
+  local i k
+  CR_EXISTS=false
+  CR_COUNT=()
+  CR_VALUE=()
+  CR_LINES=()
+  CR_BAD_LINE=()
+  CR_BAD_VALUE=()
+  CR_TEMPLATE=()
+  CR_NOEQ_LINES=""
+  CR_UNKNOWN_KEYS=()
+  CR_UNKNOWN_VALUES=()
+  CR_UNKNOWN_LINES=()
+  i=0
+  for k in $CONFIG_KEYS; do
+    CR_COUNT[i]=0
+    CR_VALUE[i]=""
+    CR_LINES[i]=""
+    CR_BAD_LINE[i]=""
+    CR_BAD_VALUE[i]=""
+    CR_TEMPLATE[i]=""
+    i=$((i + 1))
+  done
+  [ -e "$CONFIG_FILE" ] || return 0
+  if [ ! -r "$CONFIG_FILE" ] || [ -d "$CONFIG_FILE" ]; then
+    error "$CONFIG_FILE: cannot be read"
+    exit 1
+  fi
+  # shellcheck disable=SC2034 # for callers such as the wizard (#405)
+  CR_EXISTS=true
+
+  local raw line key value n=0 u found
+  while IFS= read -r raw || [ -n "$raw" ]; do
+    n=$((n + 1))
+    line="${raw%%#*}"
+    line="$(trim "$line")"
+    if [ -z "$line" ]; then
+      # A commented-out `#key=...` template line (as in config.example).
+      line="$(trim "$raw")"
+      case "$line" in
+        '#'*=*)
+          key="$(trim "${line#\#}")"
+          key="$(trim "${key%%=*}")"
+          if config_key_index "$key" && [ -z "${CR_TEMPLATE[CKI]}" ]; then
+            CR_TEMPLATE[CKI]=$n
+          fi
+          ;;
+      esac
+      continue
+    fi
+    case "$line" in
+      *=*) ;;
+      *)
+        CR_NOEQ_LINES="$CR_NOEQ_LINES $n"
+        continue
+        ;;
+    esac
+    key="$(trim "${line%%=*}")"
+    value="$(trim "${line#*=}")"
+    if config_key_index "$key"; then
+      CR_COUNT[CKI]=$((CR_COUNT[CKI] + 1))
+      CR_VALUE[CKI]="$value"
+      CR_LINES[CKI]="${CR_LINES[CKI]} $n"
+      if [ -n "$value" ] && ! valid_config_value "$key" "$value" && [ -z "${CR_BAD_LINE[CKI]}" ]; then
+        CR_BAD_LINE[CKI]=$n
+        CR_BAD_VALUE[CKI]="$value"
+      fi
+    else
+      found=false
+      u=0
+      while [ "$u" -lt "${#CR_UNKNOWN_KEYS[@]}" ]; do
+        if [ "${CR_UNKNOWN_KEYS[u]}" = "$key" ]; then
+          CR_UNKNOWN_VALUES[u]="$value"
+          found=true
+          break
+        fi
+        u=$((u + 1))
+      done
+      if [ "$found" = "false" ]; then
+        CR_UNKNOWN_KEYS+=("$key")
+        CR_UNKNOWN_VALUES+=("$value")
+        CR_UNKNOWN_LINES+=("$n")
+      fi
+    fi
+  done <"$CONFIG_FILE"
+}
+
+# Filled by read_env_file, one entry per key, in order of first appearance.
+ER_EXISTS=false
+ER_KEYS=()
+ER_VALUES=() # effective (last) value, literal
+ER_KINDS=()  # value (KEY=value) or bare (KEY: from the host environment)
+ER_LINES=()  # line numbers of every line for the key, space-separated
+
+# env_key_index <key> - sets EKI to the ER_KEYS index of <key>; returns 1 when
+# kerghan.env has no line for it.
+EKI=0
+env_key_index() {
+  local i=0
+  while [ "$i" -lt "${#ER_KEYS[@]}" ]; do
+    if [ "${ER_KEYS[i]}" = "$1" ]; then
+      EKI=$i
+      return 0
+    fi
+    i=$((i + 1))
+  done
+  return 1
+}
+
+# read_env_file - parses ENV_FILE into the ER_* globals with the rules of
+# Docker's env-file parser: a line starting with # (after leading whitespace)
+# is a comment, leading whitespace is ignored, the value is literal (no
+# quoting, no trimming), a bare KEY line comes from the host environment, and
+# the last line for a key wins.
+read_env_file() {
+  ER_EXISTS=false
+  ER_KEYS=()
+  ER_VALUES=()
+  ER_KINDS=()
+  ER_LINES=()
+  [ -e "$ENV_FILE" ] || return 0
+  if [ ! -r "$ENV_FILE" ] || [ -d "$ENV_FILE" ]; then
+    error "$ENV_FILE: cannot be read"
+    exit 1
+  fi
+  ER_EXISTS=true
+
+  local line key value kind n=0
+  while IFS= read -r line || [ -n "$line" ]; do
+    n=$((n + 1))
+    line="${line%$'\r'}"
+    line="${line#"${line%%[![:space:]]*}"}"
+    case "$line" in
+      '' | '#'*) continue ;;
+      *=*)
+        key="${line%%=*}"
+        value="${line#*=}"
+        kind=value
+        ;;
+      *)
+        key="$(trim "$line")"
+        value=""
+        kind=bare
+        ;;
+    esac
+    if env_key_index "$key"; then
+      ER_VALUES[EKI]="$value"
+      ER_KINDS[EKI]="$kind"
+      ER_LINES[EKI]="${ER_LINES[EKI]} $n"
+    else
+      ER_KEYS+=("$key")
+      ER_VALUES+=("$value")
+      ER_KINDS+=("$kind")
+      ER_LINES+=(" $n")
+    fi
+  done <"$ENV_FILE"
+}
+
+# read_settings - reads both files (read_config_file and read_env_file).
+read_settings() {
+  read_config_file
+  read_env_file
+}
+
+# env_value_set <key> - kerghan.env (as read by read_env_file) gives <key> a
+# non-blank value, as env_file_sets checks.
+env_value_set() {
+  env_key_index "$1" || return 1
+  [ "${ER_KINDS[EKI]}" = "value" ] || return 1
+  case "${ER_VALUES[EKI]}" in
+    *[![:space:]]*) return 0 ;;
+  esac
+  return 1
+}
+
+# env_has_default_user - kerghan.env has the default user's credentials (as
+# has_default_user_credentials, from the read_env_file globals).
+env_has_default_user() {
+  env_value_set KERGHAN_DEFAULT_USER_USERNAME &&
+    env_value_set KERGHAN_DEFAULT_USER_EMAIL &&
+    env_value_set KERGHAN_DEFAULT_USER_PASSWORD
+}
+
+# Set by setting_lookup.
+SETTING_VALUE="" # effective value (the default when unset), unmasked
+SETTING_RAW=""   # value written in the file (empty when none): the single read
+SETTING_SOURCE="" # file, default, derived (...), not set, with suffixes
+SETTING_SET=false # the key has a line with a value
+
+# setting_lookup <key> - the effective value and source of a config or env
+# key, from the read_settings globals. Used by the listing, the single read
+# and the wizard defaults. auto-login and bind follow the defaults of `up`.
+setting_lookup() {
+  local key="$1" default
+  SETTING_VALUE=""
+  SETTING_RAW=""
+  SETTING_SOURCE=""
+  SETTING_SET=false
+  if is_env_key "$key"; then
+    if env_key_index "$key"; then
+      SETTING_SOURCE="file"
+      if [ "${ER_KINDS[EKI]}" = "bare" ]; then
+        SETTING_SOURCE="file, from environment"
+      else
+        SETTING_VALUE="${ER_VALUES[EKI]}"
+        SETTING_RAW="$SETTING_VALUE"
+        SETTING_SET=true
+      fi
+      if is_client_managed_key "$key"; then
+        SETTING_SOURCE="$SETTING_SOURCE, refused (client-managed)"
+      fi
+    else
+      SETTING_SOURCE="not set"
+    fi
+    return 0
+  fi
+
+  if ! config_key_index "$key"; then
+    # An unknown config key: only the one found in the file.
+    local u=0
+    while [ "$u" -lt "${#CR_UNKNOWN_KEYS[@]}" ]; do
+      if [ "${CR_UNKNOWN_KEYS[u]}" = "$key" ]; then
+        SETTING_VALUE="${CR_UNKNOWN_VALUES[u]}"
+        SETTING_RAW="$SETTING_VALUE"
+        SETTING_SOURCE="unknown (ignored)"
+        SETTING_SET=true
+        return 0
+      fi
+      u=$((u + 1))
+    done
+    return 1
+  fi
+
+  if [ -n "${CR_VALUE[CKI]}" ]; then
+    SETTING_VALUE="${CR_VALUE[CKI]}"
+    SETTING_RAW="$SETTING_VALUE"
+    SETTING_SOURCE="file"
+    SETTING_SET=true
+    if [ -n "${CR_BAD_LINE[CKI]}" ]; then
+      SETTING_SOURCE="file, invalid"
+    fi
+    return 0
+  fi
+  if [ -n "${CR_BAD_LINE[CKI]}" ]; then
+    # The last line is empty but an earlier one is invalid (load_config fails).
+    SETTING_VALUE="${CR_BAD_VALUE[CKI]}"
+    SETTING_SOURCE="file, invalid"
+    return 0
+  fi
+
+  case "$key" in
+    auto-login)
+      if [ "$ER_EXISTS" = "true" ] && ! env_has_default_user; then
+        SETTING_VALUE=false
+        SETTING_SOURCE="derived (no default user in kerghan.env)"
+      else
+        SETTING_VALUE="$DEFAULT_AUTO_LOGIN"
+        SETTING_SOURCE="default"
+      fi
+      ;;
+    bind)
+      local auto_login
+      setting_lookup auto-login
+      auto_login="$SETTING_VALUE"
+      SETTING_SET=false
+      SETTING_RAW=""
+      if [ "$auto_login" = "true" ]; then
+        SETTING_VALUE="$DEFAULT_BIND_AUTO_LOGIN"
+        SETTING_SOURCE="derived (auto-login on)"
+      else
+        SETTING_VALUE="$DEFAULT_BIND_NO_AUTO_LOGIN"
+        SETTING_SOURCE="derived (auto-login off)"
+      fi
+      ;;
+    *)
+      default="$(config_default "$key")"
+      SETTING_VALUE="$default"
+      SETTING_SOURCE="default"
+      ;;
+  esac
+}
+
+# mask_value <key> <value> - prints <value>, or MASK for a set secret unless
+# SHOW_SECRETS is true.
+mask_value() {
+  if [ -n "$2" ] && [ "$SHOW_SECRETS" != "true" ] && is_secret_key "$1"; then
+    printf '%s' "$MASK"
+  else
+    printf '%s' "$2"
+  fi
+}
+
+# --- Writer: batches of changes ---------------------------------------------
+# A batch is a list of sets and unsets, in argument order, held in parallel
+# arrays (no associative arrays in bash 3.2). The caller fills it with
+# batch_add, runs read_settings, then batch_validate, batch_apply and
+# batch_report.
+BATCH_KEYS=()
+BATCH_ACTIONS=() # set or unset
+BATCH_VALUES=()
+BATCH_CHANGED=() # filled by batch_apply: true when the key's lines change
+BATCH_OLD=()     # its display value before the write (see setting_display)
+BATCH_NEW=()     # and after
+
+batch_reset() {
+  BATCH_KEYS=()
+  BATCH_ACTIONS=()
+  BATCH_VALUES=()
+  BATCH_CHANGED=()
+  BATCH_OLD=()
+  BATCH_NEW=()
+}
+
+# batch_add <set|unset> <key> [value]
+batch_add() {
+  BATCH_ACTIONS+=("$1")
+  BATCH_KEYS+=("$2")
+  BATCH_VALUES+=("${3:-}")
+}
+
+# batch_index <key> - sets BI to the batch index of <key>; returns 1 when the
+# batch does not touch it.
+BI=0
+batch_index() {
+  local i=0
+  while [ "$i" -lt "${#BATCH_KEYS[@]}" ]; do
+    if [ "${BATCH_KEYS[i]}" = "$1" ]; then
+      # shellcheck disable=SC2034 # for callers such as the wizard (#405)
+      BI=$i
+      return 0
+    fi
+    i=$((i + 1))
+  done
+  return 1
+}
+
+# batch_sets_env - the batch sets at least one env key.
+batch_sets_env() {
+  local i=0
+  while [ "$i" -lt "${#BATCH_KEYS[@]}" ]; do
+    if [ "${BATCH_ACTIONS[i]}" = "set" ] && is_env_key "${BATCH_KEYS[i]}"; then
+      return 0
+    fi
+    i=$((i + 1))
+  done
+  return 1
+}
+
+# word_count <words> - prints the number of words.
+word_count() {
+  # shellcheck disable=SC2086 # split on purpose
+  set -- $1
+  echo "$#"
+}
+
+# last_word <words> - prints the last word, or nothing.
+last_word() {
+  local w last=""
+  for w in $1; do
+    last="$w"
+  done
+  printf '%s' "$last"
+}
+
+# validate_value <key> <value> - reports (on stderr) why <value> cannot be set
+# for <key>, and returns 1; returns 0 for a valid value. Never prints the value
+# of a secret.
+validate_value() {
+  local key="$1" value="$2" config_keys
+  case "$value" in
+    *$'\n'* | *$'\r'*)
+      error "invalid value for $key: it contains a line break"
+      return 1
+      ;;
+  esac
+  if [ -z "$value" ]; then
+    if is_env_key "$key"; then
+      error "empty value for $key; use '--unset $key' to remove it"
+    else
+      error "empty value for $key; use '--unset $key' to return it to its default"
+    fi
+    return 1
+  fi
+  if ! is_env_key "$key"; then
+    if ! config_key_index "$key"; then
+      config_keys="${CONFIG_KEYS// /, }"
+      error "unknown key '$key' (known config keys: $config_keys)"
+      return 1
+    fi
+    case "$value" in
+      *'#'*)
+        error "invalid $key '$value' (a config value cannot contain '#')"
+        return 1
+        ;;
+    esac
+    if ! valid_config_value "$key" "$value"; then
+      error "invalid $key '$value' (expected $(config_expected "$key"))"
+      return 1
+    fi
+    return 0
+  fi
+  case "$key" in
+    KERGHAN_DEFAULT_USER_ENABLED | KERGHAN_DEFAULT_USER_ADMIN)
+      if ! valid_bool "$value"; then
+        error "invalid $key '$value' (expected true or false)"
+        return 1
+      fi
+      ;;
+    KERGHAN_DEFAULT_USER_PASSWORD)
+      if [ "${#value}" -lt "$PASSWORD_MIN_LENGTH" ]; then
+        error "invalid $key (expected at least $PASSWORD_MIN_LENGTH characters)"
+        return 1
+      fi
+      ;;
+    FRONTEND_BASE_URL)
+      case "$value" in
+        http://* | https://*) ;;
+        *)
+          error "invalid $key '$value' (expected a URL starting with http:// or https://)"
+          return 1
+          ;;
+      esac
+      ;;
+  esac
+  return 0
+}
+
+# batch_validate <force> - runs every check of the batch before anything is
+# written, reporting every problem on stderr; returns 1 when any fails. Needs
+# read_settings. <force> is true when the two secrets may be set. The only
+# Docker call is volume_exists, when kerghan.env is missing and the batch sets
+# an env key.
+batch_validate() {
+  local force="$1" ok=0 i=0 key action value config_keys n k
+  while [ "$i" -lt "${#BATCH_KEYS[@]}" ]; do
+    key="${BATCH_KEYS[i]}"
+    action="${BATCH_ACTIONS[i]}"
+    value="${BATCH_VALUES[i]}"
+    i=$((i + 1))
+    if [ "$action" = "unset" ]; then
+      if is_env_key "$key"; then
+        if in_list "$key" "$DEFAULT_ENV_KEYS"; then
+          error "$key cannot be unset: 'kerghan up' and 'kerghan update-env' would generate it again"
+          ok=1
+        fi
+      elif ! config_key_index "$key"; then
+        config_keys="${CONFIG_KEYS// /, }"
+        error "unknown key '$key' (known config keys: $config_keys)"
+        ok=1
+      fi
+      continue
+    fi
+    if is_client_managed_key "$key"; then
+      error "$key is managed by the client and cannot be set in kerghan.env"
+      hint "use auto-login (--[no-]auto-login) and bind (--bind) instead"
+      ok=1
+      continue
+    fi
+    if in_list "$key" "$FORCE_KEYS" && [ "$force" != "true" ]; then
+      error "$key is only changed with --force (it logs everyone out or makes stored integration credentials unreadable)"
+      ok=1
+      continue
+    fi
+    validate_value "$key" "$value" || ok=1
+  done
+
+  # A config line without `=` makes up fail and has no key to fix.
+  for n in $CR_NOEQ_LINES; do
+    error "$CONFIG_FILE:$n: expected key=value"
+    hint "fix or remove line $n of $CONFIG_FILE by hand"
+    ok=1
+  done
+  # An invalid config value makes up fail unless this batch fixes it.
+  i=0
+  for k in $CONFIG_KEYS; do
+    if [ -n "${CR_BAD_LINE[i]}" ] && ! batch_index "$k"; then
+      error "$CONFIG_FILE:${CR_BAD_LINE[i]}: invalid $k '${CR_BAD_VALUE[i]}' (expected $(config_expected "$k"))"
+      hint "set or unset $k in the same call to fix it"
+      ok=1
+    fi
+    i=$((i + 1))
+  done
+
+  if [ "$ER_EXISTS" != "true" ] && batch_sets_env && volume_exists; then
+    # shellcheck disable=SC2088 # the literal ~ is meant for display
+    error "~/.kerghan/kerghan.env is missing but the data volume $VOLUME exists"
+    hint "restore kerghan.env from your backup (the data was written with its secrets), or run 'kerghan reset' to start from scratch"
+    ok=1
+  fi
+  return "$ok"
+}
+
+# setting_display <key> - prints the value shown in the change list:
+# the file value, `<default> (default)` / `(default)` for a config key without
+# one, `(not set)` / `(from environment)` for an env key. Needs read_settings.
+setting_display() {
+  setting_lookup "$1" || true
+  case "$SETTING_SOURCE" in
+    file*)
+      if is_env_key "$1" && [ "$SETTING_SET" != "true" ]; then
+        printf '%s' "(from environment)"
+      else
+        printf '%s' "$SETTING_VALUE"
+      fi
+      ;;
+    "not set") printf '%s' "(not set)" ;;
+    default)
+      if [ "$1" = "image-tag" ]; then
+        printf '%s' "(default)"
+      else
+        printf '%s' "$SETTING_VALUE (default)"
+      fi
+      ;;
+    *) printf '%s' "(default)" ;;
+  esac
+}
+
+# key_changes <index> - the batch entry changes the lines of its file (needs
+# read_settings). Setting a key to its current value is not a change.
+key_changes() {
+  local key="${BATCH_KEYS[$1]}" action="${BATCH_ACTIONS[$1]}" value="${BATCH_VALUES[$1]}"
+  if is_env_key "$key"; then
+    env_key_index "$key" || {
+      [ "$action" = "set" ]
+      return
+    }
+    [ "$action" = "set" ] || return 0
+    [ "$(word_count "${ER_LINES[EKI]}")" -eq 1 ] &&
+      [ "${ER_KINDS[EKI]}" = "value" ] &&
+      [ "${ER_VALUES[EKI]}" = "$value" ] && return 1
+    return 0
+  fi
+  config_key_index "$key" || return 1
+  if [ "$action" = "unset" ]; then
+    [ "${CR_COUNT[CKI]}" -gt 0 ]
+    return
+  fi
+  [ "${CR_COUNT[CKI]}" -eq 1 ] && [ -z "${CR_BAD_LINE[CKI]}" ] &&
+    [ "${CR_VALUE[CKI]}" = "$value" ] && return 1
+  return 0
+}
+
+# Set by build_file_content.
+NEW_CONTENT=""
+FILE_EDITED=false
+
+# build_file_content <config|env> - builds in NEW_CONTENT the new content of
+# the file for the batch's changed keys: the last line of a key is rewritten in
+# place and earlier duplicates are removed (with a warning); a key without a
+# line replaces the first `#key=` template line (config only) or is appended;
+# an unset removes every line of the key. Every other line is kept byte for
+# byte, and the content always ends with a newline. FILE_EDITED tells whether
+# anything changed.
+build_file_content() {
+  local which="$1" file lines=() del=() appends=() line i=0 key nums last tpl n new
+  NEW_CONTENT=""
+  FILE_EDITED=false
+  if [ "$which" = "env" ]; then
+    file="$ENV_FILE"
+  else
+    file="$CONFIG_FILE"
+  fi
+  if [ -e "$file" ]; then
+    while IFS= read -r line || [ -n "$line" ]; do
+      lines+=("$line")
+      del+=(false)
+    done <"$file"
+  fi
+
+  while [ "$i" -lt "${#BATCH_KEYS[@]}" ]; do
+    key="${BATCH_KEYS[i]}"
+    if [ "${BATCH_CHANGED[i]}" != "true" ]; then
+      i=$((i + 1))
+      continue
+    fi
+    nums=""
+    tpl=""
+    if is_env_key "$key"; then
+      if [ "$which" != "env" ]; then
+        i=$((i + 1))
+        continue
+      fi
+      if env_key_index "$key"; then
+        nums="${ER_LINES[EKI]}"
+      fi
+    else
+      if [ "$which" != "config" ]; then
+        i=$((i + 1))
+        continue
+      fi
+      config_key_index "$key"
+      nums="${CR_LINES[CKI]}"
+      tpl="${CR_TEMPLATE[CKI]}"
+    fi
+
+    if [ "${BATCH_ACTIONS[i]}" = "unset" ]; then
+      for n in $nums; do
+        del[n-1]=true
+        FILE_EDITED=true
+      done
+    else
+      new="$key=${BATCH_VALUES[i]}"
+      last="$(last_word "$nums")"
+      if [ -n "$last" ]; then
+        for n in $nums; do
+          if [ "$n" != "$last" ]; then
+            del[n-1]=true
+          fi
+        done
+        if [ "$(word_count "$nums")" -gt 1 ]; then
+          warn "$file had $(word_count "$nums") lines for $key; kept the last one and removed the earlier ones"
+        fi
+        lines[last-1]="$new"
+      elif [ -n "$tpl" ]; then
+        lines[tpl-1]="$new"
+      else
+        appends+=("$new")
+      fi
+      FILE_EDITED=true
+    fi
+    i=$((i + 1))
+  done
+
+  i=0
+  while [ "$i" -lt "${#lines[@]}" ]; do
+    if [ "${del[i]}" != "true" ]; then
+      NEW_CONTENT="$NEW_CONTENT${lines[i]}
+"
+    fi
+    i=$((i + 1))
+  done
+  i=0
+  while [ "$i" -lt "${#appends[@]}" ]; do
+    NEW_CONTENT="$NEW_CONTENT${appends[i]}
+"
+    i=$((i + 1))
+  done
+}
+
+# resolve_symlink <path> - prints the final target of <path> (a readlink loop:
+# readlink -f is missing on older macOS); <path> itself when it is no symlink.
+resolve_symlink() {
+  local path="$1" target n=0
+  while [ -L "$path" ]; do
+    n=$((n + 1))
+    if [ "$n" -gt 40 ]; then
+      error "$1: too many levels of symbolic links"
+      return 1
+    fi
+    target="$(readlink "$path")"
+    case "$target" in
+      /*) path="$target" ;;
+      *) path="$(dirname "$path")/$target" ;;
+    esac
+  done
+  printf '%s' "$path"
+}
+
+# file_mode <path> - prints the permission bits of <path> in octal (GNU or BSD
+# stat).
+file_mode() {
+  stat -c '%a' "$1" 2>/dev/null || stat -f '%Lp' "$1"
+}
+
+# WRITE_TMP - the temp file of write_file_atomic, removed on failure or Ctrl-C.
+WRITE_TMP=""
+
+# write_file_atomic <path> <content> <mode|keep> - writes <content> to a temp
+# file next to the (symlink-resolved) target, created under umask 077, sets
+# its mode (<mode>, or keep: the target's mode, or the user's umask for a new
+# file) and renames it over the target. On failure the target is untouched,
+# the temp file is removed and it returns 1.
+write_file_atomic() {
+  local path="$1" content="$2" mode="$3" target dir
+  target="$(resolve_symlink "$path")" || return 1
+  dir="$(dirname "$target")"
+  if [ "$mode" = "keep" ]; then
+    if [ -e "$target" ]; then
+      mode="$(file_mode "$target")" || mode=""
+    else
+      mode="$(printf '%o' "$((0666 & ~$(umask)))")"
+    fi
+  fi
+  mkdir -p "$dir" 2>/dev/null || true
+  trap 'rm -f "$WRITE_TMP"; exit 130' INT TERM
+  WRITE_TMP="$(umask 077 && mktemp "$dir/.$(basename "$target").XXXXXX" 2>/dev/null)" || WRITE_TMP=""
+  if [ -z "$WRITE_TMP" ] ||
+    ! printf '%s' "$content" >"$WRITE_TMP" ||
+    { [ -n "$mode" ] && ! chmod "$mode" "$WRITE_TMP"; } ||
+    ! mv -f "$WRITE_TMP" "$target"; then
+    [ -z "$WRITE_TMP" ] || rm -f "$WRITE_TMP"
+    WRITE_TMP=""
+    trap - INT TERM
+    error "could not write $target; it was left unchanged"
+    return 1
+  fi
+  WRITE_TMP=""
+  trap - INT TERM
+}
+
+# batch_apply - writes a validated batch: kerghan.env first (created first as
+# up does when it is missing and the batch sets an env key), then config, each
+# atomically and only when its content changes. Fills BATCH_CHANGED,
+# BATCH_OLD and BATCH_NEW, and re-reads both files. Returns 1 when a write
+# fails.
+batch_apply() {
+  local i=0 any=false
+  if [ "$ER_EXISTS" != "true" ] && batch_sets_env; then
+    ensure_env_file
+    read_env_file
+  fi
+  BATCH_CHANGED=()
+  BATCH_OLD=()
+  BATCH_NEW=()
+  while [ "$i" -lt "${#BATCH_KEYS[@]}" ]; do
+    if key_changes "$i"; then
+      BATCH_CHANGED[i]=true
+      any=true
+    else
+      BATCH_CHANGED[i]=false
+    fi
+    BATCH_OLD[i]="$(setting_display "${BATCH_KEYS[i]}")"
+    i=$((i + 1))
+  done
+  [ "$any" = "true" ] || return 0
+
+  build_file_content env
+  if [ "$FILE_EDITED" = "true" ]; then
+    write_file_atomic "$ENV_FILE" "$NEW_CONTENT" 600 || return 1
+  fi
+  build_file_content config
+  if [ "$FILE_EDITED" = "true" ]; then
+    mkdir -p "$KERGHAN_HOME"
+    write_file_atomic "$CONFIG_FILE" "$NEW_CONTENT" keep || return 1
+  fi
+
+  read_settings
+  i=0
+  while [ "$i" -lt "${#BATCH_KEYS[@]}" ]; do
+    BATCH_NEW[i]="$(setting_display "${BATCH_KEYS[i]}")"
+    i=$((i + 1))
+  done
+}
+
+# batch_report - after batch_apply: the change list and the apply hint on
+# stdout, then the cross-key warnings on stderr; `Nothing changed.` when the
+# batch changed nothing.
+batch_report() {
+  local i=0 key any=false down_up=false password=false
+  while [ "$i" -lt "${#BATCH_KEYS[@]}" ]; do
+    key="${BATCH_KEYS[i]}"
+    if [ "${BATCH_CHANGED[i]}" = "true" ]; then
+      any=true
+      if is_secret_key "$key"; then
+        echo "$key: changed"
+      else
+        echo "$key: ${BATCH_OLD[i]} -> ${BATCH_NEW[i]}"
+      fi
+      case "$key" in
+        runtime | stop-timeout) down_up=true ;;
+        KERGHAN_DEFAULT_USER_PASSWORD) password=true ;;
+      esac
+      if is_env_key "$key"; then
+        down_up=true
+      fi
+    fi
+    i=$((i + 1))
+  done
+  if [ "$any" != "true" ]; then
+    echo "Nothing changed."
+    return 0
+  fi
+  if [ "$down_up" = "true" ]; then
+    echo "Run 'kerghan down && kerghan up' to apply."
+  else
+    echo "Run 'kerghan up' to apply (recreates the instance; data is kept)."
+  fi
+  if [ "$password" = "true" ]; then
+    echo "On the next boot the admin password changes and the default user's existing sessions are revoked (logged-in browsers must log in again, or are logged in again automatically when auto-login is on)."
+  fi
+  cross_key_warnings
+}
+
+# cross_key_warnings - the warnings of the written values (needs
+# read_settings): auto-login on with a non-loopback bind, and auto-login=true
+# without the default user in kerghan.env (up would fail).
+cross_key_warnings() {
+  local auto_login bind auto_login_source
+  setting_lookup auto-login
+  auto_login="$SETTING_VALUE"
+  auto_login_source="$SETTING_SOURCE"
+  setting_lookup bind
+  bind="$SETTING_VALUE"
+  if [ "$auto_login" = "true" ] && ! is_loopback "$bind"; then
+    warn "automatic login is on and the port is published on $bind: anyone who can reach it is logged in as admin"
+    hint "use 'kerghan up --no-auto-login' or set bind=127.0.0.1 in ~/.kerghan/config to restrict it"
+  fi
+  if [ "$auto_login" = "true" ] && [ "$auto_login_source" = "file" ] &&
+    [ "$ER_EXISTS" = "true" ] && ! env_has_default_user; then
+    warn "auto-login=true needs the default user, but $ENV_FILE has no KERGHAN_DEFAULT_USER_USERNAME, KERGHAN_DEFAULT_USER_EMAIL and KERGHAN_DEFAULT_USER_PASSWORD: 'kerghan up' will fail"
+    hint "run 'kerghan update-env' to add the default user to kerghan.env"
+  fi
+}
+
 cmd_up() {
   local flag_offline=false flag_port="" flag_port_set=false foreground=false
   local flag_auto_login="" flag_bind="" flag_bind_set=false
@@ -850,6 +1782,279 @@ cmd_update_env() {
   echo "Run 'kerghan down && kerghan up' to apply the change."
 }
 
+# read_hidden_value <key> - prints the value of `KEY=-`: on a TTY (is_tty) it
+# prompts twice on stderr with echo off until both entries match; from a pipe
+# it reads the first line of stdin without its newline (end of input: empty).
+# Ctrl-C exits 130.
+read_hidden_value() {
+  local key="$1" first="" second=""
+  if ! is_tty; then
+    IFS= read -r first || true
+    printf '%s' "$first"
+    return 0
+  fi
+  trap 'stty echo 2>/dev/null || true; echo >&2; exit 130' INT
+  stty -echo 2>/dev/null || true
+  while true; do
+    first=""
+    second=""
+    printf '%s: ' "$key" >&2
+    if ! IFS= read -r first; then
+      echo >&2
+      break
+    fi
+    echo >&2
+    printf '%s (again): ' "$key" >&2
+    if ! IFS= read -r second; then
+      echo >&2
+      first=""
+      break
+    fi
+    echo >&2
+    [ "$first" = "$second" ] && break
+    echo "The two values do not match; try again." >&2
+  done
+  stty echo 2>/dev/null || true
+  trap - INT
+  printf '%s' "$first"
+}
+
+# configure_list - the listing of `kerghan configure`: both files, with the
+# value and source of every key, secrets masked unless SHOW_SECRETS.
+configure_list() {
+  local keys=() values=() sources=() key i n kw=0 vw=0
+  read_settings
+  for n in $CR_NOEQ_LINES; do
+    warn "$CONFIG_FILE:$n: expected key=value"
+  done
+
+  # shellcheck disable=SC2088 # the literal ~ is meant for display
+  echo "config (~/.kerghan/config)"
+  for key in $CONFIG_KEYS; do
+    keys+=("$key")
+  done
+  i=0
+  while [ "$i" -lt "${#CR_UNKNOWN_KEYS[@]}" ]; do
+    keys+=("${CR_UNKNOWN_KEYS[i]}")
+    i=$((i + 1))
+  done
+  i=0
+  while [ "$i" -lt "${#keys[@]}" ]; do
+    setting_lookup "${keys[i]}" || true
+    values[i]="$SETTING_VALUE"
+    sources[i]="$SETTING_SOURCE"
+    i=$((i + 1))
+  done
+  print_rows
+
+  # shellcheck disable=SC2088 # the literal ~ is meant for display
+  echo "env (~/.kerghan/kerghan.env)"
+  if [ "$ER_EXISTS" != "true" ]; then
+    echo "  not created yet: 'kerghan up' (or the first env write) creates it"
+    return 0
+  fi
+  keys=()
+  values=()
+  sources=()
+  for key in $DEFAULT_ENV_KEYS FRONTEND_BASE_URL; do
+    keys+=("$key")
+  done
+  i=0
+  while [ "$i" -lt "${#ER_KEYS[@]}" ]; do
+    if ! in_list "${ER_KEYS[i]}" "$DEFAULT_ENV_KEYS FRONTEND_BASE_URL"; then
+      keys+=("${ER_KEYS[i]}")
+    fi
+    i=$((i + 1))
+  done
+  i=0
+  while [ "$i" -lt "${#keys[@]}" ]; do
+    key="${keys[i]}"
+    if env_key_index "$key"; then
+      SETTING_SOURCE="file"
+      if [ "${ER_KINDS[EKI]}" = "bare" ]; then
+        SETTING_SOURCE="file, from environment"
+        SETTING_VALUE="—"
+      else
+        SETTING_VALUE="$(mask_value "$key" "${ER_VALUES[EKI]}")"
+      fi
+      if is_client_managed_key "$key"; then
+        SETTING_SOURCE="$SETTING_SOURCE, refused (client-managed)"
+      fi
+    else
+      SETTING_VALUE="—"
+      SETTING_SOURCE="not set"
+    fi
+    values[i]="$SETTING_VALUE"
+    sources[i]="$SETTING_SOURCE"
+    i=$((i + 1))
+  done
+  print_rows
+}
+
+# display_width <text> - prints the column width of <text> (the em dash
+# counts as one column whatever the locale).
+display_width() {
+  if [ "$1" = "—" ]; then
+    echo 1
+  else
+    echo "${#1}"
+  fi
+}
+
+# print_rows - prints the keys/values/sources arrays of configure_list as
+# aligned columns (bash dynamic scoping: they are the caller's locals).
+print_rows() {
+  local i=0 kw=0 vw=0 w pad
+  while [ "$i" -lt "${#keys[@]}" ]; do
+    [ "${#keys[i]}" -le "$kw" ] || kw="${#keys[i]}"
+    w="$(display_width "${values[i]}")"
+    [ "$w" -le "$vw" ] || vw="$w"
+    i=$((i + 1))
+  done
+  i=0
+  while [ "$i" -lt "${#keys[@]}" ]; do
+    w="$(display_width "${values[i]}")"
+    pad="$(printf '%*s' "$((vw - w + 2))" '')"
+    printf '  %-*s  %s%s%s\n' "$kw" "${keys[i]}" "${values[i]}" "$pad" "${sources[i]}"
+    i=$((i + 1))
+  done
+}
+
+# configure_read <key> - the single read: the raw value written in the file
+# (an empty line when the default applies), `******** (set)` for a set secret
+# unless SHOW_SECRETS.
+configure_read() {
+  local key="$1" config_keys
+  if ! is_env_key "$key" && ! config_key_index "$key"; then
+    config_keys="${CONFIG_KEYS// /, }"
+    error "unknown key '$key' (known config keys: $config_keys)"
+    exit 1
+  fi
+  read_settings
+  setting_lookup "$key" || true
+  if [ -n "$SETTING_RAW" ] && [ "$SHOW_SECRETS" != "true" ] && is_secret_key "$key"; then
+    echo "$MASK (set)"
+  else
+    printf '%s\n' "$SETTING_RAW"
+  fi
+}
+
+# confirm_force - the warning before writing a --force secret, and on a TTY a
+# [y/N] confirmation; exits 1 unless confirmed.
+confirm_force() {
+  local key answer="" i=0 any=false
+  while [ "$i" -lt "${#BATCH_KEYS[@]}" ]; do
+    key="${BATCH_KEYS[i]}"
+    i=$((i + 1))
+    if [ "${BATCH_ACTIONS[i - 1]}" != "set" ] || ! in_list "$key" "$FORCE_KEYS"; then
+      continue
+    fi
+    any=true
+    case "$key" in
+      KERGHAN_SECRET_KEY)
+        warn "changing KERGHAN_SECRET_KEY logs everyone out: it signs every access token"
+        ;;
+      KERGHAN_INTEGRATIONS_KEY)
+        warn "changing KERGHAN_INTEGRATIONS_KEY makes the stored integration credentials unreadable: it encrypts them"
+        ;;
+    esac
+  done
+  [ "$any" = "true" ] || return 0
+  # shellcheck disable=SC2088 # the literal ~ is meant for display
+  hint "back up ~/.kerghan/kerghan.env first"
+  is_tty || return 0
+  printf 'Continue? [y/N] ' >&2
+  IFS= read -r answer || true
+  answer="$(printf '%s' "$answer" | tr '[:upper:]' '[:lower:]')"
+  case "$answer" in
+    y | yes) return 0 ;;
+  esac
+  error "aborted; nothing was written"
+  exit 1
+}
+
+# cmd_configure - `kerghan configure`: list, read one key, or set / unset
+# keys (all or nothing) through the shared writer. Never calls vault; the only
+# Docker call is the volume check when kerghan.env is missing.
+cmd_configure() {
+  local force=false bare="" bare_count=0 stdin_index="" key value i
+  SHOW_SECRETS=false
+  batch_reset
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --show-secrets) SHOW_SECRETS=true ;;
+      --force) force=true ;;
+      --unset)
+        [ "$#" -ge 2 ] || usage_error "option '--unset' requires a key"
+        case "$2" in
+          *=*) usage_error "option '--unset' takes a KEY, not '$2'" ;;
+        esac
+        configure_check_key "$2"
+        batch_add unset "$2"
+        shift
+        ;;
+      -*) usage_error "unknown option '$1'" ;;
+      *=*)
+        key="${1%%=*}"
+        value="${1#*=}"
+        configure_check_key "$key"
+        if [ "$value" = "-" ]; then
+          [ -z "$stdin_index" ] || usage_error "only one KEY=- per call (stdin feeds one value)"
+          stdin_index="${#BATCH_KEYS[@]}"
+        fi
+        batch_add set "$key" "$value"
+        ;;
+      *)
+        configure_check_key "$1"
+        bare="$1"
+        bare_count=$((bare_count + 1))
+        ;;
+    esac
+    shift
+  done
+
+  [ "$bare_count" -le 1 ] || usage_error "only one KEY can be read at a time"
+  if [ "${#BATCH_KEYS[@]}" -eq 0 ]; then
+    [ "$force" != "true" ] || usage_error "option '--force' only applies to changes"
+    if [ "$bare_count" -eq 1 ]; then
+      configure_read "$bare"
+    else
+      configure_list
+    fi
+    return 0
+  fi
+  [ "$bare_count" -eq 0 ] || usage_error "cannot read '$bare' and write in the same call"
+  [ "$SHOW_SECRETS" != "true" ] || usage_error "option '--show-secrets' only applies to listing or reading"
+
+  read_settings
+  if [ -n "$stdin_index" ]; then
+    BATCH_VALUES[stdin_index]="$(read_hidden_value "${BATCH_KEYS[stdin_index]}")"
+  fi
+  i=0
+  while [ "$i" -lt "${#BATCH_KEYS[@]}" ]; do
+    key="${BATCH_KEYS[i]}"
+    if [ "${BATCH_ACTIONS[i]}" = "set" ] && [ "$i" != "$stdin_index" ] && is_secret_key "$key"; then
+      hint "a value given as $key=... may be kept in your shell history and visible in ps; use $key=- to read it hidden"
+    fi
+    i=$((i + 1))
+  done
+  batch_validate "$force" || exit 1
+  confirm_force
+  batch_apply || exit 1
+  batch_report
+}
+
+# configure_check_key <key> - usage error unless <key> is an env or config key
+# name, or when the call already names it.
+configure_check_key() {
+  if ! is_env_key "$1" && ! is_config_key_name "$1"; then
+    usage_error "malformed key '$1' (expected UPPER_CASE for kerghan.env or lower-case for config)"
+  fi
+  if batch_index "$1" || { [ "$bare_count" -gt 0 ] && [ "$bare" = "$1" ]; }; then
+    usage_error "key '$1' given twice"
+  fi
+}
+
 main() {
   if [ "$#" -eq 0 ]; then
     usage_error
@@ -864,6 +2069,7 @@ main() {
     compose) cmd_compose ${@+"$@"} ;;
     reset) cmd_reset ${@+"$@"} ;;
     update-env) cmd_update_env ${@+"$@"} ;;
+    configure) cmd_configure ${@+"$@"} ;;
     version) cmd_version ${@+"$@"} ;;
     help | -h | --help) usage ;;
     *) usage_error "unknown command '$cmd'" ;;
