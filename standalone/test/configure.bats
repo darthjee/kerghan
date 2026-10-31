@@ -1,7 +1,7 @@
 #!/usr/bin/env bats
-# kerghan configure: the command (docs/agents/specs/client-config/
-# configure.md): usage errors, list, single read, write, KEY=-, --unset and
-# refused keys.
+# kerghan configure: the command (docs/agents/standalone/client-config.md,
+# "kerghan configure"): usage errors, list, single read, write, KEY=-, --unset
+# and refused keys.
 
 load helpers/setup
 

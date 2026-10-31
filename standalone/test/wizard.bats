@@ -1,6 +1,6 @@
 #!/usr/bin/env bats
-# kerghan wizard (docs/agents/specs/client-config/wizard.md): the questions,
-# the prompts, the password, the starting state, the summary and
+# kerghan wizard (docs/agents/standalone/client-config.md#kerghan-wizard):
+# the questions, the prompts, the password, the starting state, the summary and
 # confirmation, and the abort paths. Driven through stdin with the test-only
 # KERGHAN_ASSUME_TTY=true override; prompts are on stderr.
 
