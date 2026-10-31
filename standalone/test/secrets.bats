@@ -50,6 +50,31 @@ load helpers/setup
   [ "$(grep -c '^KERGHAN_DEFAULT_USER_ALLOWED_IPS=' "$ENV_FILE")" -eq 0 ]
 }
 
+@test "the first up writes a dangling symlinked kerghan.env at its target" {
+  mkdir -p "$HOME/.kerghan" "$TEST_ROOT/dotfiles"
+  ln -s "$TEST_ROOT/dotfiles/kerghan.env" "$ENV_FILE"
+  run "$KERGHAN" up
+  [ "$status" -eq 0 ]
+  [ -L "$ENV_FILE" ]
+  grep -qx 'KERGHAN_SECRET_KEY=fake-key-1' "$TEST_ROOT/dotfiles/kerghan.env"
+  [ "$(stat -c %a "$TEST_ROOT/dotfiles/kerghan.env")" = "600" ]
+  [ "$(ls -A "$TEST_ROOT/dotfiles")" = "kerghan.env" ]
+  vault_calls | grep -q '^vault up '
+}
+
+@test "a failed kerghan.env write stops up and leaves no file behind" {
+  cp "$BATS_TEST_DIRNAME/stubs/mv" "$STUB_BIN/mv"
+  chmod +x "$STUB_BIN/mv"
+  export STUB_MV_FAIL=1
+  run "$KERGHAN" up
+  [ "$status" -eq 1 ]
+  assert_output_contains "kerghan: error: could not write $ENV_FILE; it was left unchanged"
+  [[ "$output" != *"back this file up"* ]]
+  [ ! -e "$ENV_FILE" ]
+  [ -z "$(ls -A "$HOME/.kerghan")" ]
+  refute_logged_prefix "vault"
+}
+
 @test "an existing kerghan.env is never rewritten" {
   write_env_file
   touch -d "2020-01-01 00:00:00" "$ENV_FILE"
