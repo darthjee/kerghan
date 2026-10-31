@@ -1,7 +1,8 @@
 #!/usr/bin/env bats
-# kerghan configure: the shared writer's file rules (docs/agents/specs/
-# client-config/files.md): routing, missing files, existing content, values,
-# writing, change list and apply hint.
+# kerghan configure: the shared writer's file rules
+# (docs/agents/standalone/client-config.md, "Files and the shared writer"):
+# routing, missing files, existing content, values, writing, change list and
+# apply hint.
 
 load helpers/setup
 

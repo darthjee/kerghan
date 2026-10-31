@@ -514,7 +514,7 @@ compare_number() {
 # The layer `kerghan configure` (and `kerghan wizard`) uses to read, validate
 # and write ~/.kerghan/config and ~/.kerghan/kerghan.env. It never calls vault;
 # the only Docker call is volume_exists, when kerghan.env is missing and an env
-# key is written. Specs: docs/agents/specs/client-config/.
+# key is written. Docs: docs/agents/standalone/client-config.md.
 
 # CONFIG_KEYS - the known ~/.kerghan/config keys, in listing order.
 CONFIG_KEYS="port variant runtime stop-timeout image-tag auto-login bind"
@@ -1848,7 +1848,7 @@ read_hidden_value() {
 # Every prompt goes to stderr and every answer is read from stdin. Nothing is
 # written while the questions run: the answers only live in memory (the batch)
 # until the confirmation, so Ctrl-C and end of input leave both files as they
-# were. Spec: docs/agents/specs/client-config/wizard.md.
+# were. Docs: docs/agents/standalone/client-config.md#kerghan-wizard.
 
 # Set by wizard_read, wizard_ask and wizard_password.
 WIZARD_ANSWER=""
