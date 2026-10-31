@@ -24,3 +24,7 @@ secret:
       match: Zq9!x
     - name: Standalone client configure bats fixture password (issue #404) — fake value used only in standalone/test/configure_security.bats to assert configure makes no docker/vault calls
       match: yet-another-pw
+    - name: Same configure bats fixture (issue #404), as captured with its key prefix
+      match: KERGHAN_DEFAULT_USER_PASSWORD=yet-another-pw
+    - name: Same configure bats fixture (issue #404), as captured up to the end of the line
+      match: yet-another-pw port=3002
