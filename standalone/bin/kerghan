@@ -661,6 +661,7 @@ read_config_file() {
     error "$CONFIG_FILE: cannot be read"
     exit 1
   fi
+  # shellcheck disable=SC2034 # for callers such as the wizard (#405)
   CR_EXISTS=true
 
   local raw line key value n=0 u found
@@ -959,6 +960,7 @@ batch_index() {
   local i=0
   while [ "$i" -lt "${#BATCH_KEYS[@]}" ]; do
     if [ "${BATCH_KEYS[i]}" = "$1" ]; then
+      # shellcheck disable=SC2034 # for callers such as the wizard (#405)
       BI=$i
       return 0
     fi
@@ -1016,7 +1018,7 @@ validate_value() {
   fi
   if ! is_env_key "$key"; then
     if ! config_key_index "$key"; then
-      config_keys="$(echo "$CONFIG_KEYS" | sed 's/ /, /g')"
+      config_keys="${CONFIG_KEYS// /, }"
       error "unknown key '$key' (known config keys: $config_keys)"
       return 1
     fi
@@ -1077,7 +1079,7 @@ batch_validate() {
           ok=1
         fi
       elif ! config_key_index "$key"; then
-        config_keys="$(echo "$CONFIG_KEYS" | sed 's/ /, /g')"
+        config_keys="${CONFIG_KEYS// /, }"
         error "unknown key '$key' (known config keys: $config_keys)"
         ok=1
       fi
@@ -1924,7 +1926,7 @@ print_rows() {
 configure_read() {
   local key="$1" config_keys
   if ! is_env_key "$key" && ! config_key_index "$key"; then
-    config_keys="$(echo "$CONFIG_KEYS" | sed 's/ /, /g')"
+    config_keys="${CONFIG_KEYS// /, }"
     error "unknown key '$key' (known config keys: $config_keys)"
     exit 1
   fi
@@ -1944,7 +1946,9 @@ confirm_force() {
   while [ "$i" -lt "${#BATCH_KEYS[@]}" ]; do
     key="${BATCH_KEYS[i]}"
     i=$((i + 1))
-    [ "${BATCH_ACTIONS[i - 1]}" = "set" ] && in_list "$key" "$FORCE_KEYS" || continue
+    if [ "${BATCH_ACTIONS[i - 1]}" != "set" ] || ! in_list "$key" "$FORCE_KEYS"; then
+      continue
+    fi
     any=true
     case "$key" in
       KERGHAN_SECRET_KEY)
