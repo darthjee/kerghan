@@ -133,6 +133,11 @@ kerghan status                          # show the instance state
 kerghan compose <args>                  # docker compose inside the instance, e.g. compose exec mysql sh
 kerghan reset                           # wipe all data, asks for confirmation
 kerghan update-env                      # add missing variables to ~/.kerghan/kerghan.env (keeps existing values)
+kerghan configure [--show-secrets] [KEY]
+                                        # list the settings in ~/.kerghan/config and kerghan.env, or print KEY
+kerghan configure [--force] [--unset KEY]... [KEY=VALUE | KEY=-]...
+                                        # set or unset settings (all or nothing); KEY=- reads the value hidden
+kerghan wizard [--advanced]             # set up the settings interactively (--advanced asks every setting)
 kerghan version | help
 ```
 
@@ -237,6 +242,26 @@ date (upgrading the client never modifies it):
   does not touch the instance: the only Docker call is the read-only volume check when the file is
   missing.
 
+#### `configure` and `wizard`
+
+The two commands that change the settings without hand-editing the files:
+
+- `kerghan configure` lists every value of `~/.kerghan/config` and `~/.kerghan/kerghan.env`
+  (secrets masked unless `--show-secrets`), prints one (`kerghan configure KEY`, the scripting
+  interface), or sets and unsets several in one all-or-nothing call
+  (`kerghan configure port=3002 FRONTEND_BASE_URL=https://kerghan.example.com`, `--unset KEY`,
+  `KEY=-` to read a value hidden). The key's case picks the file: lower-case keys go to `config`,
+  upper-case keys to `kerghan.env`.
+- `kerghan wizard` asks one question per setting (`--advanced` asks them all), with the current
+  value as the default, then shows the changes and asks for confirmation before writing.
+
+Both are write-only: they never start, stop or recreate the instance, and print the command
+that applies the change (`kerghan up`, or `kerghan down && kerghan up`). The two secrets are
+only changed by `kerghan configure --force`; the client-managed
+`KERGHAN_DEFAULT_USER_ALWAYS_AUTHENTICATED` / `KERGHAN_DEFAULT_USER_ALLOWED_IPS` are refused. Full
+rules (key routing, write rules, edge cases, secret handling, exit codes, required tests):
+[Client config](standalone/client-config.md).
+
 ### `FRONTEND_BASE_URL`
 
 `up` passes `FRONTEND_BASE_URL=http://localhost:<port>` (the effective port) unless
@@ -277,6 +302,9 @@ container is created (`kerghan down && kerghan up` applies it now).
 |---|---|---|
 | `~/.kerghan/config` | Client settings. Optional. | user default |
 | `~/.kerghan/kerghan.env` | Secrets and backend variables passed to the stack (see [environment-variables.md](environment-variables.md#5-standalone-darthjeekerghan-standalone)). Generated on the first `up`. | 600 |
+
+Both files can be edited by hand, or through `kerghan configure` / `kerghan wizard` (see
+[`configure` and `wizard`](#configure-and-wizard)).
 
 ### `config` format
 
@@ -605,7 +633,7 @@ The CI jobs that build and publish the images and the client assets (`release-ke
 | Build the online image locally | `make build-standalone` (tags `darthjee/kerghan-standalone:dev`) |
 | Smoke-test it | `make standalone-smoke`, which runs `standalone/scripts/smoke_test.sh`: boots the image with `--privileged`, checks `/health.json` and `/` through Tent, restarts with the data volume kept, and checks no env file or secret is baked in. Needs `--privileged` support on the host Docker. |
 | Verify the effective client IP | `standalone/scripts/verify_client_ip.sh [probe\|reach\|e2e]`, run by hand (no `make` target): measures the address the backend sees through Vault, and checks `status.json` against a running instance. See [Verifying the effective client IP](#verifying-the-effective-client-ip). |
-| Client and installer tests | The bats suite in `standalone/test/` (with `helpers/` and command `stubs/`): `docker-compose run --rm standalone_tests`. CI runs it in the `standalone_tests` job. |
+| Client and installer tests | The bats suite in `standalone/test/` (with `helpers/` and command `stubs/`): `docker-compose run --rm standalone_tests`. CI runs it in the `standalone_tests` job. It also covers `configure` and `wizard` (`configure_files.bats`, `configure.bats`, `wizard.bats`, `configure_security.bats`; see the "Required tests" sections of [Client config](standalone/client-config.md)). |
 
 The release job smoke-tests the published offline image on amd64 with `SKIP_BUILD=true` and
 `SMOKE_EXPECT_OFFLINE=true`, which also checks that the stack started from the preloaded tarballs
