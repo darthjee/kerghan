@@ -28,3 +28,11 @@ secret:
       match: KERGHAN_DEFAULT_USER_PASSWORD=yet-another-pw
     - name: Same configure bats fixture (issue #404), as captured up to the end of the line
       match: yet-another-pw port=3002
+    - name: Standalone client wizard bats fixture password (issue #405) — fake value typed into the wizard only in standalone/test/wizard.bats
+      match: wizard-typed-pw
+    - name: Same wizard bats fixture (issue #405), as captured with its key prefix
+      match: KERGHAN_DEFAULT_USER_PASSWORD=wizard-typed-pw
+    - name: Wizard bats mismatch fixtures (issue #405) — fake values used only to exercise the typed-password mismatch re-ask
+      match: first-try-pw
+    - name: Same wizard bats mismatch fixture (issue #405)
+      match: other-try-pw
