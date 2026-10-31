@@ -163,13 +163,42 @@ refute_value_printed() {
   [ "$(wc -l <"$ENV_FILE")" -eq 7 ]
 }
 
-@test "the file keeps mode 600 and its inode" {
+@test "the file keeps mode 600" {
   write_legacy_env_file
-  before_inode="$(stat -c %i "$ENV_FILE")"
   run "$KERGHAN" update-env
   [ "$status" -eq 0 ]
   [ "$(stat -c %a "$ENV_FILE")" = "600" ]
-  [ "$(stat -c %i "$ENV_FILE")" = "$before_inode" ]
+}
+
+@test "a symlinked kerghan.env gets the missing keys in its target and stays a symlink" {
+  mkdir -p "$HOME/.kerghan" "$TEST_ROOT/dotfiles"
+  printf 'KERGHAN_SECRET_KEY=existing-secret\nKERGHAN_INTEGRATIONS_KEY=existing-integrations\n' \
+    >"$TEST_ROOT/dotfiles/kerghan.env"
+  chmod 600 "$TEST_ROOT/dotfiles/kerghan.env"
+  ln -s "$TEST_ROOT/dotfiles/kerghan.env" "$ENV_FILE"
+  run "$KERGHAN" update-env
+  [ "$status" -eq 0 ]
+  [ -L "$ENV_FILE" ]
+  [ "$(sed -n 1p "$TEST_ROOT/dotfiles/kerghan.env")" = "KERGHAN_SECRET_KEY=existing-secret" ]
+  grep -qx 'KERGHAN_DEFAULT_USER_USERNAME=admin' "$TEST_ROOT/dotfiles/kerghan.env"
+  [ "$(wc -l <"$TEST_ROOT/dotfiles/kerghan.env")" -eq 7 ]
+  [ "$(file_mode "$TEST_ROOT/dotfiles/kerghan.env")" = "600" ]
+  [ "$(ls -A "$TEST_ROOT/dotfiles")" = "kerghan.env" ]
+  [ "$(ls -A "$HOME/.kerghan")" = "kerghan.env" ]
+}
+
+@test "a failed write leaves kerghan.env untouched and no temp file" {
+  write_legacy_env_file
+  cp "$ENV_FILE" "$TEST_ROOT/before"
+  cp "$BATS_TEST_DIRNAME/stubs/mv" "$STUB_BIN/mv"
+  chmod +x "$STUB_BIN/mv"
+  export STUB_MV_FAIL=1
+  run "$KERGHAN" update-env
+  [ "$status" -eq 1 ]
+  assert_output_contains "kerghan: error: could not write $ENV_FILE; it was left unchanged"
+  [[ "$output" != *"Added to"* ]]
+  cmp "$ENV_FILE" "$TEST_ROOT/before"
+  [ "$(ls -A "$HOME/.kerghan")" = "kerghan.env" ]
 }
 
 @test "a second run adds nothing and leaves the file byte-identical" {

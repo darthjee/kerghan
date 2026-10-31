@@ -200,6 +200,10 @@ Validation of known env keys (the others are only checked by rules 8–9):
       umask.
     - **Symlinks.** When a file is a symlink, the write goes through to its target (the temp
       file is created next to the target and renamed over it); the link itself is kept.
+    - **One writer.** These rules live in `write_file_atomic` (`bin/kerghan`), which is the
+      only code path that writes `kerghan.env`: `ensure_env_file` (`up`, and a batch that
+      creates the file) and `update-env` use it too, with mode `600`, so atomicity,
+      permissions and symlink handling are the same for every command.
 
 A key set to its current value is not a change. A call with no change writes nothing, prints
 `Nothing changed.` and no apply hint, and exits `0`.

@@ -354,17 +354,14 @@ default_env_lines() {
 # ensure_env_file - generates kerghan.env (mode 600) when it does not exist,
 # with every key in DEFAULT_ENV_KEYS (the two secrets and the default user).
 # Never touches an existing file; 'kerghan update-env' adds missing keys to one.
+# Writes atomically through write_file_atomic (which creates the directory);
+# returns 1, leaving no file behind, when the write fails.
 ensure_env_file() {
   [ -e "$ENV_FILE" ] && return 0
   local content
   # shellcheck disable=SC2086 # DEFAULT_ENV_KEYS is a space-separated list
-  content="$(default_env_lines $DEFAULT_ENV_KEYS)"
-  mkdir -p "$KERGHAN_HOME"
-  (
-    umask 077
-    printf '%s\n' "$content" >"$ENV_FILE"
-  )
-  chmod 600 "$ENV_FILE"
+  content="$(default_env_lines $DEFAULT_ENV_KEYS)" || return 1
+  write_file_atomic "$ENV_FILE" "$content"$'\n' 600 || return 1
   echo "Generated secrets in $ENV_FILE; back this file up (losing it logs everyone out and makes stored integration credentials unreadable). It also holds the password of the 'admin' user, for manual login."
 }
 
@@ -1342,7 +1339,7 @@ write_file_atomic() {
 batch_apply() {
   local i=0 any=false
   if [ "$ER_EXISTS" != "true" ] && batch_sets_env; then
-    ensure_env_file
+    ensure_env_file || return 1
     read_env_file
   fi
   BATCH_CHANGED=()
@@ -1516,7 +1513,7 @@ cmd_up() {
   fi
 
   # 2. Secrets.
-  ensure_env_file
+  ensure_env_file || exit 1
   refuse_client_managed_keys
 
   # A kerghan.env from before #371 has no default user: the backend refuses
@@ -1750,6 +1747,9 @@ env_file_has_key() {
 # (default_env_value). Present keys are never changed and never duplicated; a
 # blank one only gets a warning. Never prints the generated values, and never
 # touches Docker except the read-only volume check when the file is missing.
+# Rewrites the file atomically through write_file_atomic (existing content
+# kept byte for byte, symlinks written through); a failed write leaves it
+# unchanged and exits 1.
 cmd_update_env() {
   [ "$#" -eq 0 ] || usage_error "unknown option '$1'"
   load_config
@@ -1790,13 +1790,18 @@ cmd_update_env() {
   local content
   # shellcheck disable=SC2086 # $missing is a space-separated list of keys
   content="$(default_env_lines $missing)"
-  {
-    if [ -s "$ENV_FILE" ] && [ -n "$(tail -c1 "$ENV_FILE")" ]; then
-      echo
-    fi
-    printf '%s\n' "$content"
-  } >>"$ENV_FILE"
-  chmod 600 "$ENV_FILE"
+  # The existing file, byte for byte: the trailing x keeps $(...) from
+  # stripping its final newlines (a text env file holds no NUL bytes, which a
+  # bash variable could not hold).
+  local old new
+  old="$(cat "$ENV_FILE" && printf x)" || exit 1
+  old="${old%x}"
+  new="$old"
+  if [ -n "$old" ] && [ "${old: -1}" != $'\n' ]; then
+    new="$new"$'\n'
+  fi
+  new="$new$content"$'\n'
+  write_file_atomic "$ENV_FILE" "$new" 600 || exit 1
 
   echo "Added to $ENV_FILE:$missing"
   case " $missing " in
