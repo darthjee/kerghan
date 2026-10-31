@@ -354,17 +354,14 @@ default_env_lines() {
 # ensure_env_file - generates kerghan.env (mode 600) when it does not exist,
 # with every key in DEFAULT_ENV_KEYS (the two secrets and the default user).
 # Never touches an existing file; 'kerghan update-env' adds missing keys to one.
+# Writes atomically through write_file_atomic (which creates the directory);
+# returns 1, leaving no file behind, when the write fails.
 ensure_env_file() {
   [ -e "$ENV_FILE" ] && return 0
   local content
   # shellcheck disable=SC2086 # DEFAULT_ENV_KEYS is a space-separated list
-  content="$(default_env_lines $DEFAULT_ENV_KEYS)"
-  mkdir -p "$KERGHAN_HOME"
-  (
-    umask 077
-    printf '%s\n' "$content" >"$ENV_FILE"
-  )
-  chmod 600 "$ENV_FILE"
+  content="$(default_env_lines $DEFAULT_ENV_KEYS)" || return 1
+  write_file_atomic "$ENV_FILE" "$content"$'\n' 600 || return 1
   echo "Generated secrets in $ENV_FILE; back this file up (losing it logs everyone out and makes stored integration credentials unreadable). It also holds the password of the 'admin' user, for manual login."
 }
 
@@ -1342,7 +1339,7 @@ write_file_atomic() {
 batch_apply() {
   local i=0 any=false
   if [ "$ER_EXISTS" != "true" ] && batch_sets_env; then
-    ensure_env_file
+    ensure_env_file || return 1
     read_env_file
   fi
   BATCH_CHANGED=()
@@ -1516,7 +1513,7 @@ cmd_up() {
   fi
 
   # 2. Secrets.
-  ensure_env_file
+  ensure_env_file || exit 1
   refuse_client_managed_keys
 
   # A kerghan.env from before #371 has no default user: the backend refuses
