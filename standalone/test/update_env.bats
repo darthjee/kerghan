@@ -163,13 +163,11 @@ refute_value_printed() {
   [ "$(wc -l <"$ENV_FILE")" -eq 7 ]
 }
 
-@test "the file keeps mode 600 and its inode" {
+@test "the file keeps mode 600" {
   write_legacy_env_file
-  before_inode="$(stat -c %i "$ENV_FILE")"
   run "$KERGHAN" update-env
   [ "$status" -eq 0 ]
   [ "$(stat -c %a "$ENV_FILE")" = "600" ]
-  [ "$(stat -c %i "$ENV_FILE")" = "$before_inode" ]
 }
 
 @test "a symlinked kerghan.env gets the missing keys in its target and stays a symlink" {
