@@ -81,6 +81,7 @@ Commands:
                                   list the settings in ~/.kerghan/config and kerghan.env, or print KEY
   configure [--force] [--unset KEY]... [KEY=VALUE | KEY=-]...
                                   set or unset settings (all or nothing); KEY=- reads the value hidden
+  wizard [--advanced]             set up the settings interactively (--advanced asks every setting)
   version                         print the version
   help                            print this help
 
@@ -1377,20 +1378,48 @@ batch_apply() {
   done
 }
 
+# change_line <key> <old> <new> [generated] - prints one line of the change
+# list: `<key>: <old> -> <new>`, or `<key>: changed` for a secret (`changed
+# (generated)` when [generated] is true), never its value.
+change_line() {
+  if is_secret_key "$1"; then
+    if [ "${4:-}" = "true" ]; then
+      echo "$1: changed (generated)"
+    else
+      echo "$1: changed"
+    fi
+  else
+    echo "$1: $2 -> $3"
+  fi
+}
+
 # batch_report - after batch_apply: the change list and the apply hint on
 # stdout, then the cross-key warnings on stderr; `Nothing changed.` when the
 # batch changed nothing.
 batch_report() {
-  local i=0 key any=false down_up=false password=false
+  local i=0 any=false
+  while [ "$i" -lt "${#BATCH_KEYS[@]}" ]; do
+    if [ "${BATCH_CHANGED[i]}" = "true" ]; then
+      any=true
+      change_line "${BATCH_KEYS[i]}" "${BATCH_OLD[i]}" "${BATCH_NEW[i]}"
+    fi
+    i=$((i + 1))
+  done
+  if [ "$any" != "true" ]; then
+    echo "Nothing changed."
+    return 0
+  fi
+  batch_apply_hint
+}
+
+# batch_apply_hint - after batch_apply, for a batch that changed something:
+# the strongest apply hint and the password note on stdout, then the
+# cross-key warnings on stderr.
+batch_apply_hint() {
+  local i=0 key down_up=false password=false
   while [ "$i" -lt "${#BATCH_KEYS[@]}" ]; do
     key="${BATCH_KEYS[i]}"
     if [ "${BATCH_CHANGED[i]}" = "true" ]; then
-      any=true
-      if is_secret_key "$key"; then
-        echo "$key: changed"
-      else
-        echo "$key: ${BATCH_OLD[i]} -> ${BATCH_NEW[i]}"
-      fi
       case "$key" in
         runtime | stop-timeout) down_up=true ;;
         KERGHAN_DEFAULT_USER_PASSWORD) password=true ;;
@@ -1401,10 +1430,6 @@ batch_report() {
     fi
     i=$((i + 1))
   done
-  if [ "$any" != "true" ]; then
-    echo "Nothing changed."
-    return 0
-  fi
   if [ "$down_up" = "true" ]; then
     echo "Run 'kerghan down && kerghan up' to apply."
   else
@@ -2428,9 +2453,58 @@ cmd_wizard() {
   WIZARD_GENERATED=false
   wizard_questions "$advanced"
 
+  # Every answer was validated as it was given; this also catches what spans
+  # the batch (e.g. an invalid config line), before the confirmation.
   batch_validate false || exit 1
+  wizard_preview || {
+    echo "Nothing changed."
+    return 0
+  }
+  wizard_confirm || {
+    echo "Nothing written."
+    return 0
+  }
   batch_apply || exit 1
-  batch_report
+  batch_apply_hint
+  if [ "$WIZARD_GENERATED" = "true" ]; then
+    # shellcheck disable=SC2088 # the literal ~ is meant for display
+    echo "The new default user password is in ~/.kerghan/kerghan.env (KERGHAN_DEFAULT_USER_PASSWORD)."
+  fi
+}
+
+# wizard_preview - prints the change list of the batch before anything is
+# written (old value from setting_display, new value from the batch; the
+# wizard only sets values). Returns 1 when nothing would change.
+wizard_preview() {
+  local i=0 any=false key generated
+  while [ "$i" -lt "${#BATCH_KEYS[@]}" ]; do
+    key="${BATCH_KEYS[i]}"
+    if key_changes "$i"; then
+      any=true
+      generated=false
+      if [ "$key" = "KERGHAN_DEFAULT_USER_PASSWORD" ]; then
+        generated="$WIZARD_GENERATED"
+      fi
+      change_line "$key" "$(setting_display "$key")" "${BATCH_VALUES[i]}" "$generated"
+    fi
+    i=$((i + 1))
+  done
+  [ "$any" = "true" ]
+}
+
+# wizard_confirm - asks `Write these changes? [Y/n]` until the answer is
+# Enter / y / yes (returns 0) or n / no (returns 1). End of input exits 1.
+wizard_confirm() {
+  local answer
+  while true; do
+    printf 'Write these changes? [Y/n] ' >&2
+    IFS= read -r answer || wizard_input_ended
+    answer="$(trim "${answer%$'\r'}" | tr '[:upper:]' '[:lower:]')"
+    case "$answer" in
+      '' | y | yes) return 0 ;;
+      n | no) return 1 ;;
+    esac
+  done
 }
 
 main() {
