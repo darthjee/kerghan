@@ -3,6 +3,9 @@
 # Copy this file to ~/.kerghan/config and uncomment the settings you want to
 # change. The file is optional; every setting has a default.
 #
+# Instead of hand-editing, `kerghan configure key=value` (for example
+# `kerghan configure port=8080`) or `kerghan wizard` writes these settings.
+#
 # Format: one key=value per line. Blank lines and # comments (whole line or
 # trailing) are ignored, and surrounding whitespace is trimmed. An empty value
 # uses the default. Unknown keys only print a warning; a line without "=" or an

@@ -101,6 +101,7 @@ Owned by the `standalone` agent. See [standalone.md](standalone.md) for how the 
 |---|---|
 | `architecture/` | Per-area architecture pages (`proxy.md`, `frontend.md`, `backend.md`, `modular-pattern.md`, `infra.md`) |
 | `modules/` | Per-backend-module documentation (routes, entities, events) — `auth.md` today |
+| `standalone/` | Sub-docs of `standalone.md` — `client-config.md` (`kerghan configure` / `kerghan wizard` reference) |
 | `plans/` | Implementation plans, one directory per issue |
 | `issues/` | Detailed specs for open issues, one file per issue |
 | `index.md`, `summary.md`, `folder-structure.md`, `flow.md`, `architecture.md`, `contributing.md`, `cache-warmer.md`, `product.md`, `issue-enhancement.md`, `environment-variables.md`, `standalone.md` | Top-level reference docs |

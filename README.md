@@ -133,8 +133,13 @@ must pass `--privileged` (or the Sysbox runtime), the required secrets (`KERGHAN
 
 | File | Content |
 |---|---|
-| `~/.kerghan/config` | Optional client settings: `port`, `variant`, `runtime`, `stop-timeout`, `image-tag`. Copy `config.example` from the release assets to start. |
+| `~/.kerghan/config` | Optional client settings: `port`, `variant`, `runtime`, `stop-timeout`, `image-tag`, `auto-login`, `bind`. Copy `config.example` from the release assets to start. |
 | `~/.kerghan/kerghan.env` | Secrets generated on the first `kerghan up`, plus any backend variables you add (see [Standalone variables](docs/agents/environment-variables.md#5-standalone-darthjeekerghan-standalone)). |
+
+Instead of editing the files by hand, use `kerghan configure` (scriptable: `kerghan configure`
+lists every value, `kerghan configure port=8080` sets one) or `kerghan wizard` (interactive). Both
+only write the files and print the command that applies the change. See
+[docs/agents/standalone/client-config.md](docs/agents/standalone/client-config.md).
 
 ### Caveats
 
