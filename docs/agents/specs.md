@@ -45,7 +45,9 @@ file changes.
 
 ## Active specs
 
-none
+| Feature | Specs | Product decision |
+|---------|-------|------------------|
+| Client config (`kerghan configure` / `kerghan wizard`) | [specs/client-config/README.md](specs/client-config/README.md) | #402 |
 
 When no feature is in progress, this list reads "none".
 
