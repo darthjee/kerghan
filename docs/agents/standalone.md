@@ -110,15 +110,33 @@ bash install.sh
 
 ### Upgrading
 
+Run `kerghan update` (or `kerghan update VERSION` for a given release). The client and the image
+always move together: it downloads the release's installer, replaces the client in place, then
+hands off to the new client, which adds missing `kerghan.env` variables, pulls the new image
+and, when the instance is running, restarts it according to `restart-on-update` (`ask` by
+default; `--restart` / `--no-restart` override it for one run). A restart recreates the container
+on the new image like `kerghan up`: the data volume is kept, and the backend runs the pending
+migrations on boot. A stopped instance is never started. See [`update`](#update) and
+[Client update](standalone/client-update.md).
+
+**First upgrade.** Clients older than `FIRST_UPDATE_VERSION` (0.8.2 and older) have no `update`.
+To reach the first version that has it, upgrade by hand once:
+
 1. Run the installer again. It replaces the client in place (with the latest release, or with
    `KERGHAN_VERSION`).
 2. Run `kerghan up`. When the running instance uses an older image than the new client, the client
    recreates it (`down`, then `up`) with the new image. The data volume is kept, and the backend
    runs the pending migrations on boot. An installation whose `kerghan.env` predates the default
    user keeps automatic login off and the port on every interface (see [Secrets](#secrets));
-   `kerghan update-env` adds the missing keys. Upgrading never modifies `kerghan.env` by itself.
+   `kerghan update-env` adds the missing keys. This manual path never modifies `kerghan.env` by
+   itself.
 
-**Downgrades are not supported** (an older image against a newer schema). When the running
+From then on, `kerghan update` works.
+
+**Downgrades.** `kerghan update VERSION` with an older `VERSION` downgrades the client (and pulls
+its image) only after a warning and a `[y/N]` confirmation (`--yes` without a terminal), and it
+never restarts the instance: it prints how to switch it by hand. Running an older image against
+data a newer one wrote is not supported (an older image against a newer schema): when the running
 instance uses a newer image than the client (or than `image-tag`), `kerghan up` prints a warning
 and a hint, exits non-zero, and does not touch the instance.
 
@@ -132,6 +150,8 @@ kerghan logs [-f]                       # show (or follow) the logs
 kerghan status                          # show the instance state
 kerghan compose <args>                  # docker compose inside the instance, e.g. compose exec mysql sh
 kerghan reset                           # wipe all data, asks for confirmation
+kerghan update [VERSION] [--force] [--yes] [--[no-]restart]
+                                        # update the client and the image to VERSION (default: the latest release)
 kerghan update-env                      # add missing variables to ~/.kerghan/kerghan.env (keeps existing values)
 kerghan configure [--show-secrets] [KEY]
                                         # list the settings in ~/.kerghan/config and kerghan.env, or print KEY
@@ -265,7 +285,30 @@ that applies the change (`kerghan up`, or `kerghan down && kerghan up`). The two
 only changed by `kerghan configure --force`; the client-managed
 `KERGHAN_DEFAULT_USER_ALWAYS_AUTHENTICATED` / `KERGHAN_DEFAULT_USER_ALLOWED_IPS` are refused. Full
 rules (key routing, write rules, edge cases, secret handling, exit codes, required tests):
-[Client config](standalone/client-config.md).
+[Client config](standalone/client-config.md). Both also handle `restart-on-update` (the wizard
+always asks it, right after `bind`); changing only that key prints
+`Takes effect on the next 'kerghan update'.` instead of a restart command.
+
+#### `update`
+
+`kerghan update [VERSION]` updates the client and the image together, to `VERSION` or the latest
+release:
+
+- It downloads the release's `install.sh` once (HTTPS only, to a private temp folder, never
+  piped into `bash`), reads the target version from its stamp line, and compares it with the
+  running client: already there is a no-op (`--force` reinstalls), and an older `VERSION` is a
+  downgrade that needs a confirmation (`--yes`) and never restarts the instance.
+- It runs that installer into the directory of the running client (symlinks resolved, never
+  `sudo`), then hands off to the new client with `update --finish` (hidden), which adds missing
+  `kerghan.env` variables, pulls the image and decides on the restart.
+- The restart of a running instance follows `restart-on-update` (`ask`, `always` or `never`),
+  overridden for one run by `--restart` / `--no-restart`. A stopped instance is never started.
+- There is no rollback: when the pull or the restart fails, the client stays updated and the
+  error says how to recover. A hint prints the `docker image rm` command for the previous image.
+
+The handoff, the installer interface and the release files are stable contracts between client
+versions. Full rules (flow, versions, downgrades, the setting, security, exit codes, stable
+contracts, required tests): [Client update](standalone/client-update.md).
 
 ### `FRONTEND_BASE_URL`
 
@@ -324,6 +367,7 @@ stop-timeout=60
 image-tag=            # optional override of the pinned image tag
 auto-login=true       # true | false
 bind=                 # host IPv4 address; default depends on auto-login
+restart-on-update=ask # ask | always | never
 ```
 
 | Key | Values | Default | Overridden by | Passed to Vault as |
@@ -335,6 +379,7 @@ bind=                 # host IPv4 address; default depends on auto-login
 | `image-tag` | a Docker tag, or empty | the tag pinned in the client | none | the image tag |
 | `auto-login` | `true` \| `false` | `true` (`false` when `kerghan.env` has no default user, see [Secrets](#secrets)) | `--auto-login`, `--no-auto-login` | `-e KERGHAN_DEFAULT_USER_ALWAYS_AUTHENTICATED` |
 | `bind` | an IPv4 address | `127.0.0.1` with auto-login on, `0.0.0.0` with it off | `--bind ADDRESS` | the host IP in `-p <bind>:<port>:80` |
+| `restart-on-update` | `ask` \| `always` \| `never` | `ask` (prompt on a terminal; without one, like `never`) | `update --restart`, `update --no-restart` | not passed; read by `kerghan update` only (see [`update`](#update)) |
 
 - **Precedence:** command-line flag, then `~/.kerghan/config`, then the default. `--offline`
   selects the offline variant even with `variant=online`; with `variant=offline`, a run without
@@ -354,7 +399,7 @@ bind=                 # host IPv4 address; default depends on auto-login
   brackets, and IPv6 is not supported. The user-facing URL stays `http://localhost:<port>` with
   any bind. Backend behavior and security rules:
   [Default user and automatic login](modules/auth/default-user.md).
-- **Which commands read it:** only `up`, `down`, `reset` and `update-env` load the file, before any side effect
+- **Which commands read it:** only `up`, `down`, `reset`, `update` and `update-env` load the file, before any side effect
   (in `reset`, before the confirmation prompt). `version`, `help`, `logs`, `status` and `compose`
   never read it, so a broken config does not block them.
 - **Malformed input:** a line without `=`, or an invalid value for a known key (for example
@@ -638,7 +683,7 @@ The CI jobs that build and publish the images and the client assets (`release-ke
 | Build the online image locally | `make build-standalone` (tags `darthjee/kerghan-standalone:dev`) |
 | Smoke-test it | `make standalone-smoke`, which runs `standalone/scripts/smoke_test.sh`: boots the image with `--privileged`, checks `/health.json` and `/` through Tent, restarts with the data volume kept, and checks no env file or secret is baked in. Needs `--privileged` support on the host Docker. |
 | Verify the effective client IP | `standalone/scripts/verify_client_ip.sh [probe\|reach\|e2e]`, run by hand (no `make` target): measures the address the backend sees through Vault, and checks `status.json` against a running instance. See [Verifying the effective client IP](#verifying-the-effective-client-ip). |
-| Client and installer tests | The bats suite in `standalone/test/` (with `helpers/` and command `stubs/`): `docker-compose run --rm standalone_tests`. CI runs it in the `standalone_tests` job. It also covers `configure` and `wizard` (`configure_files.bats`, `configure.bats`, `wizard.bats`, `configure_security.bats`; see the "Required tests" sections of [Client config](standalone/client-config.md)). |
+| Client and installer tests | The bats suite in `standalone/test/` (with `helpers/` and command `stubs/`): `docker-compose run --rm standalone_tests`. CI runs it in the `standalone_tests` job. It also covers `configure` and `wizard` (`configure_files.bats`, `configure.bats`, `wizard.bats`, `configure_security.bats`; see the "Required tests" sections of [Client config](standalone/client-config.md)) and `update` (`update.bats`; see the "Required tests" sections of [Client update](standalone/client-update.md)). |
 
 The release job smoke-tests the published offline image on amd64 with `SKIP_BUILD=true` and
 `SMOKE_EXPECT_OFFLINE=true`, which also checks that the stack started from the preloaded tarballs
