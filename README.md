@@ -116,8 +116,26 @@ confirmation). Run `kerghan help` for the full list.
 
 ### Upgrade
 
-Run the installer again, then `kerghan up`: the instance is recreated with the new image, the
-data is kept, and the database migrations run on boot. Downgrades are not supported.
+```bash
+kerghan update          # to the latest release
+kerghan update 0.9.1    # to a given release
+```
+
+`kerghan update` replaces the client and pulls the matching image in one go. A running instance
+is then recreated on the new image (the data is kept, and the database migrations run on boot)
+according to the `restart-on-update` setting: `ask` (the default) asks first, `always` restarts,
+`never` leaves it running for a later `kerghan up`; `--restart` / `--no-restart` override it for
+one run. A stopped instance is never started.
+
+**First upgrade:** clients 0.8.2 and older have no `kerghan update`. Run the installer once more
+by hand, then `kerghan up`, to reach the first version that has it; from then on,
+`kerghan update` works.
+
+**Downgrades:** `kerghan update <older version>` installs the older client (and pulls its image)
+only after a warning and a confirmation (`--yes` to skip it), and never restarts the instance. An older image cannot be run
+against data a newer one wrote, so `kerghan up` refuses to switch a running instance to an older
+image. See
+[docs/agents/standalone/client-update.md](docs/agents/standalone/client-update.md).
 
 ### Online and offline images
 
@@ -133,13 +151,15 @@ must pass `--privileged` (or the Sysbox runtime), the required secrets (`KERGHAN
 
 | File | Content |
 |---|---|
-| `~/.kerghan/config` | Optional client settings: `port`, `variant`, `runtime`, `stop-timeout`, `image-tag`, `auto-login`, `bind`. Copy `config.example` from the release assets to start. |
+| `~/.kerghan/config` | Optional client settings: `port`, `variant`, `runtime`, `stop-timeout`, `image-tag`, `auto-login`, `bind`, `restart-on-update`. Copy `config.example` from the release assets to start. |
 | `~/.kerghan/kerghan.env` | Secrets generated on the first `kerghan up`, plus any backend variables you add (see [Standalone variables](docs/agents/environment-variables.md#5-standalone-darthjeekerghan-standalone)). |
 
 Instead of editing the files by hand, use `kerghan configure` (scriptable: `kerghan configure`
 lists every value, `kerghan configure port=8080` sets one) or `kerghan wizard` (interactive). Both
 only write the files and print the command that applies the change. See
-[docs/agents/standalone/client-config.md](docs/agents/standalone/client-config.md).
+[docs/agents/standalone/client-config.md](docs/agents/standalone/client-config.md) (and
+[docs/agents/standalone/client-update.md](docs/agents/standalone/client-update.md) for
+`kerghan update` and `restart-on-update`).
 
 ### Caveats
 
@@ -151,7 +171,8 @@ See [Caveats](docs/agents/standalone.md#caveats) for the details of each one.
   credentials unreadable.
 - **MySQL password:** fixed when the data volume is created.
 - **Disk usage:** older inner images pile up after upgrades; prune them by hand.
-- **No downgrades**, and **one instance per host**.
+- **No running downgrades** (an older image never runs against newer data; `kerghan update`
+  never restarts on a downgrade and leaves the switch to you), and **one instance per host**.
 - **Demo user:** standalone databases contain the `demo` user.
 
 See [docs/agents/standalone.md](docs/agents/standalone.md) for the full reference.

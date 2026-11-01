@@ -666,8 +666,9 @@ The CI jobs that build and publish the images and the client assets (`release-ke
 
   Unused images of the host Docker (for example older `darthjee/kerghan-standalone` tags) are
   cleaned up as usual with `docker image prune -a` on the host.
-- **No downgrades.** Running an older image against a newer schema is unsupported; the client
-  refuses it.
+- **No running downgrades.** Running an older image against a newer schema is unsupported;
+  `kerghan up` refuses it. `kerghan update` can downgrade the client (after a confirmation), but
+  never restarts the instance on a downgrade (see [Upgrading](#upgrading)).
 - **One instance per host.** The instance name `kerghan` is fixed.
 - **Demo user.** The demo-seed migration also creates the `demo` user in standalone databases.
   `KERGHAN_DEMO_PASSWORD` is not passed to the stack, so its password falls back to a non-working
