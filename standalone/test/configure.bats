@@ -23,9 +23,12 @@ list_row() {
   [ "$(list_row image-tag)" = " image-tag $CURRENT_VERSION default" ]
   [ "$(list_row auto-login)" = " auto-login true default" ]
   [ "$(list_row bind)" = " bind 127.0.0.1 derived (auto-login on)" ]
-  [ "${lines[8]}" = "env (~/.kerghan/kerghan.env)" ]
+  [ "$(list_row restart-on-update)" = " restart-on-update ask default" ]
+  [[ "${lines[7]}" == "  bind "* ]]
+  [[ "${lines[8]}" == "  restart-on-update "* ]]
+  [ "${lines[9]}" = "env (~/.kerghan/kerghan.env)" ]
   assert_output_contains "not created yet"
-  [ "${#lines[@]}" -eq 10 ]
+  [ "${#lines[@]}" -eq 11 ]
   [ ! -e "$HOME/.kerghan" ]
 }
 
@@ -68,6 +71,18 @@ list_row() {
   [ "$(list_row port)" = " port 3001 file" ]
 }
 
+@test "the restart-on-update row shows the file value, or file, invalid" {
+  write_env_file
+  write_config "restart-on-update=never"
+  run "$KERGHAN" configure
+  [ "$status" -eq 0 ]
+  [ "$(list_row restart-on-update)" = " restart-on-update never file" ]
+  write_config "restart-on-update=yes"
+  run "$KERGHAN" configure
+  [ "$status" -eq 0 ]
+  [ "$(list_row restart-on-update)" = " restart-on-update yes file, invalid" ]
+}
+
 @test "auto-login without a default user in kerghan.env is derived false" {
   write_legacy_env_file
   run "$KERGHAN" configure
@@ -101,6 +116,18 @@ list_row() {
   [ "$output" = "3001" ]
   write_config "variant=online"
   run "$KERGHAN" configure port
+  [ "$status" -eq 0 ]
+  [ "$output" = "" ]
+}
+
+@test "a single read of restart-on-update prints the file value, or an empty line when unset" {
+  write_env_file
+  write_config "restart-on-update=always"
+  run "$KERGHAN" configure restart-on-update
+  [ "$status" -eq 0 ]
+  [ "$output" = "always" ]
+  write_config "port=3001"
+  run "$KERGHAN" configure restart-on-update
   [ "$status" -eq 0 ]
   [ "$output" = "" ]
 }
@@ -143,6 +170,28 @@ list_row() {
   [ "$status" -eq 0 ]
   [ "$(cat "$CONFIG_FILE")" = "port=3002
 auto-login=false" ]
+}
+
+@test "each restart-on-update value is written with the kerghan update hint" {
+  local value
+  write_env_file
+  for value in always never ask; do
+    run "$KERGHAN" configure "restart-on-update=$value"
+    [ "$status" -eq 0 ]
+    [ "$(cat "$CONFIG_FILE")" = "restart-on-update=$value" ]
+    [ "${lines[1]}" = "Takes effect on the next 'kerghan update'." ]
+  done
+}
+
+@test "an invalid restart-on-update is refused and nothing is written" {
+  local bad
+  write_env_file
+  for bad in yes Always true y; do
+    run "$KERGHAN" configure "restart-on-update=$bad"
+    [ "$status" -eq 1 ]
+    assert_output_contains "invalid restart-on-update '$bad' (expected ask, always or never)"
+    [ ! -e "$CONFIG_FILE" ]
+  done
 }
 
 @test "one invalid value writes nothing" {
@@ -211,6 +260,16 @@ auto-login=false" ]
   [ "$status" -eq 0 ]
   [ ! -s "$CONFIG_FILE" ]
   [ "${lines[0]}" = "port: 3002 -> 3000 (default)" ]
+}
+
+@test "--unset restart-on-update removes the line and shows the default" {
+  write_env_file
+  write_config "port=3002" "restart-on-update=never"
+  run "$KERGHAN" configure --unset restart-on-update
+  [ "$status" -eq 0 ]
+  [ "$(cat "$CONFIG_FILE")" = "port=3002" ]
+  [ "${lines[0]}" = "restart-on-update: never -> ask (default)" ]
+  [ "${lines[1]}" = "Takes effect on the next 'kerghan update'." ]
 }
 
 # --- refused keys ---
