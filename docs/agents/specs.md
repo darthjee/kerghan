@@ -45,7 +45,9 @@ file changes.
 
 ## Active specs
 
-none
+| Feature | Specs | Product decision |
+|---------|-------|------------------|
+| Client update (`kerghan update` / `restart-on-update`) | [specs/client-update/README.md](specs/client-update/README.md) | #414 |
 
 When no feature is in progress, this list reads "none".
 
