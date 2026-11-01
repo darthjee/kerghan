@@ -1977,6 +1977,64 @@ cmd_update() {
     reinstall) echo "Reinstalling kerghan $target..." ;;
     downgrade) echo "Downgrading kerghan $current -> $target..." ;;
   esac
+
+  # 3. Install: both variables passed explicitly, so values exported in the
+  # user's shell never apply. Its output passes through unchanged.
+  local rc=0
+  KERGHAN_VERSION="$target" KERGHAN_INSTALL_DIR="$UPDATE_INSTALL_DIR" "$BASH" "$installer" || rc=$?
+  if [ "$rc" -ne 0 ]; then
+    error "the installer failed; kerghan $current is still installed"
+    exit 1
+  fi
+
+  # Below FIRST_UPDATE_VERSION the new client has no `update --finish`: only
+  # the client was replaced (the EXIT trap removes the staging folder).
+  if [ "$(version_compare "$target" "$FIRST_UPDATE_VERSION")" = "lt" ]; then
+    echo "kerghan client replaced: $current -> $target"
+    update_downgrade_hint "$target" "$(running_image)"
+    return 0
+  fi
+
+  # 4. Hand off to the new client (--restart never reaches a downgrade).
+  local restart="$UPDATE_RESTART"
+  if [ "$action" = "downgrade" ] && [ "$restart" = "always" ]; then
+    restart=""
+  fi
+  update_handoff "$current" "$restart"
+}
+
+# update_downgrade_hint <version> <running image> - how to switch the instance
+# to <version> by hand after a downgrade (it is never restarted).
+update_downgrade_hint() {
+  if [ -n "$2" ]; then
+    hint "run 'kerghan down && kerghan up' to switch the instance to $1 (an older version may not read data written by a newer one)"
+  else
+    hint "run 'kerghan up' to start the instance on $1"
+  fi
+}
+
+# update_handoff <from version> <restart override> - removes the staging
+# folder (exec runs no trap) and execs exactly <install dir>/kerghan with
+# `update --finish` as its only argument. KERGHAN_UPDATE_FROM is always set,
+# KERGHAN_UPDATE_RESTART is set to the override or unset, so nothing exported
+# in the user's shell leaks in. Exits 1 when the new client cannot be run.
+update_handoff() {
+  local new="$UPDATE_INSTALL_DIR/kerghan"
+  update_cleanup
+  trap - EXIT INT TERM
+  if [ -f "$new" ] && [ -x "$new" ]; then
+    # A failed exec returns instead of ending the shell.
+    shopt -s execfail
+    if [ -n "$2" ]; then
+      KERGHAN_UPDATE_FROM="$1" KERGHAN_UPDATE_RESTART="$2" exec "$new" update --finish || true
+    else
+      unset KERGHAN_UPDATE_RESTART
+      KERGHAN_UPDATE_FROM="$1" exec "$new" update --finish || true
+    fi
+  fi
+  error "could not run $new update --finish"
+  hint "the client may already be updated: check with 'kerghan version', then run 'kerghan up'"
+  exit 1
 }
 
 # UPDATE_INSTALL_DIR - the canonical directory of the running client's real
