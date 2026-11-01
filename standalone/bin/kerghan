@@ -1922,7 +1922,7 @@ update_parse_args() {
 
 # cmd_update - `kerghan update [VERSION] [--force] [--yes] [--[no-]restart]`,
 # and the hidden `update --finish` the old client hands off to (see
-# docs/agents/specs/client-update/).
+# docs/agents/standalone/client-update.md).
 cmd_update() {
   if [ "${1:-}" = "--finish" ]; then
     [ "$#" -eq 1 ] || usage_error "option '--finish' must be the only argument"
@@ -2081,8 +2081,9 @@ update_restart() {
 # cmd_update_finish - `kerghan update --finish`, run by the old client's
 # handoff (or by hand) in the new client: adds missing kerghan.env keys, pulls
 # the image, decides on the restart and prints the result and cleanup hints.
-# Reads KERGHAN_UPDATE_FROM and KERGHAN_UPDATE_RESTART (see
-# docs/agents/specs/client-update/contracts.md); unknown variables are ignored.
+# Reads KERGHAN_UPDATE_FROM and KERGHAN_UPDATE_RESTART (a stable contract, see
+# docs/agents/standalone/client-update.md#handoff-interface); unknown
+# variables are ignored.
 cmd_update_finish() {
   # 1. Config.
   load_config

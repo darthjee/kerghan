@@ -1,6 +1,6 @@
 #!/usr/bin/env bats
 # kerghan update [VERSION] and its hidden update --finish step
-# (docs/agents/specs/client-update/): parsing, preconditions, resolution
+# (docs/agents/standalone/client-update.md): parsing, preconditions, resolution
 # through the installer stamp line, comparison, downgrades, the installer run,
 # the handoff, the env step, the pull, the restart decision and the hints.
 #

@@ -10,6 +10,17 @@
 #                        installer was released with)
 #   KERGHAN_INSTALL_DIR  where the kerghan client goes (default: ~/.local/bin)
 #
+# Stable contract: `kerghan update` runs a downloaded release's install.sh
+# with KERGHAN_VERSION and KERGHAN_INSTALL_DIR set explicitly, and reads the
+# release version from the KERGHAN_VERSION="x.y.z" stamp line below (at the
+# start of a line, exactly that format; written by scripts/bump_version.sh,
+# read as text, never sourced). Both variables, the stamp line, and the
+# behaviour `update` relies on (no prompts, no sudo, `mv -f` as the only write
+# to the install dir, non-zero exit on any failure) can only grow in
+# backward-compatible ways, since every update and downgrade runs an installer
+# from another version. See
+# docs/agents/standalone/client-update.md#stable-contracts.
+#
 # It downloads the kerghan client of the chosen version into the install dir
 # (a rerun upgrades it in place) and installs the `vault` CLI when it is not
 # on PATH yet. It never uses sudo and never touches ~/.kerghan or any Docker

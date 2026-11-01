@@ -27,7 +27,7 @@ Both use one writer (key routing, validation, line editing, atomic writes) and o
 secret-handling rules.
 
 - **Both files.** `~/.kerghan/config` holds the client settings, all lower-case keys: `port`,
-  `variant`, `runtime`, `stop-timeout`, `image-tag`, `auto-login`, `bind`.
+  `variant`, `runtime`, `stop-timeout`, `image-tag`, `auto-login`, `bind`, `restart-on-update`.
   `~/.kerghan/kerghan.env` holds the container's environment, all upper-case keys (the two
   secrets, the `KERGHAN_DEFAULT_USER_*` values, `FRONTEND_BASE_URL`, any custom variable).
 - **Routing by key.** The two namespaces never collide, so the key alone decides which file is
@@ -85,7 +85,7 @@ first write.
 
 | File | Keys | Read by | Mode |
 |------|------|---------|------|
-| `~/.kerghan/config` | lower-case: `port`, `variant`, `runtime`, `stop-timeout`, `image-tag`, `auto-login`, `bind` | the client's `load_config` (`up`, `down`, `reset`, `update-env`) | whatever it has (usually `644`) |
+| `~/.kerghan/config` | lower-case: `port`, `variant`, `runtime`, `stop-timeout`, `image-tag`, `auto-login`, `bind`, `restart-on-update` | the client's `load_config` (`up`, `down`, `reset`, `update`, `update-env`) | whatever it has (usually `644`) |
 | `~/.kerghan/kerghan.env` | upper-case: any environment variable | Docker's env-file parser, through Vault, on `up` | `600` |
 
 When the commands read a value, they read it the way its consumer does:
@@ -96,7 +96,7 @@ When the commands read a value, they read it the way its consumer does:
   the **last** line wins; a line without `=` or an invalid value fails with the line number; an
   unknown key only warns. Values are validated with the client's `valid_*` validators
   (`valid_port`, `valid_variant`, `valid_runtime`, `valid_stop_timeout`, `valid_image_tag`,
-  `valid_bool` for `auto-login`, `valid_bind`).
+  `valid_bool` for `auto-login`, `valid_bind`, `valid_restart_on_update`).
 - **`kerghan.env`** (Docker's env-file parser): one `KEY=value` per line; a line starting with
   `#` is a comment; leading whitespace before the key is ignored; the value is **literal** (no
   quoting, no escaping, no trimming, `#` is part of the value); a bare `KEY` line (no `=`) takes
@@ -233,6 +233,7 @@ After the change list, both commands print the hint for the keys that changed:
 | `port`, `variant`, `image-tag`, `auto-login`, `bind` | `Run 'kerghan up' to apply (recreates the instance; data is kept).` |
 | `runtime`, `stop-timeout` | `Run 'kerghan down && kerghan up' to apply.` |
 | Any env key | `Run 'kerghan down && kerghan up' to apply.` |
+| Only `restart-on-update` | `Takes effect on the next 'kerghan update'.` (see [Client update](client-update.md#apply-hint)) |
 
 When several keys change, only the strongest hint is printed: `down && up` covers everything. A
 change of `KERGHAN_DEFAULT_USER_PASSWORD` adds the [password change](#password-change) note.
@@ -450,20 +451,24 @@ Asked in this order; `+` marks the questions only asked with `--advanced`:
 | 5 + | Image tag | `image-tag` | config |
 | 6 | Automatic login (true / false) | `auto-login` | config |
 | 7 | Bind address | `bind` | config |
-| 8 + | Default user enabled (true / false) | `KERGHAN_DEFAULT_USER_ENABLED` | env |
-| 9 + | Default user is admin (true / false) | `KERGHAN_DEFAULT_USER_ADMIN` | env |
-| 10 | Default user username | `KERGHAN_DEFAULT_USER_USERNAME` | env |
-| 11 | Default user email | `KERGHAN_DEFAULT_USER_EMAIL` | env |
-| 12 | Default user password (keep / generate / type) | `KERGHAN_DEFAULT_USER_PASSWORD` | env |
-| 13 + | Public URL | `FRONTEND_BASE_URL` | env |
+| 8 | Restart after update (ask / always / never) | `restart-on-update` | config |
+| 9 + | Default user enabled (true / false) | `KERGHAN_DEFAULT_USER_ENABLED` | env |
+| 10 + | Default user is admin (true / false) | `KERGHAN_DEFAULT_USER_ADMIN` | env |
+| 11 | Default user username | `KERGHAN_DEFAULT_USER_USERNAME` | env |
+| 12 | Default user email | `KERGHAN_DEFAULT_USER_EMAIL` | env |
+| 13 | Default user password (keep / generate / type) | `KERGHAN_DEFAULT_USER_PASSWORD` | env |
+| 14 + | Public URL | `FRONTEND_BASE_URL` | env |
 
 - **`bind` after `auto-login`.** When `bind` has no line in `config`, its bracketed default is
   the one derived from the auto-login answer (`127.0.0.1` when on, `0.0.0.0` when off).
 - **Skipping the default user.** When automatic login ends up off **and**
   `KERGHAN_DEFAULT_USER_ENABLED` is `false` (its answer with `--advanced`, its current value
-  otherwise), nothing uses the default user: questions 9–12 are skipped. There is no conflict
+  otherwise), nothing uses the default user: questions 10–13 are skipped. There is no conflict
   check between the two: automatic login implies an enabled default user (see
   [Default user: configuration](../modules/auth/default-user.md#configuration)).
+- **Restart after update.** Asked as `Restart after update (ask/always/never) [ask]` (or the
+  current value); not a boolean key, so `y` / `n` are not translated. See
+  [Client update: wizard](client-update.md#kerghan-wizard).
 - **Public URL.** Asked as `Public URL [http://localhost:<port>, derived from port]` (with the
   port answer) when `kerghan.env` has no `FRONTEND_BASE_URL`, or with its current value. Enter
   keeps the current value; nothing is written when it was never set.
@@ -560,7 +565,7 @@ unless stated:
 
 - Without `KERGHAN_ASSUME_TTY` and with piped stdin: exit `1` pointing to `kerghan configure`, no
   question printed. An unknown option exits `2`.
-- Without `--advanced`, questions 1, 2, 6, 7, 10, 11, 12 in that order; with it, all thirteen.
+- Without `--advanced`, questions 1, 2, 6, 7, 8, 11, 12, 13 in that order; with it, all fourteen.
 - Enter on every question with no `config` writes nothing and prints `Nothing changed.`.
 - Port `3002` + confirm writes `port=3002`, prints the change list and the `kerghan up` hint.
 - The `bind` default follows the auto-login answer; Enter on it writes no `bind` line.
