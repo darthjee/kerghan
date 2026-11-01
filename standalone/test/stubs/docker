@@ -14,9 +14,21 @@
 #                          started without it)
 #   STUB_RUNNING_ENV_FAIL=1  inspecting its .Config.Env fails (exit 1)
 #   STUB_DOCKER_INFO_EXIT  exit code of `docker info` (default 0)
+#   STUB_DOCKER_PULL_EXIT  exit code of `docker pull` (default 0)
+#   STUB_CONTAINER_ID      the container's .Id (unset: container-<n>, n being
+#                          the number of `vault up` calls logged so far, so it
+#                          changes on every recreate)
 echo "docker $*" >>"$STUB_LOG"
 if [ "${1:-}" = "info" ]; then
   exit "${STUB_DOCKER_INFO_EXIT:-0}"
+fi
+if [ "${1:-}" = "pull" ]; then
+  if [ "${STUB_DOCKER_PULL_EXIT:-0}" != "0" ]; then
+    echo "Error response from daemon: manifest for $2 not found" >&2
+    exit "$STUB_DOCKER_PULL_EXIT"
+  fi
+  echo "pulled $2"
+  exit 0
 fi
 case "${1:-} ${2:-}" in
   "volume inspect")
@@ -48,6 +60,7 @@ if [ "${1:-}" = "inspect" ]; then
       echo
       ;;
     *HostPort*) echo "${STUB_RUNNING_PORT:-3000}" ;;
+    '{{.Id}}') echo "${STUB_CONTAINER_ID:-container-$(grep -c '^vault up' "$STUB_LOG")}" ;;
     *HostIp*) echo "${STUB_RUNNING_HOST_IP-127.0.0.1}" ;;
     *) echo "unexpected inspect format: $3" >&2; exit 1 ;;
   esac

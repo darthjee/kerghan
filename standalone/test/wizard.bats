@@ -22,7 +22,7 @@ run_wizard() {
 # prompts - the question labels on stderr, in order, comma-separated.
 prompts() {
   printf '%s' "$stderr" |
-    grep -oE 'Port \[|Image variant|Docker runtime|Stop timeout|Image tag|Automatic login|Bind address|Default user enabled|Default user is admin|Default user username|Default user email|Default user password|Public URL' |
+    grep -oE 'Port \[|Image variant|Docker runtime|Stop timeout|Image tag|Automatic login|Bind address|Restart after update|Default user enabled|Default user is admin|Default user username|Default user email|Default user password|Public URL' |
     sed 's/ \[$//' | paste -sd, -
 }
 
@@ -63,8 +63,8 @@ unchanged_files() {
   cmp "$CONFIG_FILE" "$TEST_ROOT/config.before"
 }
 
-DEFAULT_ORDER="Port,Image variant,Automatic login,Bind address,Default user username,Default user email,Default user password"
-ADVANCED_ORDER="Port,Image variant,Docker runtime,Stop timeout,Image tag,Automatic login,Bind address,Default user enabled,Default user is admin,Default user username,Default user email,Default user password,Public URL"
+DEFAULT_ORDER="Port,Image variant,Automatic login,Bind address,Restart after update,Default user username,Default user email,Default user password"
+ADVANCED_ORDER="Port,Image variant,Docker runtime,Stop timeout,Image tag,Automatic login,Bind address,Restart after update,Default user enabled,Default user is admin,Default user username,Default user email,Default user password,Public URL"
 
 # --- arguments and starting state ---
 
@@ -95,7 +95,7 @@ ADVANCED_ORDER="Port,Image variant,Docker runtime,Stop timeout,Image tag,Automat
 @test "a config line without = exits 1 with the line number and asks nothing" {
   write_env_file
   write_config "port=3000" "garbage"
-  run_wizard "\n\n\n\n\n\n\n"
+  run_wizard "\n\n\n\n\n\n\n\n"
   [ "$status" -eq 1 ]
   assert_stderr_contains "$CONFIG_FILE:2: expected key=value"
   assert_stderr_contains "by hand"
@@ -104,16 +104,16 @@ ADVANCED_ORDER="Port,Image variant,Docker runtime,Stop timeout,Image tag,Automat
 
 # --- questions ---
 
-@test "without --advanced it asks questions 1, 2, 6, 7, 10, 11, 12 in that order" {
+@test "without --advanced it asks questions 1, 2, 6, 7, 8, 11, 12, 13 in that order" {
   write_env_file
-  run_wizard "\n\n\n\n\n\n\n"
+  run_wizard "\n\n\n\n\n\n\n\n"
   [ "$status" -eq 0 ]
   [ "$(prompts)" = "$DEFAULT_ORDER" ]
 }
 
-@test "with --advanced it asks all thirteen in table order" {
+@test "with --advanced it asks all fourteen in table order" {
   write_env_file
-  run_wizard "\n\n\n\n\n\n\n\n\n\n\n\n\n" --advanced
+  run_wizard "\n\n\n\n\n\n\n\n\n\n\n\n\n\n" --advanced
   [ "$status" -eq 0 ]
   [ "$(prompts)" = "$ADVANCED_ORDER" ]
   [ "$output" = "Nothing changed." ]
@@ -121,7 +121,7 @@ ADVANCED_ORDER="Port,Image variant,Docker runtime,Stop timeout,Image tag,Automat
 
 @test "the secrets, the client-managed pair and custom keys are never asked" {
   write_env_file "MY_CUSTOM=1"
-  run_wizard "\n\n\n\n\n\n\n\n\n\n\n\n\n" --advanced
+  run_wizard "\n\n\n\n\n\n\n\n\n\n\n\n\n\n" --advanced
   [ "$status" -eq 0 ]
   refute_stderr_contains "KERGHAN_SECRET_KEY"
   refute_stderr_contains "KERGHAN_INTEGRATIONS_KEY"
@@ -133,7 +133,7 @@ ADVANCED_ORDER="Port,Image variant,Docker runtime,Stop timeout,Image tag,Automat
 @test "Enter on every question with no config writes nothing and prints Nothing changed." {
   write_env_file
   cp "$ENV_FILE" "$TEST_ROOT/env.before"
-  run_wizard "\n\n\n\n\n\n\n"
+  run_wizard "\n\n\n\n\n\n\n\n"
   [ "$status" -eq 0 ]
   [ "$output" = "Nothing changed." ]
   refute_stderr_contains "Write these changes?"
@@ -143,7 +143,7 @@ ADVANCED_ORDER="Port,Image variant,Docker runtime,Stop timeout,Image tag,Automat
 
 @test "port 3002 and a confirmation write port=3002, the change list and the up hint" {
   write_env_file
-  run_wizard "3002\n\n\n\n\n\n\n\n"
+  run_wizard "3002\n\n\n\n\n\n\n\n\n"
   [ "$status" -eq 0 ]
   [ "$(cat "$CONFIG_FILE")" = "port=3002" ]
   assert_output_contains "port: 3000 (default) -> 3002"
@@ -154,10 +154,10 @@ ADVANCED_ORDER="Port,Image variant,Docker runtime,Stop timeout,Image tag,Automat
 
 @test "the bind default follows the auto-login answer and Enter writes no bind line" {
   write_env_file
-  run_wizard "\n\n\n\n\n\n\n"
+  run_wizard "\n\n\n\n\n\n\n\n"
   assert_stderr_contains "Bind address [127.0.0.1, derived from auto-login]: "
 
-  run_wizard "\n\nn\n\n\n\n\n\n"
+  run_wizard "\n\nn\n\n\n\n\n\n\n"
   [ "$status" -eq 0 ]
   assert_stderr_contains "Bind address [0.0.0.0, derived from auto-login]: "
   [ "$(cat "$CONFIG_FILE")" = "auto-login=false" ]
@@ -167,7 +167,7 @@ ADVANCED_ORDER="Port,Image variant,Docker runtime,Stop timeout,Image tag,Automat
 @test "a set bind is offered as its current value" {
   write_env_file
   write_config "bind=10.1.2.3"
-  run_wizard "\n\n\n\n\n\n\n"
+  run_wizard "\n\n\n\n\n\n\n\n"
   [ "$status" -eq 0 ]
   assert_stderr_contains "Bind address [10.1.2.3]: "
 }
@@ -178,9 +178,9 @@ ADVANCED_ORDER="Port,Image variant,Docker runtime,Stop timeout,Image tag,Automat
     "KERGHAN_DEFAULT_USER_USERNAME=admin" \
     "KERGHAN_DEFAULT_USER_EMAIL=admin@kerghan.local" \
     "KERGHAN_DEFAULT_USER_PASSWORD=existing-password-0123456789abcdef"
-  run_wizard "\n\nfalse\n\n\n"
+  run_wizard "\n\nfalse\n\n\n\n"
   [ "$status" -eq 0 ]
-  [ "$(prompts)" = "Port,Image variant,Automatic login,Bind address" ]
+  [ "$(prompts)" = "Port,Image variant,Automatic login,Bind address,Restart after update" ]
   [ "$(cat "$CONFIG_FILE")" = "auto-login=false" ]
 }
 
@@ -190,23 +190,23 @@ ADVANCED_ORDER="Port,Image variant,Docker runtime,Stop timeout,Image tag,Automat
     "KERGHAN_DEFAULT_USER_USERNAME=admin" \
     "KERGHAN_DEFAULT_USER_EMAIL=admin@kerghan.local" \
     "KERGHAN_DEFAULT_USER_PASSWORD=existing-password-0123456789abcdef"
-  run_wizard "\n\ntrue\n\n\n\n\n\n"
+  run_wizard "\n\ntrue\n\n\n\n\n\n\n"
   [ "$status" -eq 0 ]
   [ "$(prompts)" = "$DEFAULT_ORDER" ]
 }
 
 @test "with --advanced the skip rule uses the enabled answer" {
   write_env_file
-  run_wizard "\n\n\n\n\nfalse\n\nn\n\n\n" --advanced
+  run_wizard "\n\n\n\n\nfalse\n\n\nn\n\n\n" --advanced
   [ "$status" -eq 0 ]
-  [ "$(prompts)" = "Port,Image variant,Docker runtime,Stop timeout,Image tag,Automatic login,Bind address,Default user enabled,Public URL" ]
+  [ "$(prompts)" = "Port,Image variant,Docker runtime,Stop timeout,Image tag,Automatic login,Bind address,Restart after update,Default user enabled,Public URL" ]
   grep -qx 'KERGHAN_DEFAULT_USER_ENABLED=false' "$ENV_FILE"
   [ "$(cat "$CONFIG_FILE")" = "auto-login=false" ]
 }
 
 @test "an invalid port answer is asked again and the next valid answer is written" {
   write_env_file
-  run_wizard "abc\n3002\n\n\n\n\n\n\n\n"
+  run_wizard "abc\n3002\n\n\n\n\n\n\n\n\n"
   [ "$status" -eq 0 ]
   assert_stderr_contains "kerghan: error: invalid port 'abc' (expected 1-65535)"
   [ "$(printf '%s' "$stderr" | grep -o 'Port \[3000\]' | wc -l | tr -d ' ')" -eq 2 ]
@@ -215,7 +215,7 @@ ADVANCED_ORDER="Port,Image variant,Docker runtime,Stop timeout,Image tag,Automat
 
 @test "an invalid boolean answer is asked again" {
   write_env_file
-  run_wizard "\n\nmaybe\nfalse\n\n\n\n\n\n"
+  run_wizard "\n\nmaybe\nfalse\n\n\n\n\n\n\n"
   [ "$status" -eq 0 ]
   assert_stderr_contains "invalid auto-login 'maybe'"
   [ "$(cat "$CONFIG_FILE")" = "auto-login=false" ]
@@ -224,7 +224,7 @@ ADVANCED_ORDER="Port,Image variant,Docker runtime,Stop timeout,Image tag,Automat
 @test "an invalid runtime line is shown as invalid and Enter writes the default (--advanced)" {
   write_env_file
   write_config "runtime=bogus"
-  run_wizard "\n\n\n\n\n\n\n\n\n\n\n\n\n\n" --advanced
+  run_wizard "\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n" --advanced
   [ "$status" -eq 0 ]
   assert_stderr_contains "Docker runtime (auto/sysbox/privileged) [auto] (current value 'bogus' is invalid): "
   [ "$(cat "$CONFIG_FILE")" = "runtime=auto" ]
@@ -239,26 +239,93 @@ ADVANCED_ORDER="Port,Image variant,Docker runtime,Stop timeout,Image tag,Automat
 @test "an invalid runtime line is asked without --advanced too, so the write cannot fail" {
   write_env_file
   write_config "runtime=bogus"
-  run_wizard "\n\n\n\n\n\n\n\n\n"
+  run_wizard "\n\n\n\n\n\n\n\n\n\n"
   [ "$status" -eq 0 ]
-  [ "$(prompts)" = "Port,Image variant,Docker runtime,Automatic login,Bind address,Default user username,Default user email,Default user password" ]
+  [ "$(prompts)" = "Port,Image variant,Docker runtime,Automatic login,Bind address,Restart after update,Default user username,Default user email,Default user password" ]
   [ "$(cat "$CONFIG_FILE")" = "runtime=auto" ]
 }
 
 @test "an invalid port line offers the default and Enter writes it" {
   write_env_file
   write_config "port=abc"
-  run_wizard "\n\n\n\n\n\n\n\n"
+  run_wizard "\n\n\n\n\n\n\n\n\n"
   [ "$status" -eq 0 ]
   assert_stderr_contains "Port [3000] (current value 'abc' is invalid): "
   [ "$(cat "$CONFIG_FILE")" = "port=3000" ]
+}
+
+# --- restart-on-update ---
+
+@test "restart-on-update is asked right after bind with the default; Enter writes nothing" {
+  write_env_file
+  run_wizard "\n\n\n\n\n\n\n\n"
+  [ "$status" -eq 0 ]
+  assert_stderr_contains "Bind address [127.0.0.1, derived from auto-login]: Restart after update (ask/always/never) [ask]: "
+  [ "$output" = "Nothing changed." ]
+  [ ! -e "$CONFIG_FILE" ]
+}
+
+@test "a set restart-on-update is offered as its current value and Enter keeps it" {
+  write_env_file
+  write_config "restart-on-update=never"
+  snapshot
+  run_wizard "\n\n\n\n\n\n\n\n"
+  [ "$status" -eq 0 ]
+  assert_stderr_contains "Restart after update (ask/always/never) [never]: "
+  [ "$output" = "Nothing changed." ]
+  unchanged_files
+}
+
+@test "a restart-on-update answer is written with the kerghan update hint" {
+  write_env_file
+  run_wizard "\n\n\n\nalways\n\n\n\n\n"
+  [ "$status" -eq 0 ]
+  [ "$(cat "$CONFIG_FILE")" = "restart-on-update=always" ]
+  assert_output_contains "restart-on-update: ask (default) -> always"
+  assert_output_contains "Takes effect on the next 'kerghan update'."
+  refute_output_contains "Run 'kerghan"
+}
+
+@test "an invalid restart-on-update answer is asked again" {
+  write_env_file
+  run_wizard "\n\n\n\nyes\nnever\n\n\n\n\n"
+  [ "$status" -eq 0 ]
+  assert_stderr_contains "kerghan: error: invalid restart-on-update 'yes' (expected ask, always or never)"
+  [ "$(printf '%s' "$stderr" | grep -o 'Restart after update (ask/always/never) \[ask\]' | wc -l | tr -d ' ')" -eq 2 ]
+  [ "$(cat "$CONFIG_FILE")" = "restart-on-update=never" ]
+}
+
+@test "y is refused for restart-on-update, not translated" {
+  write_env_file
+  run_wizard "\n\n\n\ny\nalways\n\n\n\n\n"
+  [ "$status" -eq 0 ]
+  assert_stderr_contains "invalid restart-on-update 'y'"
+  [ "$(cat "$CONFIG_FILE")" = "restart-on-update=always" ]
+}
+
+@test "an invalid restart-on-update line is offered as [ask] and Enter fixes it" {
+  write_env_file
+  write_config "restart-on-update=yes"
+  run_wizard "\n\n\n\n\n\n\n\n\n"
+  [ "$status" -eq 0 ]
+  assert_stderr_contains "Restart after update (ask/always/never) [ask] (current value 'yes' is invalid): "
+  [ "$(cat "$CONFIG_FILE")" = "restart-on-update=ask" ]
+  assert_output_contains "restart-on-update: yes -> ask"
+}
+
+@test "with --advanced restart-on-update is asked right after bind" {
+  write_env_file
+  run_wizard "\n\n\n\n\n\n\nnever\n\n\n\n\n\n\n\n" --advanced
+  [ "$status" -eq 0 ]
+  [ "$(prompts)" = "$ADVANCED_ORDER" ]
+  [ "$(cat "$CONFIG_FILE")" = "restart-on-update=never" ]
 }
 
 # --- password ---
 
 @test "password g writes 48 hex characters, never printed, and says it is in kerghan.env" {
   write_env_file
-  run_wizard "\n\n\n\n\n\ng\n\n"
+  run_wizard "\n\n\n\n\n\n\ng\n\n"
   [ "$status" -eq 0 ]
   local password
   password="$(sed -n 's/^KERGHAN_DEFAULT_USER_PASSWORD=//p' "$ENV_FILE")"
@@ -273,7 +340,7 @@ ADVANCED_ORDER="Port,Image variant,Docker runtime,Stop timeout,Image tag,Automat
 
 @test "password t with two matching answers writes it and the summary masks it" {
   write_env_file
-  run_wizard "\n\n\n\n\n\nt\nwizard-typed-pw\nwizard-typed-pw\n\n"
+  run_wizard "\n\n\n\n\n\n\nt\nwizard-typed-pw\nwizard-typed-pw\n\n"
   [ "$status" -eq 0 ]
   grep -qx 'KERGHAN_DEFAULT_USER_PASSWORD=wizard-typed-pw' "$ENV_FILE"
   assert_output_contains "KERGHAN_DEFAULT_USER_PASSWORD: changed"
@@ -285,7 +352,7 @@ ADVANCED_ORDER="Port,Image variant,Docker runtime,Stop timeout,Image tag,Automat
 
 @test "a typed password mismatch asks both again" {
   write_env_file
-  run_wizard "\n\n\n\n\n\nt\nfirst-try-pw\nother-try-pw\nwizard-typed-pw\nwizard-typed-pw\n\n"
+  run_wizard "\n\n\n\n\n\n\nt\nfirst-try-pw\nother-try-pw\nwizard-typed-pw\nwizard-typed-pw\n\n"
   [ "$status" -eq 0 ]
   assert_stderr_contains "do not match"
   [ "$(printf '%s' "$stderr" | grep -o 'New password (again)' | wc -l | tr -d ' ')" -eq 2 ]
@@ -294,7 +361,7 @@ ADVANCED_ORDER="Port,Image variant,Docker runtime,Stop timeout,Image tag,Automat
 
 @test "a 7-character typed password is asked again and never shown" {
   write_env_file
-  run_wizard "\n\n\n\n\n\nt\nshort77\nshort77\nwizard-typed-pw\nwizard-typed-pw\n\n"
+  run_wizard "\n\n\n\n\n\n\nt\nshort77\nshort77\nwizard-typed-pw\nwizard-typed-pw\n\n"
   [ "$status" -eq 0 ]
   assert_stderr_contains "at least 8 characters"
   refute_stderr_contains "short77"
@@ -307,7 +374,7 @@ ADVANCED_ORDER="Port,Image variant,Docker runtime,Stop timeout,Image tag,Automat
     "KERGHAN_DEFAULT_USER_ENABLED=true" \
     "KERGHAN_DEFAULT_USER_USERNAME=admin" \
     "KERGHAN_DEFAULT_USER_EMAIL=admin@kerghan.local"
-  run_wizard "\n\n\n\n\n\n\n\n"
+  run_wizard "\n\n\n\n\n\n\n\n\n"
   [ "$status" -eq 0 ]
   assert_stderr_contains "Default user password: (g)enerate or (t)ype? [g]: "
   refute_stderr_contains "(k)eep"
@@ -319,7 +386,7 @@ ADVANCED_ORDER="Port,Image variant,Docker runtime,Stop timeout,Image tag,Automat
 @test "--advanced public URL: Enter with none set writes nothing" {
   write_env_file
   cp "$ENV_FILE" "$TEST_ROOT/env.before"
-  run_wizard "\n\n\n\n\n\n\n\n\n\n\n\n\n" --advanced
+  run_wizard "\n\n\n\n\n\n\n\n\n\n\n\n\n\n" --advanced
   [ "$status" -eq 0 ]
   assert_stderr_contains "Public URL [http://localhost:3000, derived from port]:"
   cmp "$ENV_FILE" "$TEST_ROOT/env.before"
@@ -327,7 +394,7 @@ ADVANCED_ORDER="Port,Image variant,Docker runtime,Stop timeout,Image tag,Automat
 
 @test "--advanced public URL: the default follows the port answer and an answer is written" {
   write_env_file
-  run_wizard "3002\n\n\n\n\n\n\n\n\n\n\n\nhttps://kerghan.example.com\n\n" --advanced
+  run_wizard "3002\n\n\n\n\n\n\n\n\n\n\n\n\nhttps://kerghan.example.com\n\n" --advanced
   [ "$status" -eq 0 ]
   assert_stderr_contains "Public URL [http://localhost:3002, derived from port]:"
   grep -qx 'FRONTEND_BASE_URL=https://kerghan.example.com' "$ENV_FILE"
@@ -337,7 +404,7 @@ ADVANCED_ORDER="Port,Image variant,Docker runtime,Stop timeout,Image tag,Automat
 
 @test "--advanced public URL: a set value is offered as its current value" {
   write_env_file "FRONTEND_BASE_URL=https://old.example.com"
-  run_wizard "\n\n\n\n\n\n\n\n\n\n\n\n\n" --advanced
+  run_wizard "\n\n\n\n\n\n\n\n\n\n\n\n\n\n" --advanced
   [ "$status" -eq 0 ]
   assert_stderr_contains "Public URL [https://old.example.com]:"
   [ "$output" = "Nothing changed." ]
@@ -349,7 +416,7 @@ ADVANCED_ORDER="Port,Image variant,Docker runtime,Stop timeout,Image tag,Automat
   write_env_file
   write_config "# my settings" "port=3001"
   snapshot
-  run_wizard "3002\n\n\n\n\n\ng\nn\n"
+  run_wizard "3002\n\n\n\n\n\n\ng\nn\n"
   [ "$status" -eq 0 ]
   assert_output_contains "port: 3001 -> 3002"
   assert_output_contains "KERGHAN_DEFAULT_USER_PASSWORD: changed (generated)"
@@ -372,7 +439,7 @@ ADVANCED_ORDER="Port,Image variant,Docker runtime,Stop timeout,Image tag,Automat
   write_env_file
   write_config "port=3001"
   snapshot
-  run_wizard "3002\n\n\n\n\n\n\n"
+  run_wizard "3002\n\n\n\n\n\n\n\n"
   [ "$status" -eq 1 ]
   assert_stderr_contains "input ended"
   unchanged_files
@@ -381,7 +448,7 @@ ADVANCED_ORDER="Port,Image variant,Docker runtime,Stop timeout,Image tag,Automat
 # --- missing kerghan.env ---
 
 @test "with no kerghan.env and no volume it creates the file as up does with the answers applied" {
-  run_wizard "\n\n\n\n\nme@example.com\n\n\n"
+  run_wizard "\n\n\n\n\n\nme@example.com\n\n\n"
   [ "$status" -eq 0 ]
   assert_stderr_contains "Default user username [admin]: "
   assert_stderr_contains "Default user email [admin@kerghan.local]: "
@@ -399,7 +466,7 @@ ADVANCED_ORDER="Port,Image variant,Docker runtime,Stop timeout,Image tag,Automat
 
 @test "with no kerghan.env and a data volume it exits 1 before the first question" {
   export STUB_VOLUME_EXISTS=1
-  run_wizard "\n\n\n\n\n\n\n\n"
+  run_wizard "\n\n\n\n\n\n\n\n\n"
   [ "$status" -eq 1 ]
   assert_stderr_contains "kerghan reset"
   assert_stderr_contains "kerghan configure"
@@ -411,9 +478,9 @@ ADVANCED_ORDER="Port,Image variant,Docker runtime,Stop timeout,Image tag,Automat
 
 @test "the wizard makes no vault call, and no docker call when kerghan.env exists" {
   write_env_file
-  run_wizard "3002\n\n\n\n\n\ng\n\n"
+  run_wizard "3002\n\n\n\n\n\n\ng\n\n"
   [ "$status" -eq 0 ]
-  run_wizard "3002\n\n\n\n\n\n\n\n\n\n\nt\nwizard-typed-pw\nwizard-typed-pw\n\n\n" --advanced
+  run_wizard "3002\n\n\n\n\n\n\n\n\n\n\n\nt\nwizard-typed-pw\nwizard-typed-pw\n\n\n" --advanced
   [ "$status" -eq 0 ]
   refute_logged_prefix "vault"
   refute_logged_prefix "docker"

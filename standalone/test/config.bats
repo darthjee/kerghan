@@ -370,3 +370,59 @@ refute_side_effects() {
   [ "$status" -eq 3 ]
   assert_output_contains "or set port= in ~/.kerghan/config to pick another port"
 }
+
+# --- restart-on-update ---
+
+@test "restart-on-update accepts ask, always and never" {
+  local value
+  write_env_file
+  for value in ask always never; do
+    : >"$STUB_LOG"
+    write_config "restart-on-update=$value"
+    run "$KERGHAN" up
+    if [ "$status" -ne 0 ]; then
+      echo "expected status 0 for '$value', got $status: $output" >&2
+      return 1
+    fi
+    [ "$(vault_calls)" = "$(up_line "$IMAGE" 3000)" ]
+    [[ "$output" != *warning* ]]
+  done
+}
+
+@test "an empty or missing restart-on-update uses the default" {
+  write_env_file
+  write_config "restart-on-update="
+  run "$KERGHAN" up
+  [ "$status" -eq 0 ]
+  [[ "$output" != *warning* ]]
+  write_config "port=3000"
+  run "$KERGHAN" up
+  [ "$status" -eq 0 ]
+  [[ "$output" != *warning* ]]
+}
+
+@test "an invalid restart-on-update fails with the expected values and touches nothing" {
+  local bad
+  for bad in yes Always true; do
+    : >"$STUB_LOG"
+    write_config "# first line" "restart-on-update=$bad"
+    run "$KERGHAN" up
+    if [ "$status" -ne 1 ]; then
+      echo "expected status 1 for '$bad', got $status: $output" >&2
+      return 1
+    fi
+    assert_output_contains "kerghan: error: $CONFIG_FILE:2: invalid restart-on-update '$bad' (expected ask, always or never)"
+    refute_side_effects
+  done
+}
+
+@test "help lists restart-on-update with its default" {
+  run "$KERGHAN" help
+  [ "$status" -eq 0 ]
+  assert_output_contains "  restart-on-update=ask  ask | always | never (overridden by update --[no-]restart)"
+  assert_output_contains "A changed restart-on-update applies to the next 'kerghan update'."
+}
+
+@test "config.example documents restart-on-update" {
+  grep -qx '#restart-on-update=ask' "$BATS_TEST_DIRNAME/../config.example"
+}

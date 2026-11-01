@@ -8,6 +8,7 @@ load helpers/setup
 
 UP_HINT="Run 'kerghan up' to apply (recreates the instance; data is kept)."
 DOWN_UP_HINT="Run 'kerghan down && kerghan up' to apply."
+UPDATE_HINT="Takes effect on the next 'kerghan update'."
 
 # --- routing ---
 
@@ -34,7 +35,7 @@ DOWN_UP_HINT="Run 'kerghan down && kerghan up' to apply."
 @test "the listing without files shows the defaults and creates nothing" {
   run "$KERGHAN" configure
   [ "$status" -eq 0 ]
-  assert_output_contains "port          3000"
+  assert_output_contains "port               3000"
   [ ! -e "$HOME/.kerghan" ]
   [ ! -s "$STUB_LOG" ]
 }
@@ -218,7 +219,7 @@ port=3002" ]
   run "$KERGHAN" configure portt=3002
   [ "$status" -eq 1 ]
   assert_output_contains "unknown key 'portt'"
-  assert_output_contains "port, variant, runtime, stop-timeout, image-tag, auto-login, bind"
+  assert_output_contains "port, variant, runtime, stop-timeout, image-tag, auto-login, bind, restart-on-update"
   [ ! -e "$CONFIG_FILE" ]
 }
 
@@ -435,6 +436,27 @@ OTHER=2" ]
   [ "$status" -eq 0 ]
   assert_output_contains "$DOWN_UP_HINT"
   refute_output_contains "$UP_HINT"
+}
+
+@test "restart-on-update alone prints only the kerghan update hint" {
+  write_env_file
+  run "$KERGHAN" configure restart-on-update=always
+  [ "$status" -eq 0 ]
+  assert_output_contains "$UPDATE_HINT"
+  refute_output_contains "$UP_HINT"
+  refute_output_contains "$DOWN_UP_HINT"
+}
+
+@test "restart-on-update with port prints the kerghan up hint instead" {
+  write_env_file
+  run "$KERGHAN" configure port=3002 restart-on-update=never
+  [ "$status" -eq 0 ]
+  assert_output_contains "$UP_HINT"
+  refute_output_contains "$UPDATE_HINT"
+  run "$KERGHAN" configure runtime=sysbox restart-on-update=always
+  [ "$status" -eq 0 ]
+  assert_output_contains "$DOWN_UP_HINT"
+  refute_output_contains "$UPDATE_HINT"
 }
 
 @test "a password change adds the sessions note" {

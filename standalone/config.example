@@ -63,3 +63,12 @@
 # warning on `kerghan up`, because anyone who can reach the port is logged in
 # as admin, but still starts. Overridden by `kerghan up --bind ADDRESS`.
 #bind=
+
+# What `kerghan update` does with a running instance once the new client and
+# image are installed: ask | always | never.
+#   ask     prompt "Restart Kerghan now? [Y/n]" (without a terminal: like never)
+#   always  restart it, like `kerghan up` (the data volume is kept)
+#   never   leave it running; `kerghan up` restarts it later
+# A stopped instance is never started, and a downgrade never restarts.
+# Overridden by `kerghan update --restart` / `kerghan update --no-restart`.
+#restart-on-update=ask
