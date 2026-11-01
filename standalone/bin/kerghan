@@ -39,6 +39,7 @@ DEFAULT_VARIANT=online
 DEFAULT_RUNTIME=auto
 DEFAULT_STOP_TIMEOUT=60
 DEFAULT_AUTO_LOGIN=true
+DEFAULT_RESTART_ON_UPDATE=ask
 # The default bind depends on auto-login: loopback when it is on, every
 # interface when it is off.
 DEFAULT_BIND_AUTO_LOGIN=127.0.0.1
@@ -63,6 +64,7 @@ CFG_STOP_TIMEOUT=""
 CFG_IMAGE_TAG=""
 CFG_AUTO_LOGIN=""
 CFG_BIND=""
+CFG_RESTART_ON_UPDATE=""
 
 usage() {
   cat <<USAGE
@@ -206,6 +208,14 @@ ADDRESS
   done
 }
 
+# valid_restart_on_update <value> - ask, always or never (lower-case).
+valid_restart_on_update() {
+  case "$1" in
+    ask | always | never) return 0 ;;
+  esac
+  return 1
+}
+
 # is_loopback <address> - the address is in 127.0.0.0/8.
 is_loopback() {
   case "$1" in
@@ -240,6 +250,7 @@ load_config() {
   CFG_IMAGE_TAG=""
   CFG_AUTO_LOGIN=""
   CFG_BIND=""
+  CFG_RESTART_ON_UPDATE=""
   [ -e "$CONFIG_FILE" ] || return 0
   if [ ! -r "$CONFIG_FILE" ] || [ -d "$CONFIG_FILE" ]; then
     error "$CONFIG_FILE: cannot be read"
@@ -292,6 +303,11 @@ load_config() {
       bind)
         [ -z "$value" ] || valid_bind "$value" || config_invalid "$n" "$key" "$value" "an IPv4 address"
         CFG_BIND="$value"
+        ;;
+      restart-on-update)
+        [ -z "$value" ] || valid_restart_on_update "$value" ||
+          config_invalid "$n" "$key" "$value" "ask, always or never"
+        CFG_RESTART_ON_UPDATE="$value"
         ;;
       *)
         warn "$CONFIG_FILE:$n: unknown key '$key' (ignored)"
@@ -514,7 +530,7 @@ compare_number() {
 # key is written. Docs: docs/agents/standalone/client-config.md.
 
 # CONFIG_KEYS - the known ~/.kerghan/config keys, in listing order.
-CONFIG_KEYS="port variant runtime stop-timeout image-tag auto-login bind"
+CONFIG_KEYS="port variant runtime stop-timeout image-tag auto-login bind restart-on-update"
 # SECRET_KEYS - masked in the listing, the single read and the change list.
 SECRET_KEYS="KERGHAN_DEFAULT_USER_PASSWORD KERGHAN_SECRET_KEY KERGHAN_INTEGRATIONS_KEY"
 # FORCE_KEYS - only written with --force (stored data depends on them).
@@ -570,6 +586,7 @@ valid_config_value() {
     image-tag) valid_image_tag "$2" ;;
     auto-login) valid_bool "$2" ;;
     bind) valid_bind "$2" ;;
+    restart-on-update) valid_restart_on_update "$2" ;;
     *) return 1 ;;
   esac
 }
@@ -584,6 +601,7 @@ config_expected() {
     image-tag) echo "a Docker image tag, without the -offline suffix" ;;
     auto-login) echo "true or false" ;;
     bind) echo "an IPv4 address" ;;
+    restart-on-update) echo "ask, always or never" ;;
   esac
 }
 
@@ -597,6 +615,7 @@ config_default() {
     stop-timeout) echo "$DEFAULT_STOP_TIMEOUT" ;;
     image-tag) echo "$KERGHAN_VERSION" ;;
     auto-login) echo "$DEFAULT_AUTO_LOGIN" ;;
+    restart-on-update) echo "$DEFAULT_RESTART_ON_UPDATE" ;;
   esac
 }
 
