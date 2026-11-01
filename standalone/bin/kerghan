@@ -1930,6 +1930,173 @@ cmd_update() {
     return
   fi
   update_parse_args ${@+"$@"}
+
+  # 0. Preconditions, before any download.
+  load_config
+  update_client_dir
+
+  # 1. Resolve: one download into a private staging folder.
+  UPDATE_STAGING="$(mktemp -d "${TMPDIR:-/tmp}/kerghan-update.XXXXXX")" || {
+    error "could not create a temporary folder"
+    exit 1
+  }
+  trap update_cleanup EXIT
+  trap 'update_cleanup; exit 130' INT TERM
+  local installer="$UPDATE_STAGING/install.sh" target
+  update_download "$installer"
+  target="$(update_stamp_version "$installer")"
+
+  # 2. Compare.
+  local current="$KERGHAN_VERSION" action
+  if ! is_semver "$current"; then
+    warn "this client ($current) is not a release; updating to $target without comparing versions"
+    action=upgrade
+  else
+    case "$(version_compare "$target" "$current")" in
+      eq)
+        if [ "$UPDATE_FORCE" != "true" ]; then
+          echo "kerghan $current is already up to date."
+          return 0
+        fi
+        action=reinstall
+        ;;
+      gt) action=upgrade ;;
+      *)
+        if [ -z "$UPDATE_VERSION" ]; then
+          echo "kerghan $current is newer than the latest release $target; nothing to do."
+          hint "run 'kerghan update $target' to downgrade to it"
+          return 0
+        fi
+        action=downgrade
+        update_confirm_downgrade "$current" "$target"
+        ;;
+    esac
+  fi
+  case "$action" in
+    upgrade) echo "Updating kerghan $current -> $target..." ;;
+    reinstall) echo "Reinstalling kerghan $target..." ;;
+    downgrade) echo "Downgrading kerghan $current -> $target..." ;;
+  esac
+}
+
+# UPDATE_INSTALL_DIR - the canonical directory of the running client's real
+# file, set by update_client_dir: where the installer writes the new client.
+UPDATE_INSTALL_DIR=""
+# UPDATE_STAGING - the staging folder of `kerghan update` (removed on exit).
+UPDATE_STAGING=""
+
+# update_cleanup - removes the staging folder (EXIT/INT/TERM trap, and
+# explicitly before the handoff's exec, which runs no trap).
+update_cleanup() {
+  if [ -n "$UPDATE_STAGING" ]; then
+    rm -rf "$UPDATE_STAGING"
+    UPDATE_STAGING=""
+  fi
+}
+
+# update_client_dir - sets UPDATE_INSTALL_DIR to the canonical directory of
+# the running client's real file (symlinks resolved). Exits 1 when it cannot
+# be resolved, when the real file is not named kerghan (the installer always
+# writes <dir>/kerghan), or when the directory is not writable.
+update_client_dir() {
+  local real dir name
+  real="$(resolve_symlink "${BASH_SOURCE[0]}")" || exit 1
+  name="$(basename "$real")"
+  dir="$(cd -P "$(dirname "$real")" 2>/dev/null && pwd -P)" || {
+    error "cannot resolve the directory of $real"
+    exit 1
+  }
+  if [ "$name" != "kerghan" ]; then
+    error "this client runs from $dir/$name, not a file named 'kerghan'"
+    hint "reinstall with KERGHAN_INSTALL_DIR=<dir> and the installer (curl -fsSL $RELEASES_URL/latest/download/install.sh | bash)"
+    exit 1
+  fi
+  if [ ! -w "$dir" ]; then
+    error "$dir is not writable"
+    hint "kerghan update installs to $dir, where this client runs from; it never uses sudo"
+    exit 1
+  fi
+  UPDATE_INSTALL_DIR="$dir"
+}
+
+# update_installer_url - prints the install.sh URL of UPDATE_VERSION, or of
+# the latest release when no VERSION was given.
+update_installer_url() {
+  if [ -n "$UPDATE_VERSION" ]; then
+    echo "$RELEASES_URL/download/$UPDATE_VERSION/install.sh"
+  else
+    echo "$RELEASES_URL/latest/download/install.sh"
+  fi
+}
+
+# update_download <file> - downloads the release's install.sh to <file> over
+# HTTPS only (redirects included), in one request. Exits 1 on any failure,
+# telling a 404 (from curl's own status code) from a network failure.
+update_download() {
+  local url code rc=0
+  url="$(update_installer_url)"
+  code="$(curl -fsSL --proto '=https' --proto-redir '=https' -o "$1" -w '%{http_code}' "$url" 2>/dev/null)" || rc=$?
+  [ "$rc" -ne 0 ] || return 0
+  if [ "$code" = "404" ]; then
+    if [ -n "$UPDATE_VERSION" ]; then
+      error "version $UPDATE_VERSION does not exist"
+      hint "see $RELEASES_URL for the available versions"
+    else
+      error "no release found at $url"
+    fi
+  else
+    error "could not download $url"
+    hint "check your network connection and that github.com is reachable, then try again"
+  fi
+  exit 1
+}
+
+# update_stamp_version <file> - prints the version of the downloaded installer,
+# read as text from its first KERGHAN_VERSION="x.y.z" line (never sourced).
+# Exits 1 when there is none, or when it is not the requested VERSION.
+update_stamp_version() {
+  local url stamp
+  url="$(update_installer_url)"
+  stamp="$(grep -E '^KERGHAN_VERSION="[0-9]+\.[0-9]+\.[0-9]+"$' "$1" 2>/dev/null | head -n 1)" || stamp=""
+  stamp="${stamp#KERGHAN_VERSION=\"}"
+  stamp="${stamp%\"}"
+  if ! is_semver "$stamp"; then
+    error "$url has no KERGHAN_VERSION=\"x.y.z\" line; nothing was changed"
+    exit 1
+  fi
+  if [ -n "$UPDATE_VERSION" ] && [ "$stamp" != "$UPDATE_VERSION" ]; then
+    error "$url is for version $stamp, not $UPDATE_VERSION; nothing was changed"
+    exit 1
+  fi
+  echo "$stamp"
+}
+
+# update_confirm_downgrade <current> <target> - the downgrade warning, then
+# --yes, a [y/N] prompt on a TTY, or a refusal without one. Exits 1 unless
+# confirmed.
+update_confirm_downgrade() {
+  local answer=""
+  warn "downgrading kerghan $1 -> $2"
+  warn "older versions may have security issues that later releases fixed"
+  warn "config keys added after $2 are reported as unknown (and ignored) by it"
+  warn "the instance is not restarted on a downgrade: switch it by hand afterwards"
+  if [ "$UPDATE_RESTART" = "always" ]; then
+    warn "--restart is ignored on a downgrade"
+  fi
+  [ "$UPDATE_YES" != "true" ] || return 0
+  if ! is_tty; then
+    error "a downgrade needs a confirmation, but stdin is not a terminal"
+    hint "run 'kerghan update $2 --yes' to confirm it"
+    exit 1
+  fi
+  printf 'Downgrade to %s? [y/N] ' "$2" >&2
+  read -r answer || true
+  answer="$(printf '%s' "$answer" | tr '[:upper:]' '[:lower:]')"
+  case "$answer" in
+    y | yes) return 0 ;;
+  esac
+  echo "Downgrade cancelled; nothing was changed."
+  exit 1
 }
 
 # read_hidden_value <key> - prints the value of `KEY=-`: on a TTY (is_tty) it
