@@ -2228,7 +2228,10 @@ update_client_dir() {
   local real dir name
   real="$(resolve_symlink "${BASH_SOURCE[0]}")" || exit 1
   name="$(basename "$real")"
-  dir="$(cd -P "$(dirname "$real")" 2>/dev/null && pwd -P)" || {
+  # CDPATH='' keeps a relative dirname (bash bin/kerghan) from resolving into
+  # a CDPATH entry, whose path cd would also print into $dir; -- keeps a
+  # dirname starting with - from being read as an option.
+  dir="$(CDPATH='' cd -P -- "$(dirname "$real")" >/dev/null 2>&1 && pwd -P)" || {
     error "cannot resolve the directory of $real"
     exit 1
   }

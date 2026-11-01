@@ -563,6 +563,20 @@ x"; do
   assert_logged_like "finish \$0=$INSTALL_DIR/kerghan args=update --finish *"
 }
 
+@test "a client run by a relative path ignores a CDPATH with a decoy bin directory" {
+  export STUB_INSTALLER_RESULT=recorder
+  mkdir -p "$TEST_ROOT/project/bin" "$TEST_ROOT/decoy/bin"
+  local project_bin
+  project_bin="$(CDPATH='' cd -P -- "$TEST_ROOT/project/bin" && pwd -P)"
+  install_client "$CURRENT_VERSION" "$project_bin/kerghan"
+  run bash -c 'cd "$1" && CDPATH="$2" "$BASH" bin/kerghan update' _ \
+    "$TEST_ROOT/project" "$TEST_ROOT/decoy"
+  [ "$status" -eq 0 ]
+  assert_logged_like "installer * KERGHAN_INSTALL_DIR=$project_bin"
+  assert_logged_like "finish \$0=$project_bin/kerghan args=update --finish *"
+  [ ! -e "$TEST_ROOT/decoy/bin/kerghan" ]
+}
+
 @test "another kerghan first on PATH is never run by the handoff" {
   export STUB_INSTALLER_RESULT=recorder
   mkdir -p "$TEST_ROOT/shadow"
