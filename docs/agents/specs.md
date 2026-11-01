@@ -45,9 +45,7 @@ file changes.
 
 ## Active specs
 
-| Feature | Specs | Product decision |
-|---------|-------|------------------|
-| Client update (`kerghan update` / `restart-on-update`) | [specs/client-update/README.md](specs/client-update/README.md) | #414 |
+none
 
 When no feature is in progress, this list reads "none".
 
@@ -62,3 +60,4 @@ Features whose specs were folded into the permanent docs, and where their defini
 | Default user | [modules/auth/default-user.md](modules/auth/default-user.md) (boot sync, edit blocking, automatic login, security); [backend/routes/auth.md](backend/routes/auth.md) (`status.json` automatic login, `409 DEFAULT_USER_MANAGED`); [environment-variables.md](environment-variables.md) section 1 (variables, boot validation) and section 5 (standalone); [standalone.md](standalone.md) (`auto-login`, `bind`, `update-env`, effective client IP); [product.md](product.md#default-user) | #366 |
 | User approval (optional admin approval of new registrations) | [modules/auth/user-approval.md](modules/auth/user-approval.md) (status model, flag, exceptions, non-disclosure, admin review, frontend); [modules/auth.md](modules/auth.md) (session-lookup gate, `sid` claim, immediate revocation, `logged → denied`); [backend/routes/auth.md](backend/routes/auth.md) (status-aware auth endpoints, `USER_DENIED`); [environment-variables.md](environment-variables.md) (`KERGHAN_USER_APPROVAL_REQUIRED`); [product.md](product.md#user-approval) | #389 |
 | Client config (`kerghan configure` / `kerghan wizard`) | [standalone/client-config.md](standalone/client-config.md) (shared writer, `configure`, `wizard`, security, required tests); [standalone.md](standalone.md) (command list, `configure` and `wizard` summary); `README.md` "Run Kerghan standalone"; `standalone/config.example` | #402 |
+| Client update (`kerghan update` / `restart-on-update`) | [standalone/client-update.md](standalone/client-update.md) (command, versions, setting, security, stable contracts, required tests); [standalone.md](standalone.md) (command list, upgrading, `update` summary); `README.md` "Run Kerghan standalone" (upgrade, first upgrade); `standalone/install.sh` header (installer interface); `standalone/config.example` | #414 |
