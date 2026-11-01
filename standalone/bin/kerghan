@@ -2414,6 +2414,8 @@ wizard_questions() {
   wizard_config_question auto-login "Automatic login (true/false)"
   WIZARD_AUTO_LOGIN="$WIZARD_VALUE"
   wizard_config_question bind "Bind address"
+  # Always asked, like bind: the last config question.
+  wizard_config_question restart-on-update "Restart after update (ask/always/never)"
 
   # KERGHAN_DEFAULT_USER_ENABLED: the answer with --advanced, the current
   # value otherwise (the backend treats anything other than true as off).
