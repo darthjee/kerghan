@@ -9,7 +9,7 @@
 # Persistent settings (port, variant, runtime, stop-timeout, image-tag,
 # auto-login, bind, restart-on-update) are read from the optional
 # ~/.kerghan/config (flat key=value, see config.example); CLI flags override
-# it, built-in defaults fill the rest. It is only loaded by up, down, reset and update-env, so a broken
+# it, built-in defaults fill the rest. It is only loaded by up, down, reset, update and update-env, so a broken
 # config never blocks the other commands.
 #
 # Dependencies on the host: vault, docker and openssl.
@@ -29,6 +29,13 @@
 set -euo pipefail
 
 KERGHAN_VERSION="0.8.2"
+# FIRST_UPDATE_VERSION - the first release that ships `kerghan update` (and so
+# `update --finish`); a downgrade below it skips the handoff. Any value above
+# 0.8.2 and not above that release behaves the same, since no release lies in
+# between. It must never change once released.
+FIRST_UPDATE_VERSION="0.8.3"
+# RELEASES_URL - where `kerghan update` downloads the release's install.sh.
+RELEASES_URL="https://github.com/darthjee/kerghan/releases"
 
 IMAGE_REPO="darthjee/kerghan-standalone"
 INSTANCE="kerghan"
@@ -78,6 +85,8 @@ Commands:
   status                          show the instance state
   compose <args>                  run docker compose inside the instance (e.g. compose exec mysql sh)
   reset                           wipe all data (removes $VOLUME), asks for confirmation
+  update [VERSION] [--force] [--yes] [--[no-]restart]
+                                  update the client and the image to VERSION (default: the latest release)
   update-env                      add missing variables to ~/.kerghan/kerghan.env (keeps existing values)
   configure [--show-secrets] [KEY]
                                   list the settings in ~/.kerghan/config and kerghan.env, or print KEY
@@ -95,6 +104,13 @@ Options for up:
   --bind ADDRESS     host IPv4 address to publish on (default $DEFAULT_BIND_AUTO_LOGIN with
                      auto-login, $DEFAULT_BIND_NO_AUTO_LOGIN without)
   -f                 run in the foreground
+
+Options for update:
+  VERSION            release to install, x.y.z (default: the latest release)
+  --force            reinstall even when already on that version
+  --yes              confirm a downgrade without asking
+  --restart          restart a running instance afterwards (overrides restart-on-update)
+  --no-restart       leave a running instance as it is (overrides restart-on-update)
 
 Settings are read from ~/.kerghan/config (optional, one key=value per line):
   port=$DEFAULT_PORT           host port (overridden by -p)
@@ -1837,6 +1853,67 @@ cmd_update_env() {
   echo "Run 'kerghan down && kerghan up' to apply the change."
 }
 
+# Set by update_parse_args: the parsed `kerghan update` arguments.
+UPDATE_VERSION=""
+UPDATE_FORCE=false
+UPDATE_YES=false
+UPDATE_RESTART=""
+
+# update_parse_args [args...] - parses `kerghan update`'s options and VERSION
+# (any order) into the UPDATE_* globals. Every error is a usage error (exit 2),
+# raised before anything else runs. VERSION loses one leading v and must be
+# strict x.y.z: it goes into a URL and into the installer's environment.
+update_parse_args() {
+  local version_set=false restart=false no_restart=false
+  UPDATE_VERSION=""
+  UPDATE_FORCE=false
+  UPDATE_YES=false
+  UPDATE_RESTART=""
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --force) UPDATE_FORCE=true ;;
+      --yes) UPDATE_YES=true ;;
+      --restart) restart=true ;;
+      --no-restart) no_restart=true ;;
+      --finish) usage_error "option '--finish' must be the only argument" ;;
+      -*) usage_error "unknown option '$1'" ;;
+      *)
+        [ "$version_set" = "false" ] || usage_error "only one VERSION can be given"
+        version_set=true
+        UPDATE_VERSION="$1"
+        ;;
+    esac
+    shift
+  done
+  if [ "$restart" = "true" ] && [ "$no_restart" = "true" ]; then
+    usage_error "options '--restart' and '--no-restart' cannot be combined"
+  fi
+  if [ "$restart" = "true" ]; then
+    UPDATE_RESTART=always
+  elif [ "$no_restart" = "true" ]; then
+    UPDATE_RESTART=never
+  fi
+  if [ "$version_set" = "true" ]; then
+    local version="${UPDATE_VERSION#v}"
+    if ! is_semver "$version"; then
+      usage_error "invalid version '$UPDATE_VERSION' (expected x.y.z, e.g. 0.9.0)"
+    fi
+    UPDATE_VERSION="$version"
+  fi
+}
+
+# cmd_update - `kerghan update [VERSION] [--force] [--yes] [--[no-]restart]`,
+# and the hidden `update --finish` the old client hands off to (see
+# docs/agents/specs/client-update/).
+cmd_update() {
+  if [ "${1:-}" = "--finish" ]; then
+    [ "$#" -eq 1 ] || usage_error "option '--finish' must be the only argument"
+    cmd_update_finish
+    return
+  fi
+  update_parse_args ${@+"$@"}
+}
+
 # read_hidden_value <key> - prints the value of `KEY=-`: on a TTY (is_tty) it
 # prompts twice on stderr with echo off until both entries match; from a pipe
 # it reads the first line of stdin without its newline (end of input: empty).
@@ -2552,6 +2629,7 @@ main() {
     status) cmd_status ${@+"$@"} ;;
     compose) cmd_compose ${@+"$@"} ;;
     reset) cmd_reset ${@+"$@"} ;;
+    update) cmd_update ${@+"$@"} ;;
     update-env) cmd_update_env ${@+"$@"} ;;
     configure) cmd_configure ${@+"$@"} ;;
     wizard) cmd_wizard ${@+"$@"} ;;
