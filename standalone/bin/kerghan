@@ -2003,6 +2003,174 @@ cmd_update() {
   update_handoff "$current" "$restart"
 }
 
+# update_finish_from - prints KERGHAN_UPDATE_FROM when it is usable: it is
+# printed, so only [A-Za-z0-9._-]{1,64} is accepted; anything else counts as
+# unset.
+update_finish_from() {
+  local v="${KERGHAN_UPDATE_FROM:-}"
+  case "$v" in
+    '' | *[!A-Za-z0-9._-]*) return 0 ;;
+  esac
+  [ "${#v}" -le 64 ] || return 0
+  printf '%s' "$v"
+}
+
+# update_is_downgrade <from> - <from> is x.y.z and newer than this client: the
+# finish step of a downgrade, which never restarts (a stable rule every
+# client with update --finish keeps).
+update_is_downgrade() {
+  is_semver "$1" && is_semver "$KERGHAN_VERSION" &&
+    [ "$(version_compare "$1" "$KERGHAN_VERSION")" = "gt" ]
+}
+
+# container_id - prints the ID of the vault-kerghan container, or nothing.
+container_id() {
+  docker inspect -f '{{.Id}}' "$CONTAINER" 2>/dev/null || true
+}
+
+# UPDATE_RESTARTED - set by update_restart: true when the restart recreated
+# the container.
+UPDATE_RESTARTED=false
+
+# update_restart <mode> <image> <container id before> - the restart decision
+# for a running instance whose image differs from <image>: always restarts,
+# never does not, ask prompts on a TTY only. A restart runs cmd_up's logic
+# in an errexit-preserving subshell; its failure exits with its status.
+update_restart() {
+  local mode="$1" image="$2" old_id="$3" answer="" restart=false rc=0
+  UPDATE_RESTARTED=false
+  case "$mode" in
+    always) restart=true ;;
+    never) ;;
+    *)
+      if is_tty; then
+        printf 'Restart Kerghan now? [Y/n] ' >&2
+        if IFS= read -r answer; then
+          answer="$(printf '%s' "$answer" | tr '[:upper:]' '[:lower:]')"
+          case "$answer" in
+            '' | y | yes) restart=true ;;
+          esac
+        fi
+      fi
+      ;;
+  esac
+  if [ "$restart" != "true" ]; then
+    hint "run 'kerghan up' to restart Kerghan on $image (data is kept)"
+    return 0
+  fi
+
+  # Not `( cmd_up ) || rc=$?`, which would disable errexit inside cmd_up.
+  set +e
+  (
+    set -e
+    cmd_up
+  )
+  rc=$?
+  set -e
+  if [ "$rc" -ne 0 ]; then
+    error "the restart failed; kerghan was updated to $KERGHAN_VERSION"
+    exit "$rc"
+  fi
+  if [ "$(container_id)" != "$old_id" ]; then
+    UPDATE_RESTARTED=true
+  elif [ "$ENV_KEYS_ADDED" = "true" ]; then
+    hint "run 'kerghan down && kerghan up' to apply the new kerghan.env variables"
+  fi
+}
+
+# cmd_update_finish - `kerghan update --finish`, run by the old client's
+# handoff (or by hand) in the new client: adds missing kerghan.env keys, pulls
+# the image, decides on the restart and prints the result and cleanup hints.
+# Reads KERGHAN_UPDATE_FROM and KERGHAN_UPDATE_RESTART (see
+# docs/agents/specs/client-update/contracts.md); unknown variables are ignored.
+cmd_update_finish() {
+  # 1. Config.
+  load_config
+
+  local from downgrade=false override=""
+  from="$(update_finish_from)"
+  if [ -n "$from" ] && update_is_downgrade "$from"; then
+    downgrade=true
+  fi
+  case "${KERGHAN_UPDATE_RESTART:-}" in
+    '') ;;
+    always | never) override="$KERGHAN_UPDATE_RESTART" ;;
+    *) warn "ignoring KERGHAN_UPDATE_RESTART='$KERGHAN_UPDATE_RESTART' (expected always or never)" ;;
+  esac
+
+  # 2. Env: missing keys only, no apply line.
+  local env_lost=false
+  ENV_KEYS_ADDED=false
+  if [ ! -e "$ENV_FILE" ]; then
+    if volume_exists; then
+      env_lost=true
+      # shellcheck disable=SC2088 # the literal ~ is meant for display
+      warn "~/.kerghan/kerghan.env is missing but the data volume $VOLUME exists"
+      hint "the data volume $VOLUME exists: restore kerghan.env from your backup (the data was written with its secrets), or run 'kerghan reset' to start from scratch"
+    fi
+  else
+    add_missing_env_keys || exit 1
+  fi
+
+  # 3. Previous image, before anything changes it.
+  local previous old_id=""
+  previous="$(running_image)"
+  if [ -n "$previous" ]; then
+    old_id="$(container_id)"
+  fi
+
+  # 4. image-tag override.
+  if [ -n "$CFG_IMAGE_TAG" ]; then
+    warn "image-tag=$CFG_IMAGE_TAG in ~/.kerghan/config still overrides the pinned image tag ($KERGHAN_VERSION)"
+    hint "run 'kerghan configure --unset image-tag' to use the pinned image"
+  fi
+
+  # 5. Pull the image `up` would run (variant from the config, never from the
+  # running container).
+  local offline=false image
+  if [ "${CFG_VARIANT:-$DEFAULT_VARIANT}" = "offline" ]; then
+    offline=true
+  fi
+  image="$(image_ref "$offline" "${CFG_IMAGE_TAG:-$KERGHAN_VERSION}")"
+  if ! docker pull "$image"; then
+    error "could not pull $image; kerghan was updated to $KERGHAN_VERSION, the instance was not restarted"
+    hint "run 'kerghan update --force' to try again, or 'kerghan up' (which also pulls it)"
+    exit 1
+  fi
+
+  # 6. Restart decision: the first matching row applies.
+  UPDATE_RESTARTED=false
+  if [ "$downgrade" = "true" ] || [ "$env_lost" = "true" ]; then
+    :
+  elif [ -z "$previous" ]; then
+    hint "run 'kerghan up' to start Kerghan on $image"
+  elif [ "$previous" = "$image" ]; then
+    if [ "$ENV_KEYS_ADDED" = "true" ]; then
+      hint "run 'kerghan down && kerghan up' to apply the new kerghan.env variables"
+    fi
+  else
+    update_restart "${override:-${CFG_RESTART_ON_UPDATE:-$DEFAULT_RESTART_ON_UPDATE}}" "$image" "$old_id"
+  fi
+
+  # 7. Result and cleanup hints.
+  if [ -z "$from" ]; then
+    echo "kerghan $KERGHAN_VERSION is installed"
+  elif [ "$from" = "$KERGHAN_VERSION" ]; then
+    echo "kerghan $KERGHAN_VERSION reinstalled"
+  else
+    echo "kerghan updated $from -> $KERGHAN_VERSION"
+  fi
+  if [ "$downgrade" = "true" ]; then
+    update_downgrade_hint "$KERGHAN_VERSION" "$previous"
+  elif [ -n "$previous" ] && [ "$previous" != "$image" ]; then
+    if [ "$UPDATE_RESTARTED" = "true" ]; then
+      hint "free disk space with 'docker image rm $previous'"
+    else
+      hint "after 'kerghan up', free disk space with 'docker image rm $previous'"
+    fi
+  fi
+}
+
 # update_downgrade_hint <version> <running image> - how to switch the instance
 # to <version> by hand after a downgrade (it is never restarted).
 update_downgrade_hint() {
