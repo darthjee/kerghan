@@ -1,20 +1,49 @@
 #!/usr/bin/env bash
-# Test stub for curl, used by the installer tests: logs its call and writes
-# the -o target according to the URL.
+# Test stub for curl, used by the installer and update tests: logs its call
+# and writes the -o target according to the URL.
 #   .../releases/download/<v>/kerghan       a fake kerghan client printing <v>
 #   raw.githubusercontent.com/darthjee/vault  a fake Vault installer that logs
 #                                            `vault-install VAULT_VERSION=<v>`
 #                                            and writes an executable vault to
 #                                            $HOME/.local/bin
-#   STUB_CURL_FAIL_URL=<substring>  a matching download fails (exit 22)
-#   STUB_VAULT_INSTALL_EXIT         exit code of the fake Vault installer
+#   .../releases/download/<v>/install.sh    a fake kerghan installer stamped
+#   .../releases/latest/download/install.sh  KERGHAN_VERSION="<v>" (latest:
+#                                            STUB_LATEST_VERSION), see below
+#   STUB_CURL_FAIL_URL=<substring>  a matching download fails with HTTP 404
+#                                   (exit 22)
+#   STUB_CURL_NETWORK_FAIL=1        every download fails without an HTTP
+#                                   status (exit 6, status 000)
+#   -w '%{http_code}'               prints the HTTP status (200, 404 or 000)
+#
+# The fake kerghan installer (update tests) logs
+# `installer $0=<path> KERGHAN_VERSION=<v> KERGHAN_INSTALL_DIR=<dir>`, refuses
+# like check_docker when `docker info` fails, and writes <dir>/kerghan:
+#   STUB_INSTALLER_STAMP     replaces the stamp line (set it empty for none)
+#   STUB_INSTALLER_BODY=empty  serve an empty file
+#   STUB_INSTALLER_EXIT      the installer fails with this exit code
+#   STUB_INSTALLER_RESULT    client (default): STUB_CLIENT_SOURCE re-pinned to
+#                            the requested version; recorder: a client that
+#                            logs `finish $0=... args=... FROM=... RESTART=...
+#                            staging=...` (<unset> for an unset variable,
+#                            staging: the kerghan-update.* folders left in
+#                            TMPDIR); noexec: a non-executable file;
+#                            missing: no file at all
+#   STUB_INSTALLER_KILL=INT  the installer sends SIGINT to the client
 echo "curl $*" >>"$STUB_LOG"
 out=""
 url=""
+write_out=""
 while [ "$#" -gt 0 ]; do
   case "$1" in
     -o)
       out="$2"
+      shift 2
+      ;;
+    -w)
+      write_out="$2"
+      shift 2
+      ;;
+    --proto | --proto-redir)
       shift 2
       ;;
     -*) shift ;;
@@ -24,9 +53,23 @@ while [ "$#" -gt 0 ]; do
       ;;
   esac
 done
+
+# http_status <code> - prints the -w output for <code>, when asked for.
+http_status() {
+  case "$write_out" in
+    *http_code*) printf '%s' "$1" ;;
+  esac
+}
+
+if [ "${STUB_CURL_NETWORK_FAIL:-0}" = "1" ]; then
+  http_status 000
+  echo "curl: (6) Could not resolve host: github.com" >&2
+  exit 6
+fi
 if [ -n "${STUB_CURL_FAIL_URL:-}" ]; then
   case "$url" in
     *"$STUB_CURL_FAIL_URL"*)
+      http_status 404
       echo "curl: (22) The requested URL returned error: 404" >&2
       exit 22
       ;;
@@ -50,9 +93,78 @@ printf '#!/usr/bin/env bash\necho "fake vault"\n' >"$HOME/.local/bin/vault"
 chmod +x "$HOME/.local/bin/vault"
 INSTALLER
     ;;
+  https://github.com/darthjee/kerghan/releases/latest/download/install.sh | \
+    https://github.com/darthjee/kerghan/releases/download/*/install.sh)
+    case "$url" in
+      */latest/*) v="${STUB_LATEST_VERSION:-0.0.0}" ;;
+      *)
+        v="${url%/install.sh}"
+        v="${v##*/}"
+        ;;
+    esac
+    if [ "${STUB_INSTALLER_BODY:-}" = "empty" ]; then
+      : >"$out"
+    else
+      stamp="${STUB_INSTALLER_STAMP-KERGHAN_VERSION=\"$v\"}"
+      {
+        echo '#!/usr/bin/env bash'
+        # shellcheck disable=SC2016 # written literally into the fake installer
+        echo 'requested="${KERGHAN_VERSION:-}"'
+        if [ -n "$stamp" ]; then
+          echo "$stamp"
+        fi
+        cat <<'INSTALLER'
+version="${requested:-${KERGHAN_VERSION:-}}"
+dir="${KERGHAN_INSTALL_DIR:-$HOME/.local/bin}"
+echo "installer \$0=$0 KERGHAN_VERSION=$requested KERGHAN_INSTALL_DIR=${KERGHAN_INSTALL_DIR:-}" >>"$STUB_LOG"
+if [ -n "${STUB_INSTALLER_KILL:-}" ]; then
+  kill "-$STUB_INSTALLER_KILL" "$PPID"
+  kill "-$STUB_INSTALLER_KILL" "$$"
+fi
+if ! docker info >/dev/null 2>&1; then
+  echo "kerghan-install: error: cannot reach the Docker daemon" >&2
+  exit 1
+fi
+if [ "${STUB_INSTALLER_EXIT:-0}" != "0" ]; then
+  echo "kerghan-install: error: failed to download kerghan $version" >&2
+  exit "$STUB_INSTALLER_EXIT"
+fi
+echo "kerghan-install: downloading kerghan $version"
+tmp="$dir/.kerghan.stub-new"
+case "${STUB_INSTALLER_RESULT:-client}" in
+  missing)
+    rm -f "$dir/kerghan"
+    ;;
+  noexec)
+    printf '#!/usr/bin/env bash\necho "not executable"\n' >"$tmp"
+    chmod 644 "$tmp"
+    mv -f "$tmp" "$dir/kerghan"
+    ;;
+  recorder)
+    cat >"$tmp" <<'RECORDER'
+#!/usr/bin/env bash
+staging="$(ls -A "${TMPDIR:-/tmp}" 2>/dev/null | grep '^kerghan-update' || true)"
+echo "finish \$0=$0 args=$* FROM=${KERGHAN_UPDATE_FROM-<unset>} RESTART=${KERGHAN_UPDATE_RESTART-<unset>} staging=${staging:-none}" >>"$STUB_LOG"
+RECORDER
+    chmod 755 "$tmp"
+    mv -f "$tmp" "$dir/kerghan"
+    ;;
   *)
+    sed "s/^KERGHAN_VERSION=\"[^\"]*\"\$/KERGHAN_VERSION=\"$version\"/" "$STUB_CLIENT_SOURCE" >"$tmp"
+    chmod 755 "$tmp"
+    mv -f "$tmp" "$dir/kerghan"
+    ;;
+esac
+echo "kerghan-install: kerghan $version installed to $dir/kerghan"
+INSTALLER
+      } >"$out"
+    fi
+    ;;
+  *)
+    http_status 404
     echo "curl stub: unexpected URL: $url" >&2
     exit 22
     ;;
 esac
+http_status 200
 exit 0
