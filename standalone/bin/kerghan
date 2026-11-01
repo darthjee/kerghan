@@ -7,9 +7,9 @@
 # `vault-kerghan-data`, secrets in ~/.kerghan/kerghan.env.
 #
 # Persistent settings (port, variant, runtime, stop-timeout, image-tag,
-# auto-login, bind) are read from the optional ~/.kerghan/config (flat
-# key=value, see config.example); CLI flags override it, built-in defaults fill
-# the rest. It is only loaded by up, down, reset and update-env, so a broken
+# auto-login, bind, restart-on-update) are read from the optional
+# ~/.kerghan/config (flat key=value, see config.example); CLI flags override
+# it, built-in defaults fill the rest. It is only loaded by up, down, reset and update-env, so a broken
 # config never blocks the other commands.
 #
 # Dependencies on the host: vault, docker and openssl.
@@ -104,10 +104,12 @@ Settings are read from ~/.kerghan/config (optional, one key=value per line):
   image-tag=           override the pinned image tag ($KERGHAN_VERSION)
   auto-login=$DEFAULT_AUTO_LOGIN      true | false (overridden by --[no-]auto-login)
   bind=                host address (overridden by --bind)
+  restart-on-update=$DEFAULT_RESTART_ON_UPDATE  ask | always | never (overridden by update --[no-]restart)
 Flags override the file; an empty value uses the default. A changed port,
 variant, image-tag, auto-login or bind recreates the instance on the next
 'kerghan up'; a changed runtime or stop-timeout applies the next time the
 container is created ('kerghan down && kerghan up').
+A changed restart-on-update applies to the next 'kerghan update'.
 With auto-login on, anyone who can reach the port is logged in as admin; a
 non-loopback bind prints a warning but still starts.
 USAGE
