@@ -1805,6 +1805,27 @@ cmd_update_env() {
     exit 1
   fi
 
+  add_missing_env_keys || exit 1
+  if [ "$ENV_KEYS_ADDED" = "true" ]; then
+    echo "Run 'kerghan down && kerghan up' to apply the change."
+  else
+    echo "$ENV_FILE is up to date; nothing was added."
+  fi
+}
+
+# ENV_KEYS_ADDED - set by add_missing_env_keys: true when it added keys.
+ENV_KEYS_ADDED=false
+
+# add_missing_env_keys - the update-env rules on an existing kerghan.env,
+# shared by cmd_update_env and update --finish: appends every key from
+# DEFAULT_ENV_KEYS it has no line for, with the values a new installation gets
+# (default_env_value), warns about blank ones, and prints the names of the
+# added keys (never their values). Sets ENV_KEYS_ADDED (a global, so the
+# caller must not run it in a subshell). Returns 1, leaving the file
+# unchanged, when a value or the write fails. Every failure is explicit: a
+# caller using `|| ...` disables set -e in here.
+add_missing_env_keys() {
+  ENV_KEYS_ADDED=false
   local key missing="" blank_credential=false
   # shellcheck disable=SC2086 # DEFAULT_ENV_KEYS is a space-separated list
   for key in $DEFAULT_ENV_KEYS; do
@@ -1823,34 +1844,31 @@ cmd_update_env() {
     hint "'kerghan up' still treats the default user as missing until KERGHAN_DEFAULT_USER_USERNAME, KERGHAN_DEFAULT_USER_EMAIL and KERGHAN_DEFAULT_USER_PASSWORD have values"
   fi
 
-  if [ -z "$missing" ]; then
-    echo "$ENV_FILE is up to date; nothing was added."
-    return 0
-  fi
+  [ -n "$missing" ] || return 0
 
   local content
   # shellcheck disable=SC2086 # $missing is a space-separated list of keys
-  content="$(default_env_lines $missing)"
+  content="$(default_env_lines $missing)" || return 1
   # The existing file, byte for byte: the trailing x keeps $(...) from
   # stripping its final newlines (a text env file holds no NUL bytes, which a
   # bash variable could not hold).
   local old new
-  old="$(cat "$ENV_FILE" && printf x)" || exit 1
+  old="$(cat "$ENV_FILE" && printf x)" || return 1
   old="${old%x}"
   new="$old"
   if [ -n "$old" ] && [ "${old: -1}" != $'\n' ]; then
     new="$new"$'\n'
   fi
   new="$new$content"$'\n'
-  write_file_atomic "$ENV_FILE" "$new" 600 || exit 1
+  write_file_atomic "$ENV_FILE" "$new" 600 || return 1
 
+  ENV_KEYS_ADDED=true
   echo "Added to $ENV_FILE:$missing"
   case " $missing " in
     *" KERGHAN_DEFAULT_USER_PASSWORD "*)
       echo "The password of the 'admin' user is in $ENV_FILE."
       ;;
   esac
-  echo "Run 'kerghan down && kerghan up' to apply the change."
 }
 
 # Set by update_parse_args: the parsed `kerghan update` arguments.
