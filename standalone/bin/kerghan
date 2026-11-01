@@ -9,7 +9,7 @@
 # Persistent settings (port, variant, runtime, stop-timeout, image-tag,
 # auto-login, bind, restart-on-update) are read from the optional
 # ~/.kerghan/config (flat key=value, see config.example); CLI flags override
-# it, built-in defaults fill the rest. It is only loaded by up, down, reset and update-env, so a broken
+# it, built-in defaults fill the rest. It is only loaded by up, down, reset, update and update-env, so a broken
 # config never blocks the other commands.
 #
 # Dependencies on the host: vault, docker and openssl.
@@ -29,6 +29,13 @@
 set -euo pipefail
 
 KERGHAN_VERSION="0.8.2"
+# FIRST_UPDATE_VERSION - the first release that ships `kerghan update` (and so
+# `update --finish`); a downgrade below it skips the handoff. Any value above
+# 0.8.2 and not above that release behaves the same, since no release lies in
+# between. It must never change once released.
+FIRST_UPDATE_VERSION="0.8.3"
+# RELEASES_URL - where `kerghan update` downloads the release's install.sh.
+RELEASES_URL="https://github.com/darthjee/kerghan/releases"
 
 IMAGE_REPO="darthjee/kerghan-standalone"
 INSTANCE="kerghan"
@@ -78,6 +85,8 @@ Commands:
   status                          show the instance state
   compose <args>                  run docker compose inside the instance (e.g. compose exec mysql sh)
   reset                           wipe all data (removes $VOLUME), asks for confirmation
+  update [VERSION] [--force] [--yes] [--[no-]restart]
+                                  update the client and the image to VERSION (default: the latest release)
   update-env                      add missing variables to ~/.kerghan/kerghan.env (keeps existing values)
   configure [--show-secrets] [KEY]
                                   list the settings in ~/.kerghan/config and kerghan.env, or print KEY
@@ -95,6 +104,13 @@ Options for up:
   --bind ADDRESS     host IPv4 address to publish on (default $DEFAULT_BIND_AUTO_LOGIN with
                      auto-login, $DEFAULT_BIND_NO_AUTO_LOGIN without)
   -f                 run in the foreground
+
+Options for update:
+  VERSION            release to install, x.y.z (default: the latest release)
+  --force            reinstall even when already on that version
+  --yes              confirm a downgrade without asking
+  --restart          restart a running instance afterwards (overrides restart-on-update)
+  --no-restart       leave a running instance as it is (overrides restart-on-update)
 
 Settings are read from ~/.kerghan/config (optional, one key=value per line):
   port=$DEFAULT_PORT           host port (overridden by -p)
@@ -1789,6 +1805,27 @@ cmd_update_env() {
     exit 1
   fi
 
+  add_missing_env_keys || exit 1
+  if [ "$ENV_KEYS_ADDED" = "true" ]; then
+    echo "Run 'kerghan down && kerghan up' to apply the change."
+  else
+    echo "$ENV_FILE is up to date; nothing was added."
+  fi
+}
+
+# ENV_KEYS_ADDED - set by add_missing_env_keys: true when it added keys.
+ENV_KEYS_ADDED=false
+
+# add_missing_env_keys - the update-env rules on an existing kerghan.env,
+# shared by cmd_update_env and update --finish: appends every key from
+# DEFAULT_ENV_KEYS it has no line for, with the values a new installation gets
+# (default_env_value), warns about blank ones, and prints the names of the
+# added keys (never their values). Sets ENV_KEYS_ADDED (a global, so the
+# caller must not run it in a subshell). Returns 1, leaving the file
+# unchanged, when a value or the write fails. Every failure is explicit: a
+# caller using `|| ...` disables set -e in here.
+add_missing_env_keys() {
+  ENV_KEYS_ADDED=false
   local key missing="" blank_credential=false
   # shellcheck disable=SC2086 # DEFAULT_ENV_KEYS is a space-separated list
   for key in $DEFAULT_ENV_KEYS; do
@@ -1807,34 +1844,488 @@ cmd_update_env() {
     hint "'kerghan up' still treats the default user as missing until KERGHAN_DEFAULT_USER_USERNAME, KERGHAN_DEFAULT_USER_EMAIL and KERGHAN_DEFAULT_USER_PASSWORD have values"
   fi
 
-  if [ -z "$missing" ]; then
-    echo "$ENV_FILE is up to date; nothing was added."
-    return 0
-  fi
+  [ -n "$missing" ] || return 0
 
   local content
   # shellcheck disable=SC2086 # $missing is a space-separated list of keys
-  content="$(default_env_lines $missing)"
+  content="$(default_env_lines $missing)" || return 1
   # The existing file, byte for byte: the trailing x keeps $(...) from
   # stripping its final newlines (a text env file holds no NUL bytes, which a
   # bash variable could not hold).
   local old new
-  old="$(cat "$ENV_FILE" && printf x)" || exit 1
+  old="$(cat "$ENV_FILE" && printf x)" || return 1
   old="${old%x}"
   new="$old"
   if [ -n "$old" ] && [ "${old: -1}" != $'\n' ]; then
     new="$new"$'\n'
   fi
   new="$new$content"$'\n'
-  write_file_atomic "$ENV_FILE" "$new" 600 || exit 1
+  write_file_atomic "$ENV_FILE" "$new" 600 || return 1
 
+  ENV_KEYS_ADDED=true
   echo "Added to $ENV_FILE:$missing"
   case " $missing " in
     *" KERGHAN_DEFAULT_USER_PASSWORD "*)
       echo "The password of the 'admin' user is in $ENV_FILE."
       ;;
   esac
-  echo "Run 'kerghan down && kerghan up' to apply the change."
+}
+
+# Set by update_parse_args: the parsed `kerghan update` arguments.
+UPDATE_VERSION=""
+UPDATE_FORCE=false
+UPDATE_YES=false
+UPDATE_RESTART=""
+
+# update_parse_args [args...] - parses `kerghan update`'s options and VERSION
+# (any order) into the UPDATE_* globals. Every error is a usage error (exit 2),
+# raised before anything else runs. VERSION loses one leading v and must be
+# strict x.y.z: it goes into a URL and into the installer's environment.
+update_parse_args() {
+  local version_set=false restart=false no_restart=false
+  UPDATE_VERSION=""
+  UPDATE_FORCE=false
+  UPDATE_YES=false
+  UPDATE_RESTART=""
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --force) UPDATE_FORCE=true ;;
+      --yes) UPDATE_YES=true ;;
+      --restart) restart=true ;;
+      --no-restart) no_restart=true ;;
+      --finish) usage_error "option '--finish' must be the only argument" ;;
+      -*) usage_error "unknown option '$1'" ;;
+      *)
+        [ "$version_set" = "false" ] || usage_error "only one VERSION can be given"
+        version_set=true
+        UPDATE_VERSION="$1"
+        ;;
+    esac
+    shift
+  done
+  if [ "$restart" = "true" ] && [ "$no_restart" = "true" ]; then
+    usage_error "options '--restart' and '--no-restart' cannot be combined"
+  fi
+  if [ "$restart" = "true" ]; then
+    UPDATE_RESTART=always
+  elif [ "$no_restart" = "true" ]; then
+    UPDATE_RESTART=never
+  fi
+  if [ "$version_set" = "true" ]; then
+    local version="${UPDATE_VERSION#v}"
+    if ! is_semver "$version"; then
+      usage_error "invalid version '$UPDATE_VERSION' (expected x.y.z, e.g. 0.9.0)"
+    fi
+    UPDATE_VERSION="$version"
+  fi
+}
+
+# cmd_update - `kerghan update [VERSION] [--force] [--yes] [--[no-]restart]`,
+# and the hidden `update --finish` the old client hands off to (see
+# docs/agents/specs/client-update/).
+cmd_update() {
+  if [ "${1:-}" = "--finish" ]; then
+    [ "$#" -eq 1 ] || usage_error "option '--finish' must be the only argument"
+    cmd_update_finish
+    return
+  fi
+  update_parse_args ${@+"$@"}
+
+  # 0. Preconditions, before any download.
+  load_config
+  update_client_dir
+
+  # 1. Resolve: one download into a private staging folder.
+  UPDATE_STAGING="$(mktemp -d "${TMPDIR:-/tmp}/kerghan-update.XXXXXX")" || {
+    error "could not create a temporary folder"
+    exit 1
+  }
+  trap update_cleanup EXIT
+  trap 'update_cleanup; exit 130' INT TERM
+  local installer="$UPDATE_STAGING/install.sh" target
+  update_download "$installer"
+  target="$(update_stamp_version "$installer")"
+
+  # 2. Compare.
+  local current="$KERGHAN_VERSION" action
+  if ! is_semver "$current"; then
+    warn "this client ($current) is not a release; updating to $target without comparing versions"
+    action=upgrade
+  else
+    case "$(version_compare "$target" "$current")" in
+      eq)
+        if [ "$UPDATE_FORCE" != "true" ]; then
+          echo "kerghan $current is already up to date."
+          return 0
+        fi
+        action=reinstall
+        ;;
+      gt) action=upgrade ;;
+      *)
+        if [ -z "$UPDATE_VERSION" ]; then
+          echo "kerghan $current is newer than the latest release $target; nothing to do."
+          hint "run 'kerghan update $target' to downgrade to it"
+          return 0
+        fi
+        action=downgrade
+        update_confirm_downgrade "$current" "$target"
+        ;;
+    esac
+  fi
+  case "$action" in
+    upgrade) echo "Updating kerghan $current -> $target..." ;;
+    reinstall) echo "Reinstalling kerghan $target..." ;;
+    downgrade) echo "Downgrading kerghan $current -> $target..." ;;
+  esac
+
+  # 3. Install: both variables passed explicitly, so values exported in the
+  # user's shell never apply. Its output passes through unchanged.
+  local rc=0
+  KERGHAN_VERSION="$target" KERGHAN_INSTALL_DIR="$UPDATE_INSTALL_DIR" "$BASH" "$installer" || rc=$?
+  if [ "$rc" -ne 0 ]; then
+    error "the installer failed; kerghan $current is still installed"
+    exit 1
+  fi
+
+  # Below FIRST_UPDATE_VERSION the new client has no `update --finish`: only
+  # the client was replaced (the EXIT trap removes the staging folder).
+  if [ "$(version_compare "$target" "$FIRST_UPDATE_VERSION")" = "lt" ]; then
+    echo "kerghan client replaced: $current -> $target"
+    update_downgrade_hint "$target" "$(running_image)"
+    return 0
+  fi
+
+  # 4. Hand off to the new client (--restart never reaches a downgrade).
+  local restart="$UPDATE_RESTART"
+  if [ "$action" = "downgrade" ] && [ "$restart" = "always" ]; then
+    restart=""
+  fi
+  update_handoff "$current" "$restart"
+}
+
+# update_finish_from - prints KERGHAN_UPDATE_FROM when it is usable: it is
+# printed, so only [A-Za-z0-9._-]{1,64} is accepted; anything else counts as
+# unset.
+update_finish_from() {
+  local v="${KERGHAN_UPDATE_FROM:-}"
+  case "$v" in
+    '' | *[!A-Za-z0-9._-]*) return 0 ;;
+  esac
+  [ "${#v}" -le 64 ] || return 0
+  printf '%s' "$v"
+}
+
+# update_is_downgrade <from> - <from> is x.y.z and newer than this client: the
+# finish step of a downgrade, which never restarts (a stable rule every
+# client with update --finish keeps).
+update_is_downgrade() {
+  is_semver "$1" && is_semver "$KERGHAN_VERSION" &&
+    [ "$(version_compare "$1" "$KERGHAN_VERSION")" = "gt" ]
+}
+
+# container_id - prints the ID of the vault-kerghan container, or nothing.
+container_id() {
+  docker inspect -f '{{.Id}}' "$CONTAINER" 2>/dev/null || true
+}
+
+# UPDATE_RESTARTED - set by update_restart: true when the restart recreated
+# the container.
+UPDATE_RESTARTED=false
+
+# update_restart <mode> <image> <container id before> - the restart decision
+# for a running instance whose image differs from <image>: always restarts,
+# never does not, ask prompts on a TTY only. A restart runs cmd_up's logic
+# in an errexit-preserving subshell; its failure exits with its status.
+update_restart() {
+  local mode="$1" image="$2" old_id="$3" answer="" restart=false rc=0
+  UPDATE_RESTARTED=false
+  case "$mode" in
+    always) restart=true ;;
+    never) ;;
+    *)
+      if is_tty; then
+        printf 'Restart Kerghan now? [Y/n] ' >&2
+        if IFS= read -r answer; then
+          answer="$(printf '%s' "$answer" | tr '[:upper:]' '[:lower:]')"
+          case "$answer" in
+            '' | y | yes) restart=true ;;
+          esac
+        fi
+      fi
+      ;;
+  esac
+  if [ "$restart" != "true" ]; then
+    hint "run 'kerghan up' to restart Kerghan on $image (data is kept)"
+    return 0
+  fi
+
+  # Not `( cmd_up ) || rc=$?`, which would disable errexit inside cmd_up.
+  set +e
+  (
+    set -e
+    cmd_up
+  )
+  rc=$?
+  set -e
+  if [ "$rc" -ne 0 ]; then
+    error "the restart failed; kerghan was updated to $KERGHAN_VERSION"
+    exit "$rc"
+  fi
+  if [ "$(container_id)" != "$old_id" ]; then
+    UPDATE_RESTARTED=true
+  elif [ "$ENV_KEYS_ADDED" = "true" ]; then
+    hint "run 'kerghan down && kerghan up' to apply the new kerghan.env variables"
+  fi
+}
+
+# cmd_update_finish - `kerghan update --finish`, run by the old client's
+# handoff (or by hand) in the new client: adds missing kerghan.env keys, pulls
+# the image, decides on the restart and prints the result and cleanup hints.
+# Reads KERGHAN_UPDATE_FROM and KERGHAN_UPDATE_RESTART (see
+# docs/agents/specs/client-update/contracts.md); unknown variables are ignored.
+cmd_update_finish() {
+  # 1. Config.
+  load_config
+
+  local from downgrade=false override=""
+  from="$(update_finish_from)"
+  if [ -n "$from" ] && update_is_downgrade "$from"; then
+    downgrade=true
+  fi
+  case "${KERGHAN_UPDATE_RESTART:-}" in
+    '') ;;
+    always | never) override="$KERGHAN_UPDATE_RESTART" ;;
+    *) warn "ignoring KERGHAN_UPDATE_RESTART='$KERGHAN_UPDATE_RESTART' (expected always or never)" ;;
+  esac
+
+  # 2. Env: missing keys only, no apply line.
+  local env_lost=false
+  ENV_KEYS_ADDED=false
+  if [ ! -e "$ENV_FILE" ]; then
+    if volume_exists; then
+      env_lost=true
+      # shellcheck disable=SC2088 # the literal ~ is meant for display
+      warn "~/.kerghan/kerghan.env is missing but the data volume $VOLUME exists"
+      hint "the data volume $VOLUME exists: restore kerghan.env from your backup (the data was written with its secrets), or run 'kerghan reset' to start from scratch"
+    fi
+  else
+    add_missing_env_keys || exit 1
+  fi
+
+  # 3. Previous image, before anything changes it.
+  local previous old_id=""
+  previous="$(running_image)"
+  if [ -n "$previous" ]; then
+    old_id="$(container_id)"
+  fi
+
+  # 4. image-tag override.
+  if [ -n "$CFG_IMAGE_TAG" ]; then
+    warn "image-tag=$CFG_IMAGE_TAG in ~/.kerghan/config still overrides the pinned image tag ($KERGHAN_VERSION)"
+    hint "run 'kerghan configure --unset image-tag' to use the pinned image"
+  fi
+
+  # 5. Pull the image `up` would run (variant from the config, never from the
+  # running container).
+  local offline=false image
+  if [ "${CFG_VARIANT:-$DEFAULT_VARIANT}" = "offline" ]; then
+    offline=true
+  fi
+  image="$(image_ref "$offline" "${CFG_IMAGE_TAG:-$KERGHAN_VERSION}")"
+  if ! docker pull "$image"; then
+    error "could not pull $image; kerghan was updated to $KERGHAN_VERSION, the instance was not restarted"
+    hint "run 'kerghan update --force' to try again, or 'kerghan up' (which also pulls it)"
+    exit 1
+  fi
+
+  # 6. Restart decision: the first matching row applies.
+  UPDATE_RESTARTED=false
+  if [ "$downgrade" = "true" ] || [ "$env_lost" = "true" ]; then
+    :
+  elif [ -z "$previous" ]; then
+    hint "run 'kerghan up' to start Kerghan on $image"
+  elif [ "$previous" = "$image" ]; then
+    if [ "$ENV_KEYS_ADDED" = "true" ]; then
+      hint "run 'kerghan down && kerghan up' to apply the new kerghan.env variables"
+    fi
+  else
+    update_restart "${override:-${CFG_RESTART_ON_UPDATE:-$DEFAULT_RESTART_ON_UPDATE}}" "$image" "$old_id"
+  fi
+
+  # 7. Result and cleanup hints.
+  if [ -z "$from" ]; then
+    echo "kerghan $KERGHAN_VERSION is installed"
+  elif [ "$from" = "$KERGHAN_VERSION" ]; then
+    echo "kerghan $KERGHAN_VERSION reinstalled"
+  else
+    echo "kerghan updated $from -> $KERGHAN_VERSION"
+  fi
+  if [ "$downgrade" = "true" ]; then
+    update_downgrade_hint "$KERGHAN_VERSION" "$previous"
+  elif [ -n "$previous" ] && [ "$previous" != "$image" ]; then
+    if [ "$UPDATE_RESTARTED" = "true" ]; then
+      hint "free disk space with 'docker image rm $previous'"
+    else
+      hint "after 'kerghan up', free disk space with 'docker image rm $previous'"
+    fi
+  fi
+}
+
+# update_downgrade_hint <version> <running image> - how to switch the instance
+# to <version> by hand after a downgrade (it is never restarted).
+update_downgrade_hint() {
+  if [ -n "$2" ]; then
+    hint "run 'kerghan down && kerghan up' to switch the instance to $1 (an older version may not read data written by a newer one)"
+  else
+    hint "run 'kerghan up' to start the instance on $1"
+  fi
+}
+
+# update_handoff <from version> <restart override> - removes the staging
+# folder (exec runs no trap) and execs exactly <install dir>/kerghan with
+# `update --finish` as its only argument. KERGHAN_UPDATE_FROM is always set,
+# KERGHAN_UPDATE_RESTART is set to the override or unset, so nothing exported
+# in the user's shell leaks in. Exits 1 when the new client cannot be run.
+update_handoff() {
+  local new="$UPDATE_INSTALL_DIR/kerghan"
+  update_cleanup
+  trap - EXIT INT TERM
+  if [ -f "$new" ] && [ -x "$new" ]; then
+    # A failed exec returns instead of ending the shell.
+    shopt -s execfail
+    if [ -n "$2" ]; then
+      KERGHAN_UPDATE_FROM="$1" KERGHAN_UPDATE_RESTART="$2" exec "$new" update --finish || true
+    else
+      unset KERGHAN_UPDATE_RESTART
+      KERGHAN_UPDATE_FROM="$1" exec "$new" update --finish || true
+    fi
+  fi
+  error "could not run $new update --finish"
+  hint "the client may already be updated: check with 'kerghan version', then run 'kerghan up'"
+  exit 1
+}
+
+# UPDATE_INSTALL_DIR - the canonical directory of the running client's real
+# file, set by update_client_dir: where the installer writes the new client.
+UPDATE_INSTALL_DIR=""
+# UPDATE_STAGING - the staging folder of `kerghan update` (removed on exit).
+UPDATE_STAGING=""
+
+# update_cleanup - removes the staging folder (EXIT/INT/TERM trap, and
+# explicitly before the handoff's exec, which runs no trap).
+update_cleanup() {
+  if [ -n "$UPDATE_STAGING" ]; then
+    rm -rf "$UPDATE_STAGING"
+    UPDATE_STAGING=""
+  fi
+}
+
+# update_client_dir - sets UPDATE_INSTALL_DIR to the canonical directory of
+# the running client's real file (symlinks resolved). Exits 1 when it cannot
+# be resolved, when the real file is not named kerghan (the installer always
+# writes <dir>/kerghan), or when the directory is not writable.
+update_client_dir() {
+  local real dir name
+  real="$(resolve_symlink "${BASH_SOURCE[0]}")" || exit 1
+  name="$(basename "$real")"
+  # CDPATH='' keeps a relative dirname (bash bin/kerghan) from resolving into
+  # a CDPATH entry, whose path cd would also print into $dir; -- keeps a
+  # dirname starting with - from being read as an option.
+  dir="$(CDPATH='' cd -P -- "$(dirname "$real")" >/dev/null 2>&1 && pwd -P)" || {
+    error "cannot resolve the directory of $real"
+    exit 1
+  }
+  if [ "$name" != "kerghan" ]; then
+    error "this client runs from $dir/$name, not a file named 'kerghan'"
+    hint "reinstall with KERGHAN_INSTALL_DIR=<dir> and the installer (curl -fsSL $RELEASES_URL/latest/download/install.sh | bash)"
+    exit 1
+  fi
+  if [ ! -w "$dir" ]; then
+    error "$dir is not writable"
+    hint "kerghan update installs to $dir, where this client runs from; it never uses sudo"
+    exit 1
+  fi
+  UPDATE_INSTALL_DIR="$dir"
+}
+
+# update_installer_url - prints the install.sh URL of UPDATE_VERSION, or of
+# the latest release when no VERSION was given.
+update_installer_url() {
+  if [ -n "$UPDATE_VERSION" ]; then
+    echo "$RELEASES_URL/download/$UPDATE_VERSION/install.sh"
+  else
+    echo "$RELEASES_URL/latest/download/install.sh"
+  fi
+}
+
+# update_download <file> - downloads the release's install.sh to <file> over
+# HTTPS only (redirects included), in one request. Exits 1 on any failure,
+# telling a 404 (from curl's own status code) from a network failure.
+update_download() {
+  local url code rc=0
+  url="$(update_installer_url)"
+  code="$(curl -fsSL --proto '=https' --proto-redir '=https' -o "$1" -w '%{http_code}' "$url" 2>/dev/null)" || rc=$?
+  [ "$rc" -ne 0 ] || return 0
+  if [ "$code" = "404" ]; then
+    if [ -n "$UPDATE_VERSION" ]; then
+      error "version $UPDATE_VERSION does not exist"
+      hint "see $RELEASES_URL for the available versions"
+    else
+      error "no release found at $url"
+    fi
+  else
+    error "could not download $url"
+    hint "check your network connection and that github.com is reachable, then try again"
+  fi
+  exit 1
+}
+
+# update_stamp_version <file> - prints the version of the downloaded installer,
+# read as text from its first KERGHAN_VERSION="x.y.z" line (never sourced).
+# Exits 1 when there is none, or when it is not the requested VERSION.
+update_stamp_version() {
+  local url stamp
+  url="$(update_installer_url)"
+  stamp="$(grep -E '^KERGHAN_VERSION="[0-9]+\.[0-9]+\.[0-9]+"$' "$1" 2>/dev/null | head -n 1)" || stamp=""
+  stamp="${stamp#KERGHAN_VERSION=\"}"
+  stamp="${stamp%\"}"
+  if ! is_semver "$stamp"; then
+    error "$url has no KERGHAN_VERSION=\"x.y.z\" line; nothing was changed"
+    exit 1
+  fi
+  if [ -n "$UPDATE_VERSION" ] && [ "$stamp" != "$UPDATE_VERSION" ]; then
+    error "$url is for version $stamp, not $UPDATE_VERSION; nothing was changed"
+    exit 1
+  fi
+  echo "$stamp"
+}
+
+# update_confirm_downgrade <current> <target> - the downgrade warning, then
+# --yes, a [y/N] prompt on a TTY, or a refusal without one. Exits 1 unless
+# confirmed.
+update_confirm_downgrade() {
+  local answer=""
+  warn "downgrading kerghan $1 -> $2"
+  warn "older versions may have security issues that later releases fixed"
+  warn "config keys added after $2 are reported as unknown (and ignored) by it"
+  warn "the instance is not restarted on a downgrade: switch it by hand afterwards"
+  if [ "$UPDATE_RESTART" = "always" ]; then
+    warn "--restart is ignored on a downgrade"
+  fi
+  [ "$UPDATE_YES" != "true" ] || return 0
+  if ! is_tty; then
+    error "a downgrade needs a confirmation, but stdin is not a terminal"
+    hint "run 'kerghan update $2 --yes' to confirm it"
+    exit 1
+  fi
+  printf 'Downgrade to %s? [y/N] ' "$2" >&2
+  read -r answer || true
+  answer="$(printf '%s' "$answer" | tr '[:upper:]' '[:lower:]')"
+  case "$answer" in
+    y | yes) return 0 ;;
+  esac
+  echo "Downgrade cancelled; nothing was changed."
+  exit 1
 }
 
 # read_hidden_value <key> - prints the value of `KEY=-`: on a TTY (is_tty) it
@@ -2552,6 +3043,7 @@ main() {
     status) cmd_status ${@+"$@"} ;;
     compose) cmd_compose ${@+"$@"} ;;
     reset) cmd_reset ${@+"$@"} ;;
+    update) cmd_update ${@+"$@"} ;;
     update-env) cmd_update_env ${@+"$@"} ;;
     configure) cmd_configure ${@+"$@"} ;;
     wizard) cmd_wizard ${@+"$@"} ;;
