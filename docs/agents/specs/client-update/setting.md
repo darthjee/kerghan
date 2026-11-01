@@ -51,6 +51,8 @@ restart-on-update=ask
   `config_expected` prints `ask, always or never`; `config_default` prints `ask` (from a new
   `DEFAULT_RESTART_ON_UPDATE=ask` constant).
 - The client's header comment, which lists the persistent settings, adds `restart-on-update`.
+- The description of the `usage` line below starts at column 25, two columns right of the other
+  settings, because the key is longer. This is accepted; the other lines are not realigned.
 
 The key is loaded with the rest of the config, so every command that already calls
 `load_config` validates it. Only `kerghan update` acts on it.
@@ -61,8 +63,8 @@ Handled like every other config key, with no special case:
 
 - **Listing:** a `restart-on-update` row after `bind`, with source `file` or `default` (value
   `ask`), or `file, invalid`.
-- **Single read:** `kerghan configure restart-on-update` prints the effective value (`ask` when
-  unset).
+- **Single read:** `kerghan configure restart-on-update` prints the value in the file, or an
+  empty line when unset (the default `ask` applies), like every other key's single read.
 - **Set:** `kerghan configure restart-on-update=always` validates with
   `valid_restart_on_update`; an invalid value is refused (exit `1`) with the same expected text.
 - **Unset:** `kerghan configure --unset restart-on-update` removes the line, so the default
@@ -144,8 +146,8 @@ A changed restart-on-update applies to the next 'kerghan update'.
 
 ## Older clients
 
-A client older than this setting (any 0.8.x, or a version a downgrade installs) does not know
-the key:
+A client older than this setting (every release before the one that ships #416, 0.8.2 and
+earlier at the time of writing, or a version a downgrade installs) does not know the key:
 
 - every command that loads the config (`up`, `down`, `reset`, `update-env`) warns
   `/home/me/.kerghan/config:9: unknown key 'restart-on-update' (ignored)` and carries on;
@@ -164,13 +166,15 @@ In the existing bats files (`config.bats`, `configure.bats`, `configure_files.ba
   `(expected ask, always or never)` message; a missing line uses `ask`.
 - **`configure` listing:** the row appears after `bind` with source `default` / `file` /
   `file, invalid`.
-- **`configure` read, set and unset:** the single read prints the effective value; each valid
+- **`configure` read, set and unset:** the single read prints the file value, or an empty line
+  when unset; each valid
   value is written; an invalid one is refused with exit `1` and nothing written; `--unset`
   removes the line.
 - **Apply hint:** a change of only `restart-on-update` prints
   `Takes effect on the next 'kerghan update'.`; together with `port` it prints the `kerghan up`
   hint instead.
-- **Wizard:** the question is asked right after `bind`, with and without `--advanced`; Enter
+- **Wizard:** every existing `wizard.bats` answer sequence gains one extra line (Enter) after the
+  `bind` answer, since the question is always asked. The question is asked right after `bind`, with and without `--advanced`; Enter
   keeps the current value (nothing written when unset); an invalid answer is re-asked; an
   invalid current line is offered as `[ask]` and fixed by Enter; `y` is refused, not
   translated.

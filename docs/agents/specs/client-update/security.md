@@ -50,8 +50,10 @@ the downloaded file is held to the same rule.
 
 ## Exact-path execution
 
-- **Real path.** The client resolves its own file (`BASH_SOURCE[0]`, made absolute) through the
-  existing `resolve_symlink` helper, so a client run through a symlink (e.g. `/usr/local/bin/kerghan`
+- **Real path.** The client resolves its own file (`BASH_SOURCE[0]`) through the existing
+  `resolve_symlink` helper, then canonicalizes its directory with
+  `(cd -P "$(dirname "$real")" && pwd -P)`, since `resolve_symlink` keeps relative parts (a
+  relative link target, or a relative `BASH_SOURCE[0]` under `bash kerghan`). It so a client run through a symlink (e.g. `/usr/local/bin/kerghan`
   pointing at `~/.local/bin/kerghan`) updates the file actually in use, and the symlink keeps
   pointing at it.
 - **`KERGHAN_INSTALL_DIR`** is the directory of that real file.
@@ -61,7 +63,7 @@ the downloaded file is held to the same rule.
 
   ```
   kerghan: error: this client runs from /opt/kerghan/kerghan-0.9.0, not a file named 'kerghan'
-  kerghan: hint: reinstall with the installer, or point KERGHAN_INSTALL_DIR at the directory you want
+  kerghan: hint: reinstall with KERGHAN_INSTALL_DIR=<dir> and the installer (curl -fsSL https://github.com/darthjee/kerghan/releases/latest/download/install.sh | bash)
   ```
 
   Exit `1`. A path that cannot be resolved (a symlink loop) fails the same way, with
@@ -108,12 +110,14 @@ In `standalone/test/update.bats`:
   stderr.
 - **Temp files:** the staging folder is removed after a successful update (before the `exec`),
   after each failure (download, stamp, installer, declined downgrade) and on `INT`.
-- **Never piped:** the installer is run from a file (the `bash` stub receives a path, never
-  stdin), and `curl` is called with `-f` and the HTTPS-only options.
+- **Never piped:** the installer is run as `"$BASH" <file>` (no `bash` stub on `PATH`, which would
+  also catch the client's own shebang); the served stub installer records its `$0` (a file in
+  the staging folder) and that its stdin is not the script. `curl` is called with `-f` and the
+  HTTPS-only options.
 - **`VERSION` metacharacters:** `../0.9.0`, `0.9.0?x`, `0.9.0#x`, `0.9.0%2e`, `0.9.0 x` and a value
   with a newline are rejected with exit `2` before any `curl` call.
-- **Symlinked client:** run through a symlink, the installer receives the target's directory as
-  `KERGHAN_INSTALL_DIR`, the `exec` targets the real file, and the symlink is left in place.
+- **Symlinked client:** run through a symlink (absolute and relative targets), the installer
+  receives the target's canonical directory as `KERGHAN_INSTALL_DIR`, the `exec` targets the real file, and the symlink is left in place.
 - **Other file name:** a client whose real file is not named `kerghan` is refused with exit `1`
   before any download.
 - **`PATH` shadowing:** with another `kerghan` first on `PATH`, the handoff still runs the

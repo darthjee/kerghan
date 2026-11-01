@@ -54,8 +54,9 @@ Out of scope (from #414):
 - Automatic pruning of old images: a hint prints the `docker image rm` command instead.
 - Rollback of any kind, and data or schema migration beyond what `kerghan up` already does.
 - Concurrent `update` runs.
-- Any change to `install.sh` (see
-  [contracts.md](contracts.md#no-installer-addition-is-needed)).
+- Any behaviour change to `install.sh` (see
+  [contracts.md](contracts.md#no-installer-addition-is-needed)); #418 only adds the contract
+  note to its header comment.
 
 ## Behaviour decisions
 
@@ -91,6 +92,10 @@ Shared by every path, following the client's existing conventions:
 | Restart failure | the exit status of `up`'s restart (non-zero) |
 | Ctrl-C | `130` |
 
+A declined downgrade exits `1`, unlike `reset`'s `Aborted.` (exit `0`): it follows the client
+config convention for a declined confirmation (`configure --force`), so a script can tell that
+no update happened.
+
 Streams:
 
 - **stdout:** progress and result lines (`Updating kerghan …`, `kerghan updated … -> …`), the
@@ -124,6 +129,10 @@ Streams:
 | #416 | The `restart-on-update` setting: parser, `configure`, `wizard`, usage, `config.example` | [setting.md](setting.md) |
 | #417 | `kerghan update [VERSION]` and `update --finish` | [command.md](command.md), [versions.md](versions.md), [contracts.md](contracts.md), [security.md](security.md) |
 | #418 | Fold these specs into the permanent docs and delete this folder | all |
+
+**Order:** #416 lands before or with #417, so the first release that ships `update` also knows
+`restart-on-update` (otherwise its `load_config` would warn about an unknown key and
+`update --finish` could not read the setting).
 
 ## Index
 

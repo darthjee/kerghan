@@ -31,13 +31,14 @@ exec "<install dir>/kerghan" update --finish
 | Variable | Value | When unset or invalid |
 |----------|-------|------------------|
 | `KERGHAN_UPDATE_FROM` | The old client's `KERGHAN_VERSION` (e.g. `0.9.0`) | The finish step still runs; the result line has no "from" part (see [command.md](command.md#result-and-cleanup-hints)) and no downgrade is detected |
-| `KERGHAN_UPDATE_RESTART` | `always` or `never`; set only when `--restart` / `--no-restart` was given | The new client reads `restart-on-update` (see [setting.md](setting.md)) |
+| `KERGHAN_UPDATE_RESTART` | `always` or `never`; set only when `--restart` / `--no-restart` was given | The new client reads `restart-on-update` (see [setting.md](setting.md)); an empty value counts as unset |
 
 - **The old client always sets or unsets both explicitly** in the `exec`'s environment:
   `KERGHAN_UPDATE_FROM` is always set, and `KERGHAN_UPDATE_RESTART` is set to the override or
   unset. A value already exported in the user's shell never leaks into the handoff.
 - **Validation in the new client:** `KERGHAN_UPDATE_FROM` is used only when it matches
-  `[A-Za-z0-9._-]{1,64}` (it is printed, so nothing else reaches the terminal); a downgrade is
+  `[A-Za-z0-9._-]{1,64}` (checked with `case` patterns and `${#v}`, bash 3.2 safe; it is
+  printed, so nothing else reaches the terminal); a downgrade is
   detected only when it is `x.y.z` and newer than the new client's version (see
   [versions.md](versions.md#downgrade)). `KERGHAN_UPDATE_RESTART` other than `always` / `never`
   is ignored with `kerghan: warning: ignoring KERGHAN_UPDATE_RESTART='<value>' (expected always or never)`.
@@ -54,13 +55,19 @@ exec "<install dir>/kerghan" update --finish
    an older target (during a downgrade) never reads them and works as before.
 4. **New context is only ever added as new optional variables** with a default that keeps the
    old behaviour. Existing variables never change meaning.
+5. **Every client that has `update --finish` skips the restart when `KERGHAN_UPDATE_FROM` is
+   `x.y.z` and newer than its own version** (a downgrade, see
+   [versions.md](versions.md#why-a-downgrade-never-restarts)). Every future downgrade target
+   relies on this, so it can never be dropped. The old client does not signal the downgrade
+   through `KERGHAN_UPDATE_RESTART`, which stays reserved for the user's override.
 
 ### `update --finish` by hand
 
 `update --finish` is hidden: it is not in the `usage` text or the user docs. Run by hand, it only
 runs the finish steps (env, pull, restart decision, hints) for the installed version, with no
-download and no install, so it is harmless. Any other argument after `--finish` is a usage error
-(exit `2`).
+download and no install, so it is harmless. `--finish` must be the only argument: any other
+argument with it, before or after (`update --finish extra`, `update 0.9.1 --finish`), is a usage
+error (exit `2`).
 
 ## Installer interface
 
@@ -120,7 +127,8 @@ Every release keeps publishing, as GitHub release assets (`bin/release_kerghan_a
 
 ## First upgrade
 
-Clients up to 0.8.2 (every version older than `FIRST_UPDATE_VERSION`) have no `update`. Moving to
+Every release older than `FIRST_UPDATE_VERSION` (0.8.2 and earlier at the time of writing) has
+no `update`. Moving to
 the first version with `update` still means running the installer by hand once, followed by
 `kerghan up`. From then on, `kerghan update` works. #418 documents this in the root `README.md`
 and the standalone docs.
@@ -138,8 +146,9 @@ In `standalone/test/update.bats`, with the installer, `curl`, `vault` and `docke
 - **Staging removed:** the staging folder no longer exists when the new client starts.
 - **`--finish` fallbacks:** with neither variable set, the finish step runs and reads
   `restart-on-update`; with `KERGHAN_UPDATE_RESTART=maybe` it warns and reads the setting; with
-  `KERGHAN_UPDATE_FROM` containing other characters it is ignored; an unknown
-  `KERGHAN_UPDATE_SOMETHING` variable changes nothing; `update --finish extra` is a usage error.
+  `KERGHAN_UPDATE_FROM` containing other characters it is ignored; an empty
+  `KERGHAN_UPDATE_RESTART` reads the setting without a warning; an unknown
+  `KERGHAN_UPDATE_SOMETHING` variable changes nothing; `update --finish extra` and `update 0.9.1 --finish` are usage errors.
 - **Downgrade detection:** `KERGHAN_UPDATE_FROM` newer than the client's version skips the
   restart (see [versions.md](versions.md#required-tests)).
 - **Installer environment:** the installer receives `KERGHAN_VERSION=<target>` and

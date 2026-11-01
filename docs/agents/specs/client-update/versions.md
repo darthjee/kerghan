@@ -38,8 +38,9 @@ KERGHAN_VERSION="0.9.1"
   [security.md](security.md#download-to-a-file)) and is the same file the install step runs (see
   [command.md](command.md#3-install)). Resolution, the existence check and the install cost one
   HTTP request; no GitHub API, no credentials.
-- **Reading the stamp:** the first line matching `^KERGHAN_VERSION="[0-9]+\.[0-9]+\.[0-9]+"$`.
-  The file is only read as text, never sourced or evaluated to find the version.
+- **Reading the stamp:** the first line matching `^KERGHAN_VERSION="[0-9]+\.[0-9]+\.[0-9]+"$`
+  (e.g. `grep -E '…' file | head -n 1`, as `pinned_version` in `bin/release_kerghan_assets.sh`
+  does). The file is only read as text, never sourced or evaluated to find the version.
 
 Every failure below exits `1`, removes the staging folder and changes nothing:
 
@@ -135,8 +136,9 @@ always fail. Instead, a downgrade:
 
 - installs the older client and, when the target ships `update`, runs the handoff with its env
   step and pull as usual;
-- never restarts, whatever `restart-on-update`, `--restart` or `--no-restart` say
-  (`--restart` prints `kerghan: warning: --restart is ignored on a downgrade`);
+- never restarts, whatever `restart-on-update`, `--restart` or `--no-restart` say. With
+  `--restart`, the **old** client adds `kerghan: warning: --restart is ignored on a downgrade`
+  to the downgrade warning, on both paths (with and without the handoff);
 - ends with the hint for the instance state (the new client knows the running image; the old
   client below `FIRST_UPDATE_VERSION` checks it itself):
 
@@ -146,7 +148,12 @@ always fail. Instead, a downgrade:
 | Not running | `kerghan: hint: run 'kerghan up' to start the instance on 0.9.0` |
 
 The new (older) client recognises the downgrade from the handoff variable `KERGHAN_UPDATE_FROM`
-being newer than its own version (see [contracts.md](contracts.md#handoff-interface)).
+being newer than its own version (see [contracts.md](contracts.md#rules), rule 5).
+
+The end of a downgrade with the handoff prints, in this order: the result line
+(`kerghan updated 0.9.2 -> 0.9.0`), then the instance-state hint above. No `docker image rm` hint
+is printed: the previous image is still the one the instance runs and the user switches it by
+hand.
 
 ### Downgrade below `FIRST_UPDATE_VERSION`
 

@@ -54,7 +54,9 @@ Steps 1–4 run in the **old** client, step 5 in the **new** one.
 Before any download, the old client:
 
 - runs `load_config`, so a broken `~/.kerghan/config` fails now (exit `1`) and not after the
-  client was replaced;
+  client was replaced. After a downgrade this also means a value only a newer client accepts
+  makes the older client refuse to update until the line is fixed; this is accepted. The
+  client's header comment, which lists the commands that load the config, adds `update`;
 - resolves the real path of the running client and its directory, and refuses when the file is
   not named `kerghan` or the path cannot be resolved (see
   [security.md](security.md#exact-path-execution));
@@ -84,9 +86,11 @@ and confirmation ([versions.md](versions.md#comparison)). Then, on stdout:
 
 ### 3. Install
 
-Run the downloaded installer with the explicit environment of
+Run the downloaded installer with `"$BASH" <file>` and the explicit environment of
 [contracts.md](contracts.md#installer-interface). Its output (`kerghan-install: …` lines,
-including its own errors and hints) passes through unchanged.
+including its own errors and hints) passes through unchanged. When the client runs through a
+symlink from another directory, the installer's `<dir> is not on your PATH` warning may print;
+it is harmless and accepted.
 
 When it exits non-zero, nothing was replaced (its only write is the final `mv -f`):
 
@@ -104,8 +108,9 @@ Remove the staging folder, then `exec` the new client per
 `FIRST_UPDATE_VERSION`, skip this step and step 5 (see
 [versions.md](versions.md#downgrade-below-first_update_version)).
 
-When the `exec` fails (the new file is missing or not executable), the client may already be
-replaced:
+Before the `exec`, the client checks that `<install dir>/kerghan` is a regular, executable file
+(`[ -f ] && [ -x ]`) and sets `shopt -s execfail`, so a failed `exec` returns instead of ending a
+non-interactive shell with `126` / `127`. When either fails, the client may already be replaced:
 
 ```
 kerghan: error: could not run /home/me/.local/bin/kerghan update --finish
@@ -119,14 +124,20 @@ Exit `1`.
 `kerghan update --finish`, in the new client, in this order:
 
 1. **Config.** `load_config` (the new client's keys and validators).
-2. **Env.** Add missing `kerghan.env` variables with the `update-env` logic
-   (`cmd_update_env`'s rules: missing keys only, existing values and permissions kept, atomic
-   write, values never printed). When keys were added it prints `Added to <file>: <KEYS>` (and
-   the admin-password line when the password was added), but not `update-env`'s own apply line,
-   which the restart step replaces. When nothing is missing it prints nothing. When
-   `kerghan.env` does not exist the step is skipped silently: there is no installation to update
-   yet, and `kerghan up` creates the file. A blank-credential warning is printed as
-   `update-env` prints it.
+2. **Env.** Add missing `kerghan.env` variables with the `update-env` rules (missing keys only,
+   existing values kept, mode `600`, atomic write, values never printed). `cmd_update_env`
+   cannot be called as it is (it exits on a missing file, prints `is up to date` and its own
+   apply line), so #417 extracts a shared helper (e.g. `add_missing_env_keys`) holding the
+   missing-key loop, the blank-value warnings, the atomic write and the `Added to <file>: <KEYS>`
+   / admin-password lines. It reports whether keys were added through a global (not a
+   subshell). `cmd_update_env` keeps its exact current output (`update_env.bats` does not
+   change). In the finish step:
+   - keys added: `Added to <file>: <KEYS>` (and the admin-password line), no apply line;
+   - nothing missing: nothing is printed;
+   - `kerghan.env` missing and no data volume: skipped silently (`kerghan up` creates it);
+   - `kerghan.env` missing and the data volume exists: `kerghan: warning: ~/.kerghan/kerghan.env
+     is missing but the data volume vault-kerghan-data exists` plus `update-env`'s restore /
+     `kerghan reset` hint; the restart is then skipped (see [Restart decision](#restart-decision)).
 3. **Previous image.** Read the running container's image (`running_image`) before anything
    changes it; empty when the instance is not running.
 4. **`image-tag` override.** When `image-tag` is set in `config`, warn (the pull and restart
@@ -137,9 +148,9 @@ Exit `1`.
    kerghan: hint: run 'kerghan configure --unset image-tag' to use the pinned image
    ```
 
-5. **Pull** the image `up` would run: `image_ref` with the configured variant (`variant=offline`
-   pulls the `-offline` image; the config wins over the running container, as with `up`) and the
-   `image-tag` override when set. `docker pull` runs in the foreground with its progress shown,
+5. **Pull** the image `up` would run: `image_ref` with the variant from `config` or the default
+   (`variant=offline` pulls the `-offline` image; the running container's variant is never
+   used, exactly as with `up`) and the `image-tag` override when set. `docker pull` runs in the foreground with its progress shown,
    while the old container keeps running, so the downtime is only the recreate. On failure:
 
    ```
@@ -155,28 +166,37 @@ Exit `1`.
 
 | Situation | Behaviour |
 |-----------|-----------|
-| Downgrade (detected per [versions.md](versions.md#downgrade)) | No restart; the downgrade hint of [versions.md](versions.md#why-a-downgrade-never-restarts). |
+| Downgrade (detected per [contracts.md](contracts.md#rules), rule 5) | No restart; the downgrade hint of [versions.md](versions.md#why-a-downgrade-never-restarts). |
+| `kerghan.env` missing with the data volume present | No restart (`up` would refuse); the env step's warning and hint already said why. |
 | Instance not running (previous image empty) | No restart, no prompt; `kerghan: hint: run 'kerghan up' to start Kerghan on <image>`. |
+| Running image equals the pulled image (e.g. `--force`, or an `image-tag` override already running) | No prompt, no restart (`up` would find it already running). When the env step added keys: `kerghan: hint: run 'kerghan down && kerghan up' to apply the new kerghan.env variables`; otherwise no hint. |
 | `KERGHAN_UPDATE_RESTART=always`, or `restart-on-update=always` | Restart. |
 | `KERGHAN_UPDATE_RESTART=never`, or `restart-on-update=never` | No restart; the not-restarted hint below. |
 | `restart-on-update=ask` (or unset), TTY | Prompt `Restart Kerghan now? [Y/n] ` on stderr. `Y`, `yes` (any case) or Enter restarts; anything else, and end of input, does not. |
 | `restart-on-update=ask` (or unset), no TTY | No prompt, no restart; the not-restarted hint below. |
 
-`KERGHAN_UPDATE_RESTART` (the per-run override) wins over the setting.
+Rows are checked top to bottom; the first match applies. `KERGHAN_UPDATE_RESTART` (the per-run
+override) wins over the setting.
 
 - **Restart** means `kerghan up`'s logic with no flags: it resolves port, variant, image-tag,
   auto-login and bind from `config` and the defaults, compares with the running instance
   (`recreate_reason`, including the warn-and-recreate for a non-release running image), stops it
   and starts it on the new image, keeping the data volume. Flags a previous `kerghan up` was
-  given (e.g. `-p 4000`) are not remembered, the same as for a plain `kerghan up`.
+  given (e.g. `-p 4000` or `--offline`) are not remembered, the same as for a plain
+  `kerghan up`: an instance started with `--offline` and no `variant=` line moves to the online
+  image.
+- **Running it.** `cmd_up` exits on every failure, so the finish step runs it in a subshell:
+  `set +e; ( set -e; cmd_up ); rc=$?; set -e` (not `( cmd_up ) || rc=$?`, which disables errexit
+  inside the subshell). Whether the container was recreated is told by comparing its ID
+  (`docker inspect -f '{{.Id}}' vault-kerghan`) before and after.
 - **Not restarted, instance running:**
   `kerghan: hint: run 'kerghan up' to restart Kerghan on <image> (data is kept)`.
 - **Restart fails** (e.g. a port conflict): `up`'s error and hints are printed as they are, then
   `kerghan: error: the restart failed; kerghan was updated to 0.9.1`. No rollback. The exit
   status is the restart's.
-- **The restart did not recreate the container** (`up` found it already matching, e.g. the
-  `image-tag` override names the running image) **but the env step added keys:**
-  `kerghan: hint: run 'kerghan down && kerghan up' to apply the new kerghan.env variables`.
+- **The restart did not recreate the container** (same container ID, `up` found it already
+  matching) **but the env step added keys:** the same `down && up` hint as the
+  equal-image row.
 
 ## Result and cleanup hints
 
@@ -189,7 +209,9 @@ After the restart decision (and only when nothing failed), on stdout:
 | `KERGHAN_UPDATE_FROM` unset or invalid (`update --finish` run by hand) | `kerghan 0.9.1 is installed` |
 
 Then the cleanup hint, on stderr, only when the previous image is known and differs from the
-image just pulled. There is no automatic pruning.
+image just pulled, and never on a downgrade (see
+[versions.md](versions.md#why-a-downgrade-never-restarts) for the downgrade's output order).
+There is no automatic pruning.
 
 | Instance after the update | Hint |
 |---------------------------|------|
@@ -242,6 +264,10 @@ existing `stubs/` convention) and the TTY driven through `KERGHAN_ASSUME_TTY=tru
   and a non-writable install dir each fail with exit `1` before any download.
 - **Full upgrade flow:** the progress line, the installer run, the handoff, the env step, the
   pull of the right image, the restart and the result line, in that order; exit `0`.
+- **Equal image:** with `--force` on the same version and a running instance, no prompt and no
+  restart; the `down && up` hint appears only when the env step added keys.
+- **Missing `kerghan.env` with a data volume:** the warning and restore hint are printed and no
+  restart is attempted.
 - **Restart matrix:** each of `always`, `never`, `ask` + `Y`, `ask` + Enter, `ask` + `n`, `ask`
   without a TTY, and unset, crossed with a running and a stopped instance; `--restart` and
   `--no-restart` override each value. A stopped instance is never started and never prompts.
@@ -253,7 +279,7 @@ existing `stubs/` convention) and the TTY driven through `KERGHAN_ASSUME_TTY=tru
   warned about; a pull failure exits `1` with the `update --force` hint and no restart.
 - **Failures:** an installer failure exits `1` with `still installed` and leaves the client
   file unchanged; an `exec` failure exits
-  `1` with the `kerghan version` hint; a restart failure prints `up`'s hints and
+  `1` with the `kerghan version` hint (both a missing and a non-executable new file); a restart failure prints `up`'s hints and
   `the restart failed`, with the restart's exit status.
 - **Result and cleanup:** the `updated X -> Y`, `reinstalled` and `is installed` lines; the
   `docker image rm` hint names the previous image after a restart, uses the "after
