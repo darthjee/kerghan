@@ -1430,12 +1430,14 @@ batch_report() {
 
 # batch_apply_hint - after batch_apply, for a batch that changed something:
 # the strongest apply hint and the password note on stdout, then the
-# cross-key warnings on stderr.
+# cross-key warnings on stderr. restart-on-update only applies to the next
+# 'kerghan update', so a batch changing only it gets the weakest hint.
 batch_apply_hint() {
-  local i=0 key down_up=false password=false
+  local i=0 key down_up=false password=false instance=false
   while [ "$i" -lt "${#BATCH_KEYS[@]}" ]; do
     key="${BATCH_KEYS[i]}"
     if [ "${BATCH_CHANGED[i]}" = "true" ]; then
+      [ "$key" = "restart-on-update" ] || instance=true
       case "$key" in
         runtime | stop-timeout) down_up=true ;;
         KERGHAN_DEFAULT_USER_PASSWORD) password=true ;;
@@ -1446,7 +1448,9 @@ batch_apply_hint() {
     fi
     i=$((i + 1))
   done
-  if [ "$down_up" = "true" ]; then
+  if [ "$instance" != "true" ]; then
+    echo "Takes effect on the next 'kerghan update'."
+  elif [ "$down_up" = "true" ]; then
     echo "Run 'kerghan down && kerghan up' to apply."
   else
     echo "Run 'kerghan up' to apply (recreates the instance; data is kept)."
