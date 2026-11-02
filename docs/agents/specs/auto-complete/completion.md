@@ -146,25 +146,28 @@ against; [Per command](#per-command) and [`configure`](#configure) are the summa
   fallback.
 - **Filtering** keeps the candidates that start with the current word, as usual.
 
+Each row has a **label** (first column), unique across the three tables. Labels are stable once
+tests cite them (`@test "matrix <label>: …"`, see [README.md](README.md#testing)).
+
 #### Top level, by position
 
-| Context | Candidates |
-|---------|------------|
-| First word after `kerghan` | `up`, `down`, `logs`, `status`, `compose`, `reset`, `update`, `update-env`, `configure`, `wizard`, `version`, `completion`, `help`, `-h`, `--help` |
-| Any later word, when the first word is not a command below (`kerghan foo …`, `kerghan -h …`, `kerghan --help …`) | nothing |
+| Label | Context | Candidates |
+|-------|---------|------------|
+| `top-first` | First word after `kerghan` | `up`, `down`, `logs`, `status`, `compose`, `reset`, `update`, `update-env`, `configure`, `wizard`, `version`, `completion`, `help`, `-h`, `--help` |
+| `top-later` | Any later word, when the first word is not a command below (`kerghan foo …`, `kerghan -h …`, `kerghan --help …`) | nothing |
 
 #### Commands, by position
 
-| Command | Context | Candidates |
-|---------|---------|------------|
-| `up` | previous word is `-p`, `--port` or `--bind` | nothing; the current word is never read as a flag |
-| `up` | any other position | `--offline`, `-p`, `--port`, `--auto-login`, `--no-auto-login`, `--bind`, `-f`, minus the flags on the line; `-p` and `--port` count as one; once `--auto-login` or `--no-auto-login` is on the line, neither is offered |
-| `logs` | any position | `-f` if it is not on the line; otherwise nothing |
-| `update` | any position | `--force`, `--yes`, `--restart`, `--no-restart`, minus the flags on the line; once `--restart` or `--no-restart` is on the line, neither is offered; a `VERSION` on the line changes nothing; never a version, never `--finish` |
-| `wizard` | any position | `--advanced` if it is not on the line; otherwise nothing |
-| `completion` | first argument | `bash` |
-| `completion` | any later argument | nothing |
-| `down`, `status`, `compose`, `reset`, `update-env`, `version`, `help` | any position | nothing |
+| Label | Command | Context | Candidates |
+|-------|---------|---------|------------|
+| `up-flag-arg` | `up` | previous word is `-p`, `--port` or `--bind` | nothing; the current word is never read as a flag |
+| `up-flags` | `up` | any other position | `--offline`, `-p`, `--port`, `--auto-login`, `--no-auto-login`, `--bind`, `-f`, minus the flags on the line; `-p` and `--port` count as one; once `--auto-login` or `--no-auto-login` is on the line, neither is offered |
+| `logs` | `logs` | any position | `-f` if it is not on the line; otherwise nothing |
+| `update` | `update` | any position | `--force`, `--yes`, `--restart`, `--no-restart`, minus the flags on the line; once `--restart` or `--no-restart` is on the line, neither is offered; a `VERSION` on the line changes nothing; never a version, never `--finish` |
+| `wizard` | `wizard` | any position | `--advanced` if it is not on the line; otherwise nothing |
+| `completion-first` | `completion` | first argument | `bash` |
+| `completion-later` | `completion` | any later argument | nothing |
+| `no-args` | `down`, `status`, `compose`, `reset`, `update-env`, `version`, `help` | any position | nothing |
 
 When reading what is on the line for `up`, the word after `-p`, `--port` or `--bind` is that
 flag's argument, never a flag (edge case 8).
@@ -185,13 +188,13 @@ flag's argument, never a flag (edge case 8).
 - **A write** is on the line when it holds a `KEY=…`, a `KEY=-` or an `--unset`.
 - **`--show-secrets` mode** is on when `--show-secrets` is on the line.
 
-| Context | Candidates |
-|---------|------------|
-| previous word is `--unset` | the `--unset` keys, bare (no `=`, with a trailing space), minus the keys on the line; never a `DEFAULT_ENV_KEYS` name |
-| current word is `KEY=` or `KEY=<partial>` (also when bash split it into `KEY`, `=`, `<partial>`), `KEY` one of `variant`, `runtime`, `auto-login`, `restart-on-update` | that key's fixed values (see [`configure`](#configure)), with a trailing space |
-| current word is `KEY=…` for any other key (free-form config key, env key), or `KEY=-` | nothing |
-| any other position, `--show-secrets` mode | nothing |
-| any other position, otherwise | the flags and the keys below, together |
+| Label | Context | Candidates |
+|-------|---------|------------|
+| `cfg-unset` | previous word is `--unset` | the `--unset` keys, bare (no `=`, with a trailing space), minus the keys on the line; never a `DEFAULT_ENV_KEYS` name |
+| `cfg-value` | current word is `KEY=` or `KEY=<partial>` (also when bash split it into `KEY`, `=`, `<partial>`), `KEY` one of `variant`, `runtime`, `auto-login`, `restart-on-update` | that key's fixed values (see [`configure`](#configure)), with a trailing space |
+| `cfg-free` | current word is `KEY=…` for any other key (free-form config key, env key), or `KEY=-` | nothing |
+| `cfg-show-secrets` | any other position, `--show-secrets` mode | nothing |
+| `cfg-other` | any other position, otherwise | the flags and the keys below, together |
 
 At "any other position, otherwise":
 
@@ -211,22 +214,22 @@ line into a usage error (the same reasoning as edge case 10).
 
 #### Edge cases in the table
 
-| Edge case | Where |
-|-----------|-------|
-| 4. Unknown command | [Top level](#top-level-by-position), "any later word" |
-| 5. Nothing left to offer | [Commands](#commands-by-position), last row |
-| 6. `compose`, `logs` beyond `-f` | [Commands](#commands-by-position): `logs` row and last row |
-| 7. `update VERSION` | `update` row |
-| 8. Free-form flag arguments | `up`'s first row, and the note under the table |
-| 9. Flags already on the line, aliases | the "minus the flags on the line" rule in each row; `--unset` in [`configure`](#configure-by-position) |
-| 10. Mutually exclusive pairs | `up` and `update` rows |
-| 11. Hidden steps | `update` row |
-| 12. `help` / `-h` / `--help` | [Top level](#top-level-by-position) only |
-| 13. `KEY=` across the `=` word break | [`configure`](#configure-by-position) context column, and [Trailing space](#trailing-space) |
-| 14. `--unset <TAB>` | [`configure`](#configure-by-position), "previous word is `--unset`" |
-| 15. Static env keys only | [`configure`](#configure-by-position) lists |
-| 16. `KEY=-` and free-form values | [`configure`](#configure-by-position), "any other key, or `KEY=-`" |
-| 17. Keys already on the line | [`configure`](#configure-by-position), "minus the keys on the line" |
+| Edge case | Where | Rows |
+|-----------|-------|------|
+| 4. Unknown command | [Top level](#top-level-by-position), "any later word" | `top-later` |
+| 5. Nothing left to offer | [Commands](#commands-by-position), last row | `no-args` |
+| 6. `compose`, `logs` beyond `-f` | [Commands](#commands-by-position): `logs` row and last row | `logs`, `no-args` |
+| 7. `update VERSION` | `update` row | `update` |
+| 8. Free-form flag arguments | `up`'s first row, and the note under the table | `up-flag-arg` |
+| 9. Flags already on the line, aliases | the "minus the flags on the line" rule in each row; `--unset` in [`configure`](#configure-by-position) | `up-flags`, `logs`, `update`, `wizard`, `cfg-other` |
+| 10. Mutually exclusive pairs | `up` and `update` rows | `up-flags`, `update` |
+| 11. Hidden steps | `update` row | `update` |
+| 12. `help` / `-h` / `--help` | [Top level](#top-level-by-position) only | `top-first`, `up-flags` |
+| 13. `KEY=` across the `=` word break | [`configure`](#configure-by-position) context column, and [Trailing space](#trailing-space) | `cfg-value`, `cfg-free` |
+| 14. `--unset <TAB>` | [`configure`](#configure-by-position), "previous word is `--unset`" | `cfg-unset` |
+| 15. Static env keys only | [`configure`](#configure-by-position) lists | `cfg-other`, `cfg-unset` |
+| 16. `KEY=-` and free-form values | [`configure`](#configure-by-position), "any other key, or `KEY=-`" | `cfg-free` |
+| 17. Keys already on the line | [`configure`](#configure-by-position), "minus the keys on the line" | `cfg-unset`, `cfg-other` |
 
 ## Never completed
 
