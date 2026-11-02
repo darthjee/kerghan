@@ -12,9 +12,9 @@ volume. The completion step stays inside that contract, and it never turns a suc
 install into a failure.
 
 The header's "non-zero exit on any failure" gets one deliberate exception: a completion failure
-only warns (see [Never fatal](#never-fatal)). #431 rewords the header accordingly (e.g. "any
-failure of the client or `vault` install"); `update` relies only on the client install failing
-loudly, so this is backward compatible.
+only warns (see [Never fatal](#never-fatal)). #430 rewords the header accordingly ("any failure
+of the client or `vault` install"); `update` relies only on the client install failing loudly,
+so this is backward compatible.
 
 The step runs **after** the client is moved into place (`move_client`, itself after
 `ensure_vault`), next to `check_path`, so it can run that client.
@@ -182,6 +182,10 @@ All in `install_completion.bats` (harness and naming: [README.md](README.md#test
 exist under the test root (so the hint prints), and the install exits `0`. `<file>` is the
 resolved target path and `<install dir>` the test's install directory.
 
+The bats container runs as root, so chmod-based failures would not fail: failures are injected
+instead (a regular file in the target path, or an `mv` in the test tools dir that fails only for
+the target path).
+
 **Target and content**
 
 | Label | Setup | Expected |
@@ -206,10 +210,10 @@ resolved target path and `<install dir>` the test's install directory.
 
 | Label | Setup | Expected stderr |
 |-------|-------|-----------------|
-| failure: `mkdir` | the target's parent directory is not writable | `kerghan-install: warning: could not create <dir>; skipping bash completion` |
+| failure: `mkdir` | `BASH_COMPLETION_USER_DIR` under a regular file | `kerghan-install: warning: could not create <dir>; skipping bash completion` |
 | failure: client exits non-zero | a client that exits `2` with empty stdout (as an older client without `completion`), and an existing file at the target | `kerghan-install: warning: <install dir>/kerghan completion bash failed; skipping bash completion`; the existing file is untouched |
 | failure: client prints nothing | a client that exits `0` with empty stdout, and an existing file at the target | the same `warning:` line; the existing file is untouched |
-| failure: write | the target directory exists and is read-only | `kerghan-install: warning: could not write <file>; skipping bash completion`; no temp file is left in the directory |
+| failure: write | an `mv` that fails for the target path | `kerghan-install: warning: could not write <file>; skipping bash completion`; no temp file is left in the directory |
 
 **Safety** (see [security.md](security.md#required-tests))
 
@@ -224,7 +228,7 @@ resolved target path and `<install dir>` the test's install directory.
 | Label | Setup | Expected |
 |-------|-------|----------|
 | `contract update` | stdin closed, a `sudo` stub that logs its calls | nothing created under `~/.kerghan`; the `sudo` log is empty; no prompt (the install finishes with stdin closed) |
-| `contract update`: exit unchanged | the target directory unwritable, compared with a `KERGHAN_COMPLETION=false` run | same exit code; same final output apart from the `warning:` line |
+| `contract update`: exit unchanged | an `mv` that fails for the target path, compared with a `KERGHAN_COMPLETION=false` run | same exit code; same final output apart from the `warning:` line |
 
 The existing tests in `install.bats` stay untouched: same prompts, exit codes and no sudo. They
 run with the completion step on, so they also cover that it changes none of those.
