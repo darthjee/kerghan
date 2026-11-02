@@ -73,6 +73,21 @@ warned about it). The hint doesn't print this form; the user docs can mention it
 The step only tests that a file exists. It never runs bash-completion and never reads the
 user's rc files.
 
+**Detection override (tests only):**
+
+- The four paths above are the default detection list.
+- An internal, test-only variable, **`KERGHAN_BASH_COMPLETION_PATHS`** (space-separated paths),
+  replaces the list when set. Tests point it at files under the test root, so the result never
+  depends on the host or CI image.
+- It only decides whether the hint is printed. It never changes the target path or what is
+  written.
+- It is not a stable contract and is not documented in the `install.sh` header, unlike
+  `KERGHAN_VERSION`, `KERGHAN_INSTALL_DIR` and `KERGHAN_COMPLETION`.
+- #430 builds it.
+
+Rejected: a test-root prefix on every path (could be mistaken for a general install root), and
+the real paths with no override (the result would depend on the host or CI image).
+
 ## Never fatal
 
 If the directory can't be created, the client fails to print the script, or the file can't be
@@ -161,29 +176,55 @@ The exit code is never changed by this step (see [Never fatal](#never-fatal)).
 
 ## Required tests
 
-- The target path resolves to `$BASH_COMPLETION_USER_DIR/completions/kerghan` when that variable
-  is set.
-- Otherwise it resolves to `$XDG_DATA_HOME/bash-completion/completions/kerghan` when that one is
-  set.
-- Otherwise it resolves to `$HOME/.local/share/bash-completion/completions/kerghan`.
-- The directory is created when missing.
-- The file holds the output of `<install dir>/kerghan completion bash`, the client just
-  installed, not a `kerghan` found on `PATH`.
-- An existing file at the target path is overwritten.
-- `KERGHAN_COMPLETION=false` skips the step: no file, and nothing printed.
-- A successful step prints `kerghan-install: bash completion installed to <file>` on stdout,
-  after the `kerghan <version> installed to …` line.
-- When none of the detection paths exists, the file is installed and the exact two-line hint
-  from [Messages](#messages) is printed on stderr; the exit code is unchanged. When one exists,
-  no hint is printed. (Whether the paths are created under a test root or the list is made
-  overridable for tests is #428's choice.)
-- Each failure prints its exact `warning:` line from [Messages](#messages), and no success line
-  or hint.
-- A write failure (e.g. a read-only target directory) prints a `warning:`, leaves no temp file,
-  and the install still exits `0`.
-- A client without `completion` (non-zero exit or empty output) leaves an existing file
-  untouched, prints a `warning:`, and the install still exits `0`.
-- The `hint:` shows `source "<file>"` with the resolved target path.
-- The step creates nothing under `~/.kerghan`, uses no sudo, and asks no question.
+All in `install_completion.bats` (harness and naming: [README.md](README.md#testing)). It uses
+`helpers/install_setup.bash` and runs on bash 5 only: running `install.sh` under bash 3.2 is
+#433. Unless a case says otherwise, `KERGHAN_BASH_COMPLETION_PATHS` points at files that don't
+exist under the test root (so the hint prints), and the install exits `0`. `<file>` is the
+resolved target path and `<install dir>` the test's install directory.
 
-> **Open — settled by #428:** the test harness and the full test coverage.
+**Target and content**
+
+| Label | Setup | Expected |
+|-------|-------|----------|
+| target: `BASH_COMPLETION_USER_DIR` | `BASH_COMPLETION_USER_DIR` and `XDG_DATA_HOME` set | the file is `$BASH_COMPLETION_USER_DIR/completions/kerghan` |
+| target: `XDG_DATA_HOME` | only `XDG_DATA_HOME` set | the file is `$XDG_DATA_HOME/bash-completion/completions/kerghan` |
+| `contract file path` | neither set | the file is `$HOME/.local/share/bash-completion/completions/kerghan` |
+| target: directory created | the completions directory doesn't exist | it is created and holds the file |
+| exact binary | a `kerghan` stub earlier on `PATH` that prints something else | the file holds `<install dir>/kerghan completion bash`'s output, not the stub's |
+| overwrite | a hand-written file already at the target | it is replaced by the client's output |
+| `contract KERGHAN_COMPLETION=false` | `KERGHAN_COMPLETION=false` | no file and no directory created; no `bash completion` line on stdout, no hint or `warning:` about completion on stderr |
+
+**Messages**
+
+| Label | Setup | Expected |
+|-------|-------|----------|
+| success line | a normal install | stdout has `kerghan-install: bash completion installed to <file>`, after the `kerghan <version> installed to …` line and before `check_path`'s output |
+| hint printed | no file in `KERGHAN_BASH_COMPLETION_PATHS` exists | the file is installed; stderr has exactly `kerghan-install: hint: bash-completion was not found; to enable completion, add this to ~/.bashrc:` then `  source "<file>"`, with the resolved path; exit code unchanged |
+| no hint | one file in `KERGHAN_BASH_COMPLETION_PATHS` exists | the file is installed; no `hint:` line about completion; exit code unchanged |
+
+**Never fatal** (each: the exact `warning:` line, no success line, no hint, install exits `0`)
+
+| Label | Setup | Expected stderr |
+|-------|-------|-----------------|
+| failure: `mkdir` | the target's parent directory is not writable | `kerghan-install: warning: could not create <dir>; skipping bash completion` |
+| failure: client exits non-zero | a client that exits `2` with empty stdout (as an older client without `completion`), and an existing file at the target | `kerghan-install: warning: <install dir>/kerghan completion bash failed; skipping bash completion`; the existing file is untouched |
+| failure: client prints nothing | a client that exits `0` with empty stdout, and an existing file at the target | the same `warning:` line; the existing file is untouched |
+| failure: write | the target directory exists and is read-only | `kerghan-install: warning: could not write <file>; skipping bash completion`; no temp file is left in the directory |
+
+**Safety** (see [security.md](security.md#required-tests))
+
+| Label | Setup | Expected |
+|-------|-------|----------|
+| temp file in the target directory | a client stub whose `completion bash` lists the target directory's entries before printing | the listing holds a temp file in that directory; after the install only `kerghan` remains |
+| symlink replaced | a symlink at the target path pointing at another file | the target is a regular file; the file it pointed at is unchanged |
+| not executable | a normal install | the file has no execute bit |
+
+**`update` contract** (see [contracts.md](contracts.md#required-tests))
+
+| Label | Setup | Expected |
+|-------|-------|----------|
+| `contract update` | stdin closed, a `sudo` stub that logs its calls | nothing created under `~/.kerghan`; the `sudo` log is empty; no prompt (the install finishes with stdin closed) |
+| `contract update`: exit unchanged | the target directory unwritable, compared with a `KERGHAN_COMPLETION=false` run | same exit code; same final output apart from the `warning:` line |
+
+The existing tests in `install.bats` stay untouched: same prompts, exit codes and no sudo. They
+run with the completion step on, so they also cover that it changes none of those.
