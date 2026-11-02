@@ -45,6 +45,8 @@ workflows:
           filters: *all_tags
       - standalone_tests:
           filters: *all_tags
+      - standalone_completion_bash32:
+          filters: *all_tags
       - scripts_tests:
           filters: *all_tags
       - coverage-final:
@@ -78,7 +80,7 @@ workflows:
             - release-production_kerghan-base-arm64
           filters: *tags_only
       - release-kerghan-standalone:
-          requires: [release-kerghan, standalone_tests]
+          requires: [release-kerghan, standalone_tests, standalone_completion_bash32]
           filters: *tags_only
       - release-kerghan-assets:
           requires: [release-kerghan-standalone]
@@ -220,6 +222,35 @@ jobs:
       - run:
           name: Tests
           command: bats standalone/test
+
+  # Client completion tests (standalone/test/completion*.bats) on bash 3.2.57, the bash macOS ships
+  # (docs/agents/specs/auto-complete/README.md#bash-32). Runs on the official bash:3.2 image (Alpine,
+  # bash 3.2.57 at /usr/local/bin/bash) and mirrors dockerfiles/bats_bash32: bats-core v1.11.0 is
+  # installed from the upstream tag, never via `apk add bash`/`bats`, so 3.2 stays the only bash on
+  # PATH. git and openssh-client don't depend on Alpine's bash.
+  standalone_completion_bash32:
+    docker:
+      - image: bash:3.2
+    steps:
+      - run:
+          name: Install checkout dependencies
+          command: apk add --no-cache git openssh-client
+      - checkout
+      - run:
+          name: Install bats-core v1.11.0
+          command: |
+            git clone --depth 1 --branch v1.11.0 https://github.com/bats-core/bats-core.git /tmp/bats-core
+            /tmp/bats-core/install.sh /usr/local
+            rm -rf /tmp/bats-core
+      - run:
+          name: Check bash version
+          command: |
+            bash --version
+            command -v bash
+            bash -c '[ "${BASH_VERSINFO[0]}" -eq 3 ] && [ "${BASH_VERSINFO[1]}" -eq 2 ]'
+      - run:
+          name: Tests
+          command: KERGHAN_TEST_BASH32=1 bats standalone/test/completion*.bats
 
   # bats suite for scripts/ (Render deploy: deploy.sh/render.sh), same bats/bats image as
   # standalone_tests plus jq, which the deploy scripts need (mirrors dockerfiles/scripts_tests).
