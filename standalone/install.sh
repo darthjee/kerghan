@@ -9,22 +9,29 @@
 #   KERGHAN_VERSION      client version to install (default: the version this
 #                        installer was released with)
 #   KERGHAN_INSTALL_DIR  where the kerghan client goes (default: ~/.local/bin)
+#   KERGHAN_COMPLETION   set to false to skip installing bash completion
+#                        (default: installed)
 #
 # Stable contract: `kerghan update` runs a downloaded release's install.sh
 # with KERGHAN_VERSION and KERGHAN_INSTALL_DIR set explicitly, and reads the
 # release version from the KERGHAN_VERSION="x.y.z" stamp line below (at the
 # start of a line, exactly that format; written by scripts/bump_version.sh,
-# read as text, never sourced). Both variables, the stamp line, and the
+# read as text, never sourced). The variables above (KERGHAN_VERSION,
+# KERGHAN_INSTALL_DIR and KERGHAN_COMPLETION), the stamp line, and the
 # behaviour `update` relies on (no prompts, no sudo, `mv -f` as the only write
-# to the install dir, non-zero exit on any failure) can only grow in
-# backward-compatible ways, since every update and downgrade runs an installer
-# from another version. See
+# to the install dir, non-zero exit on any failure of the client or `vault`
+# install) can only grow in backward-compatible ways, since every update and
+# downgrade runs an installer from another version. The bash completion step
+# only warns on failure. See
 # docs/agents/standalone/client-update.md#stable-contracts.
 #
 # It downloads the kerghan client of the chosen version into the install dir
 # (a rerun upgrades it in place) and installs the `vault` CLI when it is not
-# on PATH yet. It never uses sudo and never touches ~/.kerghan or any Docker
-# volume.
+# on PATH yet. Unless KERGHAN_COMPLETION=false, it then installs bash
+# completion to
+#   ${BASH_COMPLETION_USER_DIR:-${XDG_DATA_HOME:-$HOME/.local/share}/bash-completion}/completions/kerghan
+# from the output of the client it just installed, refreshed on every run.
+# It never uses sudo and never touches ~/.kerghan or any Docker volume.
 #
 # To verify the installer before running it, download it together with
 # SHA256SUMS from the same release and check it first:
@@ -53,6 +60,11 @@ install_dir="${KERGHAN_INSTALL_DIR:-$HOME/.local/bin}"
 client_url="https://github.com/darthjee/kerghan/releases/download/$version/kerghan"
 vault_installer_url="https://raw.githubusercontent.com/darthjee/vault/$VAULT_VERSION/install.sh"
 staging=""
+
+completion_file="${BASH_COMPLETION_USER_DIR:-${XDG_DATA_HOME:-$HOME/.local/share}/bash-completion}/completions/kerghan"
+# Test-only override of the bash-completion detection list (space-separated).
+bash_completion_paths="${KERGHAN_BASH_COMPLETION_PATHS:-/usr/share/bash-completion/bash_completion /opt/homebrew/etc/profile.d/bash_completion.sh /usr/local/etc/profile.d/bash_completion.sh /opt/local/etc/profile.d/bash_completion.sh}"
+completion_tmp=""
 
 error() { echo "kerghan-install: error: $*" >&2; }
 warn() { echo "kerghan-install: warning: $*" >&2; }
@@ -96,6 +108,9 @@ cleanup() {
   if [ -n "$staging" ]; then
     rm -rf "$staging"
   fi
+  if [ -n "$completion_tmp" ]; then
+    rm -f "$completion_tmp"
+  fi
 }
 
 fetch_client() {
@@ -130,6 +145,50 @@ move_client() {
   mv -f "$staging/kerghan" "$install_dir/kerghan"
 }
 
+# Never fatal: every command is guarded and failures only warn, so the exit
+# code reflects only the client and vault install.
+install_completion() {
+  local dir p
+  if [ "${KERGHAN_COMPLETION:-}" = "false" ]; then
+    return 0
+  fi
+  dir="${completion_file%/*}"
+  if ! mkdir -p "$dir" 2>/dev/null; then
+    warn "could not create $dir; skipping bash completion"
+    return 0
+  fi
+  # The temp file lives in the target directory, so the mv -f is atomic and
+  # replaces a symlink rather than following it.
+  if ! completion_tmp="$(mktemp "$dir/.kerghan.XXXXXX" 2>/dev/null)"; then
+    completion_tmp=""
+    warn "could not write $completion_file; skipping bash completion"
+    return 0
+  fi
+  # The client just installed, by its absolute path; an older client without
+  # `completion` exits non-zero with empty output and must not empty the file.
+  if ! "$install_dir/kerghan" completion bash >"$completion_tmp" 2>/dev/null || [ ! -s "$completion_tmp" ]; then
+    rm -f "$completion_tmp"
+    completion_tmp=""
+    warn "$install_dir/kerghan completion bash failed; skipping bash completion"
+    return 0
+  fi
+  if ! mv -f "$completion_tmp" "$completion_file" 2>/dev/null; then
+    rm -f "$completion_tmp"
+    completion_tmp=""
+    warn "could not write $completion_file; skipping bash completion"
+    return 0
+  fi
+  completion_tmp=""
+  info "bash completion installed to $completion_file"
+  for p in $bash_completion_paths; do
+    if [ -e "$p" ]; then
+      return 0
+    fi
+  done
+  hint "bash-completion was not found; to enable completion, add this to ~/.bashrc:"
+  echo "  source \"$completion_file\"" >&2
+}
+
 check_path() {
   case ":$PATH:" in
     *":$install_dir:"*) ;;
@@ -151,6 +210,7 @@ main() {
   ensure_vault
   move_client
   info "kerghan $version installed to $install_dir/kerghan"
+  install_completion
   check_path
 }
 

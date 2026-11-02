@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Test stub for curl, used by the installer and update tests: logs its call
 # and writes the -o target according to the URL.
-#   .../releases/download/<v>/kerghan       a fake kerghan client printing <v>
+#   .../releases/download/<v>/kerghan       a fake kerghan client printing
+#                                            `fake kerghan <v>`, see below
 #   raw.githubusercontent.com/darthjee/vault  a fake Vault installer that logs
 #                                            `vault-install VAULT_VERSION=<v>`
 #                                            and writes an executable vault to
@@ -29,6 +30,16 @@
 #                            TMPDIR); noexec: a non-executable file;
 #                            missing: no file at all
 #   STUB_INSTALLER_KILL=INT  the installer sends SIGINT to the client
+#
+# The fake kerghan client prints `fake kerghan <v>` for any arguments except
+# `completion bash`, which follows STUB_CLIENT_COMPLETION (read at run time):
+#   script (default)  prints a marker script: `# fake kerghan <v> completion`
+#                     and a `complete` line
+#   missing           exits 2 with empty stdout and a usage error on stderr,
+#                     like a client without `completion`
+#   empty             exits 0 with empty stdout
+#   list              prints `# entry <name>` for each entry of
+#                     STUB_COMPLETION_DIR (bash globs, no ls), then the script
 echo "curl $*" >>"$STUB_LOG"
 out=""
 url=""
@@ -79,7 +90,35 @@ case "$url" in
   */releases/download/*/kerghan)
     v="${url%/kerghan}"
     v="${v##*/}"
-    printf '#!/usr/bin/env bash\necho "fake kerghan %s"\n' "$v" >"$out"
+    {
+      printf '#!/usr/bin/env bash\nv="%s"\n' "$v"
+      cat <<'CLIENT'
+if [ "$#" -eq 2 ] && [ "$1" = "completion" ] && [ "$2" = "bash" ]; then
+  case "${STUB_CLIENT_COMPLETION:-script}" in
+    missing)
+      echo "kerghan: unknown command: completion" >&2
+      exit 2
+      ;;
+    empty)
+      exit 0
+      ;;
+    list)
+      for f in "$STUB_COMPLETION_DIR"/.* "$STUB_COMPLETION_DIR"/*; do
+        name="${f##*/}"
+        case "$name" in
+          . | .. | "*" | ".*") continue ;;
+        esac
+        echo "# entry $name"
+      done
+      ;;
+  esac
+  echo "# fake kerghan $v completion"
+  echo "complete -F _kerghan kerghan"
+  exit 0
+fi
+echo "fake kerghan $v"
+CLIENT
+    } >"$out"
     ;;
   https://raw.githubusercontent.com/darthjee/vault/*/install.sh)
     cat >"$out" <<'INSTALLER'
