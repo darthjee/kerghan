@@ -22,12 +22,18 @@ setup() {
   for tool in bash env cat chmod mkdir mktemp mv rm; do
     ln -s "$(command -v "$tool")" "$TOOLS_BIN/$tool"
   done
+  REAL_MV="$(command -v mv)"
   INSTALL_PATH="$STUB_BIN:$TOOLS_BIN"
   export STUB_LOG="$TEST_ROOT/stub.log"
   : >"$STUB_LOG"
   DEFAULT_DIR="$HOME/.local/bin"
+  COMPLETION_FILE="$HOME/.local/share/bash-completion/completions/kerghan"
   unset KERGHAN_VERSION KERGHAN_INSTALL_DIR STUB_UNAME STUB_DOCKER_INFO_EXIT \
-    STUB_CURL_FAIL_URL STUB_VAULT_INSTALL_EXIT
+    STUB_CURL_FAIL_URL STUB_VAULT_INSTALL_EXIT BASH_COMPLETION_USER_DIR \
+    XDG_DATA_HOME KERGHAN_COMPLETION STUB_CLIENT_COMPLETION STUB_COMPLETION_DIR
+  # A path that never exists, so the bash-completion hint never depends on
+  # the container.
+  export KERGHAN_BASH_COMPLETION_PATHS="$TEST_ROOT/no-bash-completion"
 }
 
 teardown() {
@@ -49,6 +55,42 @@ with_vault() {
 # without_docker - removes the docker stub from the installer's PATH.
 without_docker() {
   rm -f "$STUB_BIN/docker"
+}
+
+# with_failing_completion_mv [file] - replaces the installer's mv with a
+# wrapper that fails when its last argument is the completion file (default
+# COMPLETION_FILE) and runs the real mv otherwise. Root-proof, unlike chmod.
+with_failing_completion_mv() {
+  local target="${1:-$COMPLETION_FILE}"
+  rm -f "$TOOLS_BIN/mv"
+  {
+    echo '#!/usr/bin/env bash'
+    printf 'target=%q\nreal_mv=%q\n' "$target" "$REAL_MV"
+    # shellcheck disable=SC2016 # written literally into the wrapper
+    echo 'if [ "${!#}" = "$target" ]; then'
+    echo '  echo "mv: cannot move: simulated failure" >&2'
+    echo '  exit 1'
+    echo 'fi'
+    # shellcheck disable=SC2016 # written literally into the wrapper
+    echo 'exec "$real_mv" "$@"'
+  } >"$TOOLS_BIN/mv"
+  chmod +x "$TOOLS_BIN/mv"
+}
+
+# assert_completion_file [path] - a regular file (default COMPLETION_FILE)
+# holding the stub client's marker script for CURRENT_VERSION.
+assert_completion_file() {
+  local file="${1:-$COMPLETION_FILE}"
+  if [ -L "$file" ] || [ ! -f "$file" ]; then
+    echo "expected a regular completion file at $file" >&2
+    return 1
+  fi
+  if ! grep -qxF -- "# fake kerghan $CURRENT_VERSION completion" "$file"; then
+    echo "expected the stub client's completion script in $file" >&2
+    echo "--- file ---" >&2
+    cat "$file" >&2
+    return 1
+  fi
 }
 
 # assert_logged <exact line>
