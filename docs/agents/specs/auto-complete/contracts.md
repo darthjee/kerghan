@@ -63,8 +63,23 @@ Backward compatibility item 9: **any PR that adds or changes a client command, f
 key or fixed value updates the completion in the same PR.** #431 folds this rule into the
 permanent docs (`docs/agents/standalone.md` and/or `contributing.md`).
 
-> **Open — settled by #426:** how the rule is enforced (word lists generated from the client's
-> constants, or a sync test between `usage` / the constants and the completion).
+**Enforcement:** the sync tests in [completion.md](completion.md#required-tests) enforce the
+rule (word-list sources: [completion.md](completion.md#word-lists)):
+
+- the generated lists are compared with the client's constants, after sourcing the client;
+- the hand-written lists (commands, per-command flags) are cross-checked against
+  `kerghan help`;
+- every config key is classified as free-form or fixed-value.
+
+A PR that adds a command, flag, key or value without updating completion fails these tests.
+
+- **The client's constants are not contracts.** The value constants and the
+  `FRONTEND_BASE_URL` constant added by #434 are internal to `standalone/bin/kerghan`, and so
+  are `CONFIG_KEYS` and `DEFAULT_ENV_KEYS`. Their names may change; the sync tests change with
+  them.
+- **The `BASH_SOURCE` guard is an internal test contract.** The client can be sourced without
+  running `main`, and the sync tests rely on that. #434 documents it in the client header, next
+  to the bash 3.2 rule. It is not user-facing.
 
 ## Required tests
 
@@ -75,5 +90,7 @@ permanent docs (`docs/agents/standalone.md` and/or `contributing.md`).
 - `install.sh` writes the completion file at the documented path.
 - The completion step adds no prompt and no sudo, and a completion failure does not change the
   installer's exit code.
+- A client change that adds a command, flag, key or value without updating completion makes
+  the sync tests fail (see [completion.md](completion.md#required-tests)).
 
 > **Open — settled by #428:** the test harness and the full test coverage.

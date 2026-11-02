@@ -68,14 +68,17 @@ Out of scope (from #424):
 - **[completion.md](completion.md):** one `_kerghan` function registered for `kerghan`;
   commands, flags, `configure` keys and fixed values are completed; free-form values,
   versions, passthrough arguments and hidden steps never are; never a fallback to filenames;
-  edge cases 1–17 as behaviour; bash 3.2 compatible.
+  edge cases 1–17 as behaviour; bash 3.2 compatible; config keys, env keys and fixed values
+  generated from the client's constants, commands and flags hand-written, all guarded by sync
+  tests.
 - **[install.md](install.md):** `install.sh` writes the output of the just-installed client into
   `${BASH_COMPLETION_USER_DIR:-${XDG_DATA_HOME:-$HOME/.local/share}/bash-completion}/completions/kerghan`
   through a temp file and `mv -f`; prints a `hint:` without `bash-completion`; never fatal;
   opt out with `KERGHAN_COMPLETION=false`; overwrites; a downgrade leaves the file behind.
 - **[contracts.md](contracts.md):** `kerghan completion bash`, `_kerghan`,
   `KERGHAN_COMPLETION=false` and the completion file path are stable; the installer's `update`
-  contract is unchanged; the sync rule.
+  contract is unchanged; the sync rule, enforced by the sync tests; the client's constants
+  are not contracts.
 - **[security.md](security.md):** TAB is pure bash; the emitted script is fixed text and leaves
   the user's shell untouched; no secrets; safe installer writes; the exact binary.
 
@@ -87,12 +90,14 @@ Out of scope (from #424):
 | #426 | Specs: single source of truth for the completion word lists | [completion.md](completion.md), [contracts.md](contracts.md) |
 | #427 | Specs: exact completion matrix and messages | [completion.md](completion.md), [command.md](command.md), [install.md](install.md) |
 | #428 | Specs: testing strategy | every "Required tests" section |
+| #434 | Client: completion word-list constants (refactor, no behaviour change) | [completion.md](completion.md#word-lists), [contracts.md](contracts.md#sync-rule) |
 | #429 | Client: `kerghan completion bash` | [command.md](command.md), [completion.md](completion.md), [contracts.md](contracts.md), [security.md](security.md) |
 | #430 | Installer: completion setup in `install.sh` | [install.md](install.md), [contracts.md](contracts.md), [security.md](security.md) |
 | #431 | Fold these specs into the permanent docs and delete this folder | all |
 
-**Order:** #425 → #426 → #427 → #428 → #429 → #430 → #431. The spec-enhancement sub-issues
-edit the same folder, so they go one at a time.
+**Order:** #425 → #426 → #427 → #428 → #434 → #429 → #430 → #431. The spec-enhancement
+sub-issues edit the same folder, so they go one at a time. #434 changes the client, not this
+folder, so it doesn't count toward that rule, but it must merge before #429.
 
 ## Open markers
 
@@ -102,8 +107,6 @@ none remain.
 
 | File | Open decision | Settled by |
 |------|---------------|------------|
-| [completion.md](completion.md#word-lists) | Source of the word lists (generated from the client's constants vs. hand-written + sync test) | #426 |
-| [contracts.md](contracts.md#sync-rule) | How the sync rule is enforced | #426 |
 | [completion.md](completion.md#per-position-table) | The exact per-position completion table | #427 |
 | [command.md](command.md#messages-and-exit-codes) | The exact `completion` usage line and error messages | #427 |
 | [install.md](install.md#messages) | The exact `hint:`, `warning:` and success text | #427 |
@@ -119,8 +122,8 @@ none remain.
 | [contracts.md](contracts.md) | Stable contracts: `completion bash`, `_kerghan`, `KERGHAN_COMPLETION`, the file path, the installer's `update` contract, the sync rule |
 | [security.md](security.md) | Performance (pure-bash TAB, no side effects, `eval` cost) and security (fixed text, shell hygiene, no secrets, installer writes, exact binary) |
 
-**Who reads what:** #429 (client) reads `command.md`, `completion.md`, `contracts.md` and
-`security.md`; #430 (installer) reads `install.md`, `contracts.md` and `security.md`; #431 reads
+**Who reads what:** #434 (client refactor) reads `completion.md` and `contracts.md`; #429
+(client, after #434) reads `command.md`, `completion.md`, `contracts.md` and `security.md`; #430 (installer) reads `install.md`, `contracts.md` and `security.md`; #431 reads
 all.
 
 ## Required tests

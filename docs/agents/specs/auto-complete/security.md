@@ -23,10 +23,11 @@ Performance & security items 1–9 from #424. Overview: [README.md](README.md).
 
 ### Fixed text
 
-5. **The emitted script is fixed text.** It never interpolates environment variables, config
-   values, `$HOME`, the current directory or any path at generation time, so nothing user- or
-   attacker-controlled reaches the `eval`. Two runs with different environments print the same
-   bytes.
+5. **The emitted script is fixed text for a given client version.** It is built only from the
+   client's own constants (see [completion.md](completion.md#word-lists)) and never
+   interpolates environment variables, config values, `$HOME`, the current directory or any
+   path at generation time, so nothing user- or attacker-controlled reaches the `eval`. Two
+   runs with different environments print the same bytes.
 
 ### Shell hygiene
 
