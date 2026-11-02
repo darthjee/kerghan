@@ -86,14 +86,15 @@ A PR that adds a command, flag, key or value without updating completion fails t
 
 ## Required tests
 
-- `kerghan completion bash` is accepted and prints a script on stdout.
-- The script defines `_kerghan` and registers it for `kerghan`;
-  `complete -o nospace -F _kerghan kg` then completes `kg` the same way.
-- `install.sh` with `KERGHAN_COMPLETION=false` skips the completion step.
-- `install.sh` writes the completion file at the documented path.
-- The completion step adds no prompt and no sudo, and a completion failure does not change the
-  installer's exit code.
-- A client change that adds a command, flag, key or value without updating completion makes
-  the sync tests fail (see [completion.md](completion.md#required-tests)).
+Each stable contract has at least one test named `@test "contract <name>: …"` (see
+[README.md](README.md#testing)), so a failure reads as a user-facing break.
 
-> **Open — settled by #428:** the test harness and the full test coverage.
+| Label | File | Input or setup | Expected |
+|-------|------|----------------|----------|
+| `contract completion bash` | `completion_command.bats` | `kerghan completion bash` | exit `0`, a script on stdout, stderr empty (see [command.md](command.md#required-tests)) |
+| `contract _kerghan` | `completion_command.bats` | source the script | `complete -p kerghan` prints exactly `complete -o nospace -F _kerghan kerghan` |
+| `contract complete -o nospace -F _kerghan kg` | `completion_command.bats` | source the script, run `complete -o nospace -F _kerghan kg`, then complete words `(kg '')`, `(kg up '')` and `(kg configure variant =)` | the same replies as `(kerghan '')`, `(kerghan up '')` and `(kerghan configure variant =)` |
+| `contract file path` | `install_completion.bats` | run `install.sh` with neither `BASH_COMPLETION_USER_DIR` nor `XDG_DATA_HOME` set | the file is `$HOME/.local/share/bash-completion/completions/kerghan` (all three resolutions: [install.md](install.md#required-tests)) |
+| `contract KERGHAN_COMPLETION=false` | `install_completion.bats` | run `install.sh` with `KERGHAN_COMPLETION=false` | no completion file, no directory created, no completion line on stdout or stderr |
+| `contract update` | `install_completion.bats` | run `install.sh` with stdin closed and the target directory unwritable | no prompt, no sudo, nothing under `~/.kerghan`; exit code and final output match a run without the completion step, apart from the `warning:` line |
+| sync rule | `completion_sync.bats` | the sync cases | see [completion.md](completion.md#completion_syncbats) |
