@@ -9,22 +9,29 @@
 #   KERGHAN_VERSION      client version to install (default: the version this
 #                        installer was released with)
 #   KERGHAN_INSTALL_DIR  where the kerghan client goes (default: ~/.local/bin)
+#   KERGHAN_COMPLETION   set to false to skip installing bash completion
+#                        (default: installed)
 #
 # Stable contract: `kerghan update` runs a downloaded release's install.sh
 # with KERGHAN_VERSION and KERGHAN_INSTALL_DIR set explicitly, and reads the
 # release version from the KERGHAN_VERSION="x.y.z" stamp line below (at the
 # start of a line, exactly that format; written by scripts/bump_version.sh,
-# read as text, never sourced). Both variables, the stamp line, and the
+# read as text, never sourced). The variables above (KERGHAN_VERSION,
+# KERGHAN_INSTALL_DIR and KERGHAN_COMPLETION), the stamp line, and the
 # behaviour `update` relies on (no prompts, no sudo, `mv -f` as the only write
-# to the install dir, non-zero exit on any failure) can only grow in
-# backward-compatible ways, since every update and downgrade runs an installer
-# from another version. See
+# to the install dir, non-zero exit on any failure of the client or `vault`
+# install) can only grow in backward-compatible ways, since every update and
+# downgrade runs an installer from another version. The bash completion step
+# only warns on failure. See
 # docs/agents/standalone/client-update.md#stable-contracts.
 #
 # It downloads the kerghan client of the chosen version into the install dir
 # (a rerun upgrades it in place) and installs the `vault` CLI when it is not
-# on PATH yet. It never uses sudo and never touches ~/.kerghan or any Docker
-# volume.
+# on PATH yet. Unless KERGHAN_COMPLETION=false, it then installs bash
+# completion to
+#   ${BASH_COMPLETION_USER_DIR:-${XDG_DATA_HOME:-$HOME/.local/share}/bash-completion}/completions/kerghan
+# from the output of the client it just installed, refreshed on every run.
+# It never uses sudo and never touches ~/.kerghan or any Docker volume.
 #
 # To verify the installer before running it, download it together with
 # SHA256SUMS from the same release and check it first:
