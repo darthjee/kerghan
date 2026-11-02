@@ -23,8 +23,11 @@ updates on released versions.
 ## `_kerghan`
 
 The completion function name **`_kerghan`** is stable. It is documented for aliases and
-symlinks (`complete -F _kerghan <name>`, see [completion.md](completion.md#invocation)), so
-renaming it would break those users. Helper names (`_kerghan_*`) are not part of the contract.
+symlinks (`complete -o nospace -F _kerghan <name>`, see
+[completion.md](completion.md#invocation)), so renaming it would break those users. The
+`-o nospace` is part of the line users copy: without it, `KEY=` candidates get a trailing space
+(see [completion.md](completion.md#trailing-space)). Helper names (`_kerghan_*`) are not part
+of the contract.
 
 ## `KERGHAN_COMPLETION`
 
@@ -84,8 +87,8 @@ A PR that adds a command, flag, key or value without updating completion fails t
 ## Required tests
 
 - `kerghan completion bash` is accepted and prints a script on stdout.
-- The script defines `_kerghan` and registers it for `kerghan`; `complete -F _kerghan kg` then
-  completes `kg` the same way.
+- The script defines `_kerghan` and registers it for `kerghan`;
+  `complete -o nospace -F _kerghan kg` then completes `kg` the same way.
 - `install.sh` with `KERGHAN_COMPLETION=false` skips the completion step.
 - `install.sh` writes the completion file at the documented path.
 - The completion step adds no prompt and no sudo, and a completion failure does not change the

@@ -6,10 +6,23 @@ What the bash completion script offers, per command and position. Built by #429.
 ## Registration
 
 - The script defines one completion function, **`_kerghan`**, and registers it with
-  `complete -F _kerghan kerghan`. Helpers, if any, are prefixed `_kerghan_`.
+  `complete -o nospace -F _kerghan kerghan`. Helpers, if any, are prefixed `_kerghan_`.
 - `_kerghan` is a stable name (see [contracts.md](contracts.md#_kerghan)).
-- The registration never uses `-o default`, `-o bashdefault` or `-o filenames`: completion never
-  falls back to filenames (see [Never completed](#never-completed)).
+- **`-o nospace` is the only option allowed.** The registration never uses `-o default`,
+  `-o bashdefault` or `-o filenames`: completion never falls back to filenames (see
+  [Never completed](#never-completed)).
+
+### Trailing space
+
+bash 3.2 has no `compopt`, so the trailing space can't be switched per word. The strategy is
+fixed:
+
+- bash adds no space by itself (`-o nospace`).
+- `_kerghan` appends a space to **every candidate except `KEY=` candidates** (`port=`,
+  `KERGHAN_SECRET_KEY=`, …), so a command, a flag, a fixed value or a bare `--unset` key is
+  followed by a space, and the value of a `KEY=` follows at once.
+- When a single candidate remains, bash inserts it as is, so the space must already be part of
+  the word in `COMPREPLY`.
 
 ## What is completed
 
@@ -23,6 +36,9 @@ Word lists follow the client today (`standalone/bin/kerghan`).
 `wizard`, `version`, `completion`, plus `help`, `-h` and `--help`.
 
 ### Per command
+
+A summary. The exact candidates at each position, with the flags already on the line filtered
+out, are in the [per-position table](#per-position-table).
 
 | Command | Offered |
 |---------|---------|
@@ -99,7 +115,7 @@ hand-written.
    on purpose or the check fails.
 2. **Aliases** (`-p` / `--port`, `help` / `-h` / `--help`): both forms are completed, so both
    are plain words in the lists. Grouping them (edge case 9) is the
-   [per-position table](#per-position-table)'s job (#427).
+   [per-position table](#per-position-table)'s job.
 3. **`--[no-]x` pairs** are stored as both expanded words (`--auto-login`, `--no-auto-login`,
    `--restart`, `--no-restart`).
 4. **`CLIENT_MANAGED_KEYS`** (`KERGHAN_DEFAULT_USER_ALWAYS_AUTHENTICATED`,
@@ -116,8 +132,101 @@ hand-written.
 
 ### Per-position table
 
-> **Open — settled by #427:** the exact per-command, per-position completion table. The rules
-> below are the behaviour that table must follow.
+The exact candidates for every command and cursor position. It is the source #429 builds
+against; [Per command](#per-command) and [`configure`](#configure) are the summary.
+
+**Terms:**
+
+- **On the line:** the words between the command and the end of the line, **other than the
+  word being completed**.
+- **Context:** what decides the row: the word position, the previous word, or the `KEY=` prefix
+  of the current word, rebuilt across the `=` word break (edge case 13).
+- **Trailing space:** every candidate ends with a space except `KEY=` candidates (see
+  [Trailing space](#trailing-space)). "Nothing" means `COMPREPLY` is empty, with no filename
+  fallback.
+- **Filtering** keeps the candidates that start with the current word, as usual.
+
+#### Top level, by position
+
+| Context | Candidates |
+|---------|------------|
+| First word after `kerghan` | `up`, `down`, `logs`, `status`, `compose`, `reset`, `update`, `update-env`, `configure`, `wizard`, `version`, `completion`, `help`, `-h`, `--help` |
+| Any later word, when the first word is not a command below (`kerghan foo …`, `kerghan -h …`, `kerghan --help …`) | nothing |
+
+#### Commands, by position
+
+| Command | Context | Candidates |
+|---------|---------|------------|
+| `up` | previous word is `-p`, `--port` or `--bind` | nothing; the current word is never read as a flag |
+| `up` | any other position | `--offline`, `-p`, `--port`, `--auto-login`, `--no-auto-login`, `--bind`, `-f`, minus the flags on the line; `-p` and `--port` count as one; once `--auto-login` or `--no-auto-login` is on the line, neither is offered |
+| `logs` | any position | `-f` if it is not on the line; otherwise nothing |
+| `update` | any position | `--force`, `--yes`, `--restart`, `--no-restart`, minus the flags on the line; once `--restart` or `--no-restart` is on the line, neither is offered; a `VERSION` on the line changes nothing; never a version, never `--finish` |
+| `wizard` | any position | `--advanced` if it is not on the line; otherwise nothing |
+| `completion` | first argument | `bash` |
+| `completion` | any later argument | nothing |
+| `down`, `status`, `compose`, `reset`, `update-env`, `version`, `help` | any position | nothing |
+
+When reading what is on the line for `up`, the word after `-p`, `--port` or `--bind` is that
+flag's argument, never a flag (edge case 8).
+
+#### `configure`, by position
+
+**Lists** (sources: [Word lists](#word-lists)):
+
+- **Config keys:** `port`, `variant`, `runtime`, `stop-timeout`, `image-tag`, `auto-login`,
+  `bind`, `restart-on-update`.
+- **Env keys:** the `DEFAULT_ENV_KEYS` names and `FRONTEND_BASE_URL`.
+- **`--unset` keys:** the config keys and `FRONTEND_BASE_URL`.
+- **Keys on the line:** every `KEY` written as `KEY=…` (including `KEY=-`), and every word right
+  after an `--unset`.
+
+**State of the line:**
+
+- **A write** is on the line when it holds a `KEY=…`, a `KEY=-` or an `--unset`.
+- **`--show-secrets` mode** is on when `--show-secrets` is on the line.
+
+| Context | Candidates |
+|---------|------------|
+| previous word is `--unset` | the `--unset` keys, bare (no `=`, with a trailing space), minus the keys on the line; never a `DEFAULT_ENV_KEYS` name |
+| current word is `KEY=` or `KEY=<partial>` (also when bash split it into `KEY`, `=`, `<partial>`), `KEY` one of `variant`, `runtime`, `auto-login`, `restart-on-update` | that key's fixed values (see [`configure`](#configure)), with a trailing space |
+| current word is `KEY=…` for any other key (free-form config key, env key), or `KEY=-` | nothing |
+| any other position, `--show-secrets` mode | nothing |
+| any other position, otherwise | the flags and the keys below, together |
+
+At "any other position, otherwise":
+
+- **Flags:**
+  - `--show-secrets`, unless a write or `--force` is on the line;
+  - `--force`, unless it is on the line;
+  - `--unset`, always (it can repeat).
+- **Keys:** every config key and env key as `KEY=` (no trailing space), minus the keys on the
+  line.
+- **Never:** a bare `KEY` (print one setting). Reading one key is typed by hand.
+
+A `KEY=-` on the line leaves `KEY=` candidates offered: only one key can be read hidden per
+call, but the value of the next key is typed, not `-`.
+
+These rules mirror `configure`'s own usage errors: completion never offers a word that turns the
+line into a usage error (the same reasoning as edge case 10).
+
+#### Edge cases in the table
+
+| Edge case | Where |
+|-----------|-------|
+| 4. Unknown command | [Top level](#top-level-by-position), "any later word" |
+| 5. Nothing left to offer | [Commands](#commands-by-position), last row |
+| 6. `compose`, `logs` beyond `-f` | [Commands](#commands-by-position): `logs` row and last row |
+| 7. `update VERSION` | `update` row |
+| 8. Free-form flag arguments | `up`'s first row, and the note under the table |
+| 9. Flags already on the line, aliases | the "minus the flags on the line" rule in each row; `--unset` in [`configure`](#configure-by-position) |
+| 10. Mutually exclusive pairs | `up` and `update` rows |
+| 11. Hidden steps | `update` row |
+| 12. `help` / `-h` / `--help` | [Top level](#top-level-by-position) only |
+| 13. `KEY=` across the `=` word break | [`configure`](#configure-by-position) context column, and [Trailing space](#trailing-space) |
+| 14. `--unset <TAB>` | [`configure`](#configure-by-position), "previous word is `--unset`" |
+| 15. Static env keys only | [`configure`](#configure-by-position) lists |
+| 16. `KEY=-` and free-form values | [`configure`](#configure-by-position), "any other key, or `KEY=-`" |
+| 17. Keys already on the line | [`configure`](#configure-by-position), "minus the keys on the line" |
 
 ## Never completed
 
@@ -142,7 +251,8 @@ Edge cases 1–17 from #424, as behaviour.
 1. **Called by path** (`./kerghan`, `~/.local/bin/kerghan`): works. bash falls back to the rule
    registered for the command's basename.
 2. **Symlink or alias under another name** (e.g. `kg`): not covered. Completion binds only
-   `kerghan`; the manual fix is `complete -F _kerghan <name>`, documented for users.
+   `kerghan`; the manual fix is `complete -o nospace -F _kerghan <name>`, documented for
+   users. Without `-o nospace`, `KEY=` candidates would get a space after them.
 3. **bash 3.2 (macOS):** the script works there. It uses no `compopt`, no associative arrays
    (`declare -A`), no `mapfile` / `readarray`, and no bash-completion helpers such as
    `_init_completion`, `_get_comp_words_by_ref` or `__ltrim_colon_completions`: the `eval` route
@@ -181,10 +291,9 @@ Edge cases 1–17 from #424, as behaviour.
     without bash-completion helpers and without changing `COMP_WORDBREAKS`. Right after the
     `=`, the current word may be `=` itself or an empty word whose previous word is `=`,
     depending on the bash version and the cursor position; both cases are handled, on bash 3.2
-    and 4+. bash 3.2 has no `compopt`,
-    so the "no trailing space" rule can't be switched per word; how it is met (e.g.
-    registering with `-o nospace` and adding the trailing space to every other word) is left
-    to the per-position table (see [Per-position table](#per-position-table)) and #429.
+    and 4+. bash 3.2 has no `compopt`, so the "no trailing space" rule is met by registering
+    with `-o nospace` and adding the space to every other candidate (see
+    [Trailing space](#trailing-space)).
 14. **`--unset <TAB>`** offers bare key names, with no `=`: the config keys and
     `FRONTEND_BASE_URL`, never the `DEFAULT_ENV_KEYS` names (which can't be unset).
 15. **Env keys** come only from static names built into the script (`DEFAULT_ENV_KEYS` and
@@ -196,7 +305,9 @@ Edge cases 1–17 from #424, as behaviour.
 
 ## Required tests
 
-- Sourcing the script registers `_kerghan` for `kerghan`.
+- Sourcing the script registers `_kerghan` for `kerghan`, with `-o nospace` and no other
+  option.
+- Every candidate ends with a space, except `KEY=` candidates, which don't.
 - `kerghan <TAB>` offers every command name plus `help`, `-h`, `--help`.
 - Each command in [Per command](#per-command) offers exactly its listed words.
 - `configure <TAB>` offers its flags, the config keys with `=`, and the `DEFAULT_ENV_KEYS` names
@@ -212,7 +323,12 @@ Edge cases 1–17 from #424, as behaviour.
 - `configure KEY=-` offers nothing; env values are never offered.
 - `update <TAB>` never offers versions or `--finish`; `update 0.9.0 <TAB>` still offers the
   flags.
-- `compose <TAB>` and `logs -f <TAB>` offer nothing.
+- `compose <TAB>`, `logs -f <TAB>` and `wizard --advanced <TAB>` offer nothing.
+- `completion <TAB>` offers `bash`; `completion bash <TAB>` offers nothing.
+- `configure variant=x <TAB>` and `configure --force <TAB>` don't offer `--show-secrets`.
+- `configure --show-secrets <TAB>` offers no `KEY=`, no `--force` and no `--unset`.
+- `configure port=- <TAB>` still offers the other `KEY=` candidates.
+- `configure <TAB>` never offers a bare key name.
 - An unknown command offers nothing, and no case falls back to filenames.
 - Calling the client by path (`./kerghan`) completes the same as `kerghan`.
 - A flag already on the line is not offered again (except `--unset`); `-p` on the line hides

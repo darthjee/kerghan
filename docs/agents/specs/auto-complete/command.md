@@ -45,17 +45,42 @@ Edge case 18. Each is a usage error (`usage_error`: message and usage on stderr,
 | Call | Result |
 |------|--------|
 | `kerghan completion` (no shell) | usage error |
-| `kerghan completion zsh`, `fish`, or any other value | usage error naming the shell and the supported ones (e.g. `kerghan: error: unsupported shell: zsh (supported: bash)`) |
+| `kerghan completion zsh`, `fish`, or any other value | usage error naming the shell and the supported ones (e.g. `kerghan: error: unsupported shell 'zsh' (supported: bash)`) |
+| `kerghan completion -x` (an option-like first word) | usage error naming the option |
 | `kerghan completion bash extra` (extra arguments) | usage error |
 
 These follow the client's existing usage-error convention: `usage_error` prints
 `kerghan: error: <message>` and the `usage` text on stderr and exits `2`, like every other
-command's usage errors.
+command's usage errors. The exact messages are in
+[Messages and exit codes](#messages-and-exit-codes).
 
 ### Messages and exit codes
 
-> **Open — settled by #427:** the exact `usage` line for `completion` and the verbatim error
-> messages. The exit code is fixed by `usage_error` (`2`).
+**`usage` line,** in the `Commands:` block between `wizard` and `version`, in the same
+two-column style (the description starts at column 35, like the other lines):
+
+```
+  completion bash                 print the bash completion script (load it with: eval "$(kerghan completion bash)")
+```
+
+There is no "Options for completion" section.
+
+**Error messages,** all through `usage_error`, in the client's quoted style. Each call exits
+`2`, prints the line below then the full `usage` text on stderr, and prints nothing on stdout.
+
+| Call | stderr first line |
+|------|-------------------|
+| `kerghan completion` | `kerghan: error: missing shell (supported: bash)` |
+| `kerghan completion zsh` (any unsupported value) | `kerghan: error: unsupported shell 'zsh' (supported: bash)` |
+| `kerghan completion -x` (an option-like first word) | `kerghan: error: unknown option '-x'` |
+| `kerghan completion bash extra` | `kerghan: error: unexpected argument 'extra'` |
+
+- **Order of checks:** the first argument is checked first (missing, then option-like, then
+  unsupported), then extra arguments. So `kerghan completion zsh extra` reports the unsupported
+  shell, and `kerghan completion -x extra` the unknown option.
+- **Option-like** means a first word starting with `-` (`-x`, `--help`).
+- The quoted value is the word as typed, so `kerghan completion Bash` reports
+  `unsupported shell 'Bash' (supported: bash)`.
 
 ## No side effects
 
@@ -72,21 +97,26 @@ This matters because the `eval` route runs it on every new shell.
 ## `usage`
 
 The `usage` text gains a `completion` line among the commands (backward compatibility item 1).
-Bats tests that check the full usage text are updated with it. The exact line is open (see
-[Messages and exit codes](#messages-and-exit-codes)).
+Bats tests that check the full usage text are updated with it. The exact line is in
+[Messages and exit codes](#messages-and-exit-codes).
 
 ## Required tests
 
 - `kerghan completion bash` exits `0` and prints the completion script on stdout, with nothing
   on stderr.
 - The printed script, when sourced, defines `_kerghan` and registers it for `kerghan`.
-- `kerghan completion` with no shell exits `2`, with `kerghan: error: …` and the usage on
-  stderr, and nothing on stdout.
-- `kerghan completion zsh` (an unsupported shell) exits `2`, with an error on stderr naming the
-  shell, and nothing on stdout.
-- `kerghan completion bash extra` exits `2`, with nothing on stdout.
+- `kerghan completion` exits `2`, and stderr starts with
+  `kerghan: error: missing shell (supported: bash)` followed by the usage.
+- `kerghan completion zsh` exits `2`, and stderr starts with
+  `kerghan: error: unsupported shell 'zsh' (supported: bash)`.
+- `kerghan completion -x` exits `2`, and stderr starts with `kerghan: error: unknown option '-x'`.
+- `kerghan completion bash extra` exits `2`, and stderr starts with
+  `kerghan: error: unexpected argument 'extra'`.
+- `kerghan completion zsh extra` reports the unsupported shell, not the extra argument.
+- Stdout is empty in every error case.
 - `kerghan completion bash` creates nothing under `HOME` and calls no `docker`, `vault` or
   `curl`.
-- `usage` lists `completion`.
+- The `usage` text contains the exact `completion bash` line from
+  [Messages and exit codes](#messages-and-exit-codes), between the `wizard` and `version` lines.
 
 > **Open — settled by #428:** the test harness and the full test coverage.
