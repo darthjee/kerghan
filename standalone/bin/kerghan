@@ -18,6 +18,12 @@
 # ${var,,}, no mapfile/readarray, no [[ -v ]], no local -n, and empty arrays
 # expanded as ${arr[@]+"${arr[@]}"}.
 #
+# The trailing `if [ "${BASH_SOURCE[0]}" = "$0" ]; then main "$@"; fi` guard lets
+# the client be sourced without running main. It is an internal test contract,
+# not user-facing: the completion sync tests (#429) source the client to read
+# its constants (CONFIG_KEYS, DEFAULT_ENV_KEYS, the *_VALUES constants,
+# FRONTEND_BASE_URL_KEY). The guard must stay.
+#
 # KERGHAN_VERSION below is pinned by scripts/bump_version.sh together with the
 # package.json versions, so CLI <v> always runs image <v>. Never derive it any
 # other way.
@@ -3081,6 +3087,7 @@ main() {
   esac
 }
 
+# Sourcing guard: keep it (see the header).
 if [ "${BASH_SOURCE[0]}" = "$0" ]; then
   main "$@"
 fi
