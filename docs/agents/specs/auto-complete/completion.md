@@ -308,50 +308,148 @@ Edge cases 1–17 from #424, as behaviour.
 
 ## Required tests
 
-- Sourcing the script registers `_kerghan` for `kerghan`, with `-o nospace` and no other
-  option.
-- Every candidate ends with a space, except `KEY=` candidates, which don't.
-- `kerghan <TAB>` offers every command name plus `help`, `-h`, `--help`.
-- Each command in [Per command](#per-command) offers exactly its listed words.
-- `configure <TAB>` offers its flags, the config keys with `=`, and the `DEFAULT_ENV_KEYS` names
-  and `FRONTEND_BASE_URL` with `=`, with no trailing space after a key.
-- `configure variant=<TAB>`, `runtime=`, `auto-login=`, `restart-on-update=` offer their fixed
-  values.
-- `configure --unset <TAB>` offers the config keys and `FRONTEND_BASE_URL` as bare names with
-  no `=`, and no `DEFAULT_ENV_KEYS` name.
-- `configure --unset port --unset <TAB>` still offers `--unset`-able keys (other than `port`),
-  and `--unset` itself stays offered after one `--unset KEY`.
-- Free-form values (`port=`, `bind=`, `image-tag=`, `stop-timeout=`, `-p`, `--port`, `--bind`)
-  offer nothing.
-- `configure KEY=-` offers nothing; env values are never offered.
-- `update <TAB>` never offers versions or `--finish`; `update 0.9.0 <TAB>` still offers the
-  flags.
-- `compose <TAB>`, `logs -f <TAB>` and `wizard --advanced <TAB>` offer nothing.
-- `completion <TAB>` offers `bash`; `completion bash <TAB>` offers nothing.
-- `configure variant=x <TAB>` and `configure --force <TAB>` don't offer `--show-secrets`.
-- `configure --show-secrets <TAB>` offers no `KEY=`, no `--force` and no `--unset`.
-- `configure port=- <TAB>` still offers the other `KEY=` candidates.
-- `configure <TAB>` never offers a bare key name.
-- An unknown command offers nothing, and no case falls back to filenames.
-- Calling the client by path (`./kerghan`) completes the same as `kerghan`.
-- A flag already on the line is not offered again (except `--unset`); `-p` on the line hides
-  `--port` and the other way round.
-- Once one flag of a mutually exclusive pair is on the line, neither is offered.
-- `-h` / `--help` / `help` are offered at the top level only.
-- A key already on the line is not offered again.
-- `configure variant=<TAB>` completes the same whether the current word is `=` or an empty word
-  after `=`, on bash 3.2 and 4+.
-- Completion reads no file (in particular not `~/.kerghan/config` or `kerghan.env`).
-- Every case above passes under bash 3.2.
-- **Sync — generated lists:** with the client sourced (relying on its `BASH_SOURCE` guard),
-  completion offers exactly `CONFIG_KEYS`, `DEFAULT_ENV_KEYS` plus the `FRONTEND_BASE_URL`
-  constant, and each value constant for its key.
-- **Sync — hand-written lists:** the `kerghan help` cross-check covers the commands and the
-  synopsis flags, with `--[no-]x` expanded, aliases counted, and the exclusion list
-  (`--finish`) skipped.
-- **Sync — classification:** every `CONFIG_KEYS` entry is either in `FREE_FORM_KEYS` or has a
-  value constant, never both and never neither.
-- In the three sync checks, lists are compared as sets, and a failure names the word and the
-  side it is missing from.
+Harness, file layout and naming: [README.md](README.md#testing). Each case gives its label
+(`matrix <label>`, `edge <n>` or `contract <name>`), the input and the exact expected
+`COMPREPLY`.
 
-> **Open — settled by #428:** the test harness and the full test coverage.
+- **Input:** a line in backticks is given to `complete_line` (a trailing space means an empty
+  last word); words in parentheses are given to `complete_words`, `''` being an empty word.
+- **Expected:** each word in backticks with its trailing space visible (`` `up ` ``), compared
+  as a set; "nothing" means `assert_no_reply`.
+
+**Word sets** used below (all from the [per-position table](#per-position-table)):
+
+| Name | Words |
+|------|-------|
+| `ALL_COMMANDS` | `up `, `down `, `logs `, `status `, `compose `, `reset `, `update `, `update-env `, `configure `, `wizard `, `version `, `completion `, `help `, `-h `, `--help ` (15 words) |
+| `UP_FLAGS` | `--offline `, `-p `, `--port `, `--auto-login `, `--no-auto-login `, `--bind `, `-f ` |
+| `UPDATE_FLAGS` | `--force `, `--yes `, `--restart `, `--no-restart ` |
+| `CONFIG_KEYS=` | `port=`, `variant=`, `runtime=`, `stop-timeout=`, `image-tag=`, `auto-login=`, `bind=`, `restart-on-update=` |
+| `ENV_KEYS=` | `KERGHAN_SECRET_KEY=`, `KERGHAN_INTEGRATIONS_KEY=`, `KERGHAN_DEFAULT_USER_ENABLED=`, `KERGHAN_DEFAULT_USER_USERNAME=`, `KERGHAN_DEFAULT_USER_EMAIL=`, `KERGHAN_DEFAULT_USER_PASSWORD=`, `KERGHAN_DEFAULT_USER_ADMIN=`, `FRONTEND_BASE_URL=` |
+| `UNSET_KEYS` | `port `, `variant `, `runtime `, `stop-timeout `, `image-tag `, `auto-login `, `bind `, `restart-on-update `, `FRONTEND_BASE_URL ` |
+
+The literal lists are the client's today; the sync tests below guard them against the client's
+constants, so a test may build these sets from the same constants instead of hard-coding them.
+
+### `completion.bats`
+
+**Registration**
+
+| Label | Input | Expected |
+|-------|-------|----------|
+| `contract _kerghan` | `complete -p kerghan`, after `source_completion` | stdout exactly `complete -o nospace -F _kerghan kerghan` |
+
+**Top level**
+
+| Label | Input | Expected |
+|-------|-------|----------|
+| `matrix top-first` | `kerghan ` | `ALL_COMMANDS` |
+| `matrix top-first` | `kerghan co` | `compose `, `completion `, `configure ` |
+| `matrix top-first` | `kerghan up` | `up `, `update `, `update-env ` |
+| `matrix top-first` / edge 12 | `kerghan -` | `-h `, `--help ` |
+| `matrix top-later` / edge 4 | `kerghan foo ` | nothing |
+| `matrix top-later` / edge 4 | `kerghan -h ` | nothing |
+| `matrix top-later` / edge 4 | `kerghan --help ` | nothing |
+| edge 1 | `./kerghan ` and `~/.local/bin/kerghan up ` | the same as `kerghan ` (`ALL_COMMANDS`) and `kerghan up ` (`UP_FLAGS`) |
+
+**Commands**
+
+| Label | Input | Expected |
+|-------|-------|----------|
+| `matrix up-flags` / edge 12 | `kerghan up ` | `UP_FLAGS` (no `help `, `-h ` or `--help `) |
+| `matrix up-flags` / edge 12 | `kerghan up -` | `UP_FLAGS` |
+| `matrix up-flags` / edge 9 | `kerghan up --offline ` | `UP_FLAGS` minus `--offline ` |
+| `matrix up-flags` / edge 9 | `kerghan up -p 8080 ` | `UP_FLAGS` minus `-p ` and `--port ` |
+| `matrix up-flags` / edge 9 | `kerghan up --port 8080 ` | `UP_FLAGS` minus `-p ` and `--port ` |
+| `matrix up-flags` / edge 10 | `kerghan up --auto-login ` | `UP_FLAGS` minus `--auto-login ` and `--no-auto-login ` |
+| `matrix up-flags` / edge 10 | `kerghan up --no-auto-login ` | `UP_FLAGS` minus `--auto-login ` and `--no-auto-login ` |
+| `matrix up-flag-arg` / edge 8 | `kerghan up -p ` | nothing |
+| `matrix up-flag-arg` / edge 8 | `kerghan up --port ` | nothing |
+| `matrix up-flag-arg` / edge 8 | `kerghan up --bind ` | nothing |
+| `matrix up-flag-arg` / edge 8 | `kerghan up --bind -` | nothing (the argument is never read as a flag) |
+| `matrix logs` | `kerghan logs ` | `-f ` |
+| `matrix logs` / edge 6 | `kerghan logs -f ` | nothing |
+| `matrix update` | `kerghan update ` | `UPDATE_FLAGS` |
+| `matrix update` / edge 9 | `kerghan update --force ` | `--yes `, `--restart `, `--no-restart ` |
+| `matrix update` / edge 10 | `kerghan update --restart ` | `--force `, `--yes ` |
+| `matrix update` / edge 10 | `kerghan update --no-restart ` | `--force `, `--yes ` |
+| `matrix update` / edge 7 | `kerghan update 0.9.0 ` | `UPDATE_FLAGS` |
+| `matrix update` / edge 11 | `kerghan update --f` | `--force ` (never `--finish `) |
+| `matrix wizard` | `kerghan wizard ` | `--advanced ` |
+| `matrix wizard` / edge 9 | `kerghan wizard --advanced ` | nothing |
+| `matrix completion-first` | `kerghan completion ` | `bash ` |
+| `matrix completion-first` | `kerghan completion b` | `bash ` |
+| `matrix completion-later` | `kerghan completion bash ` | nothing |
+| `matrix no-args` / edge 5 | `kerghan down `, `status `, `reset `, `update-env `, `version `, `help ` (one case each) | nothing |
+| `matrix no-args` / edge 6 | `kerghan compose ` and `kerghan compose ps ` | nothing |
+
+**`configure`**
+
+| Label | Input | Expected |
+|-------|-------|----------|
+| `matrix cfg-other` | `kerghan configure ` | `--show-secrets `, `--force `, `--unset `, `CONFIG_KEYS=`, `ENV_KEYS=` (no bare key, no space after `=`) |
+| `matrix cfg-other` / edge 13 | `kerghan configure var` | `variant=` |
+| `matrix cfg-other` / edge 9 | `kerghan configure --force ` | `--unset `, `CONFIG_KEYS=`, `ENV_KEYS=` |
+| `matrix cfg-other` / edge 17 | `(kerghan configure variant = x '')` | `--force `, `--unset `, `CONFIG_KEYS=` minus `variant=`, `ENV_KEYS=` |
+| `matrix cfg-other` / edges 16, 17 | `(kerghan configure port = - '')` | `--force `, `--unset `, `CONFIG_KEYS=` minus `port=`, `ENV_KEYS=` |
+| `matrix cfg-other` / edge 17 | `kerghan configure --unset port ` | `--force `, `--unset `, `CONFIG_KEYS=` minus `port=`, `ENV_KEYS=` |
+| `matrix cfg-show-secrets` | `kerghan configure --show-secrets ` | nothing |
+| `matrix cfg-unset` / edge 14 | `kerghan configure --unset ` | `UNSET_KEYS` (bare, no `KERGHAN_*` name) |
+| `matrix cfg-unset` / edge 17 | `kerghan configure --unset port --unset ` | `UNSET_KEYS` minus `port ` |
+| `matrix cfg-value` / edge 13 | `(kerghan configure variant =)` and `(kerghan configure variant = '')` | `online `, `offline ` |
+| `matrix cfg-value` / edge 13 | `(kerghan configure variant = on)` | `online ` |
+| `matrix cfg-value` / edge 13 | `(kerghan configure runtime =)` and `(… runtime = '')` | `auto `, `sysbox `, `privileged ` |
+| `matrix cfg-value` / edge 13 | `(kerghan configure runtime = s)` | `sysbox ` |
+| `matrix cfg-value` / edge 13 | `(kerghan configure auto-login =)` and `(… auto-login = '')` | `true `, `false ` |
+| `matrix cfg-value` / edge 13 | `(kerghan configure auto-login = t)` | `true ` |
+| `matrix cfg-value` / edge 13 | `(kerghan configure restart-on-update =)` and `(… restart-on-update = '')` | `ask `, `always `, `never ` |
+| `matrix cfg-value` / edge 13 | `(kerghan configure restart-on-update = a)` | `ask `, `always ` |
+| `matrix cfg-free` / edge 16 | `(kerghan configure KEY =)` and `(… KEY = '')`, for each of `port`, `bind`, `image-tag`, `stop-timeout` | nothing |
+| `matrix cfg-free` / edges 15, 16 | `(kerghan configure KERGHAN_SECRET_KEY =)`, `(… FRONTEND_BASE_URL = '')` | nothing (env values are never offered) |
+| `matrix cfg-free` / edge 16 | `(kerghan configure port = -)` | nothing |
+
+**Never filenames**
+
+| Label | Input | Expected |
+|-------|-------|----------|
+| `matrix top-first` | `kerghan up`, run in a temp `PWD` holding a file `upfile` | `up `, `update `, `update-env ` (no `upfile`) |
+| `matrix top-later` | `kerghan foo u`, same `PWD` | nothing |
+
+Edges 3 (bash 3.2) and 15 (no file read) are not repeated here: every case in this file also
+runs in the bash 3.2 service, and the no-file-read checks are in
+[security.md](security.md#required-tests). Edge 2 (`kg`) is `contract _kerghan` in
+[command.md](command.md#required-tests).
+
+### `completion_sync.bats`
+
+Each check compares sets and, on failure, names the word and the side it is missing from, for
+example `--bind: in usage, not in completion` or `ask: in RESTART_ON_UPDATE values, not in
+completion`. Completions are read through the same harness as `completion.bats`.
+
+| Label | Setup | Expected |
+|-------|-------|----------|
+| sync usage commands | parse the words under `Commands:` in `kerghan help` | they equal the top-level completion words (`kerghan ` minus `help `, `-h `, `--help `); `help`, `-h` and `--help` are checked separately as accepted by the client |
+| sync usage flags | for each command, parse its synopsis line in `kerghan help` (`up [--offline] [-p PORT] …`, `configure [--force] [--unset KEY]…`, `wizard [--advanced]`, …), expanding `--[no-]x` to `--x` and `--no-x` and counting `-p, --port` as both | the flags equal what `kerghan <command> ` offers, minus the exclusion list |
+| sync usage keys | parse the config keys under `Settings are read from …` in `kerghan help` | they equal the config keys `kerghan configure ` offers (without `=`); the env key names offered equal `DEFAULT_ENV_KEYS` plus `FRONTEND_BASE_URL` read from the client |
+| sync generated lists | source the client (its `BASH_SOURCE` guard keeps `main` from running) and read `CONFIG_KEYS`, `DEFAULT_ENV_KEYS`, the `FRONTEND_BASE_URL` constant and the four value constants (#434) | `kerghan configure ` offers each config and env key as `KEY=`; `kerghan configure --unset ` offers exactly the config keys plus `FRONTEND_BASE_URL`, no `DEFAULT_ENV_KEYS`; each `KEY=` value list equals that key's value constant |
+| sync classification | the test's `FREE_FORM_KEYS` list | every `CONFIG_KEYS` entry is in `FREE_FORM_KEYS` or has a value constant, never both and never neither |
+
+The test holds both lists as commented constants, so adding to either is a visible diff:
+
+```bash
+# Accepted by the client, never completed (hidden steps).
+EXCLUDED_WORDS="--finish"
+# Config keys whose value is typed freely; every other config key has a value constant.
+FREE_FORM_KEYS="port bind image-tag stop-timeout"
+```
+
+The constant names read from the client are internal; the test changes with them (see
+[contracts.md](contracts.md#sync-rule)).
+
+### `completion_safety.bats`
+
+Completion reads no file, in particular not `~/.kerghan/config` or `kerghan.env`: the
+sentinel-config case in [security.md](security.md#required-tests).
+
+Every case above runs in both bash services (the `completion*.bats` glob), and every
+label in the per-position table and every edge case has at least one case.
