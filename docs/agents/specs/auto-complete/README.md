@@ -65,7 +65,9 @@ Out of scope (from #424):
 - **[command.md](command.md):** `kerghan completion <shell>`, `bash` the only supported shell;
   the script goes to stdout with exit `0`, errors to stderr only with a non-zero exit; no side
   effects.
-- **[completion.md](completion.md):** one `_kerghan` function registered for `kerghan`;
+- **[completion.md](completion.md):** one `_kerghan` function registered for `kerghan` with
+  `-o nospace`, adding a trailing space to every candidate except `KEY=`; an exact
+  per-position table;
   commands, flags, `configure` keys and fixed values are completed; free-form values,
   versions, passthrough arguments and hidden steps never are; never a fallback to filenames;
   edge cases 1–17 as behaviour; bash 3.2 compatible; config keys, env keys and fixed values
@@ -107,18 +109,15 @@ none remain.
 
 | File | Open decision | Settled by |
 |------|---------------|------------|
-| [completion.md](completion.md#per-position-table) | The exact per-position completion table | #427 |
-| [command.md](command.md#messages-and-exit-codes) | The exact `completion` usage line and error messages | #427 |
-| [install.md](install.md#messages) | The exact `hint:`, `warning:` and success text | #427 |
 | Every "Required tests" section | The test harness and full coverage | #428 |
 
 ## Index
 
 | File | Defines |
 |---|---|
-| [command.md](command.md) | `kerghan completion <shell>`: shape, streams, no side effects, error cases, `usage` line |
-| [completion.md](completion.md) | Registration, what is completed per command, what is never completed, edge cases 1–17, bash 3.2 |
-| [install.md](install.md) | The `install.sh` completion step: target path, content, hint, never fatal, opt-out, overwrite, downgrade, uninstall |
+| [command.md](command.md) | `kerghan completion <shell>`: shape, streams, no side effects, error cases, the exact `usage` line and error messages |
+| [completion.md](completion.md) | Registration and the trailing-space rule, what is completed per command, the exact per-position table, what is never completed, edge cases 1–17, bash 3.2 |
+| [install.md](install.md) | The `install.sh` completion step: target path, content, hint, bash-completion detection, never fatal, opt-out, overwrite, downgrade, uninstall, exact messages |
 | [contracts.md](contracts.md) | Stable contracts: `completion bash`, `_kerghan`, `KERGHAN_COMPLETION`, the file path, the installer's `update` contract, the sync rule |
 | [security.md](security.md) | Performance (pure-bash TAB, no side effects, `eval` cost) and security (fixed text, shell hygiene, no secrets, installer writes, exact binary) |
 

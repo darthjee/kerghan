@@ -56,10 +56,22 @@ Rejected:
 ## Without the `bash-completion` package
 
 The file is still installed. When bash-completion is not detected, a `hint:` prints the line to
-add to the shell rc file by hand: `source <file>`, or
-`eval "$("<install dir>/kerghan" completion bash)"` with the client's absolute path, since the
-install dir may not be on `PATH` (`check_path` may already have warned about it). This is not an
-error and does not change the exit code.
+add to `~/.bashrc` by hand: `source "<file>"` (exact text in [Messages](#messages)). This is not
+an error and does not change the exit code.
+
+Users may instead load it with `eval "$("<install dir>/kerghan" completion bash)"`, using the
+client's absolute path since the install dir may not be on `PATH` (`check_path` may already have
+warned about it). The hint doesn't print this form; the user docs can mention it.
+
+**Detection:** bash-completion counts as installed when any of these files exists:
+
+- `/usr/share/bash-completion/bash_completion` (Linux distros)
+- `/opt/homebrew/etc/profile.d/bash_completion.sh` (Homebrew, Apple silicon)
+- `/usr/local/etc/profile.d/bash_completion.sh` (Homebrew, Intel)
+- `/opt/local/etc/profile.d/bash_completion.sh` (MacPorts)
+
+The step only tests that a file exists. It never runs bash-completion and never reads the
+user's rc files.
 
 ## Never fatal
 
@@ -112,8 +124,40 @@ Out of scope: there is no uninstaller. The file's path is documented in [Target]
 
 ## Messages
 
-> **Open — settled by #427:** the exact `hint:`, `warning:` and success text of the completion
-> step (through the installer's `kerghan-install:` helpers).
+All messages go through the installer's existing helpers: `info` on stdout, `warn` and `hint`
+on stderr, all prefixed `kerghan-install:`. `<file>` is the resolved target path (see
+[Target](#target)), `<dir>` its directory, and `<install dir>` the absolute install directory.
+
+**Success:** one `info` line, printed after `kerghan <version> installed to …` and before
+`check_path`'s output:
+
+```
+kerghan-install: bash completion installed to <file>
+```
+
+**bash-completion not detected** (see
+[Without the `bash-completion` package](#without-the-bash-completion-package)): printed right
+after the success line,
+
+```
+kerghan-install: hint: bash-completion was not found; to enable completion, add this to ~/.bashrc:
+  source "<file>"
+```
+
+The second line is printed with `echo … >&2`, the same way `check_path` prints its
+`export PATH` line.
+
+**Failure:** one `warn` line naming what failed, and no success line and no hint:
+
+| Failure | stderr |
+|---------|--------|
+| `mkdir -p` of the directory | `kerghan-install: warning: could not create <dir>; skipping bash completion` |
+| the client exits non-zero or prints nothing | `kerghan-install: warning: <install dir>/kerghan completion bash failed; skipping bash completion` |
+| writing the temp file or the `mv -f` | `kerghan-install: warning: could not write <file>; skipping bash completion` |
+
+**`KERGHAN_COMPLETION=false`:** nothing is printed.
+
+The exit code is never changed by this step (see [Never fatal](#never-fatal)).
 
 ## Required tests
 
@@ -126,14 +170,20 @@ Out of scope: there is no uninstaller. The file's path is documented in [Target]
 - The file holds the output of `<install dir>/kerghan completion bash`, the client just
   installed, not a `kerghan` found on `PATH`.
 - An existing file at the target path is overwritten.
-- `KERGHAN_COMPLETION=false` skips the step: no file, no hint.
-- Without bash-completion, the file is installed and a `hint:` is printed; the exit code is
-  unchanged.
+- `KERGHAN_COMPLETION=false` skips the step: no file, and nothing printed.
+- A successful step prints `kerghan-install: bash completion installed to <file>` on stdout,
+  after the `kerghan <version> installed to …` line.
+- When none of the detection paths exists, the file is installed and the exact two-line hint
+  from [Messages](#messages) is printed on stderr; the exit code is unchanged. When one exists,
+  no hint is printed. (Whether the paths are created under a test root or the list is made
+  overridable for tests is #428's choice.)
+- Each failure prints its exact `warning:` line from [Messages](#messages), and no success line
+  or hint.
 - A write failure (e.g. a read-only target directory) prints a `warning:`, leaves no temp file,
   and the install still exits `0`.
 - A client without `completion` (non-zero exit or empty output) leaves an existing file
   untouched, prints a `warning:`, and the install still exits `0`.
-- The `hint:` uses the client's absolute path or `source <file>`.
+- The `hint:` shows `source "<file>"` with the resolved target path.
 - The step creates nothing under `~/.kerghan`, uses no sudo, and asks no question.
 
 > **Open — settled by #428:** the test harness and the full test coverage.
