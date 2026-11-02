@@ -1,7 +1,8 @@
 #!/usr/bin/env bats
 # The bash completion function _kerghan: the per-position table, the edge
 # cases, the registration and the dual = shapes
-# (docs/agents/specs/auto-complete/completion.md). Runs on bash 5 and bash 3.2.
+# (docs/agents/standalone/client-completion.md#what-is-completed). Runs on bash
+# 5 and bash 3.2.
 
 load helpers/setup
 load helpers/completion

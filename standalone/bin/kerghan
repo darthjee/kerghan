@@ -25,7 +25,7 @@
 # FRONTEND_BASE_URL_KEY). The guard must stay.
 #
 # `kerghan completion bash` and the `_kerghan` completion function it prints
-# are stable contracts (docs/agents/specs/auto-complete/contracts.md): later
+# are stable contracts (docs/agents/standalone/client-completion.md#stable-contracts): later
 # clients keep accepting `completion bash`, and `_kerghan` keeps its name.
 # Sync rule: a PR that adds or changes a command, flag, `configure` key or fixed
 # value updates the completion (completion_bash_script) in the same PR; the
@@ -1811,7 +1811,8 @@ cmd_completion() {
 # constants. Nothing from the environment, $HOME, paths, config or env files
 # goes into it, so the output is the same bytes for a given client version.
 #
-# The script is pure bash and must stay so (docs/agents/specs/auto-complete/):
+# The script is pure bash and must stay so (docs/agents/standalone/
+# client-completion.md#performance-and-security):
 # - bash 3.2: no compopt, associative arrays, ${var,,}, mapfile, [[ -v ]] or
 #   local -n, and no bash-completion helpers;
 # - TAB runs no subprocess and reads no file: none of the tokens denied by

@@ -1,7 +1,8 @@
 #!/usr/bin/env bats
 # The installer's bash completion step (standalone/install.sh): target path,
 # content, messages, never-fatal failures, safety and the `update` contract.
-# Spec: docs/agents/specs/auto-complete/install.md#required-tests. Runs on
+# Spec: docs/agents/standalone/client-completion.md#installer-setup
+# ("Required tests"). Runs on
 # bash 5 only; the bats container runs as root, so failures are injected
 # (a regular file in the path, a failing mv) rather than made with chmod.
 

@@ -1,5 +1,5 @@
 # Runs the client completion tests (standalone/test/completion*.bats) on bash 3.2.57, the bash
-# macOS ships; see docs/agents/specs/auto-complete/README.md#bash-32.
+# macOS ships; see docs/agents/standalone/client-completion.md#bash-32.
 #
 # The official bash:3.2 image keeps bash 3.2.57 at /usr/local/bin/bash, the only bash on PATH.
 # Never `apk add bash` (or bats, which depends on it): that would put a second, newer bash on

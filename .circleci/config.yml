@@ -224,7 +224,7 @@ jobs:
           command: bats standalone/test
 
   # Client completion tests (standalone/test/completion*.bats) on bash 3.2.57, the bash macOS ships
-  # (docs/agents/specs/auto-complete/README.md#bash-32). Runs on the official bash:3.2 image (Alpine,
+  # (docs/agents/standalone/client-completion.md#bash-32). Runs on the official bash:3.2 image (Alpine,
   # bash 3.2.57 at /usr/local/bin/bash) and mirrors dockerfiles/bats_bash32: bats-core v1.11.0 is
   # installed from the upstream tag, never via `apk add bash`/`bats`, so 3.2 stays the only bash on
   # PATH. git and openssh-client don't depend on Alpine's bash.

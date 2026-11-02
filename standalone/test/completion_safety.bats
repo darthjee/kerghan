@@ -1,7 +1,8 @@
 #!/usr/bin/env bats
 # Safety of the bash completion script: shell hygiene, no subprocess, no file
 # read, no secret leak, the static deny-list and the bash 3.2 guard
-# (docs/agents/specs/auto-complete/security.md). Runs on bash 5 and bash 3.2.
+# (docs/agents/standalone/client-completion.md#performance-and-security). Runs
+# on bash 5 and bash 3.2.
 #
 # The hygiene and safety cases run in a fresh `bash --norc --noprofile`, not in
 # the bats shell (bats turns on errexit and defines its own names). The fresh
