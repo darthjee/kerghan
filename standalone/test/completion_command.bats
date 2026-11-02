@@ -1,7 +1,8 @@
 #!/usr/bin/env bats
 # `kerghan completion <shell>`: output, errors, exit codes, the usage line, no
 # side effects, fixed text and the stable contracts
-# (docs/agents/specs/auto-complete/command.md, contracts.md, security.md).
+# (docs/agents/standalone/client-completion.md: "`kerghan completion <shell>`",
+# "Stable contracts", "Performance and security").
 # Runs on bash 5 and bash 3.2.
 
 load helpers/setup

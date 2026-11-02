@@ -1,5 +1,5 @@
-# Completion harness for the completion*.bats files (docs/agents/specs/
-# auto-complete/README.md, "Testing"). Load it after helpers/setup, which
+# Completion harness for the completion*.bats files (docs/agents/standalone/
+# client-completion.md#testing). Load it after helpers/setup, which
 # provides the temporary HOME and the failing stubs.
 #
 # The tests drive _kerghan directly with explicit COMP_WORDS; they do not

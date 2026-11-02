@@ -1003,7 +1003,11 @@ It relies only on what the installer has supported since it first shipped:
 - **Behaviour:** it never prompts, never uses sudo, refuses to run without a reachable Docker
   (`check_docker`) or a writable install dir (`check_dir`), stages the download and replaces the
   client with `mv -f` as its only write to the install dir, installs `vault` only when it is
-  missing, and exits non-zero on any failure.
+  missing, and exits non-zero on any failure of the client or `vault` install; the bash
+  completion step only warns (see [Client completion: Never fatal](client-completion.md#never-fatal)).
+- **`KERGHAN_COMPLETION`:** `update` does not pass it, so the installer's completion step runs on
+  updates unless the user exported `KERGHAN_COMPLETION=false` in their shell (see
+  [Client completion: Opt-out](client-completion.md#opt-out)).
 - **The client file name is always `kerghan`** in the install dir. When the running client's
   real file has another name, `update` refuses before downloading (see
   [Exact-path execution](#exact-path-execution)).
@@ -1019,6 +1023,7 @@ It relies only on what the installer has supported since it first shipped:
 - the remaining steps (env, pull, restart) belong to the new client, not the installer.
 
 Any future addition to the installer is optional, additive and never relied on for a downgrade.
+The bash completion step is one: `update` never relies on it, and it never fails the install.
 
 ### Release files
 

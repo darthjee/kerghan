@@ -45,9 +45,7 @@ file changes.
 
 ## Active specs
 
-| Feature | Specs | Product decision |
-|---------|-------|------------------|
-| Auto-complete (bash completion for the `kerghan` client: `kerghan completion bash` and `install.sh` setup) | [specs/auto-complete/README.md](specs/auto-complete/README.md) | #424 |
+none
 
 When no feature is in progress, this list reads "none".
 
@@ -63,3 +61,4 @@ Features whose specs were folded into the permanent docs, and where their defini
 | User approval (optional admin approval of new registrations) | [modules/auth/user-approval.md](modules/auth/user-approval.md) (status model, flag, exceptions, non-disclosure, admin review, frontend); [modules/auth.md](modules/auth.md) (session-lookup gate, `sid` claim, immediate revocation, `logged → denied`); [backend/routes/auth.md](backend/routes/auth.md) (status-aware auth endpoints, `USER_DENIED`); [environment-variables.md](environment-variables.md) (`KERGHAN_USER_APPROVAL_REQUIRED`); [product.md](product.md#user-approval) | #389 |
 | Client config (`kerghan configure` / `kerghan wizard`) | [standalone/client-config.md](standalone/client-config.md) (shared writer, `configure`, `wizard`, security, required tests); [standalone.md](standalone.md) (command list, `configure` and `wizard` summary); `README.md` "Run Kerghan standalone"; `standalone/config.example` | #402 |
 | Client update (`kerghan update` / `restart-on-update`) | [standalone/client-update.md](standalone/client-update.md) (command, versions, setting, security, stable contracts, required tests); [standalone.md](standalone.md) (command list, upgrading, `update` summary); `README.md` "Run Kerghan standalone" (upgrade, first upgrade); `standalone/install.sh` header (installer interface); `standalone/config.example` | #414 |
+| Auto-complete (bash completion for the `kerghan` client: `kerghan completion bash` / `install.sh` setup) | [standalone/client-completion.md](standalone/client-completion.md) (command, what is completed, installer setup, security, stable contracts, testing, required tests); [standalone.md](standalone.md) (command list, `completion` summary, testing); [contributing.md](contributing.md) (sync rule); [standalone/client-update.md](standalone/client-update.md) (installer interface); `README.md` "Run Kerghan standalone"; `standalone/install.sh` header (`KERGHAN_COMPLETION`) | #424 |

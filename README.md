@@ -102,6 +102,23 @@ This installs the `kerghan` client into `~/.local/bin` (set `KERGHAN_INSTALL_DIR
 never uses `sudo`. To verify the downloads against the release's `SHA256SUMS`, see
 [docs/agents/standalone.md](docs/agents/standalone.md#verifying-the-release-assets).
 
+#### Bash completion
+
+The installer also sets up tab completion for `kerghan` in bash. It writes the completion file to
+`${BASH_COMPLETION_USER_DIR:-${XDG_DATA_HOME:-$HOME/.local/share}/bash-completion}/completions/kerghan`
+(by default `~/.local/share/bash-completion/completions/kerghan`), and refreshes it on every
+`kerghan update`.
+
+- **With the `bash-completion` package**, completion loads on its own on the first
+  `kerghan <TAB>`.
+- **Without it**, the installer prints a `source "<file>"` line to add to `~/.bashrc`, or you can
+  add `eval "$(kerghan completion bash)"` there instead.
+- **To opt out**, install with `KERGHAN_COMPLETION=false`
+  (`curl -fsSL .../install.sh | KERGHAN_COMPLETION=false bash`). `kerghan update` does not pass
+  it, so export it in your shell to keep the opt-out on updates.
+
+See [docs/agents/standalone/client-completion.md](docs/agents/standalone/client-completion.md).
+
 ### Run
 
 ```bash
@@ -159,7 +176,9 @@ lists every value, `kerghan configure port=8080` sets one) or `kerghan wizard` (
 only write the files and print the command that applies the change. See
 [docs/agents/standalone/client-config.md](docs/agents/standalone/client-config.md) (and
 [docs/agents/standalone/client-update.md](docs/agents/standalone/client-update.md) for
-`kerghan update` and `restart-on-update`).
+`kerghan update` and `restart-on-update`, and
+[docs/agents/standalone/client-completion.md](docs/agents/standalone/client-completion.md) for
+bash completion).
 
 ### Caveats
 

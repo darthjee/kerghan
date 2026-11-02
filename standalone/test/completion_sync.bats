@@ -1,6 +1,7 @@
 #!/usr/bin/env bats
 # Sync rule: the completion's word lists match `kerghan help` and the client's
-# constants (docs/agents/specs/auto-complete/completion.md, contracts.md). A PR
+# constants (docs/agents/standalone/client-completion.md#word-lists and
+# #sync-rule). A PR
 # that adds a command, flag, configure key or fixed value without updating the
 # completion fails here. Runs on bash 5 and bash 3.2.
 

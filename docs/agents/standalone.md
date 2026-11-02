@@ -42,10 +42,11 @@ published on `127.0.0.1` only (see [`auto-login` and `bind`](#config-format)).
 
 ### Out of scope
 
-Navi (the cache warmer), phpMyAdmin, email (`KERGHAN_EMAILS_ENABLED` stays off), shell
-completion, a backup command, several instances per host, and production use. Production keeps
-its own deploy (see [architecture/infra.md](architecture/infra.md)); Render never runs the Vault
-image.
+Navi (the cache warmer), phpMyAdmin, email (`KERGHAN_EMAILS_ENABLED` stays off), a backup
+command, several instances per host, and production use. Production keeps its own deploy (see
+[architecture/infra.md](architecture/infra.md)); Render never runs the Vault image. Shell
+completion covers bash only; zsh and fish are later Epics (see
+[Client completion](standalone/client-completion.md#overview-and-scope)).
 
 ## Requirements
 
@@ -77,6 +78,10 @@ curl -fsSL https://github.com/darthjee/kerghan/releases/latest/download/install.
    Vault version the standalone image is built on (`VAULT_VERSION="0.1.0"`, matching
    `FROM darthjee/vault:0.1.0`). The Vault installer is downloaded to a file, never piped into
    `bash`. An existing `vault` is left alone.
+5. Writes the bash completion file (the output of the just-installed
+   `kerghan completion bash`) into the user-level bash-completion directory, unless
+   `KERGHAN_COMPLETION=false`. This step never fails the install: a problem only prints a
+   `warning:`. See [Client completion: Installer setup](standalone/client-completion.md#installer-setup).
 
 It never uses `sudo` and never touches `~/.kerghan/` or any Docker volume.
 
@@ -84,6 +89,7 @@ It never uses `sudo` and never touches `~/.kerghan/` or any Docker volume.
 |---|---|---|
 | `KERGHAN_VERSION` | Release to install. | The version stamped in `install.sh` by `scripts/bump_version.sh` |
 | `KERGHAN_INSTALL_DIR` | Directory the client is installed to. | `~/.local/bin` |
+| `KERGHAN_COMPLETION` | Set to `false` to skip installing bash completion. | unset (installed) |
 
 For example: `curl -fsSL .../install.sh | KERGHAN_VERSION=0.5.0 bash`.
 
@@ -158,6 +164,7 @@ kerghan configure [--show-secrets] [KEY]
 kerghan configure [--force] [--unset KEY]... [KEY=VALUE | KEY=-]...
                                         # set or unset settings (all or nothing); KEY=- reads the value hidden
 kerghan wizard [--advanced]             # set up the settings interactively (--advanced asks every setting)
+kerghan completion bash                 # print the bash completion script (eval "$(kerghan completion bash)")
 kerghan version | help
 ```
 
@@ -309,6 +316,23 @@ release:
 The handoff, the installer interface and the release files are stable contracts between client
 versions. Full rules (flow, versions, downgrades, the setting, security, exit codes, stable
 contracts, required tests): [Client update](standalone/client-update.md).
+
+#### `completion`
+
+`kerghan completion bash` prints a static bash completion script on stdout; `bash` is the only
+supported shell. It completes commands, flags, `configure` keys and the fixed values of
+`variant`, `runtime`, `auto-login` and `restart-on-update`, never free-form values, versions,
+passthrough arguments or filenames, and runs no subprocess on TAB. `install.sh` installs it into
+the bash-completion user directory, so it lazy-loads on the first `kerghan <TAB>`; without the
+`bash-completion` package, load it with `eval "$(kerghan completion bash)"`. Opt out of the
+installer step with `KERGHAN_COMPLETION=false`. Full rules (command, what is completed,
+installer setup, security, stable contracts, testing, required tests):
+[Client completion](standalone/client-completion.md).
+
+**Sync rule:** a PR that adds or changes a client command, flag, `configure` key or fixed value
+updates the completion in the same PR (see
+[Definition of Done for PRs](contributing.md#definition-of-done-for-prs));
+`standalone/test/completion_sync.bats` enforces it.
 
 ### `FRONTEND_BASE_URL`
 
@@ -684,7 +708,7 @@ The CI jobs that build and publish the images and the client assets (`release-ke
 | Build the online image locally | `make build-standalone` (tags `darthjee/kerghan-standalone:dev`) |
 | Smoke-test it | `make standalone-smoke`, which runs `standalone/scripts/smoke_test.sh`: boots the image with `--privileged`, checks `/health.json` and `/` through Tent, restarts with the data volume kept, and checks no env file or secret is baked in. Needs `--privileged` support on the host Docker. |
 | Verify the effective client IP | `standalone/scripts/verify_client_ip.sh [probe\|reach\|e2e]`, run by hand (no `make` target): measures the address the backend sees through Vault, and checks `status.json` against a running instance. See [Verifying the effective client IP](#verifying-the-effective-client-ip). |
-| Client and installer tests | The bats suite in `standalone/test/` (with `helpers/` and command `stubs/`): `docker-compose run --rm standalone_tests`. CI runs it in the `standalone_tests` job. It also covers `configure` and `wizard` (`configure_files.bats`, `configure.bats`, `wizard.bats`, `configure_security.bats`; see the "Required tests" sections of [Client config](standalone/client-config.md)) and `update` (`update.bats`; see the "Required tests" sections of [Client update](standalone/client-update.md)). |
+| Client and installer tests | The bats suite in `standalone/test/` (with `helpers/` and command `stubs/`): `docker-compose run --rm standalone_tests`. CI runs it in the `standalone_tests` job. It also covers `configure` and `wizard` (`configure_files.bats`, `configure.bats`, `wizard.bats`, `configure_security.bats`; see the "Required tests" sections of [Client config](standalone/client-config.md)), `update` (`update.bats`; see the "Required tests" sections of [Client update](standalone/client-update.md)), and bash completion (`completion.bats`, `completion_command.bats`, `completion_safety.bats`, `completion_sync.bats`, `install_completion.bats`; see the "Required tests" sections of [Client completion](standalone/client-completion.md)). The `completion*.bats` files also run under bash 3.2: `docker-compose run --rm bats_bash32`, in CI job `standalone_completion_bash32`. |
 
 The release job smoke-tests the published offline image on amd64 with `SKIP_BUILD=true` and
 `SMOKE_EXPECT_OFFLINE=true`, which also checks that the stack started from the preloaded tarballs
