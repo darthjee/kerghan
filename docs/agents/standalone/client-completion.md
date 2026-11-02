@@ -853,8 +853,7 @@ The exit code is never changed by this step (see [Never fatal](#never-fatal)).
 ### Required tests
 
 All in `install_completion.bats` (harness and naming: [Testing](#testing)). It uses
-`helpers/install_setup.bash` and runs on bash 5 only: running `install.sh` under bash 3.2 is
-#433. Unless a case says otherwise, `KERGHAN_BASH_COMPLETION_PATHS` points at files that don't
+`helpers/install_setup.bash` and runs under bash 5 and bash 3.2, like the whole suite. Unless a case says otherwise, `KERGHAN_BASH_COMPLETION_PATHS` points at files that don't
 exist under the test root (so the hint prints), and the install exits `0`. `<file>` is the
 resolved target path and `<install dir>` the test's install directory.
 
@@ -1173,16 +1172,17 @@ the same replies and empty stderr. The empty-`PATH` and sentinel-config checks
 
 ### bash 3.2
 
-The completion tests run under a real bash 3.2, in addition to the bash 5 run. No static lint.
+The whole standalone suite, completion included, runs under a real bash 3.2, in addition to
+the bash 5 run. No static lint.
 
 - **Image:** `dockerfiles/bats_bash32/Dockerfile`, `FROM bash:3.2` (official image, bash
   3.2.57, the version macOS ships), with bats-core installed at the suite's pinned version
   (1.11.0).
-- **docker-compose:** the `bats_bash32` service, next to the main bats one. It runs
-  `standalone/test/completion*.bats` and sets `KERGHAN_TEST_BASH32=1`.
-- **CircleCI:** the `standalone_completion_bash32` job runs the same glob under that image,
-  alongside the `standalone_tests` job (`bats standalone/test`). The full suite keeps running on
-  bash 5, so completion is tested under both.
+- **docker-compose:** the `standalone_tests_bash32` service, next to `standalone_tests`. It
+  runs `standalone/test` and sets `KERGHAN_TEST_BASH32=1`
+  (`docker-compose run --rm standalone_tests_bash32`).
+- **CircleCI:** the `standalone_tests_bash32` job runs the same suite as `standalone_tests`
+  (`bats standalone/test`), on 3.2 under that image. The full suite runs on both versions.
 - **Guard:** a test in `completion_safety.bats` asserts `BASH_VERSINFO[0] -eq 3`. It is skipped
   unless `KERGHAN_TEST_BASH32=1`, so a base-image change cannot silently turn the service into a
   bash 5 run.
@@ -1191,14 +1191,14 @@ The completion tests run under a real bash 3.2, in addition to the bash 5 run. N
 
 Rejected:
 
-- **The whole suite under 3.2:** the right long-term goal, tracked separately (#433).
-- **A static lint for bash-4-only syntax:** redundant once every matrix row runs under 3.2,
+- **A static lint for bash-4-only syntax:** redundant once the whole suite runs under 3.2,
   brittle, and prone to false positives.
 
 ### File layout
 
-All client completion tests live in `standalone/test/completion*.bats`; the bash 3.2 service
-runs exactly that glob.
+All client completion tests live in `standalone/test/completion*.bats`, plus the installer
+step in `install_completion.bats`. Like the rest of `standalone/test`, every file runs on both
+bash 5 and bash 3.2.
 
 | File | Holds | bash 5 | bash 3.2 |
 |---|---|---|---|
@@ -1206,10 +1206,9 @@ runs exactly that glob.
 | `completion_command.bats` | `kerghan completion …` output, errors, exit codes, generator side effects, contracts (`_kerghan`, `complete -o nospace -F _kerghan kg`) | ✓ | ✓ |
 | `completion_safety.bats` | hygiene snapshot, empty `PATH`, sentinel config, static deny-list, `BASH_VERSINFO` guard | ✓ | ✓ |
 | `completion_sync.bats` | usage cross-check and the single-source-of-truth tests | ✓ | ✓ |
-| `install_completion.bats` | installer step: path resolution, opt-out, hint, non-fatal, overwrite, temp file and symlink, not executable, runs the just-installed client; uses `helpers/install_setup.bash` | ✓ | — |
+| `install_completion.bats` | installer step: path resolution, opt-out, hint, non-fatal, overwrite, temp file and symlink, not executable, runs the just-installed client; uses `helpers/install_setup.bash` | ✓ | ✓ |
 
-- `install_completion.bats` is kept out of the 3.2 glob (running `install.sh` under 3.2 is
-  #433's scope) and keeps `install.bats` from growing.
+- `install_completion.bats` is a separate file so `install.bats` doesn't grow.
 - The `BASH_VERSINFO` guard is skipped unless `KERGHAN_TEST_BASH32=1`, which the bash 3.2
   service sets.
 
