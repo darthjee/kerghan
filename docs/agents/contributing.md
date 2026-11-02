@@ -35,6 +35,10 @@ A PR is considered complete when:
 - Code coverage is as high as reasonably possible.
 - Any new or changed environment variable/setting is documented in the PR's "Environment
   Variables & Settings" section.
+- Any PR that adds or changes a `kerghan` client command, flag, `configure` key or fixed value
+  updates the bash completion in the same PR. The sync tests in
+  `standalone/test/completion_sync.bats` fail otherwise; see
+  [Client completion](standalone/client-completion.md#sync-rule).
 - Code is not overly complex:
   - Classes/modules and methods should have clear, focused responsibilities.
   - If a class or function is taking on too many responsibilities, refactor to simplify.
