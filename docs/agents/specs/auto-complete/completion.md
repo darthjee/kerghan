@@ -45,7 +45,8 @@ Word lists follow the client today (`standalone/bin/kerghan`).
   be typed or completed right away.
 - **Env keys** (uppercase, written to `kerghan.env`), with `=` attached: the names in the
   client's static `DEFAULT_ENV_KEYS` constant (`KERGHAN_SECRET_KEY`, `KERGHAN_INTEGRATIONS_KEY`,
-  `KERGHAN_DEFAULT_USER_*`).
+  `KERGHAN_DEFAULT_USER_*`), plus `FRONTEND_BASE_URL`, the one known env key outside that
+  constant (`configure` lists, validates and unsets it, and the wizard asks for it).
 - **Fixed values after `KEY=`:**
 
   | Key | Values |
@@ -55,13 +56,15 @@ Word lists follow the client today (`standalone/bin/kerghan`).
   | `auto-login` | `true`, `false` |
   | `restart-on-update` | `ask`, `always`, `never` |
 
-- **After `--unset`:** bare key names (config and env), with no `=`.
+- **After `--unset`:** bare key names, with no `=`: the config keys and `FRONTEND_BASE_URL`.
+  The `DEFAULT_ENV_KEYS` names are not offered: `configure` refuses to unset them, because
+  `kerghan up` and `kerghan update-env` would generate them again.
 
 ### Word lists
 
 > **Open — settled by #426:** the source of the word lists: generated from the client's own
-> constants (commands, `configure` keys, `DEFAULT_ENV_KEYS`, fixed values) vs. hand-written in
-> the script and guarded by a sync test.
+> constants (commands, `configure` keys, `DEFAULT_ENV_KEYS` plus `FRONTEND_BASE_URL`, fixed
+> values) vs. hand-written in the script and guarded by a sync test.
 
 ### Per-position table
 
@@ -73,7 +76,10 @@ Word lists follow the client today (`standalone/bin/kerghan`).
 - **Free-form values:** `port`, `bind`, `image-tag`, `stop-timeout` after `KEY=`, and the
   arguments of `-p` / `--port` and `--bind`.
 - **`update` versions** (`update [VERSION]`): would need a network call.
-- **Passthrough:** any argument of `compose`, and `logs` arguments beyond `-f`.
+- **Passthrough:** any argument of `compose`, which goes to docker compose inside the
+  instance.
+- **`logs` beyond `-f`:** `logs` is not a passthrough; it takes only `-f`, and any other
+  argument is a usage error, so nothing else is offered.
 - **Env values**, and `KEY=-` (the value is read hidden).
 - **Hidden steps:** `update --finish`.
 - **Filenames:** when nothing matches, nothing is offered. There is never a fallback to filename
@@ -98,7 +104,8 @@ Edge cases 1–17 from #424, as behaviour.
 
 4. **Unknown command** (`kerghan foo <TAB>`): nothing.
 5. **Commands with nothing left to offer** (`down`, `status`, `version`, …): nothing.
-6. **Passthrough** (`compose …`, `logs` arguments beyond `-f`): nothing.
+6. **`compose …`** (passthrough) and **`logs` beyond `-f`** (`logs` takes only `-f`):
+   nothing.
 7. **`update VERSION`:** no version is suggested. Only the flags are offered, before or after a
    version already typed.
 8. **Free-form flag arguments** (`--bind <TAB>`, `-p <TAB>`, `--port <TAB>`): nothing, and the
@@ -106,9 +113,13 @@ Edge cases 1–17 from #424, as behaviour.
 
 ### Flags
 
-9. **A flag already on the line** is not offered again.
-10. **Mutually exclusive pairs** (`--restart` / `--no-restart`, `--auto-login` /
-    `--no-auto-login`): once either is on the line, neither is offered.
+9. **A flag already on the line** is not offered again, except `configure --unset`, which can
+   be repeated (`configure [--unset KEY]...`). Aliases of the same option count as one: once
+   `-p` or `--port` is on the line, neither is offered.
+10. **Mutually exclusive pairs** (`update --restart` / `--no-restart`, `up --auto-login` /
+    `--no-auto-login`): once either is on the line, neither is offered. This is a completion
+    choice: `update` rejects both together (a usage error), while `up` accepts both and the
+    last one wins; offering the opposite flag is never useful in either case.
 11. **Hidden steps** (`update --finish`) are never offered.
 12. **`help` / `-h` / `--help`:** offered only where the client accepts them, which is the top
     level. No subcommand takes a help flag, so none is offered after a command.
@@ -117,14 +128,19 @@ Edge cases 1–17 from #424, as behaviour.
 
 13. **Keys complete with `=` attached** (`configure var<TAB>` → `variant=`), with no trailing
     space, so the value follows at once (`variant=<TAB>` → `online offline`). The default
-    `COMP_WORDBREAKS` contains `=`, so bash splits `variant=on` into separate words; the
-    function rebuilds the `KEY=VALUE` word from `COMP_WORDS` / `COMP_CWORD` itself, without
-    bash-completion helpers and without changing `COMP_WORDBREAKS`. bash 3.2 has no `compopt`,
+    `COMP_WORDBREAKS` contains `=`, so bash splits `variant=on` into the words `variant`, `=`,
+    `on`; the function rebuilds the `KEY=VALUE` word from `COMP_WORDS` / `COMP_CWORD` itself,
+    without bash-completion helpers and without changing `COMP_WORDBREAKS`. Right after the
+    `=`, the current word may be `=` itself or an empty word whose previous word is `=`,
+    depending on the bash version and the cursor position; both cases are handled, on bash 3.2
+    and 4+. bash 3.2 has no `compopt`,
     so the "no trailing space" rule can't be switched per word; how it is met (e.g.
     registering with `-o nospace` and adding the trailing space to every other word) is left
     to the per-position table (see [Per-position table](#per-position-table)) and #429.
-14. **`--unset <TAB>`** offers bare key names, with no `=`.
-15. **Env keys** come only from the static `DEFAULT_ENV_KEYS` names built into the script.
+14. **`--unset <TAB>`** offers bare key names, with no `=`: the config keys and
+    `FRONTEND_BASE_URL`, never the `DEFAULT_ENV_KEYS` names (which can't be unset).
+15. **Env keys** come only from static names built into the script (`DEFAULT_ENV_KEYS` and
+    `FRONTEND_BASE_URL`).
     Completion **never** reads `~/.kerghan/config` or `kerghan.env`, and never completes env
     values.
 16. **`KEY=-`** and free-form values: nothing.
@@ -135,23 +151,29 @@ Edge cases 1–17 from #424, as behaviour.
 - Sourcing the script registers `_kerghan` for `kerghan`.
 - `kerghan <TAB>` offers every command name plus `help`, `-h`, `--help`.
 - Each command in [Per command](#per-command) offers exactly its listed words.
-- `configure <TAB>` offers its flags, the config keys with `=` and the `DEFAULT_ENV_KEYS` names
-  with `=`, with no trailing space after a key.
+- `configure <TAB>` offers its flags, the config keys with `=`, and the `DEFAULT_ENV_KEYS` names
+  and `FRONTEND_BASE_URL` with `=`, with no trailing space after a key.
 - `configure variant=<TAB>`, `runtime=`, `auto-login=`, `restart-on-update=` offer their fixed
   values.
-- `configure --unset <TAB>` offers bare key names with no `=`.
+- `configure --unset <TAB>` offers the config keys and `FRONTEND_BASE_URL` as bare names with
+  no `=`, and no `DEFAULT_ENV_KEYS` name.
+- `configure --unset port --unset <TAB>` still offers `--unset`-able keys (other than `port`),
+  and `--unset` itself stays offered after one `--unset KEY`.
 - Free-form values (`port=`, `bind=`, `image-tag=`, `stop-timeout=`, `-p`, `--port`, `--bind`)
   offer nothing.
 - `configure KEY=-` offers nothing; env values are never offered.
 - `update <TAB>` never offers versions or `--finish`; `update 0.9.0 <TAB>` still offers the
   flags.
-- `compose <TAB>` and `logs -f <TAB>` beyond `-f` offer nothing.
+- `compose <TAB>` and `logs -f <TAB>` offer nothing.
 - An unknown command offers nothing, and no case falls back to filenames.
 - Calling the client by path (`./kerghan`) completes the same as `kerghan`.
-- A flag already on the line is not offered again.
+- A flag already on the line is not offered again (except `--unset`); `-p` on the line hides
+  `--port` and the other way round.
 - Once one flag of a mutually exclusive pair is on the line, neither is offered.
 - `-h` / `--help` / `help` are offered at the top level only.
 - A key already on the line is not offered again.
+- `configure variant=<TAB>` completes the same whether the current word is `=` or an empty word
+  after `=`, on bash 3.2 and 4+.
 - Completion reads no file (in particular not `~/.kerghan/config` or `kerghan.env`).
 - Every case above passes under bash 3.2.
 

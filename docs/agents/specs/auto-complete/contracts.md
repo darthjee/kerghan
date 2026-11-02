@@ -44,14 +44,16 @@ zsh/fish Epics can rely on it. Later installers keep writing bash completion the
 ## Installer `update` contract
 
 The installer's existing contract with `kerghan update` (see the `install.sh` header and
-[client-update.md](../../standalone/client-update.md#stable-contracts)) is **unchanged**. The
+[client-update.md](../../standalone/client-update.md#stable-contracts)) is **kept**. The
 completion step adds:
 
 - no prompt;
 - no sudo;
 - no write outside the install dir and the completion directory, and no write under
   `~/.kerghan`;
-- no new failure: the step is never fatal (see [install.md](install.md#never-fatal)).
+- no new failure: the step is never fatal (see [install.md](install.md#never-fatal)). The
+  header's "non-zero exit on any failure" is narrowed to the client and `vault` install, which
+  is backward compatible (see [install.md](install.md#constraint)).
 
 `update` passes no new variable to the installer.
 

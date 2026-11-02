@@ -7,11 +7,17 @@ The completion step added to `standalone/install.sh`. Built by #430. Overview:
 
 `install.sh` is a stable contract that `kerghan update` relies on (see its header and
 [contracts.md](contracts.md#installer-update-contract)): no prompts, no sudo, `mv -f` as the only
-write, non-zero exit on any failure of the client install, never touches `~/.kerghan` or any
-Docker volume. The completion step stays inside that contract, and it never turns a successful
-client install into a failure.
+write to the install dir, non-zero exit on any failure, never touches `~/.kerghan` or any Docker
+volume. The completion step stays inside that contract, and it never turns a successful client
+install into a failure.
 
-The step runs **after** the client is installed, so it can run that client.
+The header's "non-zero exit on any failure" gets one deliberate exception: a completion failure
+only warns (see [Never fatal](#never-fatal)). #431 rewords the header accordingly (e.g. "any
+failure of the client or `vault` install"); `update` relies only on the client install failing
+loudly, so this is backward compatible.
+
+The step runs **after** the client is moved into place (`move_client`, itself after
+`ensure_vault`), next to `check_path`, so it can run that client.
 
 ## Target
 
@@ -50,15 +56,28 @@ Rejected:
 ## Without the `bash-completion` package
 
 The file is still installed. When bash-completion is not detected, a `hint:` prints the line to
-add to the shell rc file by hand: `eval "$(kerghan completion bash)"`, or `source <file>`. This
-is not an error and does not change the exit code.
+add to the shell rc file by hand: `source <file>`, or
+`eval "$("<install dir>/kerghan" completion bash)"` with the client's absolute path, since the
+install dir may not be on `PATH` (`check_path` may already have warned about it). This is not an
+error and does not change the exit code.
 
 ## Never fatal
 
 If the directory can't be created, the client fails to print the script, or the file can't be
 written or moved, the step prints a `warning:` and the install continues. The completion step
 never fails an install or an `update`; the installer's exit code reflects only the client (and
-`vault`) install, as today. A failed step leaves no temp file behind.
+`vault`) install, as today.
+
+- **Guarded commands:** the installer runs under `set -euo pipefail`, so every command in the
+  step is guarded (`if !` / `||`) and reports through `warn` (which does not exit), never
+  `error` + `exit 1`.
+- **Client without `completion`:** `KERGHAN_VERSION=<older version>` with a newer `install.sh`
+  installs a client that has no `completion` command; it exits `2` with empty stdout. The step
+  checks the client's exit code and that its output is non-empty before replacing the file, so
+  an existing file is never replaced by an empty one.
+- **No temp file left behind:** the existing `trap cleanup EXIT` only removes the `$staging`
+  folder, and the temp file lives in the completion directory, so the step removes its own temp
+  file on failure (inline, or by extending `cleanup`).
 
 ## Opt-out
 
@@ -112,6 +131,9 @@ Out of scope: there is no uninstaller. The file's path is documented in [Target]
   unchanged.
 - A write failure (e.g. a read-only target directory) prints a `warning:`, leaves no temp file,
   and the install still exits `0`.
+- A client without `completion` (non-zero exit or empty output) leaves an existing file
+  untouched, prints a `warning:`, and the install still exits `0`.
+- The `hint:` uses the client's absolute path or `source <file>`.
 - The step creates nothing under `~/.kerghan`, uses no sudo, and asks no question.
 
 > **Open — settled by #428:** the test harness and the full test coverage.

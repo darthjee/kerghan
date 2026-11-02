@@ -29,7 +29,8 @@ In scope:
 
 - **Shell:** bash only, including bash 3.2 (macOS).
 - **What is completed:** command names (and `help` / `-h` / `--help` at the top level), each
-  command's flags, `configure` keys (the config keys and the static `DEFAULT_ENV_KEYS` names),
+  command's flags, `configure` keys (the config keys, the static `DEFAULT_ENV_KEYS` names and
+  `FRONTEND_BASE_URL`),
   and the values of the keys with a fixed set: `variant`, `runtime`, `auto-login`,
   `restart-on-update` ([completion.md](completion.md)).
 - **`kerghan completion <shell>`**: its shape, streams and error cases
@@ -43,7 +44,7 @@ Out of scope (from #424):
 
 - zsh and fish (see [Follow-up Epics](#follow-up-epics)).
 - Completing `update [VERSION]` with release versions, which would need a network call.
-- Passing `compose …` / `logs …` arguments through to docker compose's own completion.
+- Passing `compose …` arguments through to docker compose's own completion.
 - Completion for the `vault` CLI.
 - Dynamic lookups (Docker, Vault, GitHub, config or env files) during completion.
 - Windows / PowerShell.
@@ -104,7 +105,7 @@ none remain.
 | [completion.md](completion.md#word-lists) | Source of the word lists (generated from the client's constants vs. hand-written + sync test) | #426 |
 | [contracts.md](contracts.md#sync-rule) | How the sync rule is enforced | #426 |
 | [completion.md](completion.md#per-position-table) | The exact per-position completion table | #427 |
-| [command.md](command.md#messages-and-exit-codes) | The exact `completion` usage line, error messages and exit codes | #427 |
+| [command.md](command.md#messages-and-exit-codes) | The exact `completion` usage line and error messages | #427 |
 | [install.md](install.md#messages) | The exact `hint:`, `warning:` and success text | #427 |
 | Every "Required tests" section | The test harness and full coverage | #428 |
 
