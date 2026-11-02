@@ -143,5 +143,6 @@ load helpers/setup
     run "$KERGHAN" "$arg"
     [ "$status" -eq 0 ]
     assert_output_contains "Usage: kerghan"
+    assert_output_contains "  completion bash                 print the bash completion script"
   done
 }
