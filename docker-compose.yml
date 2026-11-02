@@ -126,8 +126,8 @@ services:
       - ./standalone:/standalone:ro
     command: /standalone/test
 
-  # client completion tests (standalone/test/completion*.bats) on bash 3.2.57, the bash macOS ships
-  bats_bash32:
+  # whole standalone bats suite (standalone/test) on bash 3.2.57, the bash macOS ships
+  standalone_tests_bash32:
     build:
       context: ./dockerfiles/bats_bash32
     image: kerghan_bats_bash32
@@ -135,7 +135,7 @@ services:
       - ./standalone:/standalone:ro
     environment:
       KERGHAN_TEST_BASH32: "1"
-    command: bash -c 'bats /standalone/test/completion*.bats'
+    command: bats /standalone/test
 
   # bats suite for scripts/ (Render deploy: deploy.sh/render.sh); image entrypoint is `bats`
   scripts_tests:
