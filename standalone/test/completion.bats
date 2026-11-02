@@ -35,13 +35,13 @@ load helpers/completion
   assert_reply "up " "update " "update-env "
 }
 
-@test "matrix top-first: edge 12: kerghan -<TAB> offers -h and --help" {
+@test "edge 12: help at the top level (top-first), kerghan -<TAB> offers -h and --help" {
   source_completion
   complete_line "kerghan -"
   assert_reply "-h " "--help "
 }
 
-@test "matrix top-later: edge 4: kerghan foo <TAB> offers nothing" {
+@test "edge 4: unknown command, kerghan foo <TAB> offers nothing (top-later)" {
   source_completion
   complete_line "kerghan foo "
   assert_no_reply
@@ -81,7 +81,7 @@ load helpers/completion
   assert_reply "${UP_FLAGS[@]}"
 }
 
-@test "matrix up-flags: edge 9: a flag on the line is not offered again" {
+@test "edge 9: a flag on the line is not offered again (up-flags)" {
   source_completion
   complete_line "kerghan up --offline "
   minus UP_FLAGS "--offline "
@@ -102,7 +102,7 @@ load helpers/completion
   assert_reply "${EXPECTED[@]}"
 }
 
-@test "matrix up-flags: edge 10: --auto-login removes both auto-login flags" {
+@test "edge 10: mutually exclusive pair (up-flags): --auto-login removes both auto-login flags" {
   source_completion
   complete_line "kerghan up --auto-login "
   minus UP_FLAGS "--auto-login " "--no-auto-login "
@@ -116,7 +116,7 @@ load helpers/completion
   assert_reply "${EXPECTED[@]}"
 }
 
-@test "matrix up-flag-arg: edge 8: kerghan up -p <TAB> offers nothing" {
+@test "edge 8: free-form flag argument, kerghan up -p <TAB> offers nothing (up-flag-arg)" {
   source_completion
   complete_line "kerghan up -p "
   assert_no_reply
@@ -148,7 +148,7 @@ load helpers/completion
   assert_reply "-f "
 }
 
-@test "matrix logs: edge 6: kerghan logs -f <TAB> offers nothing" {
+@test "edge 6: logs beyond -f, kerghan logs -f <TAB> offers nothing (logs)" {
   source_completion
   complete_line "kerghan logs -f "
   assert_no_reply
@@ -178,13 +178,13 @@ load helpers/completion
   assert_reply "--force " "--yes "
 }
 
-@test "matrix update: edge 7: a VERSION on the line changes nothing" {
+@test "edge 7: update VERSION (update): a VERSION on the line changes nothing" {
   source_completion
   complete_line "kerghan update 0.9.0 "
   assert_reply "${UPDATE_FLAGS[@]}"
 }
 
-@test "matrix update: edge 11: --f offers --force, never --finish" {
+@test "edge 11: hidden steps (update): --f offers --force, never --finish" {
   source_completion
   complete_line "kerghan update --f"
   assert_reply "--force "
@@ -220,7 +220,7 @@ load helpers/completion
   assert_no_reply
 }
 
-@test "matrix no-args: edge 5: down, status, reset, update-env, version and help offer nothing" {
+@test "edge 5: nothing left to offer (no-args): down, status, reset, update-env, version and help offer nothing" {
   source_completion
   local cmd
   for cmd in down status reset update-env version help; do
@@ -245,7 +245,7 @@ load helpers/completion
   assert_reply "--show-secrets " "--force " "--unset " "${CONFIG_KEYS_EQ[@]}" "${ENV_KEYS_EQ[@]}"
 }
 
-@test "matrix cfg-other: edge 13: kerghan configure var<TAB> offers variant= with no space" {
+@test "edge 13: key with = attached (cfg-other), kerghan configure var<TAB> offers variant= with no space" {
   source_completion
   complete_line "kerghan configure var"
   assert_reply "variant="
@@ -257,7 +257,7 @@ load helpers/completion
   assert_reply "--unset " "${CONFIG_KEYS_EQ[@]}" "${ENV_KEYS_EQ[@]}"
 }
 
-@test "matrix cfg-other: edge 17: a KEY= on the line is not offered again" {
+@test "edge 17: keys already on the line (cfg-other): a KEY= on the line is not offered again" {
   source_completion
   complete_words "kerghan configure variant=x " -- kerghan configure variant = x ''
   minus CONFIG_KEYS_EQ "variant="
@@ -284,7 +284,7 @@ load helpers/completion
   assert_no_reply
 }
 
-@test "matrix cfg-unset: edge 14: --unset <TAB> offers the bare --unset keys" {
+@test "edge 14: --unset <TAB> offers the bare --unset keys" {
   source_completion
   complete_line "kerghan configure --unset "
   assert_reply "${UNSET_KEYS[@]}"
@@ -382,7 +382,7 @@ load helpers/completion
   assert_no_reply
 }
 
-@test "matrix cfg-free: edge 16: KEY=- offers nothing" {
+@test "edge 16: KEY=- offers nothing (cfg-free)" {
   source_completion
   complete_words "kerghan configure port=-" -- kerghan configure port = -
   assert_no_reply
