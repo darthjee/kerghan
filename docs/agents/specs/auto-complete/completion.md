@@ -62,9 +62,57 @@ Word lists follow the client today (`standalone/bin/kerghan`).
 
 ### Word lists
 
-> **Open — settled by #426:** the source of the word lists: generated from the client's own
-> constants (commands, `configure` keys, `DEFAULT_ENV_KEYS` plus `FRONTEND_BASE_URL`, fixed
-> values) vs. hand-written in the script and guarded by a sync test.
+A mix: what the client holds as data is generated, what only exists as `case` code is
+hand-written.
+
+| List | Source | Why |
+|------|--------|-----|
+| `configure` config keys | **Generated** from `CONFIG_KEYS` | Already a constant. |
+| Env keys | **Generated** from `DEFAULT_ENV_KEYS` plus a constant holding `FRONTEND_BASE_URL` (#434) | Mostly data already. |
+| Fixed values | **Generated** from four value constants, one per key (#434) | The `valid_*` validators and their messages read the same constants: one source for validation and completion. |
+| Commands | **Hand-written** in `_kerghan` | A `case` pattern can't take its alternatives from a variable, so a constant wouldn't drive the `main` dispatch. |
+| Per-command flags | **Hand-written** in `_kerghan` | Same reason: each `cmd_*` parser matches its flags in a `case`. |
+
+- **"Generated"** means `kerghan completion bash` prints the lists from the client's own
+  constants. The script is still fixed text for a given client version: never built from
+  environment variables, config, `$HOME` or paths (see [security.md](security.md#fixed-text)).
+- **Hand-written** lists are guarded by the `kerghan help` cross-check (see
+  [Required tests](#required-tests)).
+- **The `--unset` list** (the config keys plus `FRONTEND_BASE_URL`, no `DEFAULT_ENV_KEYS`) is
+  derived from the generated lists, never kept as a separate list, so it can't drift on its own.
+- The client refactor that adds the missing constants (the four value constants, the
+  `FRONTEND_BASE_URL` constant) and documents the `BASH_SOURCE` guard is #434. It changes no
+  behaviour and must merge before #429.
+
+**Rejected:**
+
+- **Generate everything:** needs rewriting the `main` dispatch and every `cmd_*` parser, and the
+  `case` patterns would still be a second copy of each list.
+- **Hand-write everything:** gives up the guarantee the existing constants already give for
+  free.
+
+**Words outside the lists:**
+
+1. **Hidden words** (`update --finish`) are accepted by the client and never completed. They
+   live in one explicit, commented **exclusion list** (only `--finish` today). The sync check
+   treats them as known and intentionally not completed; a new hidden step must be added there
+   on purpose or the check fails.
+2. **Aliases** (`-p` / `--port`, `help` / `-h` / `--help`): both forms are completed, so both
+   are plain words in the lists. Grouping them (edge case 9) is the
+   [per-position table](#per-position-table)'s job (#427).
+3. **`--[no-]x` pairs** are stored as both expanded words (`--auto-login`, `--no-auto-login`,
+   `--restart`, `--no-restart`).
+4. **`CLIENT_MANAGED_KEYS`** (`KERGHAN_DEFAULT_USER_ALWAYS_AUTHENTICATED`,
+   `KERGHAN_DEFAULT_USER_ALLOWED_IPS`) are refused by `configure` and never offered.
+5. **Positional arguments** (`compose <args>`, `update [VERSION]`, a bare `configure KEY`) are
+   not list entries; see [Never completed](#never-completed).
+6. **Fixed values vs free-form keys:** every `CONFIG_KEYS` entry is either in a commented
+   `FREE_FORM_KEYS` list kept in the sync test (`port`, `bind`, `image-tag`, `stop-timeout`) or
+   has a value constant: never both, never neither. A new config key fails the check until it
+   is classified. Rejected: detecting enum-like validators by parsing the `valid_*` `case`
+   patterns (brittle) and leaving it to review (a new key would silently complete to nothing).
+7. **Ordering:** lists are compared as sets; order is not significant (bash sorts `COMPREPLY`
+   for display).
 
 ### Per-position table
 
@@ -176,5 +224,15 @@ Edge cases 1–17 from #424, as behaviour.
   after `=`, on bash 3.2 and 4+.
 - Completion reads no file (in particular not `~/.kerghan/config` or `kerghan.env`).
 - Every case above passes under bash 3.2.
+- **Sync — generated lists:** with the client sourced (relying on its `BASH_SOURCE` guard),
+  completion offers exactly `CONFIG_KEYS`, `DEFAULT_ENV_KEYS` plus the `FRONTEND_BASE_URL`
+  constant, and each value constant for its key.
+- **Sync — hand-written lists:** the `kerghan help` cross-check covers the commands and the
+  synopsis flags, with `--[no-]x` expanded, aliases counted, and the exclusion list
+  (`--finish`) skipped.
+- **Sync — classification:** every `CONFIG_KEYS` entry is either in `FREE_FORM_KEYS` or has a
+  value constant, never both and never neither.
+- In the three sync checks, lists are compared as sets, and a failure names the word and the
+  side it is missing from.
 
 > **Open — settled by #428:** the test harness and the full test coverage.
