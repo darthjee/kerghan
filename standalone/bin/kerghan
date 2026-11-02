@@ -18,6 +18,12 @@
 # ${var,,}, no mapfile/readarray, no [[ -v ]], no local -n, and empty arrays
 # expanded as ${arr[@]+"${arr[@]}"}.
 #
+# The trailing `if [ "${BASH_SOURCE[0]}" = "$0" ]; then main "$@"; fi` guard lets
+# the client be sourced without running main. It is an internal test contract,
+# not user-facing: the completion sync tests (#429) source the client to read
+# its constants (CONFIG_KEYS, DEFAULT_ENV_KEYS, the *_VALUES constants,
+# FRONTEND_BASE_URL_KEY). The guard must stay.
+#
 # KERGHAN_VERSION below is pinned by scripts/bump_version.sh together with the
 # package.json versions, so CLI <v> always runs image <v>. Never derive it any
 # other way.
@@ -170,19 +176,47 @@ valid_port() {
   [ "$1" -ge 1 ] && [ "$1" -le 65535 ]
 }
 
-valid_variant() {
+# The fixed value set of each config key that has one (space-separated, no
+# double spaces). Validation and the "expected ..." messages read these, and
+# `kerghan completion bash` (#429) generates its word lists from them.
+VARIANT_VALUES="online offline"
+RUNTIME_VALUES="auto sysbox privileged"
+AUTO_LOGIN_VALUES="true false"
+RESTART_ON_UPDATE_VALUES="ask always never"
+
+# in_values <value> <space-separated list> - <value> is one of the words of the
+# list. Empty values and values holding whitespace never match (so a value
+# made of several words is rejected).
+in_values() {
   case "$1" in
-    online | offline) return 0 ;;
+    '' | *[[:space:]]*) return 1 ;;
   esac
-  return 1
+  in_list "$1" "$2"
 }
 
-valid_runtime() {
-  case "$1" in
-    auto | sysbox | privileged) return 0 ;;
-  esac
-  return 1
+# or_list <space-separated list> - prints the words with the last two joined by
+# " or " and the rest by ", " (e.g. "auto, sysbox or privileged").
+or_list() {
+  local word out="" prev="" count=0
+  for word in $1; do
+    if [ "$count" -ge 2 ]; then
+      out="$out, $prev"
+    elif [ "$count" -eq 1 ]; then
+      out="$prev"
+    fi
+    prev="$word"
+    count=$((count + 1))
+  done
+  if [ "$count" -ge 2 ]; then
+    printf '%s or %s\n' "$out" "$prev"
+  else
+    printf '%s\n' "$prev"
+  fi
 }
+
+valid_variant() { in_values "$1" "$VARIANT_VALUES"; }
+
+valid_runtime() { in_values "$1" "$RUNTIME_VALUES"; }
 
 valid_stop_timeout() {
   case "$1" in
@@ -202,12 +236,10 @@ valid_image_tag() {
   [ "${#1}" -le 128 ]
 }
 
-valid_bool() {
-  case "$1" in
-    true | false) return 0 ;;
-  esac
-  return 1
-}
+# valid_bool <value> - one of AUTO_LOGIN_VALUES. Also validates the
+# KERGHAN_DEFAULT_USER_ENABLED / KERGHAN_DEFAULT_USER_ADMIN env keys, which
+# share the same value set.
+valid_bool() { in_values "$1" "$AUTO_LOGIN_VALUES"; }
 
 # valid_bind <address> - an IPv4 address: four dot-separated 0-255 octets.
 # IPv6 host addresses are not supported (Docker needs them in brackets).
@@ -226,13 +258,9 @@ ADDRESS
   done
 }
 
-# valid_restart_on_update <value> - ask, always or never (lower-case).
-valid_restart_on_update() {
-  case "$1" in
-    ask | always | never) return 0 ;;
-  esac
-  return 1
-}
+# valid_restart_on_update <value> - one of RESTART_ON_UPDATE_VALUES
+# (lower-case).
+valid_restart_on_update() { in_values "$1" "$RESTART_ON_UPDATE_VALUES"; }
 
 # is_loopback <address> - the address is in 127.0.0.0/8.
 is_loopback() {
@@ -296,12 +324,12 @@ load_config() {
         CFG_PORT="$value"
         ;;
       variant)
-        [ -z "$value" ] || valid_variant "$value" || config_invalid "$n" "$key" "$value" "online or offline"
+        [ -z "$value" ] || valid_variant "$value" || config_invalid "$n" "$key" "$value" "$(config_expected "$key")"
         CFG_VARIANT="$value"
         ;;
       runtime)
         [ -z "$value" ] || valid_runtime "$value" ||
-          config_invalid "$n" "$key" "$value" "auto, sysbox or privileged"
+          config_invalid "$n" "$key" "$value" "$(config_expected "$key")"
         CFG_RUNTIME="$value"
         ;;
       stop-timeout)
@@ -315,7 +343,7 @@ load_config() {
         CFG_IMAGE_TAG="$value"
         ;;
       auto-login)
-        [ -z "$value" ] || valid_bool "$value" || config_invalid "$n" "$key" "$value" "true or false"
+        [ -z "$value" ] || valid_bool "$value" || config_invalid "$n" "$key" "$value" "$(config_expected "$key")"
         CFG_AUTO_LOGIN="$value"
         ;;
       bind)
@@ -324,7 +352,7 @@ load_config() {
         ;;
       restart-on-update)
         [ -z "$value" ] || valid_restart_on_update "$value" ||
-          config_invalid "$n" "$key" "$value" "ask, always or never"
+          config_invalid "$n" "$key" "$value" "$(config_expected "$key")"
         CFG_RESTART_ON_UPDATE="$value"
         ;;
       *)
@@ -352,6 +380,11 @@ volume_exists() {
 # KERGHAN_DEFAULT_USER_ALWAYS_AUTHENTICATED or KERGHAN_DEFAULT_USER_ALLOWED_IPS:
 # the client passes them on every up (auto-login and bind).
 DEFAULT_ENV_KEYS="KERGHAN_SECRET_KEY KERGHAN_INTEGRATIONS_KEY KERGHAN_DEFAULT_USER_ENABLED KERGHAN_DEFAULT_USER_USERNAME KERGHAN_DEFAULT_USER_EMAIL KERGHAN_DEFAULT_USER_PASSWORD KERGHAN_DEFAULT_USER_ADMIN"
+# FRONTEND_BASE_URL_KEY - the known env key the client does not generate:
+# configure lists, validates and unsets it, up/update inject it (unless
+# kerghan.env sets it), the wizard asks for it, and `kerghan completion bash`
+# (#429) offers it.
+FRONTEND_BASE_URL_KEY="FRONTEND_BASE_URL"
 
 # default_env_value <key> - prints the value a new kerghan.env gets for <key>:
 # a fresh secret for the two secrets, a generated 48-character hex password for
@@ -436,8 +469,8 @@ refuse_client_managed_keys() {
 # frontend_base_url_args <port> - prints `-e FRONTEND_BASE_URL=...` (one word
 # per line) unless kerghan.env sets FRONTEND_BASE_URL itself.
 frontend_base_url_args() {
-  if ! grep -q '^FRONTEND_BASE_URL=' "$ENV_FILE" 2>/dev/null; then
-    printf '%s\n' "-e" "FRONTEND_BASE_URL=http://localhost:$1"
+  if ! grep -q "^${FRONTEND_BASE_URL_KEY}=" "$ENV_FILE" 2>/dev/null; then
+    printf '%s\n' "-e" "${FRONTEND_BASE_URL_KEY}=http://localhost:$1"
   fi
 }
 
@@ -613,13 +646,13 @@ valid_config_value() {
 config_expected() {
   case "$1" in
     port) echo "1-65535" ;;
-    variant) echo "online or offline" ;;
-    runtime) echo "auto, sysbox or privileged" ;;
+    variant) or_list "$VARIANT_VALUES" ;;
+    runtime) or_list "$RUNTIME_VALUES" ;;
     stop-timeout) echo "a positive number of seconds" ;;
     image-tag) echo "a Docker image tag, without the -offline suffix" ;;
-    auto-login) echo "true or false" ;;
+    auto-login) or_list "$AUTO_LOGIN_VALUES" ;;
     bind) echo "an IPv4 address" ;;
-    restart-on-update) echo "ask, always or never" ;;
+    restart-on-update) or_list "$RESTART_ON_UPDATE_VALUES" ;;
   esac
 }
 
@@ -1072,7 +1105,7 @@ validate_value() {
   case "$key" in
     KERGHAN_DEFAULT_USER_ENABLED | KERGHAN_DEFAULT_USER_ADMIN)
       if ! valid_bool "$value"; then
-        error "invalid $key '$value' (expected true or false)"
+        error "invalid $key '$value' (expected $(or_list "$AUTO_LOGIN_VALUES"))"
         return 1
       fi
       ;;
@@ -1082,7 +1115,7 @@ validate_value() {
         return 1
       fi
       ;;
-    FRONTEND_BASE_URL)
+    "$FRONTEND_BASE_URL_KEY")
       case "$value" in
         http://* | https://*) ;;
         *)
@@ -2555,12 +2588,12 @@ configure_list() {
   keys=()
   values=()
   sources=()
-  for key in $DEFAULT_ENV_KEYS FRONTEND_BASE_URL; do
+  for key in $DEFAULT_ENV_KEYS $FRONTEND_BASE_URL_KEY; do
     keys+=("$key")
   done
   i=0
   while [ "$i" -lt "${#ER_KEYS[@]}" ]; do
-    if ! in_list "${ER_KEYS[i]}" "$DEFAULT_ENV_KEYS FRONTEND_BASE_URL"; then
+    if ! in_list "${ER_KEYS[i]}" "$DEFAULT_ENV_KEYS $FRONTEND_BASE_URL_KEY"; then
       keys+=("${ER_KEYS[i]}")
     fi
     i=$((i + 1))
@@ -2945,12 +2978,12 @@ wizard_questions() {
   fi
 
   if [ "$advanced" = "true" ]; then
-    if [ "$ER_EXISTS" = "true" ] && env_value_set FRONTEND_BASE_URL; then
-      wizard_env_question FRONTEND_BASE_URL "Public URL"
+    if [ "$ER_EXISTS" = "true" ] && env_value_set "$FRONTEND_BASE_URL_KEY"; then
+      wizard_env_question "$FRONTEND_BASE_URL_KEY" "Public URL"
     else
-      wizard_ask FRONTEND_BASE_URL "Public URL" "http://localhost:$WIZARD_PORT, derived from port"
+      wizard_ask "$FRONTEND_BASE_URL_KEY" "Public URL" "http://localhost:$WIZARD_PORT, derived from port"
       if [ -n "$WIZARD_ANSWER" ]; then
-        batch_add set FRONTEND_BASE_URL "$WIZARD_ANSWER"
+        batch_add set "$FRONTEND_BASE_URL_KEY" "$WIZARD_ANSWER"
       fi
     fi
   fi
@@ -3054,6 +3087,7 @@ main() {
   esac
 }
 
+# Sourcing guard: keep it (see the header).
 if [ "${BASH_SOURCE[0]}" = "$0" ]; then
   main "$@"
 fi
