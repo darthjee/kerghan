@@ -41,7 +41,7 @@
 # instance name, image or env.
 set -euo pipefail
 
-KERGHAN_VERSION="0.8.3"
+KERGHAN_VERSION="0.8.4"
 # FIRST_UPDATE_VERSION - the first release that ships `kerghan update` (and so
 # `update --finish`); a downgrade below it skips the handoff. Any value above
 # 0.8.2 and not above that release behaves the same, since no release lies in
