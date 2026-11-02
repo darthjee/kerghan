@@ -374,6 +374,11 @@ volume_exists() {
 # KERGHAN_DEFAULT_USER_ALWAYS_AUTHENTICATED or KERGHAN_DEFAULT_USER_ALLOWED_IPS:
 # the client passes them on every up (auto-login and bind).
 DEFAULT_ENV_KEYS="KERGHAN_SECRET_KEY KERGHAN_INTEGRATIONS_KEY KERGHAN_DEFAULT_USER_ENABLED KERGHAN_DEFAULT_USER_USERNAME KERGHAN_DEFAULT_USER_EMAIL KERGHAN_DEFAULT_USER_PASSWORD KERGHAN_DEFAULT_USER_ADMIN"
+# FRONTEND_BASE_URL_KEY - the known env key the client does not generate:
+# configure lists, validates and unsets it, up/update inject it (unless
+# kerghan.env sets it), the wizard asks for it, and `kerghan completion bash`
+# (#429) offers it.
+FRONTEND_BASE_URL_KEY="FRONTEND_BASE_URL"
 
 # default_env_value <key> - prints the value a new kerghan.env gets for <key>:
 # a fresh secret for the two secrets, a generated 48-character hex password for
@@ -458,8 +463,8 @@ refuse_client_managed_keys() {
 # frontend_base_url_args <port> - prints `-e FRONTEND_BASE_URL=...` (one word
 # per line) unless kerghan.env sets FRONTEND_BASE_URL itself.
 frontend_base_url_args() {
-  if ! grep -q '^FRONTEND_BASE_URL=' "$ENV_FILE" 2>/dev/null; then
-    printf '%s\n' "-e" "FRONTEND_BASE_URL=http://localhost:$1"
+  if ! grep -q "^${FRONTEND_BASE_URL_KEY}=" "$ENV_FILE" 2>/dev/null; then
+    printf '%s\n' "-e" "${FRONTEND_BASE_URL_KEY}=http://localhost:$1"
   fi
 }
 
@@ -1104,7 +1109,7 @@ validate_value() {
         return 1
       fi
       ;;
-    FRONTEND_BASE_URL)
+    "$FRONTEND_BASE_URL_KEY")
       case "$value" in
         http://* | https://*) ;;
         *)
@@ -2577,12 +2582,12 @@ configure_list() {
   keys=()
   values=()
   sources=()
-  for key in $DEFAULT_ENV_KEYS FRONTEND_BASE_URL; do
+  for key in $DEFAULT_ENV_KEYS $FRONTEND_BASE_URL_KEY; do
     keys+=("$key")
   done
   i=0
   while [ "$i" -lt "${#ER_KEYS[@]}" ]; do
-    if ! in_list "${ER_KEYS[i]}" "$DEFAULT_ENV_KEYS FRONTEND_BASE_URL"; then
+    if ! in_list "${ER_KEYS[i]}" "$DEFAULT_ENV_KEYS $FRONTEND_BASE_URL_KEY"; then
       keys+=("${ER_KEYS[i]}")
     fi
     i=$((i + 1))
@@ -2967,12 +2972,12 @@ wizard_questions() {
   fi
 
   if [ "$advanced" = "true" ]; then
-    if [ "$ER_EXISTS" = "true" ] && env_value_set FRONTEND_BASE_URL; then
-      wizard_env_question FRONTEND_BASE_URL "Public URL"
+    if [ "$ER_EXISTS" = "true" ] && env_value_set "$FRONTEND_BASE_URL_KEY"; then
+      wizard_env_question "$FRONTEND_BASE_URL_KEY" "Public URL"
     else
-      wizard_ask FRONTEND_BASE_URL "Public URL" "http://localhost:$WIZARD_PORT, derived from port"
+      wizard_ask "$FRONTEND_BASE_URL_KEY" "Public URL" "http://localhost:$WIZARD_PORT, derived from port"
       if [ -n "$WIZARD_ANSWER" ]; then
-        batch_add set FRONTEND_BASE_URL "$WIZARD_ANSWER"
+        batch_add set "$FRONTEND_BASE_URL_KEY" "$WIZARD_ANSWER"
       fi
     fi
   fi
