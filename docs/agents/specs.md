@@ -45,7 +45,9 @@ file changes.
 
 ## Active specs
 
-none
+| Feature | Specs | Product decision |
+|---------|-------|------------------|
+| Auto-complete (bash completion for the `kerghan` client: `kerghan completion bash` and `install.sh` setup) | [specs/auto-complete/README.md](specs/auto-complete/README.md) | #424 |
 
 When no feature is in progress, this list reads "none".
 
