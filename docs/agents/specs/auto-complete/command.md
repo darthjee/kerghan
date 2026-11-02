@@ -102,21 +102,27 @@ Bats tests that check the full usage text are updated with it. The exact line is
 
 ## Required tests
 
-- `kerghan completion bash` exits `0` and prints the completion script on stdout, with nothing
-  on stderr.
-- The printed script, when sourced, defines `_kerghan` and registers it for `kerghan`.
-- `kerghan completion` exits `2`, and stderr starts with
-  `kerghan: error: missing shell (supported: bash)` followed by the usage.
-- `kerghan completion zsh` exits `2`, and stderr starts with
-  `kerghan: error: unsupported shell 'zsh' (supported: bash)`.
-- `kerghan completion -x` exits `2`, and stderr starts with `kerghan: error: unknown option '-x'`.
-- `kerghan completion bash extra` exits `2`, and stderr starts with
-  `kerghan: error: unexpected argument 'extra'`.
-- `kerghan completion zsh extra` reports the unsupported shell, not the extra argument.
-- Stdout is empty in every error case.
-- `kerghan completion bash` creates nothing under `HOME` and calls no `docker`, `vault` or
-  `curl`.
-- The `usage` text contains the exact `completion bash` line from
-  [Messages and exit codes](#messages-and-exit-codes), between the `wizard` and `version` lines.
+All in `completion_command.bats` (harness and naming: [README.md](README.md#testing)). Each
+case runs the client with the stubs from `helpers/setup.bash`. "Usage" means the full `usage`
+text, as printed by `kerghan help`.
 
-> **Open — settled by #428:** the test harness and the full test coverage.
+| Label | Input | Expected |
+|-------|-------|----------|
+| `contract completion bash` | `kerghan completion bash` | exit `0`; stdout is the completion script; stderr empty |
+| `contract _kerghan` | source the output of `kerghan completion bash` | `_kerghan` is a function; `complete -p kerghan` prints `complete -o nospace -F _kerghan kerghan` |
+| error: missing shell | `kerghan completion` | exit `2`; stdout empty; stderr is `kerghan: error: missing shell (supported: bash)` then the usage |
+| error: unsupported shell | `kerghan completion zsh` | exit `2`; stdout empty; stderr is `kerghan: error: unsupported shell 'zsh' (supported: bash)` then the usage |
+| error: unsupported shell | `kerghan completion fish` | exit `2`; stdout empty; stderr is `kerghan: error: unsupported shell 'fish' (supported: bash)` then the usage |
+| error: quoted as typed | `kerghan completion Bash` | exit `2`; stdout empty; stderr is `kerghan: error: unsupported shell 'Bash' (supported: bash)` then the usage |
+| error: unknown option | `kerghan completion -x` | exit `2`; stdout empty; stderr is `kerghan: error: unknown option '-x'` then the usage |
+| error: unknown option | `kerghan completion --help` | exit `2`; stdout empty; stderr is `kerghan: error: unknown option '--help'` then the usage |
+| error: extra argument | `kerghan completion bash extra` | exit `2`; stdout empty; stderr is `kerghan: error: unexpected argument 'extra'` then the usage |
+| error: order of checks | `kerghan completion zsh extra` | exit `2`; stdout empty; stderr is `kerghan: error: unsupported shell 'zsh' (supported: bash)` then the usage |
+| error: order of checks | `kerghan completion -x extra` | exit `2`; stdout empty; stderr is `kerghan: error: unknown option '-x'` then the usage |
+| usage line | `kerghan help` | contains the exact `completion bash` line from [Messages and exit codes](#messages-and-exit-codes), after the `wizard` line and before the `version` line |
+| no side effects | `kerghan completion bash`, with `STUB_LOG` set and `find "$HOME"` taken before | `STUB_LOG` is empty (no `docker`, `vault` or `curl`); `find "$HOME"` is identical afterwards; `~/.kerghan` does not exist |
+
+Existing bats tests that compare the full usage text are updated with the new line in the same
+PR. The fixed-text and no-secret-leak cases for the generator are in
+[security.md](security.md#required-tests); the `kg` alias case is in
+[contracts.md](contracts.md#required-tests).
