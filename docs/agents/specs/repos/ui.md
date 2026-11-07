@@ -20,7 +20,9 @@ Repositories are the core product, not an account setting.
 
 One row per repository:
 
-- `owner/name`, linking to the repository on GitHub;
+- `owner/name`, linking to the repository on GitHub. The frontend builds the link as
+  `https://github.com/` + URL-encoded `owner` + `/` + URL-encoded `name`; it never renders a
+  GitHub-supplied URL;
 - a visibility badge (public / private);
 - source badges: the integration labels and/or "public" that can see it;
 - the status: **Added**, **Not added**, **Unavailable** or **Unknown**
@@ -31,7 +33,8 @@ One row per repository:
 
 ## Toolbar
 
-- A filter: **All** (default), **Added**, **Not added**, **Unavailable**.
+- A filter: **All** (default), **Added**, **Not added**, **Unavailable**. **Unknown** rows show
+  only under All, on purpose (the list fixed by #444).
 - A name search.
 - A **Refresh** button.
 - A "last synced X ago" label.
@@ -61,7 +64,8 @@ With no GitHub handle and no integration, the page explains both options and lin
 A new "GitHub handle" input on the existing Account page (`#/account/my-account`), editable by
 the default user too ([model.md](model.md#github-handle)).
 
-> **Open — settled by #449:** the field's validation messages.
+> **Open — settled by #449:** the field's validation messages, and whether admin pages show or
+> edit the handle.
 
 ## Edge cases
 
@@ -74,7 +78,8 @@ Tests for the open points above, including the frontend spec strategy (#451), ar
 issue that settles them.
 
 - The Repositories link shows for a logged-in user and is hidden while awaiting approval.
-- Each row renders `owner/name` linked to GitHub, visibility, sources and status.
+- Each row renders `owner/name` linked to `https://github.com/<owner>/<name>` (URL-encoded),
+  visibility, sources and status.
 - Add shows a spinner, turns the row Added on success, and shows an inline error on failure.
 - The filter defaults to All; filter, search and pagination drive the listing request.
 - Stored rows show with the syncing indicator; rows reload when the sync ends; the full spinner

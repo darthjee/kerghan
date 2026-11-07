@@ -18,9 +18,17 @@ given (user, integration)**.
 - Errors come back as a fixed set of statuses, never by echoing GitHub's response body.
 - Integration types in scope: `pat`, `oauth_app`, `github_app`.
 
-> **Open — settled by #448:** the exported interface, per-type authentication (including GitHub
-> App installation-token minting and caching), the GitHub endpoint and parameters per type, and
-> the error mapping.
+- A minted GitHub App installation token is a credential: if cached, it stays inside this
+  module, in memory or in the integration's own encrypted record. Any other persistence needs
+  its own product decision ([security.md](security.md#credentials-stay-in-the-backend)).
+- Server-supplied `Link` and redirect URLs are held to `https://api.github.com`
+  ([security.md](security.md#fixed-github-base-url)).
+
+> **Open — settled by #448:** the exported interface (preferably fixed, `GET`-only operations —
+> list repos, get a repo by id, list a handle's public repos — rather than a generic
+> `request(path)`), per-type authentication (including GitHub App installation-token minting and
+> caching, within the limit above), the GitHub endpoint and parameters per type, and the error
+> mapping (sanitised like the existing test-connection errors).
 
 ## Invalid on 401
 
@@ -53,7 +61,8 @@ cascade between the two modules.
 
 Tests for the open points above are added by the issue that settles them.
 
-- The exported service never returns, logs or exposes the decrypted credential.
+- The exported service never returns, logs or exposes the decrypted credential or a minted
+  installation token.
 - It refuses an integration that does not belong to the given user.
 - A `401` sets the integration `invalid`; a transient failure leaves its status unchanged.
 - Add links the oldest non-`invalid` integration that sees the repo, and none when only the

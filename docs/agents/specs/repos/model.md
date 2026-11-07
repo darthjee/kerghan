@@ -11,7 +11,7 @@ are working names.
 
 > **Open — settled by #447:** exact table names, column types and lengths, indexes beyond the
 > unique key below, the shape of the per-user sync state, and how each source page's `ETag` is
-> stored.
+> stored (keyed per user and source, never shared between users).
 
 ### `repositories`
 
@@ -67,12 +67,14 @@ edited from the existing account edit form ([ui.md](ui.md#github-handle-field)).
 - It is **not** an environment-managed field: the default user
   ([default-user.md](../../modules/auth/default-user.md)) can set it too. There is no env var to
   set it.
+- The default user's boot sync never touches or resets `github_handle`.
 - The Repositories module reads it only through Auth's exported service, never from
   `auth_users` directly.
 
 > **Open — settled by #449:** the column type, the exact validation (GitHub's username format),
-> normalisation (case, trimming), and how `PATCH /auth/account.json`'s
-> `409 DEFAULT_USER_MANAGED` block narrows to the managed fields.
+> normalisation (case, trimming), how `PATCH /auth/account.json`'s `409 DEFAULT_USER_MANAGED`
+> block narrows to the managed fields, and whether admin endpoints (`/admin/users/*`) show or
+> edit the handle (their response shapes with #446).
 
 ## Row statuses
 
@@ -80,9 +82,9 @@ Derived from stored data on read, never stored as a column:
 
 | Status | Rule |
 |---|---|
-| **Added** | `added_at` is set, and at least one source returned it in its latest sync. |
+| **Added** | `added_at` is set, at least one source returned it in its latest sync, and it is not unavailable under the private-link rule below. |
 | **Not added** | `added_at` is `null`. |
-| **Unavailable** | `added_at` is set, and the latest sync of **every** source that used to return it succeeded without returning it (deleted, renamed out of reach, access lost, or its only access integration deleted). |
+| **Unavailable** | `added_at` is set, and either the latest sync of **every** source that used to return it succeeded without returning it (deleted, renamed out of reach, access lost, or its only access integration deleted), or it is **private** and its `integration_id` is empty or dangling (its linked integration was deleted, #444). A public repo whose link was cleared stays available through the unauthenticated path. |
 | **Unknown** | `added_at` is set, it is not returned by any source in their latest syncs, and at least one source that used to return it **failed** in its latest sync. |
 
 A failed source never makes a repo unavailable: its rows are kept as they were
@@ -134,6 +136,9 @@ Tests for the open points above are added by the issue that settles them.
 - `added_at` null ⇒ Not added; set ⇒ Added while a source returns it.
 - An added repo missing from every successful source ⇒ Unavailable; missing while one of its
   sources failed ⇒ Unknown.
+- An added private repo whose linked integration was deleted ⇒ Unavailable, even if another
+  integration still sees it; an added public repo in the same case stays Added.
+- The default user's boot sync leaves `github_handle` unchanged.
 - Deleting an integration drops its source rows, clears `integration_id`, deletes not-added repos
   left with no source, and keeps added ones (Unavailable).
 - A dangling `integration_id` is read as empty.

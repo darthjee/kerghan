@@ -15,6 +15,8 @@ A user's sync reads every source they have:
     credential's own rate limit.
   - Only a user with no valid integration uses the **unauthenticated** path, which shares the
     backend IP's 60 requests/hour.
+  - The handle source keeps only repos with `private = false`, even when fetched through an
+    integration, so private metadata is always tied to the integration that granted it.
 
 Results are merged by GitHub repository id; each repo records which sources returned it
 ([model.md](model.md#sources-table)).
@@ -82,6 +84,9 @@ Not-added repos that no source returns any more are pruned
 
 - The base URL is fixed: `https://api.github.com` ([security.md](security.md#fixed-github-base-url)).
 - Every GitHub call has a timeout, and one sync bounds how many GitHub calls run in parallel.
+- Pagination never follows a `Link` URL whose origin is not exactly `https://api.github.com`;
+  redirects to another origin are not followed, and `Authorization` never leaves that origin
+  ([security.md](security.md#fixed-github-base-url)).
 
 ## Values
 
@@ -92,7 +97,8 @@ Not-added repos that no source returns any more are pruned
 
 > **Open — settled by #450:** the full edge-case matrix (renames and transfers, a repo seen
 > through several sources, source failure vs disappearance, integration deleted mid-sync, handle
-> changed, visibility flips, page cap reached, concurrent syncs).
+> changed, visibility flips, page cap reached, concurrent syncs, an integration's credential
+> replaced with the same or a different `github_login`).
 
 ## Required tests
 
@@ -111,4 +117,6 @@ Tests for the open points above are added by the issue that settles them.
 - The handle's repos go through a valid integration when one exists; unauthenticated only
   otherwise.
 - Reaching the page cap stops the source and reports it.
-- No GitHub call goes to a host other than `https://api.github.com`.
+- No GitHub call goes to a host other than `https://api.github.com`, including through `Link`
+  headers and redirects.
+- The handle source never stores a private repo, even when fetched through an integration.

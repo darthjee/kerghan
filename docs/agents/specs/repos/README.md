@@ -51,6 +51,27 @@ Out of scope (from #444):
 - The permanent docs (`product.md`, `flow.md`, `modules/`, `backend/routes/`,
   `architecture/security.md`, `cache-warmer.md`, …): folded in by #452.
 
+## Product changes folded by #452
+
+What this feature changes in the permanent product docs, as a checklist for the fold:
+
+- **`product.md`, what the backend persists:** from "each user's repo selection" to a per-user
+  snapshot of **every GitHub repo seen** in a sync, including private metadata of repos the user
+  never added ([model.md](model.md#private-metadata-lifecycle) bounds its lifetime).
+- **`product.md`, "What's still open":** the tracked-repos part of the data model is settled;
+  label rules, org-wide tracking and the rest stay open.
+- **`product.md`, "Deferred → Using integration credentials":** partly lifted, for repo listing
+  only. Issue fetching stays unauthenticated and in the browser, so the `CLAUDE.md` boundary
+  stays true and only needs wording.
+- **`flow.md` step 2:** discovery merges the handle's public repos and the integrations' repos,
+  all fetched by the backend.
+- **`flow.md` "Open questions"** (repo selection refreshed periodically or on demand): answered —
+  on demand when stale, plus Refresh.
+- **`modules/integrations.md`:** "The module exports nothing yet" and the "Not built yet" note on
+  `401 → invalid` change ([integrations.md](integrations.md)).
+- **`architecture/security.md`:** the "credentials stay in the backend" rule becomes its own
+  section ([security.md](security.md#credentials-stay-in-the-backend)).
+
 ## Decisions summary
 
 - **Backend-only GitHub calls** — authenticated and unauthenticated; the frontend never calls
@@ -109,20 +130,21 @@ table, and #452 checks that none remain.
 | [model.md](model.md#private-metadata-lifecycle) | Pruning rule details for not-added repos | #447 |
 | [model.md](model.md#logical-foreign-keys) | Integration-deletion hook mechanism (call vs event) | #448 |
 | [model.md](model.md#logical-foreign-keys) | User-deletion cleanup path | #450 |
-| [model.md](model.md#github-handle) | `github_handle` column type, validation and normalisation | #449 |
+| [model.md](model.md#github-handle) | `github_handle` column type, validation, normalisation, default-user block narrowing, admin visibility/editability | #449 |
 | [sync.md](sync.md#execution) | In-process vs queue execution, restart behaviour, per-user lock mechanism | #447 |
 | [sync.md](sync.md#values) | TTL, Refresh cooldown, page cap, rate-limit threshold, timeouts, parallelism | #447 |
 | [sync.md](sync.md#sources) | GitHub endpoint and parameters per integration type | #448 |
-| [sync.md](sync.md#edge-cases) | Sync edge cases (renames, transfers, visibility flips, deletion mid-sync, handle changes, concurrent syncs) | #450 |
-| [api.md](api.md#contract) | Paths, request/response shapes, pagination format, filter and search parameters, status and error codes, polling contract | #446 |
+| [sync.md](sync.md#edge-cases) | Sync edge cases (renames, transfers, visibility flips, deletion mid-sync, handle changes, concurrent syncs, credential replaced) | #450 |
+| [api.md](api.md#listing) | Stale-sync trigger: side effect of the listing `GET` (justified exception) or a separate `POST` | #446 |
+| [api.md](api.md#contract) | Paths, request/response shapes, pagination format, filter and search parameters, status and error codes, polling contract, exposed repository id, Add rate-limit values | #446 |
 | [integrations.md](integrations.md#exported-service) | Exported interface, per-type authentication (incl. GitHub App installation tokens), error mapping | #448 |
 | [integrations.md](integrations.md#access-link-on-add) | Which integration statuses count as usable (`expired`, `undecryptable`) | #448 |
 | [integrations.md](integrations.md#deletion-hook) | Deletion-hook mechanism (call vs event) | #448 |
-| [security.md](security.md#github-handle) | Handle validation details and the default-user block narrowing | #449 |
+| [security.md](security.md#github-handle) | Handle validation details, the default-user block narrowing, admin visibility of the handle | #449 |
 | [security.md](security.md#credentials-stay-in-the-backend) | Guarantees of the Integrations exported interface | #448 |
 | [security.md](security.md#errors-and-logging) | Exact error codes and messages | #446 |
 | [ui.md](ui.md#sync-ux) | Refresh-cooldown (`429`) message and sync-state polling interval | #446, #447 |
-| [ui.md](ui.md#github-handle-field) | Handle field validation messages | #449 |
+| [ui.md](ui.md#github-handle-field) | Handle field validation messages, admin pages and the handle | #449 |
 | [ui.md](ui.md#edge-cases) | UI edge cases | #450 |
 | Every "Required tests" section | The testing strategy: GitHub mocking, sync-engine tests, frontend specs | #451 |
 
