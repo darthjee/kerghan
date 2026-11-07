@@ -45,7 +45,8 @@ file changes.
 
 ## Active specs
 
-none
+- **Repositories** (list a user's GitHub repositories and add them to Kerghan):
+  [specs/repos/README.md](specs/repos/README.md). Product decision: #444.
 
 When no feature is in progress, this list reads "none".
 
