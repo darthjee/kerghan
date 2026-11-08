@@ -38,6 +38,11 @@ computed from it, beyond the masked `secretHint` of the Integrations routes.** D
   admin endpoints (`/admin/users/*`) carry no repository-derived field (counts, flags, names,
   sync state).
 - Every endpoint requires `JwtGuard` and sends `X-Skip-Cache` ([api.md](api.md#every-route)).
+- **Accepted cross-user signal:** the unauthenticated GitHub budget (60/h) is shared by every
+  user of the backend IP, so its state is visible to a user as a `rate_limited` source status
+  with its `resetAt`, and as Add's `503 GITHUB_RATE_LIMITED`. That `resetAt` may also hint that a
+  handle source went unauthenticated. Both are accepted; nothing else about other users'
+  activity is exposed.
 
 ## Add verification
 
@@ -51,6 +56,9 @@ GitHub repository id or an `owner/name`.
   first, so every attempt counts and probing is bounded.
 - Every `404` carries the same code and message (`Repository not found`), whether the ref is
   absent, held only by another user, or denied by GitHub.
+- The GitHub re-check is built from the stored row, never from the request's `fullName`; an
+  unlinked re-check that finds the repo private links the granting integration, so private
+  metadata stays tied to it ([api.md](api.md#add)).
 - The rate limit is **30 Adds per 60 s** per user by default, configurable
   ([api.md](api.md#add-rate-limit)); the unauthenticated re-check honours the low-budget
   threshold.

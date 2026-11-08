@@ -96,7 +96,8 @@ the default user too ([model.md](model.md#github-handle)).
 ## Edge cases
 
 > **Open — settled by #450:** UI edge cases (e.g. a row changing status during a sync, a page
-> emptied by a sync).
+> emptied by a sync, a handle source reporting `invalid_credentials` because it went through an
+> integration, whose banner has no Integrations link).
 
 ## Required tests
 

@@ -17,12 +17,18 @@ The HTTP surface of the Repositories module, in the style of
   ([security.md](security.md#csrf)).
 - **Caching:** cache class **`user-scoped`** (`@CachePolicy(CacheClass.UserScoped)`,
   [caching.md](../../architecture/caching.md#cache-classes)). As for any non-`GET`, every response
-  sends `X-Skip-Cache: true` and `Cache-Control: no-store`.
+  that passes the global guards (success and handler errors alike) sends `X-Skip-Cache: true`
+  and `Cache-Control: no-store`. `JwtGuard` / `OriginGuard` rejections run before the interceptor
+  and carry no cache headers, which is harmless since Tent caches only 2xx
+  ([caching.md](../../architecture/caching.md#response-headers)). The Add rate limit runs in the
+  service, after the interceptor, so its `429` carries the headers.
 - **Navi:** no route is warmed; none belongs in `navi/navi_config.yaml`.
 - **Errors** use the standard error format (`core/http-exception.filter.ts`); see
   [Errors](#errors).
-- Controllers stay thin: validation in DTOs (whitelist validation), everything else in the
-  module's services.
+- Controllers stay thin: validation in DTOs, everything else in the module's services.
+- **Bodies** go through the global `ValidationPipe({ whitelist: true, transform: true })`:
+  unknown properties are **stripped and ignored**, not rejected. A body sent to a "no body" route
+  (Sync state, Refresh) is ignored.
 
 ## Routes
 
@@ -51,7 +57,7 @@ Every field is optional. Any invalid value answers `400 VALIDATION_FAILED`.
 | `page` | Integer ≥ 1, default `1`. A page past the end answers `200` with an empty `repositories` list. |
 | `perPage` | Integer ≥ 1, default `50`, maximum `100`. |
 | `filter` | `all` (default), `added`, `not_added`, `unavailable`. `unknown` is rejected: Unknown rows show only under `all`, on purpose (the filter list is the one fixed by #444). |
-| `search` | Trimmed, at most 100 characters, case-insensitive substring match on `owner/name`. Empty means no search. |
+| `search` | Trimmed, at most 100 characters, case-insensitive **literal** substring match on `owner/name`. Empty means no search. Passed only as a bound query parameter, never concatenated into SQL; the `LIKE` metacharacters `%`, `_` and `\` are escaped (`ESCAPE '\'`), so they match literally. |
 
 ### Response
 
@@ -99,6 +105,11 @@ is #447's). The server owns the staleness rule; the frontend makes one call. The
 the stored rows at once, with `sync.state` already `syncing` when it started one. A fresh listing,
 or one during a running sync, starts nothing.
 
+**A stale listing never starts a sync inside the [Refresh cooldown](#refresh)**, whatever the
+TTL, so repeating the listing cannot start syncs more often than Refresh allows (the shared
+unauthenticated 60/h budget belongs to the whole instance). Inside the cooldown it only returns
+the stored rows.
+
 Because the listing is a `POST` covered by `OriginGuard`, this side effect needs no exception to
 the "no state change over `GET`" rule
 ([architecture/security.md](../../architecture/security.md#rules-for-future-changes)).
@@ -123,15 +134,22 @@ Every per-repo route (Add now, and future ones such as issues and labels) takes 
 
 Rules:
 
-- Both or neither answers `400 VALIDATION_FAILED`; so does a non-integer `githubId` or a
-  `fullName` that does not match GitHub's `owner/name` format.
+- Both or neither answers `400 VALIDATION_FAILED`.
+- `githubId`: a positive integer, at most `Number.MAX_SAFE_INTEGER`. `0`, negative, fractional or
+  larger values (e.g. `1e300`) answer `400`, never reach the database.
+- `fullName`: exactly one `/`. The owner follows the GitHub handle rule
+  ([security.md](security.md#github-handle): letters, digits, single hyphens, at most 39
+  characters); the name matches `[A-Za-z0-9._-]{1,100}` and is neither `.` nor `..`. Anything
+  else answers `400`.
 - `fullName` is resolved **case-insensitively against the caller's own rows** only, so a ref can
   only reach repos already in the user's listing (#444's "Add by `owner/name` not in the listing"
   exclusion still holds). A ref not found among the caller's rows answers `404`.
 - The ref lives in the body, not the path: repo names containing dots (`.github`, `x.json`) would
   clash with the `.json` suffix routing.
 - A stale local remote (an old name after a rename) answers `404` until a sync records the new
-  name; GitHub's rename redirects are not followed. Further rename handling is #450's.
+  name; GitHub's rename redirects are not followed. Further rename handling is #450's, including
+  the tie-break when the caller has two rows with the same `fullName` (e.g. a repo deleted and
+  recreated, or a name reused after a rename).
 
 ## Sync state
 
@@ -194,8 +212,8 @@ the same object as `sync`.
 | Idle, inside the cooldown | **`429`** `REPOSITORY_REFRESH_COOLDOWN`, `Retry-After: <seconds>` (rounded up), standard error shape. |
 | No sources (no integrations, no handle) | `202`; the sync completes at once with an empty `sources` list; the UI shows its empty state. |
 
-- Order of checks: `JwtGuard` and `OriginGuard`, then "already syncing", then "cooldown", then
-  start.
+- Order of checks: `OriginGuard`, then `JwtGuard` (as for every route: a cross-site request
+  without a session answers `403`), then "already syncing", then "cooldown", then start.
 - **The cooldown runs from the start of the last sync, whatever triggered it** (stale listing or
   Refresh). It protects the GitHub budget, notably the shared unauthenticated 60/h.
   `refreshAvailableAt` follows the same rule; the duration is #447's.
@@ -223,8 +241,15 @@ listing as added.
 - **Rate limit before the lookup:** every attempt past validation counts, so the limit bounds both
   the GitHub budget and probing; a `404` reveals nothing, since the lookup covers only the
   caller's own rows.
+- **The re-check is built only from the stored row** (its `github_id`, or its stored
+  `owner`/`name` URL-encoded), never from the request's `fullName`, so no user input reaches the
+  GitHub API path ([security.md](security.md#fixed-github-base-url)).
 - When only the public source sees the repo, the re-check goes through a valid integration if the
-  user has one (without linking it), and unauthenticated otherwise.
+  user has one (without linking it), and unauthenticated otherwise. If that re-check shows the
+  repo has become **private**, the integration that granted it is linked as `integration_id`, so
+  the stored private metadata stays tied to the integration that granted it
+  ([model.md](model.md#private-metadata-lifecycle)) and the row reads as Added, not
+  Unavailable.
 - The unauthenticated re-check honours the same low-budget threshold as the sync
   ([sync.md](sync.md#rate-limits)).
 - `502 GITHUB_UNAVAILABLE` and `503 GITHUB_RATE_LIMITED` reuse the existing codes and helpers
@@ -287,6 +312,11 @@ Standard error shape (`core/http-exception.filter.ts`,
   internal `integrations.id`. Integrations are referenced only by their `uuid` and label, and only
   the caller's own. Repo responses carry no other integration field (no `secretHint`,
   `github_login`, `status_reason` or metadata).
+- The field is named `uuid`; it holds the same value the Integrations API exposes as `id`
+  ([routes/integrations.md](../../backend/routes/integrations.md)).
+- `sources[].integration` and `accessIntegration` are resolved through a lookup also filtered by
+  the caller's `user_id`: an integration that does not match (another user's, or deleted) is
+  dropped from `sources[]` and reads as `null` in `accessIntegration`.
 
 ## Required tests
 
@@ -294,13 +324,19 @@ Backend e2e. How GitHub is mocked and how the sync engine is tested is #451's.
 
 **Routes:**
 
-- Each of the four routes is `POST`, answers `401` without a session and `403` from a foreign
-  origin (`OriginGuard`), declares the `user-scoped` cache class, and sends `X-Skip-Cache` +
-  `Cache-Control: no-store`; no repositories route answers `GET`.
+- Each of the four routes is `POST`, answers `401` without a session (same-origin request) and
+  `403` from a foreign origin (`OriginGuard`, also without a session), and declares the
+  `user-scoped` cache class; no repositories route answers `GET`.
+- Unknown body properties are stripped and ignored.
+- Authenticated, same-origin responses (success, and handler errors such as `400`, `404`,
+  `429`) send `X-Skip-Cache` + `Cache-Control: no-store`; the headers are not asserted on the
+  guard `401` / `403`.
 - A user never sees, adds or refreshes another user's repositories; another user's repository
   answers `404`. An admin has no access to another user's repositories.
 - No response body contains credential material, the internal repository `id`, `user_id`, an
-  internal `integrations.id`, `secretHint` or `github_login`.
+  internal `integrations.id`, `secretHint`, `github_login`, `status_reason`, or any other
+  integration field beyond `uuid` and `label`.
+- A row's `sources[]` and `accessIntegration` never resolve an integration of another user.
 
 **Listing:**
 
@@ -311,8 +347,10 @@ Backend e2e. How GitHub is mocked and how the sync engine is tested is #451's.
 - The filter accepts no Unknown value; Unknown rows appear under `all`.
 - Stable sort (`owner`, `name`, `githubId`, case-insensitive); correct `pagination` totals with
   filter and search.
+- `%` and `_` in `search` match literally.
 - Exact row shape; `accessIntegration` is `null` in the three documented cases.
-- A stale listing starts a sync; a fresh one, or one during a running sync, does not.
+- A stale listing starts a sync; a fresh one, one during a running sync, or a stale one inside
+  the Refresh cooldown does not.
 
 **Sync state:**
 
@@ -327,7 +365,13 @@ Backend e2e. How GitHub is mocked and how the sync engine is tested is #451's.
 
 **Add:**
 
-- Both or neither ref answers `400`.
+- Both or neither ref answers `400`; so do a `githubId` of `0`, negative, fractional or above
+  `Number.MAX_SAFE_INTEGER`, and a `fullName` outside the documented format (no `/`, two `/`,
+  name `.` or `..`, over-long parts).
+- The GitHub re-check request is built from the stored row, never from the request's
+  `fullName`.
+- An unlinked re-check that finds the repo private links the granting integration; the row
+  reads Added.
 - `fullName` resolves case-insensitively, only among the caller's rows: absent, or held only by
   another user, answers `404` without any GitHub call.
 - Already added answers `200`, with no GitHub call and `addedAt` unchanged.

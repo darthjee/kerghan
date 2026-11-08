@@ -31,7 +31,8 @@ Results are merged by GitHub repository id; each repo records which sources retu
 - **Refresh:** the Refresh action forces a sync, subject to a **cooldown**; a Refresh inside it
   is refused (`429` with `Retry-After`, see [api.md](api.md#refresh)).
 - **The cooldown runs from the start of the last sync, whatever triggered it** (stale listing or
-  Refresh).
+  Refresh), and binds both: a stale listing inside the cooldown starts no sync
+  ([api.md](api.md#stale-sync-trigger)), whatever the TTL.
 - **One sync per user at a time:** a trigger while a sync runs does not start a second one; a
   Refresh while syncing answers `202` with the running sync and does not reset the cooldown.
 - No scheduled job, no background polling of GitHub.
@@ -111,7 +112,8 @@ Not-added repos that no source returns any more are pruned
 
 Tests for the open points above are added by the issue that settles them.
 
-- Opening the listing with a stale sync starts one; with a fresh sync it does not.
+- Opening the listing with a stale sync starts one; with a fresh sync, or inside the Refresh
+  cooldown, it does not.
 - Refresh forces a sync; a Refresh inside the cooldown is refused, including right after a
   stale-triggered sync.
 - The triggering request returns stored rows and the sync state without waiting for GitHub.
