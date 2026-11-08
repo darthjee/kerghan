@@ -46,8 +46,10 @@ When the user adds a repository:
 
 - Among the integrations that returned the repo in their latest sync, the **oldest** one that is
   not `invalid` is chosen and stored as `integration_id`.
-- When only the public source sees it, no integration is linked and the re-check is
-  unauthenticated.
+- When only the public source sees it, the re-check goes through the user's oldest valid
+  integration if they have one, unauthenticated otherwise. That integration is **not** linked
+  while the repo is still public; if the re-check shows the repo is now **private**, it is linked
+  as `integration_id`, so the private metadata stays tied to it ([api.md](api.md#add)).
 - Changing the link later is out of scope.
 
 > **Open — settled by #448:** whether `expired` and `undecryptable` integrations count as
@@ -69,6 +71,7 @@ Tests for the open points above are added by the issue that settles them.
   installation token.
 - It refuses an integration that does not belong to the given user.
 - A `401` sets the integration `invalid`; a transient failure leaves its status unchanged.
-- Add links the oldest non-`invalid` integration that sees the repo, and none when only the
-  public source does.
+- Add links the oldest non-`invalid` integration that sees the repo. When only the public source
+  does, it links none while the repo is public, and links the integration whose re-check found it
+  private.
 - Deleting an integration notifies the Repositories module.
