@@ -75,7 +75,9 @@ What this feature changes in the permanent product docs, as a checklist for the 
 - **`architecture/backend.md#error-responses`:** the optional `error.retryAfterSeconds` body
   field ([api.md](api.md#errors)).
 - **`environment-variables.md`:** `KERGHAN_REPOSITORIES_ADD_MAX_PER_WINDOW` and
-  `KERGHAN_REPOSITORIES_ADD_WINDOW_MS` ([api.md](api.md#add-rate-limit)).
+  `KERGHAN_REPOSITORIES_ADD_WINDOW_MS` ([api.md](api.md#add-rate-limit));
+  `KERGHAN_REPOSITORIES_SYNC_TTL_MS`, `KERGHAN_REPOSITORIES_SYNC_COOLDOWN_MS` and
+  `KERGHAN_REPOSITORIES_SYNC_PAGE_CAP` ([sync.md](sync.md#values)).
 
 ## Decisions summary
 
@@ -85,12 +87,22 @@ What this feature changes in the permanent product docs, as a checklist for the 
   GitHub repository id; each row shows its sources ([sync.md](sync.md#sources)).
 - **GitHub handle**: a nullable `github_handle` on `auth_users`, owned by Auth, editable by the
   default user too ([model.md](model.md#github-handle)).
-- **One `repositories` table per user** for every repo seen, with a nullable `added_at`; a
-  sources table; per-user sync state ([model.md](model.md)).
+- **One `repositories` table per user** for every repo seen, with a nullable `added_at`; plus
+  `repositories_sources`, `repositories_source_pages`, `repositories_sync_states` and
+  `repositories_source_statuses`, each source keyed by `source_key` ([model.md](model.md#tables)).
 - **Logical foreign keys only** to `auth_users` and `integrations`; cleanup on integration
   deletion ([model.md](model.md#logical-foreign-keys)).
-- **Asynchronous sync** when stale or on Refresh; one sync per user at a time; Refresh cooldown
-  ([sync.md](sync.md#trigger)).
+- **Asynchronous, in-process sync** (a detached promise, no queue) when stale (TTL 1 h) or on
+  Refresh; one sync per user at a time through an atomic conditional `UPDATE`; a 5 min Refresh
+  cooldown ([sync.md](sync.md#trigger), [sync.md](sync.md#execution)).
+- **Lease recovery:** a heartbeat per page, a 2 min lease, `run_id`-guarded writes and a 5 min
+  hard deadline, so a sync stuck in `syncing` always returns to `idle`
+  ([sync.md](sync.md#restart-recovery)).
+- **Page-number pagination with stored ETags** in a page table; one transaction per page, so a
+  failing source keeps the pages already applied ([sync.md](sync.md#write-path)).
+- **Orphan pruning:** a not-added repo with no source row is deleted at the end of each sync and
+  after an integration deletion or a handle change; a failed source blocks it by construction
+  ([model.md](model.md#private-metadata-lifecycle)).
 - **Every route is `POST`** (reads included, as user-scoped reads in the repo), so the listing's
   stale-sync trigger needs no `GET` exception ([api.md](api.md#every-route)).
 - **Paginated, filterable listing** served by `POST /repositories/mine.json` from the database,
@@ -114,7 +126,7 @@ What this feature changes in the permanent product docs, as a checklist for the 
 |---|---|---|
 | #445 | Specs: repositories feature definition | all (creates them) |
 | #446 | Specs: repositories — exact API contract | [api.md](api.md), [security.md](security.md), [ui.md](ui.md), [sync.md](sync.md), [integrations.md](integrations.md), [model.md](model.md) |
-| #447 | Specs: repositories — sync engine | [sync.md](sync.md), [model.md](model.md), [ui.md](ui.md) |
+| #447 | Specs: repositories — sync engine | [sync.md](sync.md), [model.md](model.md), [ui.md](ui.md), [api.md](api.md), [security.md](security.md), [integrations.md](integrations.md) |
 | #448 | Specs: repositories — Integrations GitHub client | [integrations.md](integrations.md), [sync.md](sync.md), [model.md](model.md), [security.md](security.md) |
 | #449 | Specs: repositories — GitHub handle and default user | [model.md](model.md), [security.md](security.md), [ui.md](ui.md) |
 | #450 | Specs: repositories — edge cases matrix | every file |
@@ -136,13 +148,9 @@ table, and #452 checks that none remain.
 
 | File | Open decision | Settled by |
 |------|---------------|------------|
-| [model.md](model.md#tables) | Exact table names, column types, indexes, and the sync-state and ETag storage shape | #447 |
-| [model.md](model.md#private-metadata-lifecycle) | Pruning rule details for not-added repos | #447 |
 | [model.md](model.md#logical-foreign-keys) | Integration-deletion hook mechanism (call vs event) | #448 |
 | [model.md](model.md#logical-foreign-keys) | User-deletion cleanup path | #450 |
 | [model.md](model.md#github-handle) | `github_handle` column type, validation, normalisation, default-user block narrowing, admin visibility/editability | #449 |
-| [sync.md](sync.md#execution) | In-process vs queue execution, restart behaviour (a stuck `syncing` must return to `idle`), per-user lock mechanism | #447 |
-| [sync.md](sync.md#values) | TTL, Refresh cooldown, page cap, rate-limit threshold, timeouts, parallelism | #447 |
 | [sync.md](sync.md#sources) | GitHub endpoint and parameters per integration type | #448 |
 | [sync.md](sync.md#edge-cases) | Sync edge cases (renames, transfers, visibility flips, deletion mid-sync, handle changes, concurrent syncs, credential replaced) | #450 |
 | [integrations.md](integrations.md#exported-service) | Exported interface, per-type authentication (incl. GitHub App installation tokens), error mapping, Add's next candidate after a `401`, home of the shared `502`/`503` helpers | #448 |
@@ -150,7 +158,6 @@ table, and #452 checks that none remain.
 | [integrations.md](integrations.md#deletion-hook) | Deletion-hook mechanism (call vs event) | #448 |
 | [security.md](security.md#github-handle) | Handle validation details, the default-user block narrowing, admin visibility of the handle | #449 |
 | [security.md](security.md#credentials-stay-in-the-backend) | Guarantees of the Integrations exported interface | #448 |
-| [ui.md](ui.md#sync-ux) | Sync-state polling interval | #447 |
 | [ui.md](ui.md#github-handle-field) | Handle field validation messages, admin pages and the handle | #449 |
 | [ui.md](ui.md#edge-cases) | UI edge cases | #450 |
 | Every "Required tests" section | The testing strategy: GitHub mocking, sync-engine tests, frontend specs | #451 |
@@ -159,8 +166,8 @@ table, and #452 checks that none remain.
 
 | File | Defines |
 |---|---|
-| [model.md](model.md) | `repositories`, sources and sync-state tables, `auth_users.github_handle`, row statuses, logical FKs, private metadata lifecycle, ownership |
-| [sync.md](sync.md) | Sources, trigger (stale / Refresh), asynchronous execution, per-source processing, partial failures, rate limits, ETags |
+| [model.md](model.md) | The five tables (columns, types, indexes, `source_key`), `auth_users.github_handle`, row statuses, logical FKs, private metadata lifecycle and pruning rule, ownership |
+| [sync.md](sync.md) | Sources and the handle's credential, trigger (stale / Refresh), in-process execution, per-user lock, lease recovery, page-number pagination, write path, partial failures, pruning, rate limits and the unauthenticated budget tracker, ETags, values |
 | [api.md](api.md) | Routes, request/response contract, repo ref, sync state and polling, errors, access rules |
 | [integrations.md](integrations.md) | What the Integrations module exports, `401 → invalid`, access-link choice, deletion hook |
 | [security.md](security.md) | Credentials stay in the backend, user scoping, Add verification, handle validation, fixed base URL, CSRF, logging, abuse limits |

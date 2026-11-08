@@ -52,7 +52,8 @@ Inline Add errors, shown on the row ([api.md](api.md#add)):
 - Stored rows show immediately, with a "Syncing with GitHub…" indicator while a sync runs.
 - Only the very first sync (`lastSyncedAt` is `null`) shows a full spinner.
 - **Polling** ([api.md](api.md#polling-contract)): while `state` is `syncing`, the page polls
-  `POST /repositories/sync/state.json` at a fixed interval. It stops on `idle` (then reloads the
+  `POST /repositories/sync/state.json` every **2 s** (a frontend constant,
+  [sync.md](sync.md#values)). It stops on `idle` (then reloads the
   current listing page), on unmount, or on `401`; a transient error (network, `5xx`) keeps
   polling.
 - **Refresh button:**
@@ -62,8 +63,6 @@ Inline Add errors, shown on the row ([api.md](api.md#add)):
     `refreshAvailableAt`; it re-enables at zero;
   - on a `429` anyway (race, clock skew), an inline notice **"Repositories were synced recently.
     Try again in N s."** from `retryAfterSeconds`, and the countdown adopts it.
-
-> **Open — settled by #447:** the sync-state polling interval (a frontend constant).
 
 ## Source errors
 
@@ -111,7 +110,7 @@ issue that settles them.
   each answer (`404`, `502`/`503`, `429`).
 - The filter defaults to All; filter, search and pagination drive the listing request.
 - Stored rows show with the syncing indicator; the full spinner shows only on the first sync.
-- Polling runs while `syncing`, stops on `idle` / unmount / `401` (reloading the page on
+- Polling runs every 2 s while `syncing`, stops on `idle` / unmount / `401` (reloading the page on
   `idle`), and keeps going on a transient error.
 - The Refresh countdown follows `refreshAvailableAt`; Refresh is disabled while syncing; a `429`
   shows the cooldown notice and the countdown adopts `retryAfterSeconds`.

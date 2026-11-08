@@ -43,6 +43,11 @@ computed from it, beyond the masked `secretHint` of the Integrations routes.** D
   with its `resetAt`, and as Add's `503 GITHUB_RATE_LIMITED`. That `resetAt` may also hint that a
   handle source went unauthenticated. Both are accepted; nothing else about other users'
   activity is exposed.
+- **Accepted shared-budget starvation:** the unauthenticated budget has no per-user share. One
+  user with no usable integration (or a few accounts) can spend it down to the threshold, leaving
+  other users' unauthenticated sources `rate_limited` and their unauthenticated Adds `503` until
+  the reset. Bounded by the Refresh cooldown, the page cap and the threshold; accepted for now
+  ([sync.md](sync.md#rate-limits)). A per-user cap would need its own decision.
 
 ## Add verification
 
@@ -68,7 +73,8 @@ GitHub repository id or an `owner/name`.
 Private metadata is kept only while a source can still see it, except for added repos, kept as
 unavailable ([model.md](model.md#private-metadata-lifecycle)). The handle source keeps only
 public repos, so private metadata is always tied to the integration that granted it
-([sync.md](sync.md#sources)).
+([sync.md](sync.md#sources)); when a sync turns a repo private, its `handle` source row is
+dropped, so a stale handle row never keeps it alive ([sync.md](sync.md#write-path)).
 
 ## GitHub handle
 
@@ -85,12 +91,15 @@ public repos, so private metadata is always tied to the integration that granted
 The backend only ever calls `https://api.github.com`. No user input chooses the host or a path
 outside the endpoints this feature uses, so there is no SSRF surface.
 
-Server-supplied URLs are held to the same origin, in both the authenticated client
-(Integrations) and the unauthenticated one (Repositories):
+Server-supplied URLs are never requested, in both the authenticated client (Integrations) and
+the unauthenticated one (Repositories):
 
-- pagination never follows a `Link` URL whose origin is not exactly `https://api.github.com`;
-- redirects to another origin are not followed, and `Authorization` is never sent to another
-  host.
+- pagination builds its own page URLs (`?per_page=100&page=N`) and reads `Link` only to know
+  whether `rel="next"` exists; it never requests a URL taken from a response
+  ([sync.md](sync.md#per-source));
+- **no redirect is followed**, same-origin or not (the client uses `redirect: 'manual'` or
+  `'error'`): a `Location` is a response-supplied URL. Any `3xx` makes a sync source `error` and
+  Add answer `502 GITHUB_UNAVAILABLE`, and `Authorization` is never sent to another host.
 
 Repository links in the UI are built by the frontend from `owner` and `name`
 ([ui.md](ui.md#table)); a GitHub-supplied URL is never rendered.
@@ -113,9 +122,12 @@ trigger is therefore not a state change over `GET`, and needs no exception
 
 ## Abuse and performance
 
-- One sync per user at a time, a Refresh cooldown, a per-source page cap, and an early stop of
-  the unauthenticated source on a low rate-limit budget ([sync.md](sync.md)).
+- One sync per user at a time (an atomic claim with a lease), a Refresh cooldown, a per-source
+  page cap, a hard deadline per sync, and an early stop of the unauthenticated source on a low
+  rate-limit budget, tracked process-wide and shared with Add ([sync.md](sync.md#values)).
 - Timeouts and a parallelism bound on GitHub calls.
+- A sync that lost its lease cannot write: every write is guarded by its `run_id`
+  ([sync.md](sync.md#restart-recovery)).
 
 ## Required tests
 
@@ -132,8 +144,10 @@ Tests for the open points above are added by the issue that settles them.
   ([api.md](api.md#required-tests)).
 - A cached installation token never leaves the Integrations module.
 - The handle source stores no private repo.
-- A `Link` or redirect to another origin is not followed, and `Authorization` never leaves
+- Pagination never requests a URL supplied by a response (a `Link` URL, even same-origin); no
+  redirect is followed, same-origin `301`/`302` included, and `Authorization` never leaves
   `https://api.github.com`.
+- A zombie sync run cannot write or release a newer run's lock.
 - Deleting an integration purges not-added repos only it could see.
 - An invalid handle is rejected before storage; a stored handle is URL-encoded in the GitHub
   path.
