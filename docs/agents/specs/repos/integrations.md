@@ -20,7 +20,7 @@ getRepository(userId, integrationId | null, githubId): Promise<RepoResult>
 - **Integration identity:** callers pass the internal `integrations.id` (the logical FK the
   Repositories tables already store, [model.md](model.md#logical-foreign-keys)). Every call loads
   it with `WHERE id = ? AND user_id = ?`; a missing or foreign one answers
-  `integration_unusable` with **no GitHub call**. `null` means unauthenticated
+  `integration_unusable` with reason `missing` and **no GitHub call**. `null` means unauthenticated
   ([unauthenticated calls](#unauthenticated-calls)).
 - **Typed, normalised results**, never a raw `Response`:
 
@@ -31,7 +31,7 @@ getRepository(userId, integrationId | null, githubId): Promise<RepoResult>
     | { kind: 'invalid_credentials' }                        // 401: the integration is already set invalid
     | { kind: 'rate_limited'; resetAt: Date | null }
     | { kind: 'unavailable'; reason: 'timeout' | 'network_error' | 'server_error' | 'redirect' | 'forbidden' | 'unexpected' }
-    | { kind: 'integration_unusable'; reason: 'status' | 'type_disabled' }; // missing, foreign, undecryptable or not usable
+    | { kind: 'integration_unusable'; reason: 'status' | 'type_disabled' | 'missing' }; // not usable, type disabled, or missing / foreign
 
   type RepoResult =
     | { kind: 'ok'; repo: GithubRepo }
@@ -117,6 +117,9 @@ Integrations module**:
 - **Least privilege:** minted with `{"permissions": {"metadata": "read"}}`, enough to list repos
   and read one by id. A later feature (e.g. the issue proxy) widens it when it needs to.
 - **Eviction:** on a `401` from a call made with it, on integration delete, on replace credential.
+- **Mint invalidation is a compare-and-set:** a mint `404` / `403` sets the integration `invalid`
+  only if its credential is still the one used for the mint
+  ([compare-and-set](#status-compare-and-set)).
 - **401 retry:** a `401` with a *cached* token evicts it, mints once and retries the call
   **once**; a `401` with a **freshly minted** token (the retry, or a first call) answers
   `unavailable` (`unexpected`), logged with safe fields, status unchanged: the mint succeeded, so
@@ -144,6 +147,26 @@ invalidates; only a mint `404`/`403` does
 ([installation tokens](#github-app-installation-tokens)). Transient failures (network errors,
 `5xx`, rate limits) never change the status, as for test connection today.
 
+### Status compare-and-set
+
+Every status change caused by a repo call is conditional on the credential that call used:
+
+- a `pat` / `oauth_app` `401` ⇒ `invalid`;
+- a `github_app` mint `404` / `403` ⇒ `invalid`;
+- a decrypt failure ⇒ `undecryptable`.
+
+```sql
+UPDATE integrations SET status = …, status_reason = …
+WHERE id = :id AND user_id = :userId AND secret_iv = :ivUsed
+```
+
+- `secret_iv` is fresh on every encryption, so a Replace, or a key rotation, between the call and
+  the write makes the write a no-op: a freshly replaced credential is never marked `invalid` by a
+  request made with the old one.
+- No new column. A missed invalidation after a key rotation recurs on the next call.
+- `:ivUsed` stays inside the Integrations module: it never reaches Repositories, a response or a
+  log ([security.md](security.md#credentials-stay-in-the-backend)).
+
 ## Usable integrations
 
 **An integration is usable when its reported status is `active` and its type is enabled on this
@@ -167,12 +190,19 @@ server** (a `github_app` integration is unusable when the app's server config is
 - **Type disabled:** the server's configuration, not the user's credential, so `error`.
 - A non-usable source is a *failed* source: its earlier rows and pages are kept
   ([partial failures](sync.md#partial-failures)), so its repos stay listed until the integration
-  is fixed or deleted (#450 may revisit).
+  is fixed or deleted. **Accepted:** they hold only the user's own data, visible only to that
+  user; the banner says to fix the integration, and deleting it purges its rows at once.
+  Rejected: expiring them (for example after 30 days), since added repos would flip to
+  Unavailable and a fixed token would re-import everything.
+- A fixed integration (Test or Replace returns it to `active`) reads `pending` until its next
+  sync ([api.md](api.md#sync-state)).
 - `listUsableIntegrations` returns only usable ones, oldest first, filtered by `user_id` in the
   query. The sync builds its sources from **all** the user's integrations; the handle and Add use
   the usable list.
-- `integration_unusable` carries a reason, `'status' | 'type_disabled'`, so the sync maps it to
-  `invalid_credentials` or `error`; the reason never reaches a response.
+- `integration_unusable` carries a reason, `'status' | 'type_disabled' | 'missing'`, so the sync
+  maps it to `invalid_credentials`, `error`, or, for `missing` (no integration row for that id and
+  user, e.g. deleted mid-sync), stops that source with **no status**
+  ([sync.md](sync.md#sources)); the reason never reaches a response.
 
 ## Error mapping
 
@@ -182,7 +212,7 @@ One table in the client, for every call:
 |---|---|---|
 | `200`, well-formed body | `ok` | — |
 | `304` (listings) | `not_modified` | — |
-| `401`, authenticated | `invalid_credentials` | set `invalid` + the type's existing bad-credentials reason (`pat`, `oauth_app`; a `github_app` call `401` never invalidates — see [installation tokens](#github-app-installation-tokens)) |
+| `401`, authenticated | `invalid_credentials` | set `invalid` + the type's existing bad-credentials reason, as a [compare-and-set](#status-compare-and-set) (`pat`, `oauth_app`; a `github_app` call `401` never invalidates — see [installation tokens](#github-app-installation-tokens)) |
 | `403` / `429` with `X-RateLimit-Remaining: 0` or a `Retry-After` | `rate_limited`, `resetAt` from `X-RateLimit-Reset` or now + `Retry-After` | unchanged |
 | any other `403` | listings: `unavailable` (`forbidden`); `getRepository`: `not_found` (denied) | unchanged — the user re-checks with Test |
 | `404` | `getRepository` and the handle listing: `not_found`; other listings: `unavailable` (`unexpected`) | unchanged |
@@ -197,8 +227,9 @@ One table in the client, for every call:
   Neither mode follows a redirect.
 - Rate limits are detected from **headers only**. No body is parsed for messages, echoed or
   logged; logs carry safe fields only (integration id, operation, HTTP status, result kind).
-- The handle listing's `not_found` (a renamed or deleted handle) maps to the source status
-  `error` for now; #450 may add a dedicated one.
+- The handle listing's `not_found` (an unknown, renamed, suspended or deleted handle) maps to the
+  source status **`not_found`**, with no fallback to another credential
+  ([sync.md](sync.md#handle-credential)).
 - `unavailable` reasons never reach a response; the sync maps them to `error`, Add to
   `502 GITHUB_UNAVAILABLE`.
 
@@ -212,7 +243,10 @@ When the user adds a repository ([api.md](api.md#add)):
   (oldest first), then unauthenticated. That integration is **not** linked while the repo is
   still public; if the re-check shows the repo is now **private**, the integration that granted
   it is linked as `integration_id`, so the private metadata stays tied to it.
-- Changing the link later is out of scope.
+- Changing a set, valid link later is out of scope. An **empty or dangling** link of an added
+  private repo (its integration deleted, or a public repo turned private) is filled at the end of
+  the next sync with the oldest usable integration that returns it
+  ([link fill](sync.md#link-fill)); that is not a change of a valid link.
 
 ### Add re-check candidates
 
@@ -227,6 +261,9 @@ Add walks candidates in order, with **at most 3 GitHub calls** per Add:
 - Rate limit, timeout, `5xx`, redirect → **stop**: `503 GITHUB_RATE_LIMITED` / `502
   GITHUB_UNAVAILABLE`, no fallback (as for the handle source).
 - No candidate left, or the cap reached, after denials → `404 NOT_FOUND`.
+- **No candidate at all**, before any GitHub call (every source holding the repo is a non-usable
+  integration: `expired`, `invalid`, `undecryptable` or type disabled; and the handle source does
+  not hold it) → `409 REPOSITORY_SOURCE_UNUSABLE`, nothing written ([api.md](api.md#add)).
 
 ## Shared 502 / 503 helpers
 
@@ -267,7 +304,9 @@ A direct call would need Integrations to import Repositories, which already impo
   `integration:<id>` key not among all the user's integrations (usable or not), covering a failed listener and a parallel sync writing
   after the cleanup ([sync.md](sync.md#write-path)).
 - Inside Integrations, the delete also evicts the cached installation token.
-- There is no database cascade between the two modules. User deletion stays #450's.
+- There is no database cascade between the two modules. User deletion goes through a separate
+  awaited `user.deleted` event ([model.md](model.md#user-deletion)); the user's integrations
+  cascade without emitting `integration.deleted`, and that listener covers their rows.
 
 ## Unauthenticated budget tracker
 
@@ -298,7 +337,12 @@ unauthenticated call). Its home, interface, concurrency and thresholds:
 
 - The exported service never returns, logs or exposes a decrypted credential, a minted
   installation token or a GitHub response body.
-- A missing or foreign `integrationId` answers `integration_unusable` without a GitHub call.
+- A missing or foreign `integrationId` answers `integration_unusable` with reason `missing`,
+  without a GitHub call (a call for an integration deleted mid-sync included).
+- Status compare-and-set: a `401` from a call made before a Replace leaves the replaced
+  integration `active`; a `401` with the current credential sets it `invalid`; the same holds for
+  a mint `404` / `403` and a decrypt failure.
+- The handle listing's `404` answers `not_found`.
 - Each operation calls exactly its fixed endpoint and parameters (per type, the handle, the
   re-check), builds its own page URL, and reads `Link` only for `rel="next"`.
 - `integrationId: null` sends no `Authorization` header.
@@ -317,7 +361,7 @@ unauthenticated call). Its home, interface, concurrency and thresholds:
   in the query.
 - Add's candidate walk: `401`/`403`/`404` move to the next candidate; a rate limit, timeout,
   `5xx` or redirect stops it; it never makes more than 3 GitHub calls; denials everywhere answer
-  `404`.
+  `404`; no candidate at all answers `409 REPOSITORY_SOURCE_UNUSABLE` with no GitHub call.
 - Add links the oldest usable integration that sees and grants the repo. When only the public
   source does, it links none while the repo is public, and links the integration whose re-check
   found it private.

@@ -15,6 +15,12 @@ A user's sync reads every source they have:
     not called: its source records `invalid_credentials` (status `expired`, `invalid` or
     `undecryptable`) or `error` (type disabled on this server), and keeps its earlier rows and
     pages, like any [failed source](#partial-failures).
+  - A **missing** integration (deleted since the run listed the user's integrations) answers
+    `integration_unusable` with reason `missing`
+    ([usable integrations](integrations.md#usable-integrations)). The run stops that source and
+    writes nothing more for it, **no status** either, as for a handle changed mid-sync
+    ([write path](#write-path)); the deletion hook and the end-of-sync safety net drop its rows.
+    The reason never reaches a response.
 - **The GitHub handle** ([model.md](model.md#github-handle)): the handle's public repositories.
   - The run reads the current handle through Auth's export when it starts, after the
     [handle reconciliation](model.md#handle-changes); no handle ⇒ no handle source. The handle
@@ -44,8 +50,13 @@ Results are merged by GitHub repository id; each repo records which sources retu
   fall back ([installation tokens](integrations.md#github-app-installation-tokens)).
 - On a **rate limit, timeout or `5xx`, there is no fallback**: the source is `rate_limited` /
   `error`. Falling back to the unauthenticated path would spend the budget every user shares.
-- A **`404`** on the handle listing (a renamed or deleted handle) makes the source `error` for
-  now; #450 may add a dedicated status.
+- A **`404`** on the handle listing (an unknown, renamed, suspended or deleted handle) makes the
+  source **`not_found`**, whatever credential served it ([error mapping](integrations.md#error-mapping)).
+  - **No fallback:** a `404` is not a `401`, so no other credential is tried.
+  - **Not ok for row statuses:** its rows and pages are kept, so nothing is pruned, and added repos
+    it alone holds read Unknown ([model.md](model.md#row-statuses)). A renamed handle's repos
+    still exist on GitHub under the new name.
+  - **Retried on every sync:** it is not skipped like `rate_limited`.
 - The source status never reveals which credential served it ([api.md](api.md#sync-state)).
 - **Endpoints** ([integrations.md](integrations.md#endpoints-and-parameters)): `pat` and
   `oauth_app` sources read `GET /user/repos` (`affiliation=owner,collaborator,organization_member`,
@@ -146,7 +157,7 @@ For each source, the sync reads GitHub page by page, up to the **page cap**:
   ([values](#values)).
 - The handle source drops private repos before writing anything.
 - At the end, the source's status is stored: `ok`, `error`, `invalid_credentials`,
-  `rate_limited` (with the reset time) or `page_cap_reached`
+  `rate_limited` (with the reset time), `page_cap_reached` or `not_found` (handle only)
   ([model.md](model.md#repositories_source_statuses)). A source added since the last sync reads
   as `pending` until it runs ([api.md](api.md#sync-state)).
 
@@ -185,14 +196,20 @@ The hard deadline is checked between pages.
 - **failure** (`401`, timeout, `5xx`, a redirect, rate limit, deadline): store only the status
   (`invalid_credentials`, `rate_limited`, or `error` for the others; see
   [partial failures](#partial-failures));
-- **page cap:** `page_cap_reached`; nothing past the cap is deleted.
+- **page cap:** delete its source rows and page rows **past the cap**, as for a success whose
+  last page is the cap; store `page_cap_reached` (it counts as `ok` for row statuses,
+  [model.md](model.md#row-statuses)). Pruning then applies.
+  - **Why:** listings sort by `created` ascending, so new repos land past the end and deletions
+    only pull repos toward earlier pages. Rows past the cap exist only after the cap was
+    **lowered**; the source never fetches them again, so keeping them would let private metadata
+    outlive any check.
 
 **End of the sync** (one transaction, `run_id`-guarded): drop the source, page and status rows
 (each statement `AND user_id = :userId`) of any `integration:<id>` key whose id is not among
 **all** the user's integrations (loaded `WHERE user_id = :userId`, usable or not, so a non-usable
 integration's rows are kept) (the **safety net** for a
 failed [deletion hook](integrations.md#deletion-hook), or a page a parallel run wrote after the
-hook's cleanup), then [prune](#pruning), then `state = idle`,
+hook's cleanup), then the [link fill](#link-fill), then [prune](#pruning), then `state = idle`,
 `run_id = null`, `last_synced_at = :now`, **even when every source failed** (the sync finished;
 per-source statuses carry the failures). A run that lost its lease or crashed never sets
 `last_synced_at`, so the next listing starts a sync once the cooldown has passed.
@@ -202,6 +219,37 @@ per-source statuses carry the failures). A run that lost its lease or crashed ne
   ([model.md](model.md#repositories)).
 - Rejected: all-or-nothing per source (buffer every page, write once): long transactions and
   lost work on failure.
+- **A run never creates the sync-state row.** Only the request entry points (the listing, the
+  sync-state route, Refresh, Add) create it, with `INSERT … ON DUPLICATE KEY UPDATE`. The run's
+  start-of-run [handle reconciliation](model.md#handle-changes) only locks and updates an existing
+  row; with no row, the run stops. A deleted user's row ([user deletion](model.md#user-deletion))
+  makes every guarded write of a running sync affect no row, so the run rolls back, stops, and
+  recreates nothing.
+
+### Link fill
+
+In the end-of-sync transaction, after the safety net and before pruning, an empty or dangling
+access link of an added private repo is filled:
+
+```sql
+UPDATE repositories
+SET integration_id = :integrationId
+WHERE user_id = :userId AND id = :repositoryId
+  AND added_at IS NOT NULL AND private = true
+  AND (integration_id IS NULL OR integration_id NOT IN (:userIntegrationIds))
+```
+
+- **Which repos:** added (`added_at` set), private, with an `integration_id` that is empty or not
+  among the user's integrations.
+- **Which integration:** the **oldest usable** integration (`created_at`, then `id`) holding a
+  source row for the repo from a source whose status is `ok` or `page_cap_reached` after this
+  run. No such integration ⇒ the link stays empty and the repo reads Unavailable.
+- **Never changes a set, valid link.** The `WHERE` clause matches only an empty or dangling link,
+  so it never overwrites a link Add wrote concurrently. A public repo and a not-added repo are
+  never touched. Filling an empty or dangling link is not "changing an added repo's access link",
+  which #444 excludes ([README](README.md#scope)).
+- Every statement is `run_id`-guarded (the transaction's first statement) and `AND user_id =
+  :userId`; it uses the (`user_id`, `integration_id`) index.
 
 ## Partial failures
 
@@ -213,14 +261,17 @@ per-source statuses carry the failures). A run that lost its lease or crashed ne
 - A `401` on an integration sets it to `invalid`, through the Integrations module
   ([integrations.md](integrations.md#invalid-on-401)); the handle source then moves to the next
   credential ([handle credential](#handle-credential)).
-- Hitting the page cap is reported as the source's status; pages already read are applied.
+- Hitting the page cap is reported as the source's status (`page_cap_reached`, which counts as
+  `ok`); pages already read are applied and rows past the cap are deleted
+  ([write path](#write-path)).
 
 ## Pruning
 
 - **Rule:** a not-added repo (`added_at IS NULL`) is deleted when **no source row** points at it
   ([model.md](model.md#private-metadata-lifecycle)). Nothing else is checked: a successful source
-  has already dropped the rows it no longer returns, and a failed, interrupted or capped source
-  keeps its rows, so **a failure blocks pruning by construction**.
+  has already dropped the rows it no longer returns (a capped source drops those past the cap),
+  and a failed or interrupted source keeps its rows, so **a failure blocks pruning by
+  construction**.
 - **When:** one statement in the end-of-sync transaction; and after changes that orphan
   rows outside a sync (an integration's source rows dropped by the deletion hook, the handle
   changed or cleared: the [handle reconciliation](model.md#handle-changes) prunes on the next
@@ -261,7 +312,15 @@ per-source statuses carry the failures). A run that lost its lease or crashed ne
 
 - **Page table** ([model.md](model.md#repositories_source_pages)): one row per (user, source,
   page) with `etag`, `has_next`, `fetched_at`. Never shared between users.
-- Each page's stored `etag` is sent back as `If-None-Match`.
+- Each page's stored `etag` is sent back as `If-None-Match`, **except on the last stored page**
+  (the one whose stored `has_next` is `false`), which is always requested **without
+  `If-None-Match`** so its fresh `Link` header decides whether to go on.
+  - **Why:** when the last page N is full (100 repos), a newly created repo goes to page N+1 and
+    leaves page N's body unchanged. A `304` on page N would let the stored `has_next = false` stop
+    the source, and the new repo would never be fetched.
+  - **Cost:** one full request per source per sync; authenticated, 1 of GitHub's 5000/h;
+    unauthenticated, a `304` already costs the same as a `200`. Deletions and renames change page
+    bodies, so they already answer `200`.
 - **`200`:** the [write path](#write-path) applies the page and stores the new `etag` /
   `has_next` in the same transaction.
 - **`304`:** the page's source rows are kept and their repos' `last_seen_at` is set;
@@ -306,14 +365,12 @@ per-source statuses carry the failures). A run that lost its lease or crashed ne
 
 ## Edge cases
 
-> **Open — settled by #450:** the full edge-case matrix (renames and transfers, a repo seen
-> through several sources, source failure vs disappearance, integration deleted mid-sync, handle
-> changed, visibility flips, page cap reached, concurrent syncs, an integration's credential
-> replaced with the same or a different `github_login`).
+Every sync edge case (renames and transfers, several sources, failure vs disappearance, the
+integration lifecycle, the handle, visibility flips, the page cap, rate limits, `304`,
+concurrency) is listed, with its outcome and its rule, in the
+[edge-case matrix](edge-cases.md).
 
 ## Required tests
-
-Tests for the open points above are added by the issue that settles them.
 
 - Opening the listing with a stale sync starts one; with a fresh sync, or inside the Refresh
   cooldown, it does not.
@@ -328,7 +385,8 @@ Tests for the open points above are added by the issue that settles them.
 - The unauthenticated source stops when the budget is low and is marked rate limited.
 - The handle's repos go through the oldest usable integration; unauthenticated only when none is
   usable.
-- Reaching the page cap stops the source and reports it; nothing past the cap is deleted.
+- Reaching the page cap stops the source, stores `page_cap_reached`, deletes its source and page
+  rows past the cap, then prunes; `page_cap_reached` counts as `ok` for row statuses.
 - No GitHub call goes to a host other than `https://api.github.com`; no redirect is followed,
   same-origin `301`/`302` included (the source reads `error`).
 - When an integration sync turns a repo private, its `handle` source row is dropped; a not-added
@@ -361,11 +419,26 @@ Tests for the open points above are added by the issue that settles them.
 - `last_synced_at` is set at the end of a sync even when every source failed; a run that lost
   its lease never sets it.
 - `last_seen_at` is set on a `200` and on a `304`.
+- A source whose integration is deleted mid-sync (`integration_unusable` with reason `missing`)
+  stops and writes no status.
+- A run whose sync-state row was deleted stops at its next write and never recreates the row,
+  including through its start-of-run handle reconciliation.
+
+**Link fill:**
+
+- The end-of-sync fill links the oldest usable integration whose source is `ok` or
+  `page_cap_reached` and holds a row for it to an added private repo with an empty or dangling
+  link.
+- It never touches a set, valid link, a public repo or a not-added repo; with no such
+  integration the link stays empty.
 
 **Conditional requests and pagination:**
 
 - A `304` reuses the stored page through the page table: source rows kept, `owner` / `name` /
   `private` untouched, the stored `has_next` decides whether to continue.
+- The last stored page (`has_next = false`) is requested without `If-None-Match`; earlier pages
+  send their `etag`.
+- With a full last page and a new repo created since, the next sync fetches the new page.
 - Pagination requests `?per_page=100&page=N` and never requests a URL supplied by a response
   (`Link` or otherwise), even a same-origin one.
 - Deleting an integration drops its page and status rows; changing the handle drops the
@@ -399,7 +472,8 @@ Tests for the open points above are added by the issue that settles them.
   both are refused. Concurrent acquires never overshoot the budget.
 - A non-usable integration (`expired`, `invalid`, `undecryptable`, type disabled) is never
   called: its source stores `invalid_credentials` or `error` and keeps its rows.
-- A `404` on the handle listing makes the handle source `error`.
+- A `404` on the handle listing stores `not_found`, keeps the handle's rows and pages, prunes
+  nothing, and does not fall back to another credential; the next sync retries it.
 
 **Integration deletion:**
 

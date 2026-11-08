@@ -46,7 +46,9 @@ Out of scope (from #444):
 - Org-wide tracking (one entry following every repo of an org).
 - Scheduled or background sync, polling GitHub. Syncs run only on demand.
 - Webhooks (already excluded by `product.md`).
-- Changing an added repo's access link after Add.
+- Changing an added repo's access link after Add. Filling an **empty or dangling** link at the
+  end of a sync ([sync.md](sync.md#link-fill)) is not a change of a valid link, so it is in
+  scope.
 - An environment variable to set the GitHub handle.
 - The permanent docs (`product.md`, `flow.md`, `modules/`, `backend/routes/`,
   `architecture/security.md`, `cache-warmer.md`, …): folded in by #452.
@@ -96,6 +98,19 @@ What this feature changes in the permanent product docs, as a checklist for the 
   `KERGHAN_REPOSITORIES_ADD_WINDOW_MS` ([api.md](api.md#add-rate-limit));
   `KERGHAN_REPOSITORIES_SYNC_TTL_MS`, `KERGHAN_REPOSITORIES_SYNC_COOLDOWN_MS` and
   `KERGHAN_REPOSITORIES_SYNC_PAGE_CAP` ([sync.md](sync.md#values)).
+- **`modules/auth.md` and the Repositories module doc:** the `user.deleted` contract: Auth emits
+  the awaited `UserDeletedEvent { userId }` after the user delete commits, once a deletion path
+  exists, and Repositories' listener deletes the user's rows in its five tables
+  ([model.md](model.md#user-deletion)).
+- **`backend/routes/repositories.md` and `core/error-codes.ts`:** the `409
+  REPOSITORY_SOURCE_UNUSABLE` Add answer ([api.md](api.md#errors)).
+- **`backend/routes/repositories.md` and the Repositories module doc:** the `not_found` source
+  status of the handle source ([sync.md](sync.md#handle-credential)).
+- **`modules/integrations.md`:** every status change caused by a repo call (`401`, mint
+  `404`/`403`, decrypt failure) is a compare-and-set on `secret_iv`
+  ([integrations.md](integrations.md#status-compare-and-set)).
+- **The Repositories module doc, "Edge cases":** built from the
+  [edge-case matrix](edge-cases.md).
 
 ## Decisions summary
 
@@ -170,6 +185,41 @@ What this feature changes in the permanent product docs, as a checklist for the 
 - **UI**: a top-level **Repositories** navbar link, a table with a toolbar, and a GitHub handle
   field on the Account page ([ui.md](ui.md)).
 
+**Edge cases (#450)**, every case listed in the [edge-case matrix](edge-cases.md):
+
+- **`fullName` tie-break:** the latest `last_seen_at`, then the highest `id`
+  ([api.md](api.md#repo-ref)).
+- **`pending` counts as not ok** for row statuses ([model.md](model.md#row-statuses)).
+- **A row's `sources[]`** lists every current source holding a row, failed and `pending` ones
+  included; the UI mutes not-ok badges ([api.md](api.md#listing), [ui.md](ui.md#table)).
+- **A missing integration** answers `integration_unusable` with reason `missing`; its source
+  stops without a status ([integrations.md](integrations.md#usable-integrations),
+  [sync.md](sync.md#sources)).
+- **A fixed integration reads `pending`:** a stored `invalid_credentials` for an integration now
+  usable is reported as `pending` ([api.md](api.md#sync-state)).
+- **End-of-sync link fill:** an added private repo's empty or dangling link gets the oldest usable
+  integration whose source is `ok` or `page_cap_reached` and returns it
+  ([sync.md](sync.md#link-fill)).
+- **Handle source status `not_found`** on a `404`, with no fallback and a retry every sync
+  ([sync.md](sync.md#handle-credential)).
+- **User deletion** through an awaited `user.deleted` event; the listener deletes the user's rows
+  in all five tables ([model.md](model.md#user-deletion)).
+- **A sync run never creates the sync-state row** ([sync.md](sync.md#write-path),
+  [model.md](model.md#handle-changes)).
+- **`page_cap_reached` counts as `ok`**, and rows past the cap are trimmed
+  ([model.md](model.md#row-statuses), [sync.md](sync.md#write-path)).
+- **The last stored page is requested without `If-None-Match`**, so a new repo past a full last
+  page is fetched ([sync.md](sync.md#conditional-requests)).
+- **Add's write is conditional** on `added_at IS NULL`, so a double Add writes once
+  ([api.md](api.md#add)).
+- **Status compare-and-set on `secret_iv`** for every status change caused by a repo call
+  ([integrations.md](integrations.md#status-compare-and-set)).
+- **`409 REPOSITORY_SOURCE_UNUSABLE`** when Add has no candidate before any GitHub call
+  ([api.md](api.md#add), [integrations.md](integrations.md#add-re-check-candidates)).
+- **Ten UI edge-case rules** ([ui.md](ui.md#edge-cases)).
+- **Accepted:** rows of non-usable integrations are kept until the integration is fixed or deleted
+  ([integrations.md](integrations.md#usable-integrations)).
+
 ## Sub-issues
 
 | Issue | Title | Spec files it touches |
@@ -179,7 +229,7 @@ What this feature changes in the permanent product docs, as a checklist for the 
 | #447 | Specs: repositories — sync engine | [sync.md](sync.md), [model.md](model.md), [ui.md](ui.md), [api.md](api.md), [security.md](security.md), [integrations.md](integrations.md) |
 | #448 | Specs: repositories — Integrations GitHub client | [integrations.md](integrations.md), [sync.md](sync.md), [model.md](model.md), [security.md](security.md), [api.md](api.md) |
 | #449 | Specs: repositories — GitHub handle and default user | [model.md](model.md), [security.md](security.md), [ui.md](ui.md), [sync.md](sync.md), [api.md](api.md) |
-| #450 | Specs: repositories — edge cases matrix | every file |
+| #450 | Specs: repositories — edge cases matrix | [edge-cases.md](edge-cases.md) (creates it), and every file |
 | #451 | Specs: repositories — testing strategy | every "Required tests" section |
 | #452 | Specs: fold the repositories specs into the permanent docs and remove them | all |
 
@@ -198,21 +248,19 @@ table, and #452 checks that none remain.
 
 | File | Open decision | Settled by |
 |------|---------------|------------|
-| [model.md](model.md#logical-foreign-keys) | User-deletion cleanup path | #450 |
-| [sync.md](sync.md#edge-cases) | Sync edge cases (renames, transfers, visibility flips, deletion mid-sync, handle changes, concurrent syncs, credential replaced) | #450 |
-| [ui.md](ui.md#edge-cases) | UI edge cases | #450 |
 | Every "Required tests" section | The testing strategy: GitHub mocking, sync-engine tests, frontend specs | #451 |
 
 ## Index
 
 | File | Defines |
 |---|---|
-| [model.md](model.md) | The five tables (columns, types, indexes, `source_key`), `auth_users.github_handle` (column, normalisation, validation, edit and read routes, default user, admins, Auth export, handle-change reconciliation), row statuses, logical FKs, private metadata lifecycle and pruning rule, ownership |
+| [model.md](model.md) | The five tables (columns, types, indexes, `source_key`), `auth_users.github_handle` (column, normalisation, validation, edit and read routes, default user, admins, Auth export, handle-change reconciliation), row statuses, logical FKs and user deletion, private metadata lifecycle and pruning rule, ownership |
 | [sync.md](sync.md) | Sources and the handle's credential, trigger (stale / Refresh), in-process execution, per-user lock, lease recovery, page-number pagination, write path, partial failures, pruning, rate limits and the unauthenticated budget tracker, ETags, values |
 | [api.md](api.md) | Routes, request/response contract, repo ref, sync state and polling, errors, access rules |
 | [integrations.md](integrations.md) | `IntegrationsGithubService` (operations, typed results), the single GitHub client, endpoints per source, installation-token cache, `401 → invalid`, usable integrations, error mapping, access-link choice and Add candidate walk, `502`/`503` helpers in `core/`, `integration.deleted` hook, unauthenticated budget tracker |
 | [security.md](security.md) | Credentials stay in the backend, user scoping, Add verification, handle validation, fixed base URL, CSRF, logging, abuse limits |
-| [ui.md](ui.md) | Navbar link, table, toolbar, sync UX, source error banners, empty state, GitHub handle field |
+| [ui.md](ui.md) | Navbar link, table, toolbar, sync UX, source error banners, empty states, GitHub handle field, UI edge cases |
+| [edge-cases.md](edge-cases.md) | Edge-case matrix: every case, its outcome and the rule behind it |
 
 ## Required tests
 

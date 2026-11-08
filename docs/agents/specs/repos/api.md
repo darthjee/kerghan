@@ -93,7 +93,7 @@ Every field is optional. Any invalid value answers `400 VALIDATION_FAILED`.
 | `status` | `added`, `not_added`, `unavailable` or `unknown`, derived on read ([model.md](model.md#row-statuses)). |
 | `addedAt` | `null` for not-added rows. |
 | `lastSeenAt` | When a source last returned the repo. |
-| `sources[]` | The sources that returned it in their latest sync: `{ kind: "integration", integration: { uuid, label } }` or `{ kind: "handle", handle }` (`handle` is the current, normalised, lowercase handle, [model.md](model.md#normalisation)). |
+| `sources[]` | Every **current** source holding a row for the repo, as of that source's last applied page, failed and `pending` sources included ([model.md](model.md#repositories_sources)): `{ kind: "integration", integration: { uuid, label } }` or `{ kind: "handle", handle }` (`handle` is the current, normalised, lowercase handle, [model.md](model.md#normalisation)). The UI matches each entry by key with the sync state's `sources[].status` and mutes a source that is not `ok` ([ui.md](ui.md#table)). |
 | `accessIntegration` | The access link set on Add, as `{ uuid, label }`. `null` for not-added rows, for added rows only the public source sees, and for a dangling link (its integration was deleted). |
 
 - **Sort:** fixed, case-insensitive `owner`, then `name`, then `githubId`, so pages are stable.
@@ -151,9 +151,13 @@ Rules:
 - The ref lives in the body, not the path: repo names containing dots (`.github`, `x.json`) would
   clash with the `.json` suffix routing.
 - A stale local remote (an old name after a rename) answers `404` until a sync records the new
-  name; GitHub's rename redirects are not followed. Further rename handling is #450's, including
-  the tie-break when the caller has two rows with the same `fullName` (e.g. a repo deleted and
-  recreated, or a name reused after a rename).
+  name; GitHub's rename redirects are not followed. A `githubId` ref is unaffected by a rename.
+- **`fullName` tie-break:** a user can hold two rows with the same `owner/name` and different
+  `github_id`s: a stale row (a repo renamed away whose only source failed, or a deleted repo kept
+  as added Unavailable) and a newer repo now using that name. A `{ fullName }` ref resolves to
+  the matching row with the **most recent `last_seen_at`, then the highest `id`**: the repo GitHub
+  most recently returned under that name. It is deterministic and needs no new error code; the UI
+  always sends `githubId`, so only API callers can hit the tie.
 
 ## Sync state
 
@@ -183,12 +187,18 @@ the same object as `sync`.
 | `lastSyncedAt` | End of the last finished sync; `null` = never synced (the UI shows its first-sync spinner). |
 | `refreshAvailableAt` | End of the Refresh cooldown (`last_started_at` + cooldown); `null` = Refresh available now. The UI disables Refresh with a countdown; the server still answers `429` + `Retry-After` for races and other clients. |
 | `sources[]` | One entry per **current** source; a deleted integration's entry disappears. |
-| `sources[].status` | `ok`, `error`, `invalid_credentials`, `rate_limited`, `page_cap_reached`, or `pending` (a source added since the last sync: a new integration, a newly set handle). |
+| `sources[].status` | `ok`, `error`, `invalid_credentials`, `rate_limited`, `page_cap_reached`, `not_found` (handle only: the handle listing answered `404`, [sync.md](sync.md#handle-credential)), or `pending` (a source added since the last sync: a new integration, a newly set handle; or a fixed integration, below). |
 | `sources[].syncedAt` | When that source last ran; `null` when `pending`. |
 | `sources[].resetAt` | Only for `rate_limited`: GitHub's reset time; `null` otherwise. |
 
 - A source entry never reveals whether the handle went through an integration or the
   unauthenticated path, and carries no integration field beyond `uuid` and `label`.
+- **A fixed integration reads `pending`:** on read, a stored `invalid_credentials` status for an
+  integration that is now **usable** ([usable integrations](integrations.md#usable-integrations))
+  reports `pending`, with `syncedAt: null`. The listing and this route already load the user's
+  integrations to resolve labels, so it costs no query. No event and no write: the next sync of
+  that source replaces the stored status. This removes the stale "Fix it in Integrations" banner
+  after a Test or a Replace.
 - The UI shows a banner for every status other than `ok` and `pending`
   ([ui.md](ui.md#source-errors)).
 - **The route never starts a sync**, so polling cannot re-trigger one. Its only possible write is
@@ -239,8 +249,8 @@ listing as added.
 | 2 | Per-user Add rate limit | `429 REPOSITORY_ADD_RATE_LIMITED` + `Retry-After` |
 | 3 | Ref looked up in the **caller's own rows**, by `user_id` from the session in the query itself | `404 NOT_FOUND`, no GitHub call, no write |
 | 4 | Already added | **`200`** with the current row: idempotent, no GitHub call, no write; the original `addedAt` and access link are kept |
-| 5 | GitHub re-check: one request for that repository, through the chosen access integration ([integrations.md](integrations.md#access-link-on-add)) | Denied (`404`/`403` from every candidate): `404 NOT_FOUND`, nothing written. Unauthenticated low budget, or a GitHub rate limit: `503 GITHUB_RATE_LIMITED` + `Retry-After` when known (never `404`, nothing marked `invalid`). Timeout / `5xx`: `502 GITHUB_UNAVAILABLE`. |
-| 6 | Write: snapshot refreshed, `added_at` and `integration_id` set | **`200`** with the updated row (listing row shape, `status: "added"`) |
+| 5 | GitHub re-check: one request for that repository, through the chosen access integration ([integrations.md](integrations.md#access-link-on-add)) | **No candidate** before any GitHub call (every source holding the repo is a non-usable integration, and the handle source does not hold it): `409 REPOSITORY_SOURCE_UNUSABLE`, no GitHub call, nothing written. Denied (`404`/`403` from every candidate called): `404 NOT_FOUND`, nothing written. Unauthenticated low budget, or a GitHub rate limit: `503 GITHUB_RATE_LIMITED` + `Retry-After` when known (never `404`, nothing marked `invalid`). Timeout / `5xx`: `502 GITHUB_UNAVAILABLE`. |
+| 6 | Write, conditional: `UPDATE … SET added_at, integration_id, snapshot WHERE id = :id AND user_id = :userId AND added_at IS NULL` | **`200`** with the updated row (listing row shape, `status: "added"`). Zero rows ⇒ re-read the row: **added** ⇒ `200` with the current row (a concurrent Add won: its `addedAt` and link are kept); **missing** ⇒ `404 NOT_FOUND` (pruned meanwhile). |
 
 - `200`, not `201`: the row already existed; Add only marks it.
 - **Owner lookup first:** a missing row, including one only another user holds, answers the same
@@ -262,10 +272,19 @@ listing as added.
   own threshold**: it is refused only when the remaining budget is **≤ 0** (the sync stops at
   ≤ 10, keeping a reserve for Add), answering `503` with no GitHub call
   ([sync.md](sync.md#rate-limits)).
-- **Race with pruning:** the write is `UPDATE … WHERE id = :id AND user_id = :userId`. If a
-  sync's pruning deleted the not-added row first, the update affects no row and Add answers
-  `404 NOT_FOUND` (the repo left the listing); if Add commits first, pruning skips the row
-  ([model.md](model.md#private-metadata-lifecycle)).
+- **Race with pruning:** the write is `UPDATE … WHERE id = :id AND user_id = :userId AND
+  added_at IS NULL`. If a sync's pruning deleted the not-added row first, the update affects no
+  row, the re-read finds nothing, and Add answers `404 NOT_FOUND` (the repo left the listing); if
+  Add commits first, pruning skips the row ([model.md](model.md#private-metadata-lifecycle)).
+- **Double Add:** two concurrent Adds of the same repo both pass step 4. Only one write matches
+  `added_at IS NULL`; the other affects no row, re-reads the row as added and answers `200` with
+  the first Add's `addedAt` and access link. The losing request's GitHub call is wasted, which the
+  per-user Add rate limit bounds.
+- **`409 REPOSITORY_SOURCE_UNUSABLE`:** decided after the rate limit and the lookup in the
+  caller's own rows, only from the caller's own sources, so it reveals nothing about other users
+  or about GitHub ([integrations.md](integrations.md#add-re-check-candidates)). Once at least one
+  candidate was called and every one denied the repo, or the 3-call cap was reached, the answer
+  stays `404 NOT_FOUND`.
 - `502 GITHUB_UNAVAILABLE` and `503 GITHUB_RATE_LIMITED` reuse the existing codes and helpers,
   moved to `core/github-http-errors.ts` ([integrations.md](integrations.md#shared-502--503-helpers)).
 - **Candidate walk** ([integrations.md](integrations.md#add-re-check-candidates)), at most **3
@@ -274,7 +293,7 @@ listing as added.
   then unauthenticated. A `401` (which also marks a `pat` / `oauth_app` integration `invalid`),
   `403` or `404` moves to the next candidate; a rate limit, timeout, `5xx` or redirect stops the
   walk (`503` / `502`, no fallback). No candidate left, or the cap reached, after denials ⇒
-  `404 NOT_FOUND`.
+  `404 NOT_FOUND`. No candidate at all before any call ⇒ `409 REPOSITORY_SOURCE_UNUSABLE`.
 
 ### Add rate limit
 
@@ -300,6 +319,7 @@ Standard error shape (`core/http-exception.filter.ts`,
 | `401` | `UNAUTHORIZED` | standard | Every route without a session (`JwtGuard`) |
 | `403` | `FORBIDDEN` | standard | Foreign origin (`OriginGuard`) |
 | `404` | `NOT_FOUND` | `Repository not found` | Add: ref not among the caller's rows, held only by another user, or denied by GitHub. **Same message for every case.** |
+| `409` | `REPOSITORY_SOURCE_UNUSABLE` (new) | `The integration that sees this repository needs attention.` | Add with no candidate: every source holding the repo is a non-usable integration and the handle source does not hold it |
 | `429` | `REPOSITORY_REFRESH_COOLDOWN` (new) | `Repositories were synced recently; try again later` | Refresh inside the cooldown |
 | `429` | `REPOSITORY_ADD_RATE_LIMITED` (new) | `Too many repositories added; try again later` | Add over the per-user limit |
 | `502` | `GITHUB_UNAVAILABLE` (existing) | `GitHub is unavailable; try again later` | Add re-check timeout / `5xx` |
@@ -314,7 +334,7 @@ Standard error shape (`core/http-exception.filter.ts`,
   [sync state](#sync-state); the UI maps each to its banner text.
 - GitHub error bodies and messages are never echoed, nor any credential detail. Anything
   unexpected falls through to the existing `500 INTERNAL_ERROR`.
-- The two new codes join `ErrorCodes` (`core/error-codes.ts`); their helpers live in the
+- The three new codes join `ErrorCodes` (`core/error-codes.ts`); their helpers live in the
   Repositories module, like `integrations/integration-http-errors.ts`. The `502`/`503` reuse the
   existing helpers `githubUnavailable()` / `githubRateLimited()`, moved (unchanged) from
   `integrations/integration-http-errors.ts` to `core/github-http-errors.ts`, so Repositories
@@ -374,12 +394,16 @@ Backend e2e. How GitHub is mocked and how the sync engine is tested is #451's.
   filter and search.
 - `%` and `_` in `search` match literally.
 - Exact row shape; `accessIntegration` is `null` in the three documented cases.
+- A row's `sources[]` includes the entry of a failed source that still holds a row for it.
 - A stale listing starts a sync; a fresh one, one during a running sync, or a stale one inside
   the Refresh cooldown does not.
 
 **Sync state:**
 
 - Exact shape; `pending` for a new source; a deleted integration's entry is gone.
+- A stored `invalid_credentials` status for an integration that is now usable reports `pending`;
+  one still non-usable reports `invalid_credentials`.
+- A `not_found` handle status is reported as `not_found`.
 - The route never starts a sync.
 - A sync stuck in `syncing` past its lease reads `idle`, with `startedAt: null`.
 
@@ -411,3 +435,10 @@ Backend e2e. How GitHub is mocked and how the sync engine is tested is #451's.
 - Add on a not-added row pruned concurrently answers `404 NOT_FOUND` and writes nothing.
 - The 31st Add in 60 s answers `429 REPOSITORY_ADD_RATE_LIMITED`, and the env overrides apply.
 - Every `404` carries the same message.
+- With two rows sharing a `fullName`, Add by `fullName` resolves to the latest-seen row, then the
+  highest `id`.
+- Add by `githubId` is unaffected by a rename.
+- Two concurrent Adds of the same repo write once; both answer `200` with the same `addedAt` and
+  access link.
+- Add with only non-usable sources (and no handle row) answers `409 REPOSITORY_SOURCE_UNUSABLE`
+  with no GitHub call and no write; with one usable candidate that denies it, Add answers `404`.
