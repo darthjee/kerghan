@@ -21,8 +21,19 @@ given (user, integration)**.
 - A minted GitHub App installation token is a credential: if cached, it stays inside this
   module, in memory or in the integration's own encrypted record. Any other persistence needs
   its own product decision ([security.md](security.md#credentials-stay-in-the-backend)).
-- Server-supplied `Link` and redirect URLs are held to `https://api.github.com`
-  ([security.md](security.md#fixed-github-base-url)).
+- Pagination builds its own page URLs and never requests a server-supplied URL; redirects are
+  held to `https://api.github.com` ([security.md](security.md#fixed-github-base-url)).
+- **Notes for #448** (decided by #447, [sync.md](sync.md)):
+  - the GitHub client hosts the process-wide **unauthenticated budget tracker**, consulted by the
+    sync and by Add's re-check before every unauthenticated call
+    ([sync.md](sync.md#rate-limits));
+  - the handle source goes through the oldest usable integration and, after a `401` on it, asks
+    for the **next usable integration**, restarting from page 1, then falls back to
+    unauthenticated; no fallback on a rate limit, timeout or `5xx`
+    ([sync.md](sync.md#handle-credential));
+  - the interface must let the sync send `If-None-Match` and read the `ETag`, `Link`
+    (`rel="next"` only) and `X-RateLimit-*` headers, with a 10 s timeout per request
+    ([sync.md](sync.md#conditional-requests)).
 
 > **Open — settled by #448:** the exported interface (preferably fixed, `GET`-only operations —
 > list repos, get a repo by id, list a handle's public repos — rather than a generic
@@ -57,8 +68,9 @@ When the user adds a repository:
 
 ## Deletion hook
 
-When an integration is deleted, the Repositories module is told, so it can drop the source rows
-and clear `integration_id` ([model.md](model.md#logical-foreign-keys)). There is no database
+When an integration is deleted, the Repositories module is told, so it can drop the
+integration's source, page and status rows, clear `integration_id`, and prune not-added repos
+left with no source ([model.md](model.md#logical-foreign-keys)). There is no database
 cascade between the two modules.
 
 > **Open — settled by #448:** the mechanism (a direct call vs an event).

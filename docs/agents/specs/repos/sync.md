@@ -19,7 +19,20 @@ A user's sync reads every source they have:
     integration, so private metadata is always tied to the integration that granted it.
 
 Results are merged by GitHub repository id; each repo records which sources returned it
-([model.md](model.md#sources-table)).
+([model.md](model.md#repositories_sources)).
+
+### Handle credential
+
+- The handle's public repositories go through the user's **oldest usable integration**
+  (`created_at`, then `id`), the same choice as Add's access link
+  ([integrations.md](integrations.md#access-link-on-add)); which statuses count as usable is
+  #448's.
+- On a **`401`**, that integration is set `invalid` and the handle source **restarts from page 1
+  with the next usable integration**; with none left, it uses the unauthenticated path, under its
+  [threshold](#rate-limits).
+- On a **rate limit, timeout or `5xx`, there is no fallback**: the source is `rate_limited` /
+  `error`. Falling back to the unauthenticated path would spend the budget every user shares.
+- The source status never reveals which credential served it ([api.md](api.md#sync-state)).
 
 > **Open — settled by #448:** the GitHub endpoint and parameters per integration type (e.g.
 > `/user/repos` vs `/installation/repositories`), and for the handle.
@@ -35,6 +48,9 @@ Results are merged by GitHub repository id; each repo records which sources retu
   ([api.md](api.md#stale-sync-trigger)), whatever the TTL.
 - **One sync per user at a time:** a trigger while a sync runs does not start a second one; a
   Refresh while syncing answers `202` with the running sync and does not reset the cooldown.
+- Both triggers go through the same [atomic claim](#per-user-lock); the cooldown is anchored on
+  `last_started_at`, set by every claim, whatever triggered it. A stale listing adds the TTL
+  condition to the claim; a Refresh does not.
 - No scheduled job, no background polling of GitHub.
 
 ## Execution
@@ -47,59 +63,185 @@ The sync is **asynchronous**: the request that triggers it does not wait for Git
   page of rows ([api.md](api.md#polling-contract), [ui.md](ui.md#sync-ux)). That route never
   starts a sync.
 
-> **Open — settled by #447:** in-process vs queue execution, behaviour on backend restart
-> mid-sync, and the per-user lock mechanism. Whatever it picks must guarantee that a sync stuck
-> in `syncing` (e.g. after a restart) eventually returns to `idle`, or polling never ends.
+- **In-process.** The triggering request claims the [per-user lock](#per-user-lock), starts the
+  sync as a **detached promise** inside the Repositories service (not awaited), and answers
+  immediately. A catch-all on the promise always releases the lock, even on an unexpected
+  exception.
+- **No queue.** A job queue (BullMQ/Redis) would add infrastructure to dev, production and the
+  standalone image for an on-demand, low-frequency job; rejected.
+- **A sync stuck in `syncing` always returns to `idle`** ([restart recovery](#restart-recovery)),
+  so polling always ends ([api.md](api.md#polling-contract)).
+
+### Per-user lock
+
+A **conditional `UPDATE`** on the user's sync-state row ([model.md](model.md#repositories_sync_states)),
+the same pattern as `IntegrationTestCooldownService`:
+
+```sql
+UPDATE repositories_sync_states
+SET state = 'syncing', last_started_at = :now, heartbeat_at = :now, run_id = :newUuid
+WHERE user_id = :userId
+  AND (state = 'idle' OR heartbeat_at < :now - lease)
+  AND (last_started_at IS NULL OR last_started_at < :now - cooldown)
+```
+
+- **One row affected:** this request owns the sync.
+- **Zero rows:** a sync is running (Refresh answers `202` with the current state) or the cooldown
+  is active (Refresh answers `429`; a stale listing starts no sync) ([api.md](api.md#refresh)).
+- A **stale listing** adds `AND (last_synced_at IS NULL OR last_synced_at < :now - ttl)` to the
+  same claim; a Refresh does not. Both are bound by the cooldown clause.
+- The row is created on first use with an **insert that ignores duplicates**, before the claim,
+  so concurrent triggers (two tabs) never start two syncs.
+
+### Restart recovery
+
+- **Heartbeat:** the running sync bumps `heartbeat_at` after every GitHub page
+  ([write path](#write-path)).
+- **Lease:** a row in `syncing` whose `heartbeat_at` is older than the lease is **dead**. The
+  sync-state route reports it as `idle` (so polling ends), and the next trigger may take it over
+  through the claim above.
+- **`run_id` guard:** every write of the run (each page, each source's end, the sync's end) is
+  conditional on `run_id`, so a zombie run never overwrites a newer one.
+- **Hard deadline:** one sync is bounded; it is checked between pages. Past it, the sync stops
+  and keeps what it already applied.
+- **No reset of `syncing` rows at boot:** unsafe with two instances (rolling deploy); the lease
+  works whatever the topology.
+- **A source interrupted mid-sync** (restart, deadline) keeps its previous rows and status; the
+  next sync redoes it in full.
 
 ## Per source
 
-For each source, the sync:
+For each source, the sync reads GitHub page by page, up to the **page cap**:
 
-1. follows every GitHub page, up to a **page cap**;
-2. upserts rows by `github_id`, refreshing `owner`, `name` and `private`;
-3. rewrites that source's rows in the sources table;
-4. sets `last_seen_at` on the rows it returned;
-5. stores the source's status: `ok`, `error`, `invalid_credentials`, `rate_limited` (with the
-   reset time) or `page_cap_reached` ([model.md](model.md#sync-state)). A source added since the
-   last sync reads as `pending` until it runs ([api.md](api.md#sync-state)).
+- **Page-number pagination.** The sync builds every page request itself (`?per_page=100&page=N`,
+  on the endpoint #448 picks) and reads the `Link` header **only to know whether `rel="next"`
+  exists**. It never requests a URL taken from a response
+  ([security.md](security.md#fixed-github-base-url)).
+- Pages within a source are sequential; up to the parallelism bound of sources run at once
+  ([values](#values)).
+- The handle source drops private repos before writing anything.
+- At the end, the source's status is stored: `ok`, `error`, `invalid_credentials`,
+  `rate_limited` (with the reset time) or `page_cap_reached`
+  ([model.md](model.md#repositories_source_statuses)). A source added since the last sync reads
+  as `pending` until it runs ([api.md](api.md#sync-state)).
 
-Not-added repos that no source returns any more are pruned
-([model.md](model.md#private-metadata-lifecycle)).
+### Write path
+
+**One transaction per page:**
+
+1. `UPDATE repositories_sync_states SET heartbeat_at = :now WHERE user_id = :userId AND run_id = :mine`;
+   zero rows ⇒ the run lost its lease: roll back and stop (zombie guard on every write).
+2. Upsert the page's repos with `INSERT … ON DUPLICATE KEY UPDATE owner, name, private,
+   updated_at` on (`user_id`, `github_id`). It never touches `added_at` or `integration_id`, is
+   safe under concurrency, and when two sources return the same repo the last write wins (same
+   data).
+3. Rewrite that page's source rows (a repo moved from another page is upserted onto this one);
+   set `last_seen_at` on its repos.
+4. Store the page's `etag` / `has_next` ([conditional requests](#conditional-requests)).
+
+The hard deadline is checked between pages.
+
+**End of a source** (one transaction, `run_id`-guarded):
+
+- **success:** delete its source rows and page rows past its last page; store `ok` and
+  `syncedAt`;
+- **failure** (`401`, timeout, `5xx`, rate limit, deadline): store only the status (see
+  [partial failures](#partial-failures));
+- **page cap:** `page_cap_reached`; nothing past the cap is deleted.
+
+**End of the sync** (one transaction, `run_id`-guarded): [prune](#pruning), then `state = idle`,
+`run_id = null`, `last_synced_at = :now`, **even when every source failed** (the sync finished;
+per-source statuses carry the failures). A run that lost its lease or crashed never sets
+`last_synced_at`, so the next listing starts a sync once the cooldown has passed.
+
+- **`last_seen_at`** is "when a source page last returned the repo" (`200` or `304`), even if
+  that source fails on a later page. It is informational: no status derives from it
+  ([model.md](model.md#repositories)).
+- Rejected: all-or-nothing per source (buffer every page, write once): long transactions and
+  lost work on failure.
 
 ## Partial failures
 
-- A failing source (401, timeout, rate limit, other error) **does not fail the sync**; the other
-  sources are still applied.
-- A failed source's rows are **kept as they were** (its added repos read as Unknown, not
-  Unavailable — [model.md](model.md#row-statuses)).
+- A failing source (`401`, timeout, `5xx`, rate limit, deadline) **does not fail the sync**; the
+  other sources are still applied.
+- **Pages already applied stay applied**; the rest keep their old rows: partly refreshed, never
+  lost. Its added repos read as Unknown, not Unavailable
+  ([model.md](model.md#row-statuses)), and nothing of it is pruned.
 - A `401` on an integration sets it to `invalid`, through the Integrations module
-  ([integrations.md](integrations.md#invalid-on-401)).
-- Hitting the page cap is reported as the source's status; rows already read are applied.
+  ([integrations.md](integrations.md#invalid-on-401)); the handle source then moves to the next
+  credential ([handle credential](#handle-credential)).
+- Hitting the page cap is reported as the source's status; pages already read are applied.
+
+## Pruning
+
+- **Rule:** a not-added repo (`added_at IS NULL`) is deleted when **no source row** points at it
+  ([model.md](model.md#private-metadata-lifecycle)). Nothing else is checked: a successful source
+  has already dropped the rows it no longer returns, and a failed, interrupted or capped source
+  keeps its rows, so **a failure blocks pruning by construction**.
+- **When:** one statement in the end-of-sync transaction; and right after changes that orphan
+  rows outside a sync (an integration's source rows dropped by the deletion hook, the handle
+  changed or cleared).
+- Added repos are never deleted; they read Unavailable.
 
 ## Rate limits
 
 - Every GitHub response's `X-RateLimit-Remaining` / `X-RateLimit-Reset` are read.
-- The **unauthenticated** source stops early when the remaining budget is low, is marked
-  **rate limited** with its reset time, and keeps its stored rows.
+- **`rate_limited` sources are skipped** while their stored `resetAt` is in the future: no call;
+  status, `resetAt` and rows are kept. This applies to every source, including on Refresh.
+- **Unauthenticated budget tracker:** the unauthenticated limit belongs to the backend IP, not a
+  user, so one **process-wide, in-memory** tracker keeps the latest `X-RateLimit-Remaining` /
+  `X-RateLimit-Reset` of unauthenticated responses. Every unauthenticated call (sync or Add
+  re-check) consults it first: remaining ≤ the threshold and reset not passed ⇒ the sync marks
+  the source `rate_limited` with that reset, and Add answers `503 GITHUB_RATE_LIMITED`
+  ([api.md](api.md#add)), with no call.
+  - It is an optimisation: GitHub's headers stay the truth, and with several instances each
+    learns the budget on its first call.
+  - Its home in code is #448's (the GitHub client, [integrations.md](integrations.md#exported-service)).
+- The unauthenticated source stops early when the remaining budget reaches the threshold, is
+  marked **rate limited** with its reset time, and keeps its stored rows.
 
 ## Conditional requests
 
-- Each source page's `ETag` is stored and sent back as `If-None-Match`.
-- A `304` reuses the stored data for that page and does not count against GitHub's limit.
-- This applies to every source, authenticated or not.
+- **Page table** ([model.md](model.md#repositories_source_pages)): one row per (user, source,
+  page) with `etag`, `has_next`, `fetched_at`. Never shared between users.
+- Each page's stored `etag` is sent back as `If-None-Match`.
+- **`200`:** the [write path](#write-path) applies the page and stores the new `etag` /
+  `has_next` in the same transaction.
+- **`304`:** the page's source rows are kept and their repos' `last_seen_at` is set;
+  `owner` / `name` / `private` are untouched (identical content). The stored `has_next` decides
+  whether to continue.
+- **Invalidation:** a failed or interrupted source keeps its page rows and ETags; deleting an
+  integration drops its page rows; changing the handle drops the handle's page rows; a replaced
+  credential needs nothing (GitHub's ETag differs, the next request gets `200`).
+- **Rate limit:** a `304` is free of GitHub's rate limit **only on authenticated requests**. An
+  unauthenticated `304` still counts against the shared 60/h; ETags there save transfer and
+  writes, not budget.
 
 ## Network
 
 - The base URL is fixed: `https://api.github.com` ([security.md](security.md#fixed-github-base-url)).
-- Every GitHub call has a timeout, and one sync bounds how many GitHub calls run in parallel.
-- Pagination never follows a `Link` URL whose origin is not exactly `https://api.github.com`;
-  redirects to another origin are not followed, and `Authorization` never leaves that origin
-  ([security.md](security.md#fixed-github-base-url)).
+- Every GitHub call has a timeout, and one sync bounds how many sources run in parallel
+  ([values](#values)).
+- Pagination builds its own page URLs and **never requests a URL taken from a response**;
+  redirects to another origin are not followed, and `Authorization` never leaves
+  `https://api.github.com` ([security.md](security.md#fixed-github-base-url)).
 
 ## Values
 
-> **Open — settled by #447:** the TTL, the Refresh cooldown, the page cap, the rate-limit
-> threshold, the timeout and the parallelism bound.
+| Value | Default | Configurable |
+|---|---|---|
+| Staleness TTL | 1 h | `KERGHAN_REPOSITORIES_SYNC_TTL_MS` (`3600000`) |
+| Refresh cooldown (from the start of any sync) | 5 min | `KERGHAN_REPOSITORIES_SYNC_COOLDOWN_MS` (`300000`) |
+| Page cap per source | 10 pages of `per_page=100` (1000 repos) | `KERGHAN_REPOSITORIES_SYNC_PAGE_CAP` (`10`) |
+| Unauthenticated rate-limit threshold | stop when `X-RateLimit-Remaining` ≤ 10 (a reserve for Add re-checks; the 60/h is shared by every user on the backend IP) | constant |
+| GitHub call timeout | 10 s per request | constant |
+| Parallelism | up to 3 sources at once; pages within a source are sequential | constant |
+| Lease (no heartbeat ⇒ dead) | 2 min | constant |
+| Hard deadline per sync | 5 min | constant |
+| Sync-state polling interval | 2 s | frontend constant ([ui.md](ui.md#sync-ux)) |
+
+- The env vars are read with `getNumberConfig` and these defaults; #452 folds them into
+  `environment-variables.md` ([README.md](README.md#product-changes-folded-by-452)).
 
 ## Edge cases
 
@@ -122,11 +264,62 @@ Tests for the open points above are added by the issue that settles them.
 - A failing source does not fail the sync: other sources are applied, its rows are kept, and its
   status is stored.
 - A `401` from an integration sets it `invalid`.
-- A `304` reuses stored data.
 - The unauthenticated source stops when the budget is low and is marked rate limited.
 - The handle's repos go through a valid integration when one exists; unauthenticated only
   otherwise.
-- Reaching the page cap stops the source and reports it.
-- No GitHub call goes to a host other than `https://api.github.com`, including through `Link`
-  headers and redirects.
+- Reaching the page cap stops the source and reports it; nothing past the cap is deleted.
+- No GitHub call goes to a host other than `https://api.github.com`, including through redirects.
 - The handle source never stores a private repo, even when fetched through an integration.
+
+**Execution and lock:**
+
+- The atomic claim: two concurrent triggers start exactly one sync; the claim fails inside the
+  cooldown, and while another run holds an unexpired lease; a stale listing also needs the TTL
+  condition, a Refresh does not.
+- The sync-state row is created on first use without duplicates under concurrent triggers.
+- The triggering request answers before the detached sync finishes; an unexpected exception in
+  the sync still releases the lock.
+- A sync stuck in `syncing` past its lease reads `idle` on the sync-state route and can be taken
+  over by the next trigger.
+- A zombie run's writes (page, end of source, end of sync) are rejected by `run_id`.
+- The hard deadline stops the sync between pages; applied pages are kept; the run still ends
+  `idle`.
+
+**Write path:**
+
+- Each page is applied in its own transaction; a source failing on a later page keeps the pages
+  already applied and the old rows of the rest; its status is stored, nothing of it is pruned.
+- The upsert never changes `added_at` or `integration_id`.
+- The end of a successful source deletes its source and page rows past its last page.
+- `last_synced_at` is set at the end of a sync even when every source failed; a run that lost
+  its lease never sets it.
+- `last_seen_at` is set on a `200` and on a `304`.
+
+**Conditional requests and pagination:**
+
+- A `304` reuses the stored page through the page table: source rows kept, `owner` / `name` /
+  `private` untouched, the stored `has_next` decides whether to continue.
+- Pagination requests `?per_page=100&page=N` and never requests a URL supplied by a response
+  (`Link` or otherwise), even a same-origin one.
+- Deleting an integration drops its page rows; changing the handle drops the handle's.
+
+**Pruning:**
+
+- Only not-added repos with no source row are pruned, at the end of a sync and after an
+  integration deletion or a handle change; a failed source blocks pruning of its repos; added
+  repos are never pruned.
+
+**Handle credential and rate limits:**
+
+- The handle uses the oldest usable integration; after a `401` it marks it `invalid` and restarts
+  from page 1 with the next one, then unauthenticated; a rate limit, timeout or `5xx` does not
+  fall back.
+- A `rate_limited` source is skipped while its `resetAt` is in the future: no call, status and
+  rows kept.
+- The unauthenticated budget tracker is shared by the sync and Add: once it reports a low budget,
+  the sync marks the unauthenticated source `rate_limited` and Add answers `503`, both without a
+  GitHub call.
+
+**Values:**
+
+- The defaults apply, and the three env vars override the TTL, the cooldown and the page cap.

@@ -100,8 +100,8 @@ Every field is optional. Any invalid value answers `400 VALIDATION_FAILED`.
 
 ### Stale-sync trigger
 
-The listing starts a sync when the user's last one is stale ([sync.md](sync.md#trigger); the TTL
-is #447's). The server owns the staleness rule; the frontend makes one call. The listing returns
+The listing starts a sync when the user's last one is stale ([sync.md](sync.md#trigger); TTL
+1 h, [sync.md](sync.md#values)). The server owns the staleness rule; the frontend makes one call. The listing returns
 the stored rows at once, with `sync.state` already `syncing` when it started one. A fresh listing,
 or one during a running sync, starts nothing.
 
@@ -174,10 +174,10 @@ the same object as `sync`.
 
 | Field | Meaning |
 |---|---|
-| `state` | `idle` or `syncing`. |
-| `startedAt` | Start of the running sync; `null` when idle. |
+| `state` | `idle` or `syncing`. A sync whose heartbeat is older than its lease is dead and reads `idle` ([sync.md](sync.md#restart-recovery)). |
+| `startedAt` | Start of the running sync (`last_started_at`); `null` when idle. |
 | `lastSyncedAt` | End of the last finished sync; `null` = never synced (the UI shows its first-sync spinner). |
-| `refreshAvailableAt` | End of the Refresh cooldown; `null` = Refresh available now. The UI disables Refresh with a countdown; the server still answers `429` + `Retry-After` for races and other clients. |
+| `refreshAvailableAt` | End of the Refresh cooldown (`last_started_at` + cooldown); `null` = Refresh available now. The UI disables Refresh with a countdown; the server still answers `429` + `Retry-After` for races and other clients. |
 | `sources[]` | One entry per **current** source; a deleted integration's entry disappears. |
 | `sources[].status` | `ok`, `error`, `invalid_credentials`, `rate_limited`, `page_cap_reached`, or `pending` (a source added since the last sync: a new integration, a newly set handle). |
 | `sources[].syncedAt` | When that source last ran; `null` when `pending`. |
@@ -192,14 +192,13 @@ the same object as `sync`.
 ### Polling contract
 
 - While `state` is `syncing`, the frontend polls `POST /repositories/sync/state.json` at a fixed
-  **frontend constant** interval (the value is #447's).
+  **frontend constant** interval of 2 s ([sync.md](sync.md#values)).
 - It stops on `idle` (then reloads the current listing page; the data is fresh, so that reload
   never starts another sync), on unmount, or on `401`. A transient error (network, `5xx`) keeps
   polling at the same interval.
-- There is no scheduled job (#444); each sync is background work started by a request. #447
-  (execution and restart behaviour) must guarantee that a sync stuck in `syncing`, e.g. after a
-  backend restart, eventually returns to `idle`, or polling never ends. This contract holds
-  whether #447 picks in-process execution or a queue.
+- There is no scheduled job (#444); each sync is background work started by a request, run
+  in-process. A sync stuck in `syncing`, e.g. after a backend restart, reads `idle` once its
+  lease expires, so polling always ends ([sync.md](sync.md#restart-recovery)).
 
 ## Refresh
 
@@ -216,9 +215,13 @@ the same object as `sync`.
   without a session answers `403`), then "already syncing", then "cooldown", then start.
 - **The cooldown runs from the start of the last sync, whatever triggered it** (stale listing or
   Refresh). It protects the GitHub budget, notably the shared unauthenticated 60/h.
-  `refreshAvailableAt` follows the same rule; the duration is #447's.
-- Refresh always runs every source; there is no per-source refresh. Whether a `rate_limited`
-  source is skipped until its `resetAt` is #447's.
+  `refreshAvailableAt` follows the same rule; the duration is 5 min
+  ([sync.md](sync.md#values)).
+- "Already syncing" and "cooldown" are one atomic claim ([sync.md](sync.md#per-user-lock)), so
+  concurrent Refreshes start one sync.
+- Refresh runs every source; there is no per-source refresh. A `rate_limited` source is skipped
+  while its `resetAt` is in the future: no GitHub call, its status, `resetAt` and rows are kept
+  ([sync.md](sync.md#rate-limits)).
 
 ## Add
 
@@ -250,8 +253,13 @@ listing as added.
   the stored private metadata stays tied to the integration that granted it
   ([model.md](model.md#private-metadata-lifecycle)) and the row reads as Added, not
   Unavailable.
-- The unauthenticated re-check honours the same low-budget threshold as the sync
+- The unauthenticated re-check honours the same low-budget threshold as the sync, through the
+  shared process-wide budget tracker: a low budget answers `503` with no GitHub call
   ([sync.md](sync.md#rate-limits)).
+- **Race with pruning:** the write is `UPDATE … WHERE id = :id AND user_id = :userId`. If a
+  sync's pruning deleted the not-added row first, the update affects no row and Add answers
+  `404 NOT_FOUND` (the repo left the listing); if Add commits first, pruning skips the row
+  ([model.md](model.md#private-metadata-lifecycle)).
 - `502 GITHUB_UNAVAILABLE` and `503 GITHUB_RATE_LIMITED` reuse the existing codes and helpers
   (`integrations/integration-http-errors.ts`).
 - A `401` on the candidate integration marks it `invalid`; whether Add then tries the next
@@ -356,12 +364,15 @@ Backend e2e. How GitHub is mocked and how the sync engine is tested is #451's.
 
 - Exact shape; `pending` for a new source; a deleted integration's entry is gone.
 - The route never starts a sync.
+- A sync stuck in `syncing` past its lease reads `idle`, with `startedAt: null`.
 
 **Refresh:**
 
 - `202` starts a sync; `202` while syncing starts no new sync and does not reset the cooldown.
 - `429 REPOSITORY_REFRESH_COOLDOWN` + `Retry-After` + `error.retryAfterSeconds` inside the
   cooldown, including right after a stale-triggered sync.
+- Two concurrent Refreshes start one sync.
+- A `rate_limited` source whose `resetAt` is in the future is skipped by Refresh.
 
 **Add:**
 
@@ -378,5 +389,6 @@ Backend e2e. How GitHub is mocked and how the sync engine is tested is #451's.
 - A GitHub denial answers `404` and writes nothing.
 - The re-check on a low budget answers `503 GITHUB_RATE_LIMITED`, not `404`; a timeout / `5xx`
   answers `502 GITHUB_UNAVAILABLE`.
+- Add on a not-added row pruned concurrently answers `404 NOT_FOUND` and writes nothing.
 - The 31st Add in 60 s answers `429 REPOSITORY_ADD_RATE_LIMITED`, and the env overrides apply.
 - Every `404` carries the same message.

@@ -85,10 +85,12 @@ public repos, so private metadata is always tied to the integration that granted
 The backend only ever calls `https://api.github.com`. No user input chooses the host or a path
 outside the endpoints this feature uses, so there is no SSRF surface.
 
-Server-supplied URLs are held to the same origin, in both the authenticated client
-(Integrations) and the unauthenticated one (Repositories):
+Server-supplied URLs are never requested, in both the authenticated client (Integrations) and
+the unauthenticated one (Repositories):
 
-- pagination never follows a `Link` URL whose origin is not exactly `https://api.github.com`;
+- pagination builds its own page URLs (`?per_page=100&page=N`) and reads `Link` only to know
+  whether `rel="next"` exists; it never requests a URL taken from a response
+  ([sync.md](sync.md#per-source));
 - redirects to another origin are not followed, and `Authorization` is never sent to another
   host.
 
@@ -113,9 +115,12 @@ trigger is therefore not a state change over `GET`, and needs no exception
 
 ## Abuse and performance
 
-- One sync per user at a time, a Refresh cooldown, a per-source page cap, and an early stop of
-  the unauthenticated source on a low rate-limit budget ([sync.md](sync.md)).
+- One sync per user at a time (an atomic claim with a lease), a Refresh cooldown, a per-source
+  page cap, a hard deadline per sync, and an early stop of the unauthenticated source on a low
+  rate-limit budget, tracked process-wide and shared with Add ([sync.md](sync.md#values)).
 - Timeouts and a parallelism bound on GitHub calls.
+- A sync that lost its lease cannot write: every write is guarded by its `run_id`
+  ([sync.md](sync.md#restart-recovery)).
 
 ## Required tests
 
@@ -132,7 +137,8 @@ Tests for the open points above are added by the issue that settles them.
   ([api.md](api.md#required-tests)).
 - A cached installation token never leaves the Integrations module.
 - The handle source stores no private repo.
-- A `Link` or redirect to another origin is not followed, and `Authorization` never leaves
+- Pagination never requests a URL supplied by a response (a `Link` URL, even same-origin); a
+  redirect to another origin is not followed, and `Authorization` never leaves
   `https://api.github.com`.
 - Deleting an integration purges not-added repos only it could see.
 - An invalid handle is rejected before storage; a stored handle is URL-encoded in the GitHub
