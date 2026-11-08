@@ -78,13 +78,32 @@ dropped, so a stale handle row never keeps it alive ([sync.md](sync.md#write-pat
 
 ## GitHub handle
 
-- Validated against GitHub's username format (letters, digits, single hyphens, at most 39
-  characters) before it is stored.
-- URL-encoded when used, so it cannot alter the GitHub API path.
+Column, normalisation, validation and edit path: [model.md](model.md#github-handle).
 
-> **Open — settled by #449:** the exact validation and normalisation, the narrowing of the
-> default-user edit block to the managed fields, and whether admin endpoints show or edit the
-> handle.
+- **Validated before storage**, after normalisation (trim, one leading `@` stripped, lowercase):
+  `^[a-z0-9](?:[a-z0-9]|-(?=[a-z0-9])){0,38}$` (letters, digits, single hyphens, no leading or
+  trailing hyphen, at most 39 characters). Anything else answers `400` and stores nothing.
+- **URL-encoded** (`encodeURIComponent`) whenever it goes into a GitHub path, so it cannot alter
+  the path even if the format rule were ever loosened.
+- **No uniqueness:** two users may hold the same handle, so saving a handle never reveals that
+  another user holds it.
+- **Handle-only edits need no current password** and stay outside the account-edit abuse guard:
+  the handle is public, non-credential data, so re-authentication would protect nothing. The
+  password is never checked on that path, so it is no password oracle, and it cannot change a
+  credential, the username or the email. A request that also carries a managed field
+  (`username`, `email`, `newPassword`) takes the full existing path: `currentPassword`, lockout,
+  abuse guard.
+- **Default user:** the `409 DEFAULT_USER_MANAGED` block narrows to the managed fields, by
+  presence. A handle-only edit passes; a mixed edit is refused whole. The block still runs before
+  the lockout and the password check, so the managed password stays unguessable through
+  `account.json`.
+- **Admins** neither see nor edit the handle: `/admin/users/*` responses and the admin edit
+  contract are unchanged (consistent with [user scoping](#user-scoping)).
+- **`POST /auth/account/mine.json`** returns only the session's own `{ username, email,
+  githubHandle }`: no id in the request, `X-Skip-Cache`, `POST` so `OriginGuard` covers it.
+- **Handle changes** drop the old handle's rows on the next Repositories request
+  ([model.md](model.md#handle-changes)); the handle source holds only public repos, so the lag
+  exposes no private metadata.
 
 ## Fixed GitHub base URL
 
@@ -151,6 +170,14 @@ Tests for the open points above are added by the issue that settles them.
 - Deleting an integration purges not-added repos only it could see.
 - An invalid handle is rejected before storage; a stored handle is URL-encoded in the GitHub
   path.
+- A handle-only `PATCH /auth/account.json` never checks `currentPassword` (a wrong one does not
+  change the answer and is not counted); a request with a managed field still requires it.
+- The default user (feature enabled) can set its handle alone; any request with a managed field
+  answers `409` before the lockout and the password check, and stores nothing.
+- Admin user endpoints neither return nor write `githubHandle`.
+- `POST /auth/account/mine.json` returns only the caller's own account, sends `X-Skip-Cache`, and
+  is rejected from a foreign origin.
+- Saving a handle another user already holds succeeds and reveals nothing.
 - Every GitHub call targets `https://api.github.com`.
 - Every route (listing and sync state included) from a foreign origin is rejected by
   `OriginGuard`.

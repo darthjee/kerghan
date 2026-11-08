@@ -26,6 +26,10 @@ The HTTP surface of the Repositories module, in the style of
 - **Errors** use the standard error format (`core/http-exception.filter.ts`); see
   [Errors](#errors).
 - Controllers stay thin: validation in DTOs, everything else in the module's services.
+- **Handle reconciliation first:** every route (listing, sync state, Refresh, Add) first runs the
+  [handle reconciliation](model.md#handle-changes), so a changed or cleared GitHub handle's old
+  rows are dropped (and pruned) before anything is read or written. The sync-state route stays a
+  pure read of the sync: it never starts one.
 - **Bodies** go through the global `ValidationPipe({ whitelist: true, transform: true })`:
   unknown properties are **stripped and ignored**, not rejected. A body sent to a "no body" route
   (Sync state, Refresh) is ignored.
@@ -89,7 +93,7 @@ Every field is optional. Any invalid value answers `400 VALIDATION_FAILED`.
 | `status` | `added`, `not_added`, `unavailable` or `unknown`, derived on read ([model.md](model.md#row-statuses)). |
 | `addedAt` | `null` for not-added rows. |
 | `lastSeenAt` | When a source last returned the repo. |
-| `sources[]` | The sources that returned it in their latest sync: `{ kind: "integration", integration: { uuid, label } }` or `{ kind: "handle", handle }`. |
+| `sources[]` | The sources that returned it in their latest sync: `{ kind: "integration", integration: { uuid, label } }` or `{ kind: "handle", handle }` (`handle` is the current, normalised, lowercase handle, [model.md](model.md#normalisation)). |
 | `accessIntegration` | The access link set on Add, as `{ uuid, label }`. `null` for not-added rows, for added rows only the public source sees, and for a dangling link (its integration was deleted). |
 
 - **Sort:** fixed, case-insensitive `owner`, then `name`, then `githubId`, so pages are stable.
@@ -137,9 +141,9 @@ Rules:
 - Both or neither answers `400 VALIDATION_FAILED`.
 - `githubId`: a positive integer, at most `Number.MAX_SAFE_INTEGER`. `0`, negative, fractional or
   larger values (e.g. `1e300`) answer `400`, never reach the database.
-- `fullName`: exactly one `/`. The owner follows the GitHub handle rule
-  ([security.md](security.md#github-handle): letters, digits, single hyphens, at most 39
-  characters); the name matches `[A-Za-z0-9._-]{1,100}` and is neither `.` nor `..`. Anything
+- `fullName`: exactly one `/`. The owner follows the GitHub handle rule, compared
+  case-insensitively ([model.md](model.md#validation): letters, digits, single hyphens, no
+  leading or trailing hyphen, at most 39 characters); the name matches `[A-Za-z0-9._-]{1,100}` and is neither `.` nor `..`. Anything
   else answers `400`.
 - `fullName` is resolved **case-insensitively against the caller's own rows** only, so a ref can
   only reach repos already in the user's listing (#444's "Add by `owner/name` not in the listing"
@@ -187,7 +191,8 @@ the same object as `sync`.
   unauthenticated path, and carries no integration field beyond `uuid` and `label`.
 - The UI shows a banner for every status other than `ok` and `pending`
   ([ui.md](ui.md#source-errors)).
-- **The route is a pure read: it never starts a sync**, so polling cannot re-trigger one.
+- **The route never starts a sync**, so polling cannot re-trigger one. Its only possible write is
+  the [handle reconciliation](model.md#handle-changes) shared by every route.
 
 ### Polling contract
 
@@ -345,6 +350,11 @@ Backend e2e. How GitHub is mocked and how the sync engine is tested is #451's.
   internal `integrations.id`, `secretHint`, `github_login`, `status_reason`, or any other
   integration field beyond `uuid` and `label`.
 - A row's `sources[]` and `accessIntegration` never resolve an integration of another user.
+- After the GitHub handle changed or was cleared, each of the four routes, called first, answers
+  without the old handle's source rows (and without not-added repos only it returned); a new
+  handle reads `pending` in `sources[]`; `sources[].handle` is the normalised handle.
+- A `fullName` whose owner differs only in case from the stored one resolves; an owner with
+  `--`, a leading or trailing hyphen, or over 39 characters answers `400`.
 
 **Listing:**
 

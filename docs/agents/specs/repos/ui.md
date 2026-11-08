@@ -86,11 +86,29 @@ With no GitHub handle and no integration, the page explains both options and lin
 
 ## GitHub handle field
 
-A new "GitHub handle" input on the existing Account page (`#/account/my-account`), editable by
-the default user too ([model.md](model.md#github-handle)).
+A new **GitHub handle** section on the existing Account page (`#/account/my-account`), separate
+from the username / email / password form, with its own input and **Save** button
+([model.md](model.md#github-handle)).
 
-> **Open — settled by #449:** the field's validation messages, and whether admin pages show or
-> edit the handle.
+- **Prefill:** on load the page calls `POST /auth/account/mine.json` and fills the input with
+  `githubHandle` (empty when `null`). While it loads, the section's input and button are
+  disabled; if it fails, the section shows "Could not load your GitHub handle." and stays
+  disabled. The username / email / password form is unchanged (still not prefilled).
+- **Help text:** "Your public GitHub repositories are listed on the Repositories page. Leave
+  empty to remove it."
+- **Save** sends `PATCH /auth/account.json` with only `{ githubHandle }`: the trimmed value, or
+  `null` when empty. No current-password field in this section, so it works for the default user
+  (who usually cannot know its password); the main form never sends `githubHandle`, so the two
+  never mix.
+- **Client-side validation** mirrors the server's after the same normalisation (trim, one
+  leading `@`, lowercase): an invalid value shows the inline field error **"Use letters, digits
+  and single hyphens (max 39 characters)."** and sends nothing.
+- **Server errors** show as the section's own submit alert with `error.message` (the existing
+  `FormFieldsHelper` pattern); a `401` follows the app's usual session handling.
+- **Success:** the input takes the response's `githubHandle` (so `@DarthJee` shows as
+  `darthjee`), with "GitHub handle updated." or, when cleared, "GitHub handle removed.".
+- **Admin pages** (`#/admin/users`, `#/admin/users/:id/edit`) are unchanged: no handle column, no
+  handle field.
 
 ## Edge cases
 
@@ -117,5 +135,15 @@ issue that settles them.
 - Each banner text maps to its status; `ok` and `pending` show none; only `invalid_credentials`
   links to Integrations, and the handle banner never does.
 - With no handle and no integration, the empty state links to Account and Integrations.
-- The Account page shows the GitHub handle field, editable by the default user.
+- The Account page shows the GitHub handle section, prefilled from
+  `POST /auth/account/mine.json` (empty for `null`), disabled while loading, with the load-error
+  text on failure.
+- Saving sends only `{ githubHandle }` (no `currentPassword`), `null` for an empty input; the
+  input then shows the response's normalised value and the matching success message.
+- An invalid handle shows the inline error and sends no request; `@name` and mixed case pass
+  client-side validation.
+- A server error shows `error.message` in the section's alert.
+- The username / email / password form never sends `githubHandle`.
+- The section works for the default user (no password asked).
+- The admin user list and edit pages show no handle.
 - No frontend request goes to GitHub.

@@ -11,6 +11,9 @@ A user's sync reads every source they have:
   credential can see, including private and organization ones. Requests go through the
   Integrations module ([integrations.md](integrations.md#exported-service)).
 - **The GitHub handle** ([model.md](model.md#github-handle)): the handle's public repositories.
+  - The run reads the current handle through Auth's export when it starts, after the
+    [handle reconciliation](model.md#handle-changes); no handle ⇒ no handle source. The handle
+    it started with is the run's **handle** for the [write guard](#write-path).
   - They are fetched **through the oldest usable integration**, with that credential's own rate
     limit ([handle credential](#handle-credential)).
   - The **unauthenticated** path, which shares the backend IP's 60 requests/hour, is used only
@@ -143,6 +146,12 @@ of deadlocks.
 
 1. `UPDATE repositories_sync_states SET heartbeat_at = :now WHERE user_id = :userId AND run_id = :mine`;
    zero rows ⇒ the run lost its lease: roll back and stop (zombie guard on every write).
+   **Handle source only:** the same statement adds `AND handle <=> :runHandle` (the handle the run
+   started with). Zero rows while a re-read shows `run_id` still the run's ⇒ the handle changed
+   since the run started ([model.md](model.md#handle-changes)): roll back and stop the handle
+   source only, writing nothing more for it (no status: the reconciliation already dropped its
+   rows, so the new handle reads `pending`); the other sources go on. Its end-of-source
+   transaction carries the same guard.
 2. Upsert the page's repos with `INSERT … ON DUPLICATE KEY UPDATE owner, name, private,
    last_seen_at, updated_at` on (`user_id`, `github_id`), then
    `SELECT id, github_id … WHERE user_id = :userId AND github_id IN (:pageIds)` to map the page
@@ -194,9 +203,10 @@ per-source statuses carry the failures). A run that lost its lease or crashed ne
   ([model.md](model.md#private-metadata-lifecycle)). Nothing else is checked: a successful source
   has already dropped the rows it no longer returns, and a failed, interrupted or capped source
   keeps its rows, so **a failure blocks pruning by construction**.
-- **When:** one statement in the end-of-sync transaction; and right after changes that orphan
+- **When:** one statement in the end-of-sync transaction; and after changes that orphan
   rows outside a sync (an integration's source rows dropped by the deletion hook, the handle
-  changed or cleared).
+  changed or cleared: the [handle reconciliation](model.md#handle-changes) prunes on the next
+  Repositories request).
 - Added repos are never deleted; they read Unavailable.
 
 ## Rate limits
@@ -234,8 +244,9 @@ per-source statuses carry the failures). A run that lost its lease or crashed ne
   `owner` / `name` / `private` are untouched (identical content). The stored `has_next` decides
   whether to continue.
 - **Invalidation:** a failed or interrupted source keeps its page rows and ETags; deleting an
-  integration drops its page and status rows; changing the handle drops the handle's page and
-  status rows (a new handle reads `pending`); a replaced credential needs nothing (GitHub's ETag
+  integration drops its page and status rows; changing or clearing the handle drops the handle's
+  page and status rows through the [handle reconciliation](model.md#handle-changes) (a new handle
+  reads `pending`); a replaced credential needs nothing (GitHub's ETag
   differs, the next request gets `200`).
 - **Rate limit:** a `304` is free of GitHub's rate limit **only on authenticated requests**. An
   unauthenticated `304` still counts against the shared 60/h; ETags there save transfer and
@@ -334,7 +345,12 @@ Tests for the open points above are added by the issue that settles them.
 - Pagination requests `?per_page=100&page=N` and never requests a URL supplied by a response
   (`Link` or otherwise), even a same-origin one.
 - Deleting an integration drops its page and status rows; changing the handle drops the
-  handle's, so a new handle reads `pending`.
+  handle's (reconciliation on the next Repositories request), so a new handle reads `pending`.
+- A sync run reconciles the handle when it starts and fetches the current, normalised handle,
+  URL-encoded in the GitHub path; with no handle there is no handle source.
+- A handle changed while a run is fetching it: the run's next handle write affects no row, the
+  handle source stops without writing a status, no row of the old handle is written after the
+  reconciliation, and the other sources finish normally.
 
 **Pruning:**
 
