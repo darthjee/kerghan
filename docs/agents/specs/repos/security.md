@@ -103,8 +103,10 @@ dropped, so a stale handle row never keeps it alive ([sync.md](sync.md#write-pat
 - Rows of non-usable integrations are kept until the integration is fixed or deleted, visible
   only to their owner ([integrations.md](integrations.md#usable-integrations)).
 - A deleted user's rows are removed by the `user.deleted` listener; orphans left by a failed
-  listener are visible to no one, since an auto-increment `id` is never reused: retention, not
-  exposure ([model.md](model.md#user-deletion)).
+  listener are visible to no one under normal operation, since an auto-increment `id` is not
+  reused; the deletion path retries the event or sweeps orphans for the cases where one could be
+  (backup restore, `AUTO_INCREMENT` reset): retention, not exposure
+  ([model.md](model.md#user-deletion)).
 - The handle source status `not_found` only says that a public GitHub login does not exist.
 
 ## GitHub handle
@@ -195,6 +197,7 @@ trigger is therefore not a state change over `GET`, and needs no exception
 - A `fullName` ref never resolves another user's row; every Add `404` carries the same message
   ([api.md](api.md#required-tests)).
 - A cached installation token never leaves the Integrations module.
+- A GitHub App mint in flight across a Replace is never cached.
 - No Repositories code, response or log carries `secret_iv` (the status compare-and-set value).
 - The exported service never returns, logs or exposes a decrypted credential, a minted
   installation token or a GitHub response body; a foreign `integrationId` answers

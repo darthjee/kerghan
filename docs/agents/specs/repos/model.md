@@ -349,15 +349,21 @@ No user-deletion path exists today. This is the Repositories contract for when o
   runs one transaction that deletes the user's rows from all five tables: `repositories`,
   `repositories_sources`, `repositories_source_pages`, `repositories_source_statuses` and
   `repositories_sync_states`. Every statement has `WHERE user_id = :userId`.
-- **Best-effort:** a listener failure is logged with safe fields (`userId`, error class) and never
-  blocks the deletion.
+- **Best-effort:** a listener failure is logged **at error level** with safe fields (`userId`,
+  error class), so the rows can be purged, and never blocks the deletion. The future deletion
+  path must retry the event or run an orphan sweep ([README](README.md#product-changes-folded-by-452)).
+- **No row created for a deleted user:** a request entry point creates the sync-state row only
+  if the user still exists, re-read through Auth's export
+  ([Auth export](#auth-export)) in the same transaction, so a request that passed `JwtGuard`
+  before the delete committed creates no orphan.
 - **A running sync:** the deleted sync-state row makes the run's next `run_id`-guarded write
   affect no row, so the run rolls back and stops; a run never recreates the row
   ([handle changes](#handle-changes), [sync.md](sync.md#write-path)).
 - **Why not a physical cascade:** it keeps logical FKs only, so `integrations.user_id` stays the
   project's only physical cross-module FK. Orphans left by a failed listener are visible to no
-  one: MySQL 8 never reuses an auto-increment `id`, so no future user can inherit them. The risk
-  is retention, not exposure.
+  one: under normal operation MySQL 8 never reuses an auto-increment `id`, so no future user can
+  inherit them. A backup restore or a manual `AUTO_INCREMENT` reset could reuse one, which is why
+  the deletion path retries the event or sweeps orphans. The risk is retention, not exposure.
 - **Integrations cascade:** the user's integrations go through their own `ON DELETE CASCADE`,
   which emits no `integration.deleted`. The `user.deleted` listener covers their Repositories
   rows anyway.
@@ -396,7 +402,8 @@ The single-table form is what TypeORM's `.delete()` query builder can produce; t
   [handle reconciliation](#handle-changes) on the next Repositories request, so a new handle reads
   `pending`).
 - **Race with Add:** pruning deletes only `added_at IS NULL` rows, and Add's write is
-  `UPDATE … WHERE id = :id AND user_id = :userId`. Add commits first ⇒ the row is skipped;
+  `UPDATE … WHERE id = :id AND user_id = :userId AND added_at IS NULL` ([api.md](api.md#add)).
+  Add commits first ⇒ the row is skipped;
   pruning first ⇒ Add's update affects no row and Add answers `404 NOT_FOUND` (the repo left the
   listing, [api.md](api.md#add)). Every other case is in the [edge-case matrix](edge-cases.md).
 - Rejected: a grace period before pruning. Private metadata would outlive access, against #444's
@@ -427,11 +434,13 @@ The single-table form is what TypeORM's `.delete()` query builder can produce; t
 - An added repo held only by a `page_cap_reached` source's rows reads Added.
 - An added repo held only by a `not_found` handle source's rows reads Unknown.
 - The `user.deleted` listener deletes the user's rows from all five tables and no other user's
-  rows; its failure is logged and does not throw.
+  rows; its failure is logged at error level and does not throw.
+- A request entry point does not create the sync-state row for a user that no longer exists.
 - A sync run's start-of-run handle reconciliation never creates the sync-state row; with no row,
   the run stops.
-- An added private repo whose linked integration was deleted ⇒ Unavailable, even if another
-  integration still sees it; an added public repo in the same case stays Added.
+- An added private repo whose linked integration was deleted ⇒ Unavailable after the deletion
+  and before the next sync, even if another integration still sees it (that sync then
+  [fills the link](sync.md#link-fill)); an added public repo in the same case stays Added.
 - The default user's boot sync leaves `github_handle` unchanged.
 - Handle normalisation: `"  @DarthJee "` is stored as `darthjee`; `""`, `"  "`, `"@"` and `null`
   clear it; a number, object, array or boolean answers `400`.

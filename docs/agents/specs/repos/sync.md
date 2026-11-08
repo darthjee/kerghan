@@ -189,7 +189,8 @@ of deadlocks.
 
 The hard deadline is checked between pages.
 
-**End of a source** (one transaction, `run_id`-guarded):
+**End of a source** (one transaction, `run_id`-guarded; every delete `AND user_id = :userId`,
+since `source_key = 'handle'` is the same string for every user):
 
 - **success:** delete its source rows and page rows past its last page; store `ok` and
   `syncedAt`;
@@ -199,6 +200,9 @@ The hard deadline is checked between pages.
 - **page cap:** delete its source rows and page rows **past the cap**, as for a success whose
   last page is the cap; store `page_cap_reached` (it counts as `ok` for row statuses,
   [model.md](model.md#row-statuses)). Pruning then applies.
+  - **Accepted outcome:** after the cap is lowered, added repos past the new cap read Unavailable
+    although GitHub still returns them, because Kerghan stopped reading that far; the
+    `page_cap_reached` banner ("some may be missing") explains it, and the added rows are kept.
   - **Why:** listings sort by `created` ascending, so new repos land past the end and deletions
     only pull repos toward earlier pages. Rows past the cap exist only after the cap was
     **lowered**; the source never fetches them again, so keeping them would let private metadata
@@ -239,15 +243,20 @@ WHERE user_id = :userId AND id = :repositoryId
   AND (integration_id IS NULL OR integration_id NOT IN (:userIntegrationIds))
 ```
 
+- **Skipped with no usable integration:** the fill runs only when the user has at least one
+  usable integration, so `:userIntegrationIds` (all the user's integrations, loaded
+  `WHERE user_id = :userId`) is never empty.
 - **Which repos:** added (`added_at` set), private, with an `integration_id` that is empty or not
   among the user's integrations.
 - **Which integration:** the **oldest usable** integration (`created_at`, then `id`) holding a
   source row for the repo from a source whose status is `ok` or `page_cap_reached` after this
   run. No such integration ⇒ the link stays empty and the repo reads Unavailable.
-- **Never changes a set, valid link.** The `WHERE` clause matches only an empty or dangling link,
-  so it never overwrites a link Add wrote concurrently. A public repo and a not-added repo are
-  never touched. Filling an empty or dangling link is not "changing an added repo's access link",
-  which #444 excludes ([README](README.md#scope)).
+- **Never changes an existing link.** The `WHERE` clause matches only an empty or dangling link
+  (a link to an existing integration, even a non-usable one, is kept), so it never overwrites a
+  link Add wrote concurrently. A public repo and a not-added repo are never touched.
+- **Amends #444:** #444 made a private repo whose linked integration was deleted Unavailable for
+  good; the fill makes it Unavailable only until the next sync that finds a usable integration
+  returning it. Changing an existing link stays out of scope ([README](README.md#scope)).
 - Every statement is `run_id`-guarded (the transaction's first statement) and `AND user_id =
   :userId`; it uses the (`user_id`, `integration_id`) index.
 
@@ -429,7 +438,7 @@ concurrency) is listed, with its outcome and its rule, in the
 - The end-of-sync fill links the oldest usable integration whose source is `ok` or
   `page_cap_reached` and holds a row for it to an added private repo with an empty or dangling
   link.
-- It never touches a set, valid link, a public repo or a not-added repo; with no such
+- It never touches an existing link, a public repo or a not-added repo; with no such
   integration the link stays empty.
 
 **Conditional requests and pagination:**

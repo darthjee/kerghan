@@ -117,6 +117,11 @@ Integrations module**:
 - **Least privilege:** minted with `{"permissions": {"metadata": "read"}}`, enough to list repos
   and read one by id. A later feature (e.g. the issue proxy) widens it when it needs to.
 - **Eviction:** on a `401` from a call made with it, on integration delete, on replace credential.
+- **A mint across a Replace is not cached:** each entry records the `secret_iv` of the credential
+  it was minted with; a mint that finishes after the stored `secret_iv` changed (a Replace or a
+  key rotation in between) is used for its own call at most and never cached, so a token for the
+  old credential is never reused after a Replace. The value stays inside the module, as for the
+  [status compare-and-set](#status-compare-and-set).
 - **Mint invalidation is a compare-and-set:** a mint `404` / `403` sets the integration `invalid`
   only if its credential is still the one used for the mint
   ([compare-and-set](#status-compare-and-set)).
@@ -243,10 +248,11 @@ When the user adds a repository ([api.md](api.md#add)):
   (oldest first), then unauthenticated. That integration is **not** linked while the repo is
   still public; if the re-check shows the repo is now **private**, the integration that granted
   it is linked as `integration_id`, so the private metadata stays tied to it.
-- Changing a set, valid link later is out of scope. An **empty or dangling** link of an added
+- Changing an existing link later is out of scope. An **empty or dangling** link of an added
   private repo (its integration deleted, or a public repo turned private) is filled at the end of
   the next sync with the oldest usable integration that returns it
-  ([link fill](sync.md#link-fill)); that is not a change of a valid link.
+  ([link fill](sync.md#link-fill)). This amends #444, which left such a repo Unavailable for
+  good ([README](README.md#scope)).
 
 ### Add re-check candidates
 
@@ -339,6 +345,7 @@ unauthenticated call). Its home, interface, concurrency and thresholds:
   installation token or a GitHub response body.
 - A missing or foreign `integrationId` answers `integration_unusable` with reason `missing`,
   without a GitHub call (a call for an integration deleted mid-sync included).
+- A mint in flight across a Replace is not cached; the next call mints with the new credential.
 - Status compare-and-set: a `401` from a call made before a Replace leaves the replaced
   integration `active`; a `401` with the current credential sets it `invalid`; the same holds for
   a mint `404` / `403` and a decrypt failure.

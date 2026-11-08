@@ -13,7 +13,7 @@ Kerghan's core value is per-user repo tracking ([product.md](../../product.md),
   public repositories of an optional **GitHub handle** stored on their account. Duplicates are
   merged by GitHub repository id.
 - Each row is **Added**, **Not added**, **Unavailable** (added, but no source returns it any more)
-  or **Unknown** (added, but its only sources failed in the latest sync).
+  or **Unknown** (added, but its only sources failed or have not been synced yet).
 - Not-added rows have an **Add** button that adds the repo to Kerghan for that user.
 - Every GitHub call happens in the **backend**. The frontend only talks to Kerghan's API.
 - Everything is **user-scoped**: a user sees and manages only their own repositories.
@@ -46,9 +46,12 @@ Out of scope (from #444):
 - Org-wide tracking (one entry following every repo of an org).
 - Scheduled or background sync, polling GitHub. Syncs run only on demand.
 - Webhooks (already excluded by `product.md`).
-- Changing an added repo's access link after Add. Filling an **empty or dangling** link at the
-  end of a sync ([sync.md](sync.md#link-fill)) is not a change of a valid link, so it is in
-  scope.
+- Changing an added repo's existing access link after Add. **Amended by #450:** #444 also said
+  that a private repo whose linked integration was deleted becomes Unavailable; #450 has the next
+  sync fill an **empty or dangling** link with a usable integration that returned the repo in that
+  sync ([sync.md](sync.md#link-fill)), so it reads Unavailable only until then. An existing link
+  is never changed. Reason: otherwise a re-created integration, or a public repo added through the
+  handle that turns private, leaves the repo Unavailable forever.
 - An environment variable to set the GitHub handle.
 - The permanent docs (`product.md`, `flow.md`, `modules/`, `backend/routes/`,
   `architecture/security.md`, `cache-warmer.md`, …): folded in by #452.
@@ -59,7 +62,11 @@ What this feature changes in the permanent product docs, as a checklist for the 
 
 - **`product.md`, what the backend persists:** from "each user's repo selection" to a per-user
   snapshot of **every GitHub repo seen** in a sync, including private metadata of repos the user
-  never added ([model.md](model.md#private-metadata-lifecycle) bounds its lifetime).
+  never added ([model.md](model.md#private-metadata-lifecycle) bounds its lifetime, except the
+  rows of non-usable integrations, kept until the integration is fixed or deleted: accepted by
+  #450, [integrations.md](integrations.md#usable-integrations)). Also: an added private repo whose
+  linked integration was deleted reads Unavailable only until the next sync fills its link
+  ([sync.md](sync.md#link-fill)), amending #444.
 - **`product.md`, "What's still open":** the tracked-repos part of the data model is settled;
   label rules, org-wide tracking and the rest stay open.
 - **`product.md`, "Deferred → Using integration credentials":** partly lifted, for repo listing
@@ -101,7 +108,8 @@ What this feature changes in the permanent product docs, as a checklist for the 
 - **`modules/auth.md` and the Repositories module doc:** the `user.deleted` contract: Auth emits
   the awaited `UserDeletedEvent { userId }` after the user delete commits, once a deletion path
   exists, and Repositories' listener deletes the user's rows in its five tables
-  ([model.md](model.md#user-deletion)).
+  ([model.md](model.md#user-deletion)). The deletion path must retry the event or run an orphan
+  sweep, since a failed listener only logs.
 - **`backend/routes/repositories.md` and `core/error-codes.ts`:** the `409
   REPOSITORY_SOURCE_UNUSABLE` Add answer ([api.md](api.md#errors)).
 - **`backend/routes/repositories.md` and the Repositories module doc:** the `not_found` source
@@ -197,9 +205,10 @@ What this feature changes in the permanent product docs, as a checklist for the 
   [sync.md](sync.md#sources)).
 - **A fixed integration reads `pending`:** a stored `invalid_credentials` for an integration now
   usable is reported as `pending` ([api.md](api.md#sync-state)).
-- **End-of-sync link fill:** an added private repo's empty or dangling link gets the oldest usable
-  integration whose source is `ok` or `page_cap_reached` and returns it
-  ([sync.md](sync.md#link-fill)).
+- **End-of-sync link fill (amends #444's "deleted link ⇒ Unavailable" outcome):** an added
+  private repo's empty or dangling link gets the oldest usable integration whose source is `ok`
+  or `page_cap_reached` and returns it ([sync.md](sync.md#link-fill)). An existing link is never
+  changed.
 - **Handle source status `not_found`** on a `404`, with no fallback and a retry every sync
   ([sync.md](sync.md#handle-credential)).
 - **User deletion** through an awaited `user.deleted` event; the listener deletes the user's rows

@@ -121,7 +121,7 @@ summary".
 | 3 | A row's `sources[]` lists every current source holding a row; the UI mutes not-ok badges | changed | `api.md`, `ui.md` |
 | 4 | `integration_unusable` reason `missing`; the source stops without a status | new | `integrations.md`, `sync.md` |
 | 5 | A stored `invalid_credentials` for an integration now usable reads `pending` | new | `api.md` |
-| 6 | End-of-sync fill of an empty or dangling access link on added private repos (oldest usable integration whose source is `ok` or `page_cap_reached`) | new | `sync.md`, `integrations.md`, `model.md`, README out-of-scope wording |
+| 6 | End-of-sync fill of an empty or dangling access link on added private repos (oldest usable integration whose source is `ok` or `page_cap_reached`); amends #444's "deleted link ⇒ Unavailable" outcome | new | `sync.md`, `integrations.md`, `model.md`, README out-of-scope wording |
 | 7 | Handle source status `not_found` | new | `model.md`, `sync.md`, `integrations.md`, `api.md`, `ui.md` |
 | 8 | Awaited `user.deleted` event; the listener deletes the user's rows in all five tables | new | `model.md` |
 | 9 | A sync run never creates the sync-state row | new | `sync.md`, `model.md` |
@@ -316,7 +316,8 @@ deleted.**
 - **Where:** the end-of-sync transaction (`run_id`-guarded, every statement
   `AND user_id = :userId`), after the safety net and before pruning.
 - **What:** an **added, private** repo whose `integration_id` is empty or dangling gets the
-  **oldest usable integration holding a source row for it from a source whose status is `ok`**.
+  **oldest usable integration holding a source row for it from a source whose status is `ok` or
+  `page_cap_reached`**.
 - **Never changes a link that is set and valid.** #444's exclusion is "changing an added repo's
   access link"; filling an empty or dangling one is not a change of a valid link. The README's
   out-of-scope line is reworded to say so.
@@ -446,7 +447,7 @@ No new rule. Matrix rows (area **Visibility**):
 | Public → private, not added, an integration sees it | The integration's upsert sets `private` and deletes the `handle` row in the same transaction. The row stays, held by the integration. | `sync.md#write-path` |
 | Public → private, not added, only the handle saw it | The handle source (public only) succeeds without it, so its row goes and the repo is pruned. | `sync.md#sources` |
 | Public → private, added, link set | Added while the linked integration sees it. | `model.md#row-statuses` |
-| Public → private, added, no link (added via the handle) | Filled at the end of the same sync with the oldest usable `ok` integration holding a row for it, then Added. If no integration sees it: Unavailable. | [Integration lifecycle](#integration-lifecycle) fill |
+| Public → private, added, no link (added via the handle) | Filled at the end of the same sync with the oldest usable `ok` or `page_cap_reached` integration holding a row for it, then Added. If no integration sees it: Unavailable. | [Integration lifecycle](#integration-lifecycle) fill |
 | Private → public, not added | The integration still holds it and the handle now returns it: two badges. | `sync.md#sources` |
 | Private → public, added (link set, empty or dangling) | Added; a public repo needs no link. A set link is kept, never cleared. | `model.md#row-statuses` |
 | Turned private while the only source holding it (the handle) fails | Stays `private = false` (stale) and reads Unknown if added. Only pre-flip public metadata is kept. The handle's next success drops it. | `sync.md#partial-failures` |
