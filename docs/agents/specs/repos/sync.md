@@ -7,9 +7,14 @@ How the backend syncs GitHub into the [data model](model.md). Part of the
 
 A user's sync reads every source they have:
 
-- **Each of their integrations** (`pat`, `oauth_app`, `github_app`): the repositories that
-  credential can see, including private and organization ones. Requests go through the
-  Integrations module ([integrations.md](integrations.md#exported-service)).
+- **Each of their integrations** (`pat`, `oauth_app`, `github_app`), whatever its status: the
+  repositories that credential can see, including private and organization ones. Requests go
+  through the Integrations module ([integrations.md](integrations.md#exported-service)), on the
+  endpoint of its type ([endpoints](integrations.md#endpoints-and-parameters)).
+  - A **non-usable** integration ([usable integrations](integrations.md#usable-integrations)) is
+    not called: its source records `invalid_credentials` (status `expired`, `invalid` or
+    `undecryptable`) or `error` (type disabled on this server), and keeps its earlier rows and
+    pages, like any [failed source](#partial-failures).
 - **The GitHub handle** ([model.md](model.md#github-handle)): the handle's public repositories.
   - The run reads the current handle through Auth's export when it starts, after the
     [handle reconciliation](model.md#handle-changes); no handle ⇒ no handle source. The handle
@@ -28,17 +33,25 @@ Results are merged by GitHub repository id; each repo records which sources retu
 
 - The handle's public repositories go through the user's **oldest usable integration**
   (`created_at`, then `id`), the same choice as Add's access link
-  ([integrations.md](integrations.md#access-link-on-add)); which statuses count as usable is
-  #448's.
-- On a **`401`**, that integration is set `invalid` and the handle source **restarts from page 1
-  with the next usable integration**; with none left, it uses the unauthenticated path, under its
-  [threshold](#rate-limits).
+  ([integrations.md](integrations.md#access-link-on-add)). **Usable** means reported status
+  `active` and type enabled on this server; `expired`, `invalid` and `undecryptable` integrations
+  are never handle credentials ([usable integrations](integrations.md#usable-integrations)). The
+  sync takes them from `listUsableIntegrations`.
+- On an **`invalid_credentials`** result (a `401`, which sets the integration `invalid`), the
+  handle source **restarts from page 1 with the next usable integration**; with none left, it
+  uses the unauthenticated path, under its [threshold](#rate-limits). A `github_app` call's `401`
+  that survives the token re-mint is `unavailable`, not `invalid_credentials`, so it does not
+  fall back ([installation tokens](integrations.md#github-app-installation-tokens)).
 - On a **rate limit, timeout or `5xx`, there is no fallback**: the source is `rate_limited` /
   `error`. Falling back to the unauthenticated path would spend the budget every user shares.
+- A **`404`** on the handle listing (a renamed or deleted handle) makes the source `error` for
+  now; #450 may add a dedicated status.
 - The source status never reveals which credential served it ([api.md](api.md#sync-state)).
-
-> **Open — settled by #448:** the GitHub endpoint and parameters per integration type (e.g.
-> `/user/repos` vs `/installation/repositories`), and for the handle.
+- **Endpoints** ([integrations.md](integrations.md#endpoints-and-parameters)): `pat` and
+  `oauth_app` sources read `GET /user/repos` (`affiliation=owner,collaborator,organization_member`,
+  `visibility=all`, `sort=created&direction=asc`); `github_app` sources read
+  `GET /installation/repositories` with an installation token; the handle reads
+  `GET /users/{handle}/repos?type=owner&sort=created&direction=asc`, whatever the credential.
 
 ## Trigger
 
@@ -126,7 +139,7 @@ WHERE user_id = :userId
 For each source, the sync reads GitHub page by page, up to the **page cap**:
 
 - **Page-number pagination.** The sync builds every page request itself (`?per_page=100&page=N`,
-  on the endpoint #448 picks) and reads the `Link` header **only to know whether `rel="next"`
+  on the [endpoint of the source](integrations.md#endpoints-and-parameters)) and reads the `Link` header **only to know whether `rel="next"`
   exists**. It never requests a URL taken from a response
   ([security.md](security.md#fixed-github-base-url)).
 - Pages within a source are sequential; up to the parallelism bound of sources run at once
@@ -174,7 +187,12 @@ The hard deadline is checked between pages.
   [partial failures](#partial-failures));
 - **page cap:** `page_cap_reached`; nothing past the cap is deleted.
 
-**End of the sync** (one transaction, `run_id`-guarded): [prune](#pruning), then `state = idle`,
+**End of the sync** (one transaction, `run_id`-guarded): drop the source, page and status rows
+(each statement `AND user_id = :userId`) of any `integration:<id>` key whose id is not among
+**all** the user's integrations (loaded `WHERE user_id = :userId`, usable or not, so a non-usable
+integration's rows are kept) (the **safety net** for a
+failed [deletion hook](integrations.md#deletion-hook), or a page a parallel run wrote after the
+hook's cleanup), then [prune](#pruning), then `state = idle`,
 `run_id = null`, `last_synced_at = :now`, **even when every source failed** (the sync finished;
 per-source statuses carry the failures). A run that lost its lease or crashed never sets
 `last_synced_at`, so the next listing starts a sync once the cooldown has passed.
@@ -219,19 +237,25 @@ per-source statuses carry the failures). A run that lost its lease or crashed ne
   `X-RateLimit-Reset` of unauthenticated responses. Within one reset window it keeps the
   **minimum** `Remaining` seen; it replaces the window only when a response carries a later
   `Reset`, so out-of-order responses (parallel sources, Add) never raise the budget. Every
-  unauthenticated call (sync or Add
-  re-check) consults it first: remaining ≤ the threshold and reset not passed ⇒ the sync marks
-  the source `rate_limited` with that reset, and Add answers `503 GITHUB_RATE_LIMITED`
-  ([api.md](api.md#add)), with no call.
+  unauthenticated call (sync or Add re-check) consults it first: remaining ≤ the caller's
+  threshold and reset not passed ⇒ the sync marks the source `rate_limited` with that reset, and
+  Add answers `503 GITHUB_RATE_LIMITED` ([api.md](api.md#add)), with no call.
+  - **Two thresholds:** the sync stops at remaining **≤ 10**; Add only at **≤ 0**. The 10 is a
+    real reserve for Add re-checks, which are bounded per user and by Add's 3-call
+    [candidate walk](integrations.md#add-re-check-candidates).
+  - **In-flight reservations:** each granted call decrements the tracked remaining by 1 before it
+    is sent, so parallel sources and concurrent Adds never overshoot; GitHub's headers then
+    correct it.
   - It is an optimisation: GitHub's headers stay the truth, and with several instances each
     learns the budget on its first call.
-  - Its home in code is #448's (the GitHub client, [integrations.md](integrations.md#exported-service)).
-- The unauthenticated source stops early when the remaining budget reaches the threshold, is
-  marked **rate limited** with its reset time, and keeps its stored rows.
+  - Its home is internal to the Integrations module's GitHub client
+    ([integrations.md](integrations.md#unauthenticated-budget-tracker)).
+- The unauthenticated source stops early when the remaining budget reaches the sync threshold,
+  is marked **rate limited** with its reset time, and keeps its stored rows.
 - **No per-user share of the unauthenticated budget:** one user with no usable integration can
-  spend it down to the threshold, leaving other users' unauthenticated sources `rate_limited` and
-  their unauthenticated Adds `503` until the reset. Accepted for now, bounded by the cooldown and
-  the threshold ([security.md](security.md#user-scoping)).
+  spend it down to the sync threshold, leaving other users' unauthenticated sources
+  `rate_limited` until the reset (their Adds keep the reserve). Accepted for now, bounded by the
+  cooldown and the thresholds ([security.md](security.md#user-scoping)).
 
 ## Conditional requests
 
@@ -269,7 +293,7 @@ per-source statuses carry the failures). A run that lost its lease or crashed ne
 | Staleness TTL | 1 h | `KERGHAN_REPOSITORIES_SYNC_TTL_MS` (`3600000`) |
 | Refresh cooldown (from the start of any sync) | 5 min | `KERGHAN_REPOSITORIES_SYNC_COOLDOWN_MS` (`300000`) |
 | Page cap per source | 10 pages of `per_page=100` (1000 repos) | `KERGHAN_REPOSITORIES_SYNC_PAGE_CAP` (`10`) |
-| Unauthenticated rate-limit threshold | stop when `X-RateLimit-Remaining` ≤ 10 (a reserve for Add re-checks; the 60/h is shared by every user on the backend IP) | constant |
+| Unauthenticated rate-limit threshold | sync: stop when `X-RateLimit-Remaining` ≤ 10 (a reserve for Add re-checks; the 60/h is shared by every user on the backend IP); Add: refused only at ≤ 0 | constants |
 | GitHub call timeout | 10 s per request | constant |
 | Parallelism | up to 3 sources at once; pages within a source are sequential | constant |
 | Lease (no heartbeat ⇒ dead) | 2 min | constant |
@@ -370,6 +394,19 @@ Tests for the open points above are added by the issue that settles them.
   GitHub call.
 - The tracker keeps the minimum `Remaining` within a reset window: an older response with a
   higher `Remaining` arriving late does not raise it; a later `Reset` starts a new window.
+- Two thresholds: with remaining between 1 and 10, the sync's unauthenticated source is
+  `rate_limited` without a call while an unauthenticated Add re-check still calls GitHub; at 0
+  both are refused. Concurrent acquires never overshoot the budget.
+- A non-usable integration (`expired`, `invalid`, `undecryptable`, type disabled) is never
+  called: its source stores `invalid_credentials` or `error` and keeps its rows.
+- A `404` on the handle listing makes the handle source `error`.
+
+**Integration deletion:**
+
+- The end-of-sync safety net drops the source, page and status rows of an integration deleted
+  during the sync (a page written after the deletion hook's cleanup, or a failed listener),
+  before pruning; every statement is scoped by `user_id`, and a still-existing non-usable
+  integration's rows are kept.
 
 **Values:**
 
