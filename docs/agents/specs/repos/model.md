@@ -317,8 +317,13 @@ Consequences:
   includes `AND user_id = :userId`. Reads treat a dangling `integration_id` as empty.
 - **User deleted:** the user's repositories, sources and sync state must not outlive them.
 
-> **Open — settled by #448:** the integration-deletion hook mechanism (a direct call vs an
-> event).
+- **Hook mechanism:** an awaited `integration.deleted` event (`IntegrationDeletedEvent { userId,
+  integrationId }`), emitted by the Integrations service with `emitAsync` **after the delete
+  commits**; Repositories' listener runs the cleanup above in one transaction. A listener failure
+  is logged and never blocks the delete (`204` stands); the end-of-sync
+  [safety net](sync.md#write-path) drops the rows of any integration no longer among the user's
+  ([integrations.md](integrations.md#deletion-hook)). A direct call would make the two modules
+  import each other.
 
 > **Open — settled by #450:** the user-deletion cleanup path.
 
@@ -350,8 +355,7 @@ The single-table form is what TypeORM's `.delete()` query builder can produce; t
 
 - **When:** at the end of each sync, in its final `run_id`-guarded transaction
   ([sync.md](sync.md#pruning)); and after changes that orphan rows outside a sync: an
-  integration's source rows dropped by the [deletion hook](#logical-foreign-keys) (#448 picks the
-  mechanism), and the handle changed or cleared (its source, page and status rows dropped by the
+  integration's source rows dropped by the [deletion hook](#logical-foreign-keys) (the `integration.deleted` event), and the handle changed or cleared (its source, page and status rows dropped by the
   [handle reconciliation](#handle-changes) on the next Repositories request, so a new handle reads
   `pending`).
 - **Race with Add:** pruning deletes only `added_at IS NULL` rows, and Add's write is

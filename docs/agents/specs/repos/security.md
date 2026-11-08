@@ -14,15 +14,26 @@ computed from it, beyond the masked `secretHint` of the Integrations routes.** D
   never calls GitHub for the listing.
 - Inside the backend, credentials stay **inside the Integrations module**
   ([integrations.md](integrations.md#exported-service)).
-- A minted GitHub App installation token is a credential too: if cached, it stays inside the
-  Integrations module, in memory or in the integration's own encrypted record. Any other
-  persistence needs its own product decision (`CLAUDE.md`, #295).
+- A minted GitHub App installation token is a credential too: it is cached **in process memory
+  only**, inside the Integrations module (in a `Secret`), never in the database, a log or a
+  response, and minted with `metadata: read` only
+  ([installation tokens](integrations.md#github-app-installation-tokens)). Any other persistence
+  needs its own product decision (`CLAUDE.md`, #295).
 - Repo responses carry no integration field beyond its `uuid` and label
   ([api.md](api.md#access)).
 - This rule is cross-cutting: #452 promotes it to `docs/agents/architecture/security.md` as its
   own section (alongside "CSRF"), linked from `docs/agents/modules/integrations.md`.
 
-> **Open — settled by #448:** the guarantees of the Integrations exported interface.
+Guarantees of the exported `IntegrationsGithubService`
+([integrations.md](integrations.md#exported-service)):
+
+- **Nothing sensitive leaves the module:** no decrypted credential, minted installation token or
+  GitHub response body is returned, logged or exposed; callers get typed, normalised results
+  only, and logs carry safe fields (integration id, operation, HTTP status, result kind).
+- **Owner-scoped:** every call loads the integration with `WHERE id = ? AND user_id = ?`; a
+  missing or foreign one answers `integration_unusable` without a GitHub call.
+- **Fixed operations:** `GET`-only, with fixed endpoints and parameters; no generic
+  `request(path)`, so no caller chooses a path.
 
 ## User scoping
 
@@ -44,9 +55,11 @@ computed from it, beyond the masked `secretHint` of the Integrations routes.** D
   handle source went unauthenticated. Both are accepted; nothing else about other users'
   activity is exposed.
 - **Accepted shared-budget starvation:** the unauthenticated budget has no per-user share. One
-  user with no usable integration (or a few accounts) can spend it down to the threshold, leaving
-  other users' unauthenticated sources `rate_limited` and their unauthenticated Adds `503` until
-  the reset. Bounded by the Refresh cooldown, the page cap and the threshold; accepted for now
+  user with no usable integration (or a few accounts) can spend it down to the sync threshold,
+  leaving other users' unauthenticated sources `rate_limited` until the reset; Adds keep the
+  reserve below it, but repeated Adds can still drain it and make other users' unauthenticated
+  Adds answer `503`. Bounded by the Refresh cooldown, the page cap, the per-user Add rate limit
+  and the thresholds; accepted for now
   ([sync.md](sync.md#rate-limits)). A per-user cap would need its own decision.
 
 ## Add verification
@@ -65,8 +78,9 @@ GitHub repository id or an `owner/name`.
   unlinked re-check that finds the repo private links the granting integration, so private
   metadata stays tied to it ([api.md](api.md#add)).
 - The rate limit is **30 Adds per 60 s** per user by default, configurable
-  ([api.md](api.md#add-rate-limit)); the unauthenticated re-check honours the low-budget
-  threshold.
+  ([api.md](api.md#add-rate-limit)). The unauthenticated re-check honours **Add's own
+  threshold** (refused at remaining ≤ 0; the sync stops at ≤ 10), and each Add makes at most 3
+  GitHub calls ([candidate walk](integrations.md#add-re-check-candidates)).
 
 ## Private metadata lifecycle
 
@@ -110,14 +124,16 @@ Column, normalisation, validation and edit path: [model.md](model.md#github-hand
 The backend only ever calls `https://api.github.com`. No user input chooses the host or a path
 outside the endpoints this feature uses, so there is no SSRF surface.
 
-Server-supplied URLs are never requested, in both the authenticated client (Integrations) and
-the unauthenticated one (Repositories):
+A single client, in the Integrations module, makes every GitHub call of the feature, with or
+without a credential ([unauthenticated calls](integrations.md#unauthenticated-calls)); without
+one it sends no `Authorization` header. Server-supplied URLs are never requested:
 
 - pagination builds its own page URLs (`?per_page=100&page=N`) and reads `Link` only to know
   whether `rel="next"` exists; it never requests a URL taken from a response
   ([sync.md](sync.md#per-source));
-- **no redirect is followed**, same-origin or not (the client uses `redirect: 'manual'` or
-  `'error'`): a `Location` is a response-supplied URL. Any `3xx` makes a sync source `error` and
+- **no redirect is followed**, same-origin or not (the repo operations use `redirect: 'manual'`, and
+  classifies any `3xx` other than `304` as `unavailable` (`redirect`)): a `Location` is a
+  response-supplied URL. Any such `3xx` makes a sync source `error` and
   Add answer `502 GITHUB_UNAVAILABLE`, and `Authorization` is never sent to another host.
 
 Repository links in the UI are built by the frontend from `owner` and `name`
@@ -143,14 +159,14 @@ trigger is therefore not a state change over `GET`, and needs no exception
 
 - One sync per user at a time (an atomic claim with a lease), a Refresh cooldown, a per-source
   page cap, a hard deadline per sync, and an early stop of the unauthenticated source on a low
-  rate-limit budget, tracked process-wide and shared with Add ([sync.md](sync.md#values)).
+  rate-limit budget, tracked process-wide and shared with Add ([sync.md](sync.md#values)). The
+  tracker reserves each granted call before it is sent, so parallel sources and concurrent Adds
+  never overshoot the budget ([sync.md](sync.md#rate-limits)).
 - Timeouts and a parallelism bound on GitHub calls.
 - A sync that lost its lease cannot write: every write is guarded by its `run_id`
   ([sync.md](sync.md#restart-recovery)).
 
 ## Required tests
-
-Tests for the open points above are added by the issue that settles them.
 
 - No response of the feature contains a credential or a value derived from one.
 - The Repositories module never handles a decrypted credential.
@@ -162,6 +178,11 @@ Tests for the open points above are added by the issue that settles them.
 - A `fullName` ref never resolves another user's row; every Add `404` carries the same message
   ([api.md](api.md#required-tests)).
 - A cached installation token never leaves the Integrations module.
+- The exported service never returns, logs or exposes a decrypted credential, a minted
+  installation token or a GitHub response body; a foreign `integrationId` answers
+  `integration_unusable` without a GitHub call.
+- An unauthenticated call (`integrationId: null`) sends no `Authorization` header.
+- Installation tokens are minted with `{"permissions": {"metadata": "read"}}` only.
 - The handle source stores no private repo.
 - Pagination never requests a URL supplied by a response (a `Link` URL, even same-origin); no
   redirect is followed, same-origin `301`/`302` included, and `Authorization` never leaves

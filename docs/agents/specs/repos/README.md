@@ -68,7 +68,15 @@ What this feature changes in the permanent product docs, as a checklist for the 
 - **`flow.md` "Open questions"** (repo selection refreshed periodically or on demand): answered —
   on demand when stale, plus Refresh.
 - **`modules/integrations.md`:** "The module exports nothing yet" and the "Not built yet" note on
-  `401 → invalid` change ([integrations.md](integrations.md)).
+  `401 → invalid` change: the module exports `IntegrationsGithubService` and emits the awaited
+  `integration.deleted` event; and the "Credential stops working" edge case: nothing polls, but a
+  repo call answered `401` (or a mint `404`/`403` for a GitHub App) now sets the integration
+  `invalid`; outside those, the status changes only on test or replace
+  ([integrations.md](integrations.md)).
+- **`modules/integrations/github-app.md`:** installation tokens are cached in memory for repo
+  calls (until `expires_at` − 5 min, minted with `metadata: read`) instead of minted per use;
+  test connection still mints fresh
+  ([integrations.md](integrations.md#github-app-installation-tokens)).
 - **`architecture/security.md`:** the "credentials stay in the backend" rule becomes its own
   section ([security.md](security.md#credentials-stay-in-the-backend)).
 - **`backend/routes/repositories.md`:** created from [api.md](api.md).
@@ -134,8 +142,31 @@ What this feature changes in the permanent product docs, as a checklist for the 
 - **Add re-checked with GitHub**, idempotent (already added answers `200`), rate limited per
   user; the oldest usable integration that sees the repo becomes its access link
   ([api.md](api.md#add), [integrations.md](integrations.md#access-link-on-add)).
-- **Credentials stay inside the Integrations module**, which exports authenticated GitHub
-  requests ([integrations.md](integrations.md)).
+- **Credentials stay inside the Integrations module**, which exports `IntegrationsGithubService`:
+  fixed, `GET`-only operations returning typed results; no credential, minted token or GitHub
+  body leaves it ([integrations.md](integrations.md#exported-service)).
+- **One GitHub client** in the Integrations module for authenticated and unauthenticated calls;
+  Repositories holds no HTTP code ([integrations.md](integrations.md#unauthenticated-calls)).
+- **Endpoints:** `GET /user/repos` (`pat`, `oauth_app`), `GET /installation/repositories`
+  (`github_app`), `GET /users/{handle}/repos?type=owner`, `GET /repositories/{id}` (Add);
+  listings sorted `created` ascending so earlier pages keep their ETag
+  ([integrations.md](integrations.md#endpoints-and-parameters)).
+- **Installation tokens cached in memory** until `expires_at` − 5 min, single-flight, minted
+  with `metadata: read`; only a mint `404`/`403` invalidates a `github_app` integration
+  ([integrations.md](integrations.md#github-app-installation-tokens)).
+- **Usable integration** = reported `active` and type enabled; non-usable sources are not called
+  and keep their rows ([integrations.md](integrations.md#usable-integrations)).
+- **One error-mapping table** (rate limits from headers only, redirects classified, never
+  followed) and an **Add candidate walk** capped at 3 GitHub calls
+  ([integrations.md](integrations.md#error-mapping),
+  [integrations.md](integrations.md#add-re-check-candidates)).
+- **`502`/`503` helpers move to `core/github-http-errors.ts`**
+  ([integrations.md](integrations.md#shared-502--503-helpers)).
+- **Integration deletion** through an awaited `integration.deleted` event, with an end-of-sync
+  safety net ([integrations.md](integrations.md#deletion-hook), [sync.md](sync.md#write-path)).
+- **Unauthenticated budget tracker** internal to the Integrations client, with in-flight
+  reservations and two thresholds: sync ≤ 10, Add ≤ 0
+  ([integrations.md](integrations.md#unauthenticated-budget-tracker)).
 - **UI**: a top-level **Repositories** navbar link, a table with a toolbar, and a GitHub handle
   field on the Account page ([ui.md](ui.md)).
 
@@ -146,7 +177,7 @@ What this feature changes in the permanent product docs, as a checklist for the 
 | #445 | Specs: repositories feature definition | all (creates them) |
 | #446 | Specs: repositories — exact API contract | [api.md](api.md), [security.md](security.md), [ui.md](ui.md), [sync.md](sync.md), [integrations.md](integrations.md), [model.md](model.md) |
 | #447 | Specs: repositories — sync engine | [sync.md](sync.md), [model.md](model.md), [ui.md](ui.md), [api.md](api.md), [security.md](security.md), [integrations.md](integrations.md) |
-| #448 | Specs: repositories — Integrations GitHub client | [integrations.md](integrations.md), [sync.md](sync.md), [model.md](model.md), [security.md](security.md) |
+| #448 | Specs: repositories — Integrations GitHub client | [integrations.md](integrations.md), [sync.md](sync.md), [model.md](model.md), [security.md](security.md), [api.md](api.md) |
 | #449 | Specs: repositories — GitHub handle and default user | [model.md](model.md), [security.md](security.md), [ui.md](ui.md), [sync.md](sync.md), [api.md](api.md) |
 | #450 | Specs: repositories — edge cases matrix | every file |
 | #451 | Specs: repositories — testing strategy | every "Required tests" section |
@@ -167,14 +198,8 @@ table, and #452 checks that none remain.
 
 | File | Open decision | Settled by |
 |------|---------------|------------|
-| [model.md](model.md#logical-foreign-keys) | Integration-deletion hook mechanism (call vs event) | #448 |
 | [model.md](model.md#logical-foreign-keys) | User-deletion cleanup path | #450 |
-| [sync.md](sync.md#sources) | GitHub endpoint and parameters per integration type | #448 |
 | [sync.md](sync.md#edge-cases) | Sync edge cases (renames, transfers, visibility flips, deletion mid-sync, handle changes, concurrent syncs, credential replaced) | #450 |
-| [integrations.md](integrations.md#exported-service) | Exported interface, per-type authentication (incl. GitHub App installation tokens), error mapping, Add's next candidate after a `401`, home of the shared `502`/`503` helpers | #448 |
-| [integrations.md](integrations.md#access-link-on-add) | Which integration statuses count as usable (`expired`, `undecryptable`) | #448 |
-| [integrations.md](integrations.md#deletion-hook) | Deletion-hook mechanism (call vs event) | #448 |
-| [security.md](security.md#credentials-stay-in-the-backend) | Guarantees of the Integrations exported interface | #448 |
 | [ui.md](ui.md#edge-cases) | UI edge cases | #450 |
 | Every "Required tests" section | The testing strategy: GitHub mocking, sync-engine tests, frontend specs | #451 |
 
@@ -185,7 +210,7 @@ table, and #452 checks that none remain.
 | [model.md](model.md) | The five tables (columns, types, indexes, `source_key`), `auth_users.github_handle` (column, normalisation, validation, edit and read routes, default user, admins, Auth export, handle-change reconciliation), row statuses, logical FKs, private metadata lifecycle and pruning rule, ownership |
 | [sync.md](sync.md) | Sources and the handle's credential, trigger (stale / Refresh), in-process execution, per-user lock, lease recovery, page-number pagination, write path, partial failures, pruning, rate limits and the unauthenticated budget tracker, ETags, values |
 | [api.md](api.md) | Routes, request/response contract, repo ref, sync state and polling, errors, access rules |
-| [integrations.md](integrations.md) | What the Integrations module exports, `401 → invalid`, access-link choice, deletion hook |
+| [integrations.md](integrations.md) | `IntegrationsGithubService` (operations, typed results), the single GitHub client, endpoints per source, installation-token cache, `401 → invalid`, usable integrations, error mapping, access-link choice and Add candidate walk, `502`/`503` helpers in `core/`, `integration.deleted` hook, unauthenticated budget tracker |
 | [security.md](security.md) | Credentials stay in the backend, user scoping, Add verification, handle validation, fixed base URL, CSRF, logging, abuse limits |
 | [ui.md](ui.md) | Navbar link, table, toolbar, sync UX, source error banners, empty state, GitHub handle field |
 

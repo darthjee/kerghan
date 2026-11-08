@@ -258,17 +258,23 @@ listing as added.
   the stored private metadata stays tied to the integration that granted it
   ([model.md](model.md#private-metadata-lifecycle)) and the row reads as Added, not
   Unavailable.
-- The unauthenticated re-check honours the same low-budget threshold as the sync, through the
-  shared process-wide budget tracker: a low budget answers `503` with no GitHub call
+- The unauthenticated re-check goes through the shared process-wide budget tracker with **Add's
+  own threshold**: it is refused only when the remaining budget is **≤ 0** (the sync stops at
+  ≤ 10, keeping a reserve for Add), answering `503` with no GitHub call
   ([sync.md](sync.md#rate-limits)).
 - **Race with pruning:** the write is `UPDATE … WHERE id = :id AND user_id = :userId`. If a
   sync's pruning deleted the not-added row first, the update affects no row and Add answers
   `404 NOT_FOUND` (the repo left the listing); if Add commits first, pruning skips the row
   ([model.md](model.md#private-metadata-lifecycle)).
-- `502 GITHUB_UNAVAILABLE` and `503 GITHUB_RATE_LIMITED` reuse the existing codes and helpers
-  (`integrations/integration-http-errors.ts`).
-- A `401` on the candidate integration marks it `invalid`; whether Add then tries the next
-  candidate is #448's. With no candidate left, Add answers `404`.
+- `502 GITHUB_UNAVAILABLE` and `503 GITHUB_RATE_LIMITED` reuse the existing codes and helpers,
+  moved to `core/github-http-errors.ts` ([integrations.md](integrations.md#shared-502--503-helpers)).
+- **Candidate walk** ([integrations.md](integrations.md#add-re-check-candidates)), at most **3
+  GitHub calls** per Add: first the usable integrations holding a source row for the repo, oldest
+  first; then, when the handle source sees it, the remaining usable integrations, oldest first,
+  then unauthenticated. A `401` (which also marks a `pat` / `oauth_app` integration `invalid`),
+  `403` or `404` moves to the next candidate; a rate limit, timeout, `5xx` or redirect stops the
+  walk (`503` / `502`, no fallback). No candidate left, or the cap reached, after denials ⇒
+  `404 NOT_FOUND`.
 
 ### Add rate limit
 
@@ -310,8 +316,9 @@ Standard error shape (`core/http-exception.filter.ts`,
   unexpected falls through to the existing `500 INTERNAL_ERROR`.
 - The two new codes join `ErrorCodes` (`core/error-codes.ts`); their helpers live in the
   Repositories module, like `integrations/integration-http-errors.ts`. The `502`/`503` reuse the
-  Integrations helpers; where they live once shared is #448's
-  ([integrations.md](integrations.md#exported-service)).
+  existing helpers `githubUnavailable()` / `githubRateLimited()`, moved (unchanged) from
+  `integrations/integration-http-errors.ts` to `core/github-http-errors.ts`, so Repositories
+  never imports Integrations' HTTP layer ([integrations.md](integrations.md#shared-502--503-helpers)).
 
 ## Access
 
@@ -399,6 +406,8 @@ Backend e2e. How GitHub is mocked and how the sync engine is tested is #451's.
 - A GitHub denial answers `404` and writes nothing.
 - The re-check on a low budget answers `503 GITHUB_RATE_LIMITED`, not `404`; a timeout / `5xx`
   answers `502 GITHUB_UNAVAILABLE`.
+- The candidate walk: a `401` / `403` / `404` moves to the next candidate, a rate limit, timeout,
+  `5xx` or redirect stops it; never more than 3 GitHub calls; denials everywhere answer `404`.
 - Add on a not-added row pruned concurrently answers `404 NOT_FOUND` and writes nothing.
 - The 31st Add in 60 s answers `429 REPOSITORY_ADD_RATE_LIMITED`, and the env overrides apply.
 - Every `404` carries the same message.
