@@ -203,7 +203,7 @@ per-source statuses carry the failures). A run that lost its lease or crashed ne
   ([model.md](model.md#private-metadata-lifecycle)). Nothing else is checked: a successful source
   has already dropped the rows it no longer returns, and a failed, interrupted or capped source
   keeps its rows, so **a failure blocks pruning by construction**.
-- **When:** one statement in the end-of-sync transaction; and right after changes that orphan
+- **When:** one statement in the end-of-sync transaction; and after changes that orphan
   rows outside a sync (an integration's source rows dropped by the deletion hook, the handle
   changed or cleared: the [handle reconciliation](model.md#handle-changes) prunes on the next
   Repositories request).

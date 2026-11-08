@@ -349,7 +349,7 @@ The single-table form is what TypeORM's `.delete()` query builder can produce; t
 (`repository_id`, `source_key`) index covers the subquery.
 
 - **When:** at the end of each sync, in its final `run_id`-guarded transaction
-  ([sync.md](sync.md#pruning)); and right after changes that orphan rows outside a sync: an
+  ([sync.md](sync.md#pruning)); and after changes that orphan rows outside a sync: an
   integration's source rows dropped by the [deletion hook](#logical-foreign-keys) (#448 picks the
   mechanism), and the handle changed or cleared (its source, page and status rows dropped by the
   [handle reconciliation](#handle-changes) on the next Repositories request, so a new handle reads

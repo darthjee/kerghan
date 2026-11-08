@@ -74,6 +74,16 @@ What this feature changes in the permanent product docs, as a checklist for the 
 - **`backend/routes/repositories.md`:** created from [api.md](api.md).
 - **`architecture/backend.md#error-responses`:** the optional `error.retryAfterSeconds` body
   field ([api.md](api.md#errors)).
+- **`modules/auth/default-user.md`:** "What is blocked" and "Rule: per field, by presence" gain
+  `github_handle` as an editable, unmanaged field; the "every editable field is managed today"
+  rationale (and "in practice every edit reaching the default user is rejected") is replaced by
+  [model.md](model.md#default-user)'s; boot sync never touches the handle.
+- **`modules/auth.md`:** the new exported `AccountHandleService`; the `github_handle` column; the
+  admin routes table stays without the handle.
+- **`backend/routes/auth.md`:** `PATCH /auth/account.json` (the `githubHandle` field, the
+  `currentPassword`-only-with-managed-fields rule, the handle-only path outside the abuse guard,
+  the `{ username, email, githubHandle }` response, the new `assertAnyFieldPresent` message) and
+  the new `POST /auth/account/mine.json`; the default-user `409` table's `account.json` row.
 - **`environment-variables.md`:** `KERGHAN_REPOSITORIES_ADD_MAX_PER_WINDOW` and
   `KERGHAN_REPOSITORIES_ADD_WINDOW_MS` ([api.md](api.md#add-rate-limit));
   `KERGHAN_REPOSITORIES_SYNC_TTL_MS`, `KERGHAN_REPOSITORIES_SYNC_COOLDOWN_MS` and
@@ -85,8 +95,17 @@ What this feature changes in the permanent product docs, as a checklist for the 
   GitHub for this feature and never receives a credential ([security.md](security.md#credentials-stay-in-the-backend)).
 - **Merged listing** of every integration plus the GitHub handle's public repos, deduplicated by
   GitHub repository id; each row shows its sources ([sync.md](sync.md#sources)).
-- **GitHub handle**: a nullable `github_handle` on `auth_users`, owned by Auth, editable by the
-  default user too ([model.md](model.md#github-handle)).
+- **GitHub handle**: a nullable `github_handle varchar(39)` on `auth_users`, owned by Auth, no
+  uniqueness; normalised (trim, one leading `@`, lowercase, empty ⇒ `null`) and validated against
+  GitHub's username format. Set by a handle-only `PATCH /auth/account.json` that needs no
+  current password and skips the abuse guard; read by a new `POST /auth/account/mine.json`;
+  exported to Repositories as `AccountHandleService#getGithubHandle`. The default-user `409`
+  narrows to the managed fields, so the default user can set it; admins neither see nor edit it
+  ([model.md](model.md#github-handle)).
+- **Handle changes reconciled lazily**: every Repositories route and sync run compares the
+  current handle with `repositories_sync_states.handle` and drops (and prunes) the old handle's
+  rows on a mismatch; a running sync's handle writes are guarded by the handle it started with
+  ([model.md](model.md#handle-changes)).
 - **One `repositories` table per user** for every repo seen, with a nullable `added_at`; plus
   `repositories_sources`, `repositories_source_pages`, `repositories_sync_states` and
   `repositories_source_statuses`, each source keyed by `source_key` ([model.md](model.md#tables)).
@@ -128,7 +147,7 @@ What this feature changes in the permanent product docs, as a checklist for the 
 | #446 | Specs: repositories — exact API contract | [api.md](api.md), [security.md](security.md), [ui.md](ui.md), [sync.md](sync.md), [integrations.md](integrations.md), [model.md](model.md) |
 | #447 | Specs: repositories — sync engine | [sync.md](sync.md), [model.md](model.md), [ui.md](ui.md), [api.md](api.md), [security.md](security.md), [integrations.md](integrations.md) |
 | #448 | Specs: repositories — Integrations GitHub client | [integrations.md](integrations.md), [sync.md](sync.md), [model.md](model.md), [security.md](security.md) |
-| #449 | Specs: repositories — GitHub handle and default user | [model.md](model.md), [security.md](security.md), [ui.md](ui.md) |
+| #449 | Specs: repositories — GitHub handle and default user | [model.md](model.md), [security.md](security.md), [ui.md](ui.md), [sync.md](sync.md), [api.md](api.md) |
 | #450 | Specs: repositories — edge cases matrix | every file |
 | #451 | Specs: repositories — testing strategy | every "Required tests" section |
 | #452 | Specs: fold the repositories specs into the permanent docs and remove them | all |
@@ -150,15 +169,12 @@ table, and #452 checks that none remain.
 |------|---------------|------------|
 | [model.md](model.md#logical-foreign-keys) | Integration-deletion hook mechanism (call vs event) | #448 |
 | [model.md](model.md#logical-foreign-keys) | User-deletion cleanup path | #450 |
-| [model.md](model.md#github-handle) | `github_handle` column type, validation, normalisation, default-user block narrowing, admin visibility/editability | #449 |
 | [sync.md](sync.md#sources) | GitHub endpoint and parameters per integration type | #448 |
 | [sync.md](sync.md#edge-cases) | Sync edge cases (renames, transfers, visibility flips, deletion mid-sync, handle changes, concurrent syncs, credential replaced) | #450 |
 | [integrations.md](integrations.md#exported-service) | Exported interface, per-type authentication (incl. GitHub App installation tokens), error mapping, Add's next candidate after a `401`, home of the shared `502`/`503` helpers | #448 |
 | [integrations.md](integrations.md#access-link-on-add) | Which integration statuses count as usable (`expired`, `undecryptable`) | #448 |
 | [integrations.md](integrations.md#deletion-hook) | Deletion-hook mechanism (call vs event) | #448 |
-| [security.md](security.md#github-handle) | Handle validation details, the default-user block narrowing, admin visibility of the handle | #449 |
 | [security.md](security.md#credentials-stay-in-the-backend) | Guarantees of the Integrations exported interface | #448 |
-| [ui.md](ui.md#github-handle-field) | Handle field validation messages, admin pages and the handle | #449 |
 | [ui.md](ui.md#edge-cases) | UI edge cases | #450 |
 | Every "Required tests" section | The testing strategy: GitHub mocking, sync-engine tests, frontend specs | #451 |
 
@@ -166,7 +182,7 @@ table, and #452 checks that none remain.
 
 | File | Defines |
 |---|---|
-| [model.md](model.md) | The five tables (columns, types, indexes, `source_key`), `auth_users.github_handle`, row statuses, logical FKs, private metadata lifecycle and pruning rule, ownership |
+| [model.md](model.md) | The five tables (columns, types, indexes, `source_key`), `auth_users.github_handle` (column, normalisation, validation, edit and read routes, default user, admins, Auth export, handle-change reconciliation), row statuses, logical FKs, private metadata lifecycle and pruning rule, ownership |
 | [sync.md](sync.md) | Sources and the handle's credential, trigger (stale / Refresh), in-process execution, per-user lock, lease recovery, page-number pagination, write path, partial failures, pruning, rate limits and the unauthenticated budget tracker, ETags, values |
 | [api.md](api.md) | Routes, request/response contract, repo ref, sync state and polling, errors, access rules |
 | [integrations.md](integrations.md) | What the Integrations module exports, `401 → invalid`, access-link choice, deletion hook |
