@@ -1,7 +1,7 @@
 # security.md: errors and Add verification
 
 - `## Errors and logging`: replace the #446 open marker with a link to the error table in
-  [api.md](../../specs/repos/api.md) (`api.md#errors`) and the rule that sync failures surface only as
+  `api.md` (anchor `api.md#errors`) and the rule that sync failures surface only as
   per-source statuses, never as HTTP errors; GitHub bodies and credential details are never
   echoed; anything unexpected is `500 INTERNAL_ERROR`.
 - `## Add verification`: mention the repo ref (`fullName` resolves only among the caller's own
