@@ -24,7 +24,11 @@ One row per repository:
   `https://github.com/` + URL-encoded `owner` + `/` + URL-encoded `name`; it never renders a
   GitHub-supplied URL;
 - a visibility badge (public / private);
-- source badges from the row's `sources[]`: the integration label, or the GitHub handle;
+- source badges from the row's `sources[]`: the integration label, or the GitHub handle. Each
+  badge is matched by key with the sync state's `sources[].status`
+  ([api.md](api.md#listing)). The badge of a source that is not `ok` (or `page_cap_reached`) is
+  shown **muted**, with the tooltip and accessible label **"<source> could not be refreshed"**;
+  a `pending` source's badge reads **"<source> has not been synced yet"**;
 - the status: **Added**, **Not added**, **Unavailable** or **Unknown**
   ([model.md](model.md#row-statuses));
 - on not-added rows, an **Add** button (sending the row's `githubId`): a spinner while the
@@ -36,6 +40,7 @@ Inline Add errors, shown on the row ([api.md](api.md#add)):
 |---|---|
 | `404` | "Repository not found on GitHub." |
 | `502` / `503` | "GitHub is unavailable or rate limited — try again later." |
+| `409` `REPOSITORY_SOURCE_UNUSABLE` | "Fix the integration that sees this repository in Integrations." (link to `#/account/integrations`) |
 | `429` | "Too many repositories added — try again in N s." (N from `retryAfterSeconds`) |
 
 ## Toolbar
@@ -75,14 +80,26 @@ A dismissible banner per source whose `status` is not `ok` or `pending`
 | `invalid_credentials` | `<source>` failed: invalid credentials. **Fix it in Integrations** (link to `#/account/integrations`) |
 | `rate_limited` | `<source>` hit GitHub's rate limit; it will retry after `<resetAt, local time>`. |
 | `page_cap_reached` | `<source>` has more repositories than Kerghan reads; some may be missing. |
+| `not_found` | GitHub handle "darthjee" was not found on GitHub. **Check it on your Account page** (link to `#/account/my-account`) |
 | `error` | `<source>` could not be read from GitHub; its repositories may be out of date. |
 
-The handle source never links to Integrations.
+- The handle source never links to Integrations.
+- **Only integration sources show the `invalid_credentials` banner.** The handle source cannot
+  read `invalid_credentials`: after a `401` it falls back to the next usable integration, then to
+  the unauthenticated call, which cannot get a `401` ([sync.md](sync.md#handle-credential)).
+- **`not_found`** is a handle-source status only.
+- A fixed integration reads `pending` ([api.md](api.md#sync-state)), so its banner disappears
+  at the next poll or reload after a Test or a Replace.
 
 ## Empty state
 
-With no GitHub handle and no integration, the page explains both options and links to
-**Account** (`#/account/my-account`, to set the handle) and **Integrations**.
+- **No source:** with no GitHub handle and no integration, the page explains both options and
+  links to **Account** (`#/account/my-account`, to set the handle) and **Integrations**.
+- **Sources but no repos:** with at least one source and a finished sync that found no
+  repository, the page shows **"No repositories found. Check the sources above."**, distinct
+  from the no-source state.
+- **No match:** when a filter or a search matches nothing, the table shows **"No repositories
+  match your filters."**
 
 ## GitHub handle field
 
@@ -112,14 +129,25 @@ from the username / email / password form, with its own input and **Save** butto
 
 ## Edge cases
 
-> **Open — settled by #450:** UI edge cases (e.g. a row changing status during a sync, a page
-> emptied by a sync, a handle source reporting `invalid_credentials` because it went through an
-> integration, whose banner has no Integrations link).
+| Case | Rule |
+|---|---|
+| Page emptied by the reload after a sync (on page 3, the total shrank) | If the reload returns no items on a page above 1, jump to the last page (from `total`) and reload once. |
+| Row changes status during a sync | Rows stay as loaded until the reload when the sync goes idle; no row updates while syncing. |
+| Add in flight, or its result, when the reload lands | Add state (spinner, inline error) is kept by `githubId` across the reload; cleared on success or on navigation. |
+| Added under the "Not added" filter | The row turns Added and stays visible until the next reload or filter change, so the list does not jump under the cursor. |
+| Add on a row pruned meanwhile | The `404` inline error shows; the row disappears on the next reload. |
+| Handle source and `invalid_credentials` | Cannot happen ([source errors](#source-errors)); only integration sources show that banner. |
+| Dismissed banners | Dismissal is kept **in memory** (no `localStorage`) per (source, status, `syncedAt`). The banner comes back when a new sync stores a failure again, or on a page reload. |
+| Integration deleted while the page is open | Its badges and banner disappear at the next reload (`sources[]` drops it). |
+| Sources exist but the sync found no repos | The "No repositories found" [empty state](#empty-state), distinct from the no-source one. |
+| Filter or search with no matches | "No repositories match your filters." ([empty state](#empty-state)). |
+
+Every Repositories edge case, with its outcome and its rule, is listed in the
+[edge-case matrix](edge-cases.md#ui).
 
 ## Required tests
 
-Tests for the open points above, including the frontend spec strategy (#451), are added by the
-issue that settles them.
+The frontend spec strategy is #451's.
 
 - The Repositories link shows for a logged-in user and is hidden while awaiting approval.
 - Each row renders `owner/name` linked to `https://github.com/<owner>/<name>` (URL-encoded),
@@ -147,3 +175,18 @@ issue that settles them.
 - The section works for the default user (no password asked).
 - The admin user list and edit pages show no handle.
 - No frontend request goes to GitHub.
+- A not-ok source badge renders muted with "<source> could not be refreshed"; a `pending` one
+  with "<source> has not been synced yet"; an `ok` or `page_cap_reached` one is not muted.
+- The `not_found` banner shows its text and links to the Account page.
+- A `409 REPOSITORY_SOURCE_UNUSABLE` on Add shows the inline error with the Integrations link.
+- An empty page above 1 after a reload jumps to the last page and reloads once.
+- Rows do not change while syncing.
+- Add state survives the reload.
+- An Added row stays under the "Not added" filter until the next reload or a filter change.
+- A `404` on a pruned row shows the inline error; the row is gone after the next reload.
+- Only integration sources show the `invalid_credentials` banner.
+- A dismissed banner stays hidden for the same (source, status, `syncedAt`) and returns for a new
+  `syncedAt` or a page reload.
+- A deleted integration's badge and banner disappear on reload.
+- The no-source empty state, the "No repositories found" state and the no-match message each
+  render in their case.

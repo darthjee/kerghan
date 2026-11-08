@@ -21,6 +21,9 @@ computed from it, beyond the masked `secretHint` of the Integrations routes.** D
   needs its own product decision (`CLAUDE.md`, #295).
 - Repo responses carry no integration field beyond its `uuid` and label
   ([api.md](api.md#access)).
+- **The `secret_iv` compare value stays inside the Integrations module.** The status
+  [compare-and-set](integrations.md#status-compare-and-set) uses the `secret_iv` of the credential
+  a call used; it never reaches the Repositories module, a response or a log.
 - This rule is cross-cutting: #452 promotes it to `docs/agents/architecture/security.md` as its
   own section (alongside "CSRF"), linked from `docs/agents/modules/integrations.md`.
 
@@ -74,6 +77,9 @@ GitHub repository id or an `owner/name`.
   first, so every attempt counts and probing is bounded.
 - Every `404` carries the same code and message (`Repository not found`), whether the ref is
   absent, held only by another user, or denied by GitHub.
+- `409 REPOSITORY_SOURCE_UNUSABLE` (no usable candidate before any GitHub call) is decided after
+  the rate limit and the own-rows lookup, only from the caller's own sources, so it reveals
+  nothing about other users or about GitHub and adds no probing surface.
 - The GitHub re-check is built from the stored row, never from the request's `fullName`; an
   unlinked re-check that finds the repo private links the granting integration, so private
   metadata stays tied to it ([api.md](api.md#add)).
@@ -89,6 +95,19 @@ unavailable ([model.md](model.md#private-metadata-lifecycle)). The handle source
 public repos, so private metadata is always tied to the integration that granted it
 ([sync.md](sync.md#sources)); when a sync turns a repo private, its `handle` source row is
 dropped, so a stale handle row never keeps it alive ([sync.md](sync.md#write-path)).
+
+- A capped source deletes its rows past the cap, so a lowered cap never keeps private metadata
+  past any check ([sync.md](sync.md#write-path)).
+- The end-of-sync [link fill](sync.md#link-fill) ties an added private repo with an empty or
+  dangling link back to a usable integration that returns it.
+- Rows of non-usable integrations are kept until the integration is fixed or deleted, visible
+  only to their owner ([integrations.md](integrations.md#usable-integrations)).
+- A deleted user's rows are removed by the `user.deleted` listener; orphans left by a failed
+  listener are visible to no one under normal operation, since an auto-increment `id` is not
+  reused; the deletion path retries the event or sweeps orphans for the cases where one could be
+  (backup restore, `AUTO_INCREMENT` reset): retention, not exposure
+  ([model.md](model.md#user-deletion)).
+- The handle source status `not_found` only says that a public GitHub login does not exist.
 
 ## GitHub handle
 
@@ -178,6 +197,8 @@ trigger is therefore not a state change over `GET`, and needs no exception
 - A `fullName` ref never resolves another user's row; every Add `404` carries the same message
   ([api.md](api.md#required-tests)).
 - A cached installation token never leaves the Integrations module.
+- A GitHub App mint in flight across a Replace is never cached.
+- No Repositories code, response or log carries `secret_iv` (the status compare-and-set value).
 - The exported service never returns, logs or exposes a decrypted credential, a minted
   installation token or a GitHub response body; a foreign `integrationId` answers
   `integration_unusable` without a GitHub call.

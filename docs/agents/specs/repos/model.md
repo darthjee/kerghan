@@ -95,7 +95,8 @@ lock and its claim are defined in [sync.md](sync.md#per-user-lock).
 
 The **per-source status** of the latest run of each source, one row per (user, `source_key`):
 **ok**, **error**, **invalid credentials**, **rate limited** (with `reset_at`), **page cap
-reached**, and `synced_at`.
+reached**, **not found** (`not_found`, handle source only: the handle listing answered `404`,
+[sync.md](sync.md#handle-credential)), and `synced_at`.
 
 - A current source with no row (added since the last sync) reads `pending`
   ([api.md](api.md#sync-state)).
@@ -152,8 +153,8 @@ field message `githubHandle must be a valid GitHub username` and nothing stored.
 (case-insensitively) is the owner rule of a `fullName` repo ref ([api.md](api.md#repo-ref)).
 
 Kerghan does not check that the handle exists on GitHub when it is saved: an unknown handle shows
-up as the handle source's status after the next sync (the exact status is #450's edge-case
-matrix, "handle vanished").
+up as the handle source's status after the next sync: `not_found`
+([sync.md](sync.md#handle-credential)).
 
 **URL-encoding:** whenever the handle is interpolated into a GitHub path, it goes through
 `encodeURIComponent`. The format already excludes every path character; the encoding is defence
@@ -263,7 +264,11 @@ to.
   `repositories_sync_states.handle` (missing row: `null`). Equal: nothing to do. Different: one
   transaction that
   1. creates the sync-state row if missing and locks it (`SELECT … FOR UPDATE`), re-comparing
-     under the lock (a concurrent request may already have reconciled);
+     under the lock (a concurrent request may already have reconciled). **A sync run never
+     creates the row:** its start-of-run reconciliation only locks an existing row, and with no
+     row the run stops ([sync.md](sync.md#write-path)). Only the request entry points (the
+     listing, the sync-state route, Refresh, Add) create it, so a run never recreates the row of
+     a deleted user ([user deletion](#user-deletion));
   2. deletes the user's `source_key = 'handle'` source, page and status rows (`AND user_id =
      :userId` on each statement);
   3. sets `handle` to the current value;
@@ -275,7 +280,8 @@ to.
   handle is fetched on the next stale listing or Refresh.
 - **Mid-sync change:** the run guards its handle-source writes with the handle it started with
   ([sync.md](sync.md#write-path)), so a run that started before the change never writes rows for
-  the old handle after the reconciliation. The rest of the mid-sync matrix stays #450's.
+  the old handle after the reconciliation. Every other mid-sync case is in the
+  [edge-case matrix](edge-cases.md#handle).
 - **Why lazy, not an event:** Auth emitting an event that Repositories handles would make Auth
   know about Repositories, which already depends on Auth; reading on use keeps the dependency
   one-way and has no failure window between the Auth write and the cleanup. The handle source
@@ -290,16 +296,22 @@ Derived from stored data on read, never stored as a column:
 
 | Status | Rule |
 |---|---|
-| **Added** | `added_at` is set, it has at least one source row from a source whose latest status is `ok`, and it is not unavailable under the private-link rule below. |
+| **Added** | `added_at` is set, it has at least one source row from a source whose latest status is `ok` or `page_cap_reached`, and it is not unavailable under the private-link rule below. |
 | **Not added** | `added_at` is `null`. |
 | **Unavailable** | `added_at` is set, and either it has **no source row left** (every source that returned it later succeeded without returning it: deleted, renamed out of reach, access lost, or its only access integration deleted), or it is **private** and its `integration_id` is empty or dangling (its linked integration was deleted, #444). A public repo whose link was cleared stays available through the unauthenticated path. |
-| **Unknown** | `added_at` is set, and every source row it has belongs to a source whose latest status is a failure (`error`, `invalid_credentials`, `rate_limited`). |
+| **Unknown** | `added_at` is set, and every source row it has belongs to a source that is not ok: its latest status is a failure (`error`, `invalid_credentials`, `rate_limited`, `not_found`), or it has no status row yet (`pending`, for example a first run interrupted after it applied pages). |
 
 Statuses are read from `repositories_sources` together with `repositories_source_statuses`. A
 failed source never makes a repo unavailable: its rows are kept as they were
-([sync.md](sync.md#partial-failures)). Whether a `page_cap_reached` source counts as `ok` or as a
-failure here is part of #450's edge-case matrix ([sync.md](sync.md#edge-cases), "page cap
-reached").
+([sync.md](sync.md#partial-failures)).
+
+- **`page_cap_reached` counts as `ok`:** every row it holds within the cap was just returned, and
+  its rows past the cap are trimmed ([sync.md](sync.md#write-path)).
+- **`pending` counts as not ok:** a source with rows but no status row (its first run was
+  interrupted) cannot vouch for them.
+- **An empty link is refilled:** an added private repo with an empty or dangling
+  `integration_id` reads Unavailable only until the next sync's [link fill](sync.md#link-fill)
+  gives it a usable integration that returns it; it then reads Added again.
 
 ## Logical foreign keys
 
@@ -315,7 +327,8 @@ Consequences:
   The hook receives the owning `user_id` with the integration id, and every statement in it
   (the `integration_id` clear, the deletes by `source_key = 'integration:<id>'`, the pruning)
   includes `AND user_id = :userId`. Reads treat a dangling `integration_id` as empty.
-- **User deleted:** the user's repositories, sources and sync state must not outlive them.
+- **User deleted:** the user's repositories, sources and sync state must not outlive them
+  ([user deletion](#user-deletion)).
 
 - **Hook mechanism:** an awaited `integration.deleted` event (`IntegrationDeletedEvent { userId,
   integrationId }`), emitted by the Integrations service with `emitAsync` **after the delete
@@ -325,7 +338,37 @@ Consequences:
   ([integrations.md](integrations.md#deletion-hook)). A direct call would make the two modules
   import each other.
 
-> **Open — settled by #450:** the user-deletion cleanup path.
+### User deletion
+
+No user-deletion path exists today. This is the Repositories contract for when one does.
+
+- **Event:** the deletion path emits an awaited **`user.deleted`** event
+  (`UserDeletedEvent { userId }`) with `emitAsync`, **after the user row delete commits**: the
+  same pattern as `integration.deleted`.
+- **Listener:** Repositories' listener, registered at boot like the `integration.deleted` one,
+  runs one transaction that deletes the user's rows from all five tables: `repositories`,
+  `repositories_sources`, `repositories_source_pages`, `repositories_source_statuses` and
+  `repositories_sync_states`. Every statement has `WHERE user_id = :userId`.
+- **Best-effort:** a listener failure is logged **at error level** with safe fields (`userId`,
+  error class), so the rows can be purged, and never blocks the deletion. The future deletion
+  path must retry the event or run an orphan sweep ([README](README.md#product-changes-folded-by-452)).
+- **No row created for a deleted user:** a request entry point creates the sync-state row only
+  if the user still exists, re-read through Auth's export
+  ([Auth export](#auth-export)) in the same transaction, so a request that passed `JwtGuard`
+  before the delete committed creates no orphan.
+- **A running sync:** the deleted sync-state row makes the run's next `run_id`-guarded write
+  affect no row, so the run rolls back and stops; a run never recreates the row
+  ([handle changes](#handle-changes), [sync.md](sync.md#write-path)).
+- **Why not a physical cascade:** it keeps logical FKs only, so `integrations.user_id` stays the
+  project's only physical cross-module FK. Orphans left by a failed listener are visible to no
+  one: under normal operation MySQL 8 never reuses an auto-increment `id`, so no future user can
+  inherit them. A backup restore or a manual `AUTO_INCREMENT` reset could reuse one, which is why
+  the deletion path retries the event or sweeps orphans. The risk is retention, not exposure.
+- **Integrations cascade:** the user's integrations go through their own `ON DELETE CASCADE`,
+  which emits no `integration.deleted`. The `user.deleted` listener covers their Repositories
+  rows anyway.
+- #452 records the contract in the Repositories module doc and in `modules/auth.md`
+  ([README](README.md#product-changes-folded-by-452)).
 
 ## Private metadata lifecycle
 
@@ -359,9 +402,10 @@ The single-table form is what TypeORM's `.delete()` query builder can produce; t
   [handle reconciliation](#handle-changes) on the next Repositories request, so a new handle reads
   `pending`).
 - **Race with Add:** pruning deletes only `added_at IS NULL` rows, and Add's write is
-  `UPDATE … WHERE id = :id AND user_id = :userId`. Add commits first ⇒ the row is skipped;
+  `UPDATE … WHERE id = :id AND user_id = :userId AND added_at IS NULL` ([api.md](api.md#add)).
+  Add commits first ⇒ the row is skipped;
   pruning first ⇒ Add's update affects no row and Add answers `404 NOT_FOUND` (the repo left the
-  listing, [api.md](api.md#add)). The rest of the edge-case matrix stays with #450.
+  listing, [api.md](api.md#add)). Every other case is in the [edge-case matrix](edge-cases.md).
 - Rejected: a grace period before pruning. Private metadata would outlive access, against #444's
   lifecycle rule; failed sources are already protected by keeping their rows.
 
@@ -371,8 +415,6 @@ The single-table form is what TypeORM's `.delete()` query builder can produce; t
 - Two users who see or add the same GitHub repo get two independent rows; nothing is shared.
 
 ## Required tests
-
-Tests for the open points above are added by the issue that settles them.
 
 - A second row for the same (`user_id`, `github_id`) is rejected; two users can each hold one;
   a `github_id` above 2³¹ is stored and read back exactly.
@@ -387,8 +429,18 @@ Tests for the open points above are added by the issue that settles them.
 - `added_at` null ⇒ Not added; set ⇒ Added while a source returns it.
 - An added repo missing from every successful source ⇒ Unavailable; missing while one of its
   sources failed ⇒ Unknown.
-- An added private repo whose linked integration was deleted ⇒ Unavailable, even if another
-  integration still sees it; an added public repo in the same case stays Added.
+- An added repo held only by a `pending` source's rows reads Unknown; one source row from an
+  `ok` source makes it Added.
+- An added repo held only by a `page_cap_reached` source's rows reads Added.
+- An added repo held only by a `not_found` handle source's rows reads Unknown.
+- The `user.deleted` listener deletes the user's rows from all five tables and no other user's
+  rows; its failure is logged at error level and does not throw.
+- A request entry point does not create the sync-state row for a user that no longer exists.
+- A sync run's start-of-run handle reconciliation never creates the sync-state row; with no row,
+  the run stops.
+- An added private repo whose linked integration was deleted ⇒ Unavailable after the deletion
+  and before the next sync, even if another integration still sees it (that sync then
+  [fills the link](sync.md#link-fill)); an added public repo in the same case stays Added.
 - The default user's boot sync leaves `github_handle` unchanged.
 - Handle normalisation: `"  @DarthJee "` is stored as `darthjee`; `""`, `"  "`, `"@"` and `null`
   clear it; a number, object, array or boolean answers `400`.
