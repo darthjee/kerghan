@@ -28,7 +28,11 @@ given (user, integration)**.
 > list repos, get a repo by id, list a handle's public repos — rather than a generic
 > `request(path)`), per-type authentication (including GitHub App installation-token minting and
 > caching, within the limit above), the GitHub endpoint and parameters per type, and the error
-> mapping (sanitised like the existing test-connection errors).
+> mapping (sanitised like the existing test-connection errors). Also: whether Add tries the next
+> candidate integration after a `401` on the first (with none left, Add answers `404`,
+> [api.md](api.md#add)), and where the shared `502 GITHUB_UNAVAILABLE` / `503
+> GITHUB_RATE_LIMITED` helpers live once Repositories uses them (exported by Integrations, or
+> moved to `core/`).
 
 ## Invalid on 401
 

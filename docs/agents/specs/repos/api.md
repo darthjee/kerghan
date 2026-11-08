@@ -1,66 +1,279 @@
 # Repositories — API
 
-The HTTP surface of the Repositories module. Part of the [Repositories specs](README.md).
-
-## Routes
-
-Routes are named here by method and purpose; their exact contract is open (see
-[Contract](#contract)).
-
-### Listing
-
-`GET`, paginated. Serves the user's rows **from the database**, never straight from GitHub.
-
-- Filter: **All** (default), **Added**, **Not added**, **Unavailable**. **Unknown** rows show
-  only under All, on purpose: the filter list is the one fixed by #444.
-- Name search.
-- Each row: `owner/name`, visibility, sources, status ([model.md](model.md#row-statuses)), and
-  the GitHub repository id used by Add.
-- Includes the sync state (`idle` / `syncing`, `last_synced_at`, per-source status).
-- Starts a sync when the last one is stale ([sync.md](sync.md#trigger)).
-
-> **Open — settled by #446:** whether the stale-sync trigger stays a side effect of this `GET` —
-> then recorded as a justified exception to the "no state change over `GET`" rule
-> ([architecture/security.md](../../architecture/security.md#rules-for-future-changes)), which
-> #452 folds there — or becomes a separate `POST` covered by `OriginGuard`.
-
-### Sync state
-
-`GET`. Returns the sync state only. Polled by the frontend while a sync runs.
-
-### Refresh
-
-`POST`. Forces a sync. Inside the cooldown it answers `429` with `Retry-After`.
-
-### Add
-
-`POST`, with a GitHub repository id.
-
-- **Owner lookup first:** the row is looked up by (`user_id` from the session, `github_id`) in the
-  query itself, before any cooldown check or GitHub call. A missing row, including one that only
-  another user holds, answers the same `404` as a GitHub denial, with no GitHub call and no
-  write. Only repos already in the user's own listing can be added.
-- Re-checked with GitHub before anything is written ([security.md](security.md#add-verification)):
-  one request for that repository, through the chosen access integration
-  ([integrations.md](integrations.md#access-link-on-add)). When only the public source sees it,
-  the re-check goes through a valid integration if the user has one (without linking it), and
-  unauthenticated otherwise.
-- The unauthenticated re-check honours the same low-budget threshold as the sync
-  ([sync.md](sync.md#rate-limits)): when the budget is low it answers a transient "rate limited"
-  error, never `404`, and marks nothing `invalid`.
-- Add is rate limited per user, following the abuse-guard services in `backend/src/auth/`.
-- On success: refreshes the snapshot, sets `added_at` and `integration_id`.
-- A repository the user cannot see answers `404`.
+The HTTP surface of the Repositories module, in the style of
+[`backend/routes/`](../../backend/routes/integrations.md). Part of the
+[Repositories specs](README.md). #452 folds it into `docs/agents/backend/routes/repositories.md`.
 
 ## Every route
 
-- Requires `JwtGuard`.
-- Uses the `.json` URL suffix convention.
-- Cache class **`user-scoped`** ([caching.md](../../architecture/caching.md#cache-classes)), so
-  it sends `X-Skip-Cache` and is never warmed by Navi.
-- State-changing routes (Refresh, Add) are `POST`, covered by `OriginGuard`
+- Routes end in `.json`; Tent forwards them to the backend.
+- **Every route is `POST`**, reads included. User-scoped reads use `POST` like
+  `POST /integrations/mine.json`: Tent's cache key ignores the method, so a user-scoped `GET`
+  risks being cached for everyone ([caching.md](../../architecture/caching.md)). No repositories
+  route answers `GET`.
+- **Auth:** every route sits behind the global `JwtGuard` (no `@Public()`, no `@AdminOnly()`) and
+  is scoped to the caller (`req.user.sub`).
+- **CSRF:** every route is `POST`, so the global `OriginGuard` covers all four
   ([security.md](security.md#csrf)).
-- Controllers stay thin; the logic lives in the module's services.
+- **Caching:** cache class **`user-scoped`** (`@CachePolicy(CacheClass.UserScoped)`,
+  [caching.md](../../architecture/caching.md#cache-classes)). As for any non-`GET`, every response
+  sends `X-Skip-Cache: true` and `Cache-Control: no-store`.
+- **Navi:** no route is warmed; none belongs in `navi/navi_config.yaml`.
+- **Errors** use the standard error format (`core/http-exception.filter.ts`); see
+  [Errors](#errors).
+- Controllers stay thin: validation in DTOs (whitelist validation), everything else in the
+  module's services.
+
+## Routes
+
+| Action | Route | Body | Success |
+|---|---|---|---|
+| [Listing](#listing) | `POST /repositories/mine.json` | `{ page, perPage, filter, search }` | `200` `{ repositories, pagination, sync }` |
+| [Sync state](#sync-state) | `POST /repositories/sync/state.json` | none | `200` sync-state object |
+| [Refresh](#refresh) | `POST /repositories/sync.json` | none | `202` sync-state object |
+| [Add](#add) | `POST /repositories/add.json` | a [repo ref](#repo-ref): `{ githubId }` or `{ fullName }` | `200` repository row |
+
+## Listing
+
+`POST /repositories/mine.json`. Serves the user's rows **from the database**, never straight
+from GitHub.
+
+### Request
+
+Every field is optional. Any invalid value answers `400 VALIDATION_FAILED`.
+
+```json
+{ "page": 1, "perPage": 50, "filter": "all", "search": "kerg" }
+```
+
+| Field | Rule |
+|---|---|
+| `page` | Integer ≥ 1, default `1`. A page past the end answers `200` with an empty `repositories` list. |
+| `perPage` | Integer ≥ 1, default `50`, maximum `100`. |
+| `filter` | `all` (default), `added`, `not_added`, `unavailable`. `unknown` is rejected: Unknown rows show only under `all`, on purpose (the filter list is the one fixed by #444). |
+| `search` | Trimmed, at most 100 characters, case-insensitive substring match on `owner/name`. Empty means no search. |
+
+### Response
+
+```json
+{
+  "repositories": [{
+    "githubId": 123456,
+    "owner": "darthjee", "name": "kerghan", "fullName": "darthjee/kerghan",
+    "private": false,
+    "status": "added",
+    "addedAt": "2026-11-07T12:00:00Z",
+    "lastSeenAt": "2026-11-07T12:00:00Z",
+    "sources": [
+      { "kind": "integration", "integration": { "uuid": "…", "label": "work-pat" } },
+      { "kind": "handle", "handle": "darthjee" }
+    ],
+    "accessIntegration": { "uuid": "…", "label": "work-pat" }
+  }],
+  "pagination": { "page": 1, "perPage": 50, "total": 123, "totalPages": 3 },
+  "sync": { "state": "idle", "…": "the sync-state object, see Sync state" }
+}
+```
+
+| Row field | Meaning |
+|---|---|
+| `githubId` | GitHub's repository id, the canonical key ([Repository identity](#repository-identity)). |
+| `owner`, `name`, `fullName` | From the latest snapshot; `fullName` is `owner/name`. |
+| `private` | Visibility. |
+| `status` | `added`, `not_added`, `unavailable` or `unknown`, derived on read ([model.md](model.md#row-statuses)). |
+| `addedAt` | `null` for not-added rows. |
+| `lastSeenAt` | When a source last returned the repo. |
+| `sources[]` | The sources that returned it in their latest sync: `{ kind: "integration", integration: { uuid, label } }` or `{ kind: "handle", handle }`. |
+| `accessIntegration` | The access link set on Add, as `{ uuid, label }`. `null` for not-added rows, for added rows only the public source sees, and for a dangling link (its integration was deleted). |
+
+- **Sort:** fixed, case-insensitive `owner`, then `name`, then `githubId`, so pages are stable.
+  No sort parameter.
+- **Pagination:** page-based with totals (`page`, `perPage`, `total`, `totalPages`). `total` and
+  `totalPages` count the rows matching `filter` and `search`; counts are cheap at per-user scale.
+- `sync` is the same object as the [Sync state](#sync-state) route returns.
+
+### Stale-sync trigger
+
+The listing starts a sync when the user's last one is stale ([sync.md](sync.md#trigger); the TTL
+is #447's). The server owns the staleness rule; the frontend makes one call. The listing returns
+the stored rows at once, with `sync.state` already `syncing` when it started one. A fresh listing,
+or one during a running sync, starts nothing.
+
+Because the listing is a `POST` covered by `OriginGuard`, this side effect needs no exception to
+the "no state change over `GET`" rule
+([architecture/security.md](../../architecture/security.md#rules-for-future-changes)).
+
+## Repository identity
+
+- The internal repository `id` is **never exposed**.
+- The canonical key is **`githubId`**: GitHub's global id, identical on every Kerghan instance (all
+  talk to the fixed `api.github.com`) and stable across renames and transfers. A future sync
+  between Kerghan instances can match on `githubId` with no registry of external ids; that sync
+  is out of scope and only motivates the choice.
+- Every response also carries **`fullName`** (`owner/name`).
+
+### Repo ref
+
+Every per-repo route (Add now, and future ones such as issues and labels) takes the repo in the
+**body**, as exactly one of:
+
+- `{ "githubId": 123456 }`: used by the UI;
+- `{ "fullName": "darthjee/kerghan" }`: for consumers that only know the git remote, such as the
+  CLI or an AI agent working in a repo folder.
+
+Rules:
+
+- Both or neither answers `400 VALIDATION_FAILED`; so does a non-integer `githubId` or a
+  `fullName` that does not match GitHub's `owner/name` format.
+- `fullName` is resolved **case-insensitively against the caller's own rows** only, so a ref can
+  only reach repos already in the user's listing (#444's "Add by `owner/name` not in the listing"
+  exclusion still holds). A ref not found among the caller's rows answers `404`.
+- The ref lives in the body, not the path: repo names containing dots (`.github`, `x.json`) would
+  clash with the `.json` suffix routing.
+- A stale local remote (an old name after a rename) answers `404` until a sync records the new
+  name; GitHub's rename redirects are not followed. Further rename handling is #450's.
+
+## Sync state
+
+`POST /repositories/sync/state.json`, no body. Returns the sync-state object; the listing embeds
+the same object as `sync`.
+
+```json
+{
+  "state": "syncing",
+  "startedAt": "2026-11-07T12:00:00Z",
+  "lastSyncedAt": "2026-11-07T11:00:00Z",
+  "refreshAvailableAt": "2026-11-07T12:05:00Z",
+  "sources": [
+    { "kind": "integration", "integration": { "uuid": "…", "label": "work-pat" },
+      "status": "ok", "syncedAt": "2026-11-07T11:00:00Z", "resetAt": null },
+    { "kind": "handle", "handle": "darthjee",
+      "status": "rate_limited", "syncedAt": "2026-11-07T11:00:00Z",
+      "resetAt": "2026-11-07T11:40:00Z" }
+  ]
+}
+```
+
+| Field | Meaning |
+|---|---|
+| `state` | `idle` or `syncing`. |
+| `startedAt` | Start of the running sync; `null` when idle. |
+| `lastSyncedAt` | End of the last finished sync; `null` = never synced (the UI shows its first-sync spinner). |
+| `refreshAvailableAt` | End of the Refresh cooldown; `null` = Refresh available now. The UI disables Refresh with a countdown; the server still answers `429` + `Retry-After` for races and other clients. |
+| `sources[]` | One entry per **current** source; a deleted integration's entry disappears. |
+| `sources[].status` | `ok`, `error`, `invalid_credentials`, `rate_limited`, `page_cap_reached`, or `pending` (a source added since the last sync: a new integration, a newly set handle). |
+| `sources[].syncedAt` | When that source last ran; `null` when `pending`. |
+| `sources[].resetAt` | Only for `rate_limited`: GitHub's reset time; `null` otherwise. |
+
+- A source entry never reveals whether the handle went through an integration or the
+  unauthenticated path, and carries no integration field beyond `uuid` and `label`.
+- The UI shows a banner for every status other than `ok` and `pending`
+  ([ui.md](ui.md#source-errors)).
+- **The route is a pure read: it never starts a sync**, so polling cannot re-trigger one.
+
+### Polling contract
+
+- While `state` is `syncing`, the frontend polls `POST /repositories/sync/state.json` at a fixed
+  **frontend constant** interval (the value is #447's).
+- It stops on `idle` (then reloads the current listing page; the data is fresh, so that reload
+  never starts another sync), on unmount, or on `401`. A transient error (network, `5xx`) keeps
+  polling at the same interval.
+- There is no scheduled job (#444); each sync is background work started by a request. #447
+  (execution and restart behaviour) must guarantee that a sync stuck in `syncing`, e.g. after a
+  backend restart, eventually returns to `idle`, or polling never ends. This contract holds
+  whether #447 picks in-process execution or a queue.
+
+## Refresh
+
+`POST /repositories/sync.json`, no body. Forces a sync of every source.
+
+| Case | Answer |
+|---|---|
+| Idle, outside the cooldown | Starts a sync; **`202 Accepted`** with the sync-state object (`state: "syncing"`). |
+| A sync already running (any trigger) | **`202`** with the current sync state; no second sync, the cooldown is not reset. Idempotent, so repeated clicks are harmless. |
+| Idle, inside the cooldown | **`429`** `REPOSITORY_REFRESH_COOLDOWN`, `Retry-After: <seconds>` (rounded up), standard error shape. |
+| No sources (no integrations, no handle) | `202`; the sync completes at once with an empty `sources` list; the UI shows its empty state. |
+
+- Order of checks: `JwtGuard` and `OriginGuard`, then "already syncing", then "cooldown", then
+  start.
+- **The cooldown runs from the start of the last sync, whatever triggered it** (stale listing or
+  Refresh). It protects the GitHub budget, notably the shared unauthenticated 60/h.
+  `refreshAvailableAt` follows the same rule; the duration is #447's.
+- Refresh always runs every source; there is no per-source refresh. Whether a `rate_limited`
+  source is skipped until its `resetAt` is #447's.
+
+## Add
+
+`POST /repositories/add.json`, body = a [repo ref](#repo-ref). Marks a repository of the caller's
+listing as added.
+
+| Step | Check | Failure answer |
+|---|---|---|
+| 1 | DTO: exactly one of `githubId` / `fullName`, well formed | `400 VALIDATION_FAILED` |
+| 2 | Per-user Add rate limit | `429 REPOSITORY_ADD_RATE_LIMITED` + `Retry-After` |
+| 3 | Ref looked up in the **caller's own rows**, by `user_id` from the session in the query itself | `404 NOT_FOUND`, no GitHub call, no write |
+| 4 | Already added | **`200`** with the current row: idempotent, no GitHub call, no write; the original `addedAt` and access link are kept |
+| 5 | GitHub re-check: one request for that repository, through the chosen access integration ([integrations.md](integrations.md#access-link-on-add)) | Denied (`404`/`403` from every candidate): `404 NOT_FOUND`, nothing written. Unauthenticated low budget, or a GitHub rate limit: `503 GITHUB_RATE_LIMITED` + `Retry-After` when known (never `404`, nothing marked `invalid`). Timeout / `5xx`: `502 GITHUB_UNAVAILABLE`. |
+| 6 | Write: snapshot refreshed, `added_at` and `integration_id` set | **`200`** with the updated row (listing row shape, `status: "added"`) |
+
+- `200`, not `201`: the row already existed; Add only marks it.
+- **Owner lookup first:** a missing row, including one only another user holds, answers the same
+  `404` as a GitHub denial, with no GitHub call and no write. Only repos already in the user's own
+  listing can be added.
+- **Rate limit before the lookup:** every attempt past validation counts, so the limit bounds both
+  the GitHub budget and probing; a `404` reveals nothing, since the lookup covers only the
+  caller's own rows.
+- When only the public source sees the repo, the re-check goes through a valid integration if the
+  user has one (without linking it), and unauthenticated otherwise.
+- The unauthenticated re-check honours the same low-budget threshold as the sync
+  ([sync.md](sync.md#rate-limits)).
+- `502 GITHUB_UNAVAILABLE` and `503 GITHUB_RATE_LIMITED` reuse the existing codes and helpers
+  (`integrations/integration-http-errors.ts`).
+- A `401` on the candidate integration marks it `invalid`; whether Add then tries the next
+  candidate is #448's. With no candidate left, Add answers `404`.
+
+### Add rate limit
+
+Per user, **30 Adds per 60 s** by default, following the abuse-guard services in
+`backend/src/auth/`:
+
+| Env var | Default | Meaning |
+|---|---|---|
+| `KERGHAN_REPOSITORIES_ADD_MAX_PER_WINDOW` | `30` | Adds allowed per user per window. |
+| `KERGHAN_REPOSITORIES_ADD_WINDOW_MS` | `60000` | Window length in milliseconds. |
+
+Both are read with `getNumberConfig` like the existing abuse guards, and are listed in
+`docs/agents/environment-variables.md` when implemented.
+
+## Errors
+
+Standard error shape (`core/http-exception.filter.ts`,
+[Error responses](../../architecture/backend.md#error-responses)).
+
+| Status | Code | Message | Where |
+|---|---|---|---|
+| `400` | `VALIDATION_FAILED` | standard validation message | Listing body; Add ref (both/neither, malformed `fullName`, non-integer `githubId`) |
+| `401` | `UNAUTHORIZED` | standard | Every route without a session (`JwtGuard`) |
+| `403` | `FORBIDDEN` | standard | Foreign origin (`OriginGuard`) |
+| `404` | `NOT_FOUND` | `Repository not found` | Add: ref not among the caller's rows, held only by another user, or denied by GitHub. **Same message for every case.** |
+| `429` | `REPOSITORY_REFRESH_COOLDOWN` (new) | `Repositories were synced recently; try again later` | Refresh inside the cooldown |
+| `429` | `REPOSITORY_ADD_RATE_LIMITED` (new) | `Too many repositories added; try again later` | Add over the per-user limit |
+| `502` | `GITHUB_UNAVAILABLE` (existing) | `GitHub is unavailable; try again later` | Add re-check timeout / `5xx` |
+| `503` | `GITHUB_RATE_LIMITED` (existing) | `GitHub rate limit reached; try again later` | Add re-check on a low budget or a GitHub rate limit |
+
+- **Retry delay:** both `429`s, and the `503` when the reset time is known, send `Retry-After`
+  (whole seconds, rounded up) **and** `error.retryAfterSeconds` in the body. Today the filter
+  turns a throw site's `retryAfterSeconds` into the header only; exposing it in the body is a new,
+  optional field of the standard error shape, added by the implementation and folded into
+  `architecture/backend.md#error-responses` by #452.
+- Sync failures never become HTTP errors: they appear only as the per-source `status` in the
+  [sync state](#sync-state); the UI maps each to its banner text.
+- GitHub error bodies and messages are never echoed, nor any credential detail. Anything
+  unexpected falls through to the existing `500 INTERNAL_ERROR`.
+- The two new codes join `ErrorCodes` (`core/error-codes.ts`); their helpers live in the
+  Repositories module, like `integrations/integration-http-errors.ts`. The `502`/`503` reuse the
+  Integrations helpers; where they live once shared is #448's
+  ([integrations.md](integrations.md#exported-service)).
 
 ## Access
 
@@ -70,35 +283,56 @@ Routes are named here by method and purpose; their exact contract is open (see
 - Admins have no access to anyone's repositories (same rule as integrations).
 - No response includes credential material (secrets, tokens, GitHub App installation tokens) or
   anything computed from it ([security.md](security.md#credentials-stay-in-the-backend)).
-- **Exposed identifiers:** no response includes `user_id` or an internal `integrations.id`.
-  Integrations are referenced only by their `uuid` and/or label, and only the caller's own. Repo
-  responses carry no other integration field (no `secretHint`, `github_login`, `status_reason`
-  or metadata).
-
-## Contract
-
-> **Open — settled by #446:** paths, request and response shapes, the pagination format, the
-> filter and search parameters, status and error codes (including a duplicate Add, validation
-> errors, `404`, `429` + `Retry-After`, the Add "rate limited" error), the polling contract,
-> whether a repository's own internal `id` is exposed or only `github_id`, and the Add rate-limit
-> values, in the `docs/agents/backend/routes/` style.
+- **Exposed identifiers:** no response includes the internal repository `id`, `user_id` or an
+  internal `integrations.id`. Integrations are referenced only by their `uuid` and label, and only
+  the caller's own. Repo responses carry no other integration field (no `secretHint`,
+  `github_login`, `status_reason` or metadata).
 
 ## Required tests
 
-Tests for the open points above are added by the issue that settles them.
+Backend e2e. How GitHub is mocked and how the sync engine is tested is #451's.
 
-- Every route answers `401` without a session.
-- Every route declares the `user-scoped` cache class and sends `X-Skip-Cache`.
-- The listing never calls GitHub synchronously; it reads from the database.
+**Routes:**
+
+- Each of the four routes is `POST`, answers `401` without a session and `403` from a foreign
+  origin (`OriginGuard`), declares the `user-scoped` cache class, and sends `X-Skip-Cache` +
+  `Cache-Control: no-store`; no repositories route answers `GET`.
 - A user never sees, adds or refreshes another user's repositories; another user's repository
-  answers `404`.
-- An admin has no access to another user's repositories.
-- Refresh and Add are `POST` and rejected by `OriginGuard` from a foreign origin.
-- Add re-checks with GitHub: a repository GitHub does not grant answers `404` and writes nothing.
-- Add with a `github_id` not in the caller's own rows (absent, or held only by another user)
-  answers `404` without any GitHub call.
-- The unauthenticated Add re-check on a low budget answers "rate limited", not `404`.
-- Repeated Adds hit the per-user Add rate limit.
-- No response body contains credential material, `user_id`, an internal `integrations.id`,
-  `secretHint` or `github_login`.
-- The listing filter accepts no Unknown value; Unknown rows appear under All.
+  answers `404`. An admin has no access to another user's repositories.
+- No response body contains credential material, the internal repository `id`, `user_id`, an
+  internal `integrations.id`, `secretHint` or `github_login`.
+
+**Listing:**
+
+- It never calls GitHub synchronously; it reads from the database.
+- Defaults and bounds of `page` / `perPage` / `filter` / `search`: `perPage` > 100,
+  `filter: "unknown"` and `search` > 100 characters answer `400`; a past-the-end page answers
+  `200` with an empty list.
+- The filter accepts no Unknown value; Unknown rows appear under `all`.
+- Stable sort (`owner`, `name`, `githubId`, case-insensitive); correct `pagination` totals with
+  filter and search.
+- Exact row shape; `accessIntegration` is `null` in the three documented cases.
+- A stale listing starts a sync; a fresh one, or one during a running sync, does not.
+
+**Sync state:**
+
+- Exact shape; `pending` for a new source; a deleted integration's entry is gone.
+- The route never starts a sync.
+
+**Refresh:**
+
+- `202` starts a sync; `202` while syncing starts no new sync and does not reset the cooldown.
+- `429 REPOSITORY_REFRESH_COOLDOWN` + `Retry-After` + `error.retryAfterSeconds` inside the
+  cooldown, including right after a stale-triggered sync.
+
+**Add:**
+
+- Both or neither ref answers `400`.
+- `fullName` resolves case-insensitively, only among the caller's rows: absent, or held only by
+  another user, answers `404` without any GitHub call.
+- Already added answers `200`, with no GitHub call and `addedAt` unchanged.
+- A GitHub denial answers `404` and writes nothing.
+- The re-check on a low budget answers `503 GITHUB_RATE_LIMITED`, not `404`; a timeout / `5xx`
+  answers `502 GITHUB_UNAVAILABLE`.
+- The 31st Add in 60 s answers `429 REPOSITORY_ADD_RATE_LIMITED`, and the env overrides apply.
+- Every `404` carries the same message.

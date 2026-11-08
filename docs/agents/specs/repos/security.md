@@ -43,8 +43,17 @@ computed from it, beyond the masked `secretHint` of the Integrations routes.** D
 
 Add only accepts a repository already in the caller's own listing, and is verified with GitHub
 ([api.md](api.md#add)), so a user cannot add a repository, or learn its metadata, by guessing a
-GitHub repository id. Add is rate limited per user, and its unauthenticated re-check honours the
-low-budget threshold.
+GitHub repository id or an `owner/name`.
+
+- The [repo ref](api.md#repo-ref) is `{ githubId }` or `{ fullName }`; a `fullName` resolves
+  only among the caller's own rows, so it cannot reach a repo outside the listing.
+- Check order: per-user rate limit → own-rows lookup → GitHub re-check. The rate limit comes
+  first, so every attempt counts and probing is bounded.
+- Every `404` carries the same code and message (`Repository not found`), whether the ref is
+  absent, held only by another user, or denied by GitHub.
+- The rate limit is **30 Adds per 60 s** per user by default, configurable
+  ([api.md](api.md#add-rate-limit)); the unauthenticated re-check honours the low-budget
+  threshold.
 
 ## Private metadata lifecycle
 
@@ -80,16 +89,19 @@ Repository links in the UI are built by the frontend from `owner` and `name`
 
 ## CSRF
 
-The state-changing routes (Refresh, Add) are `POST`, covered by `OriginGuard`
-([architecture/security.md](../../architecture/security.md#csrf)).
+Every route is `POST`, reads included, so `OriginGuard` covers all four
+([architecture/security.md](../../architecture/security.md#csrf)). The listing's stale-sync
+trigger is therefore not a state change over `GET`, and needs no exception
+([api.md](api.md#stale-sync-trigger)).
 
 ## Errors and logging
 
-- GitHub error bodies are never echoed to the client; source errors map to a fixed set of
-  statuses and messages.
+- Exact codes and messages: the [error table](api.md#errors) in `api.md`.
+- Sync failures never become HTTP errors: they surface only as the per-source `status` of the
+  [sync state](api.md#sync-state), which the UI maps to fixed banner texts.
+- GitHub error bodies and messages are never echoed to the client, nor any credential detail;
+  anything unexpected is `500 INTERNAL_ERROR`.
 - Credentials never appear in logs or error responses.
-
-> **Open — settled by #446:** the exact error codes and messages.
 
 ## Abuse and performance
 
@@ -108,6 +120,8 @@ Tests for the open points above are added by the issue that settles them.
 - No response reveals that another user holds the same GitHub repository.
 - Add with a GitHub repository id not in the caller's own rows answers `404` without a GitHub
   call; one GitHub does not grant answers `404` and writes nothing.
+- A `fullName` ref never resolves another user's row; every Add `404` carries the same message
+  ([api.md](api.md#required-tests)).
 - A cached installation token never leaves the Integrations module.
 - The handle source stores no private repo.
 - A `Link` or redirect to another origin is not followed, and `Authorization` never leaves
@@ -116,6 +130,7 @@ Tests for the open points above are added by the issue that settles them.
 - An invalid handle is rejected before storage; a stored handle is URL-encoded in the GitHub
   path.
 - Every GitHub call targets `https://api.github.com`.
-- Refresh and Add from a foreign origin are rejected by `OriginGuard`.
+- Every route (listing and sync state included) from a foreign origin is rejected by
+  `OriginGuard`.
 - A GitHub error body is never returned verbatim; no credential is logged.
 - A second concurrent sync and a Refresh inside the cooldown are refused.

@@ -26,10 +26,14 @@ Results are merged by GitHub repository id; each repo records which sources retu
 
 ## Trigger
 
-- **Stale:** opening the listing starts a sync when the user's last sync is older than a TTL.
+- **Stale:** the listing (`POST /repositories/mine.json`) starts a sync when the user's last
+  sync is older than a TTL ([api.md](api.md#stale-sync-trigger)).
 - **Refresh:** the Refresh action forces a sync, subject to a **cooldown**; a Refresh inside it
   is refused (`429` with `Retry-After`, see [api.md](api.md#refresh)).
-- **One sync per user at a time:** a trigger while a sync runs does not start a second one.
+- **The cooldown runs from the start of the last sync, whatever triggered it** (stale listing or
+  Refresh).
+- **One sync per user at a time:** a trigger while a sync runs does not start a second one; a
+  Refresh while syncing answers `202` with the running sync and does not reset the cooldown.
 - No scheduled job, no background polling of GitHub.
 
 ## Execution
@@ -37,12 +41,14 @@ Results are merged by GitHub repository id; each repo records which sources retu
 The sync is **asynchronous**: the request that triggers it does not wait for GitHub.
 
 - The listing returns the stored rows immediately, with the sync state (`idle` / `syncing`,
-  `last_synced_at`, per-source status).
-- The frontend polls the sync state until it is `idle`, then reloads the page of rows
-  ([ui.md](ui.md#sync-ux)).
+  `lastSyncedAt`, per-source status; [api.md](api.md#sync-state)).
+- The frontend polls `POST /repositories/sync/state.json` until it is `idle`, then reloads the
+  page of rows ([api.md](api.md#polling-contract), [ui.md](ui.md#sync-ux)). That route never
+  starts a sync.
 
 > **Open — settled by #447:** in-process vs queue execution, behaviour on backend restart
-> mid-sync, and the per-user lock mechanism.
+> mid-sync, and the per-user lock mechanism. Whatever it picks must guarantee that a sync stuck
+> in `syncing` (e.g. after a restart) eventually returns to `idle`, or polling never ends.
 
 ## Per source
 
@@ -52,8 +58,9 @@ For each source, the sync:
 2. upserts rows by `github_id`, refreshing `owner`, `name` and `private`;
 3. rewrites that source's rows in the sources table;
 4. sets `last_seen_at` on the rows it returned;
-5. stores the source's status: ok, error, invalid credentials, rate limited, or page cap
-   reached ([model.md](model.md#sync-state)).
+5. stores the source's status: `ok`, `error`, `invalid_credentials`, `rate_limited` (with the
+   reset time) or `page_cap_reached` ([model.md](model.md#sync-state)). A source added since the
+   last sync reads as `pending` until it runs ([api.md](api.md#sync-state)).
 
 Not-added repos that no source returns any more are pruned
 ([model.md](model.md#private-metadata-lifecycle)).
@@ -105,7 +112,8 @@ Not-added repos that no source returns any more are pruned
 Tests for the open points above are added by the issue that settles them.
 
 - Opening the listing with a stale sync starts one; with a fresh sync it does not.
-- Refresh forces a sync; a Refresh inside the cooldown is refused.
+- Refresh forces a sync; a Refresh inside the cooldown is refused, including right after a
+  stale-triggered sync.
 - The triggering request returns stored rows and the sync state without waiting for GitHub.
 - A trigger while a sync runs does not start a second one, and concurrent triggers never
   duplicate rows.

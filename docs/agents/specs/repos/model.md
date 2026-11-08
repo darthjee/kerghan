@@ -54,7 +54,8 @@ Working name `repositories_sync_states`. One row per user:
 - the sync state: `idle` or `syncing`;
 - the **per-source status** of the latest sync, one of: **ok**, **error**, **invalid
   credentials**, **rate limited**, **page cap reached** (with the reset time when rate
-  limited).
+  limited). A source with no stored status yet (added since the last sync) is exposed as
+  `pending` ([api.md](api.md#sync-state)).
 
 It survives across requests, so staleness and partial failures are known on every listing.
 
@@ -74,7 +75,7 @@ edited from the existing account edit form ([ui.md](ui.md#github-handle-field)).
 > **Open — settled by #449:** the column type, the exact validation (GitHub's username format),
 > normalisation (case, trimming), how `PATCH /auth/account.json`'s `409 DEFAULT_USER_MANAGED`
 > block narrows to the managed fields, and whether admin endpoints (`/admin/users/*`) show or
-> edit the handle (their response shapes with #446).
+> edit the handle (and, if they do, their response shapes).
 
 ## Row statuses
 
