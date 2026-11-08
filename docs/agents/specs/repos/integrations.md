@@ -13,7 +13,7 @@ given (user, integration)**.
 - The request is scoped by the owner: an integration of another user is never used.
 - Used for:
   - listing the repositories an integration can see ([sync.md](sync.md#sources));
-  - fetching the GitHub handle's public repositories through a valid integration;
+  - fetching the GitHub handle's public repositories through the oldest usable integration;
   - the Add re-check ([api.md](api.md#add)).
 - Errors come back as a fixed set of statuses, never by echoing GitHub's response body.
 - Integration types in scope: `pat`, `oauth_app`, `github_app`.
@@ -21,8 +21,8 @@ given (user, integration)**.
 - A minted GitHub App installation token is a credential: if cached, it stays inside this
   module, in memory or in the integration's own encrypted record. Any other persistence needs
   its own product decision ([security.md](security.md#credentials-stay-in-the-backend)).
-- Pagination builds its own page URLs and never requests a server-supplied URL; redirects are
-  held to `https://api.github.com` ([security.md](security.md#fixed-github-base-url)).
+- Pagination builds its own page URLs and never requests a server-supplied URL; no redirect is
+  followed, same-origin or not ([security.md](security.md#fixed-github-base-url)).
 - **Notes for #448** (decided by #447, [sync.md](sync.md)):
   - the GitHub client hosts the process-wide **unauthenticated budget tracker**, consulted by the
     sync and by Add's re-check before every unauthenticated call
@@ -55,9 +55,9 @@ limits) never change the status, as for test connection today.
 
 When the user adds a repository:
 
-- Among the integrations that returned the repo in their latest sync, the **oldest** one that is
-  not `invalid` is chosen and stored as `integration_id`.
-- When only the public source sees it, the re-check goes through the user's oldest valid
+- Among the integrations that hold a source row for the repo, the **oldest** one that is not
+  `invalid` is chosen and stored as `integration_id`.
+- When only the public source sees it, the re-check goes through the user's oldest usable
   integration if they have one, unauthenticated otherwise. That integration is **not** linked
   while the repo is still public; if the re-check shows the repo is now **private**, it is linked
   as `integration_id`, so the private metadata stays tied to it ([api.md](api.md#add)).

@@ -10,8 +10,8 @@ The Repositories module owns five tables, under its own prefix
 
 **Conventions** follow `integrations`: `int` auto-increment `id`, plain `int` `user_id` (no
 relation, logical FK), explicit `varchar` lengths, `datetime`, index names
-`idx_<table>_<cols>` / `uq_<table>_<cols>`. MySQL's default `utf8mb4_0900_ai_ci` collation gives
-the case-insensitive `fullName` lookup ([api.md](api.md#repo-ref)).
+`idx_<table>_<cols>`, unique or not (`isUnique: true`), as in `integrations`. MySQL's default
+`utf8mb4_0900_ai_ci` collation gives the case-insensitive `fullName` lookup ([api.md](api.md#repo-ref)).
 
 **Source key:** every per-source row identifies its source with `source_key varchar(32)`:
 `integration:<id>` or `handle`. Not a nullable `integration_id` (MySQL unique indexes allow
@@ -19,10 +19,10 @@ several `NULL`s) nor a `0` sentinel.
 
 | Table | Columns | Indexes |
 |---|---|---|
-| `repositories` | `id`; `user_id int`; `github_id bigint`; `owner varchar(39)`; `name varchar(100)`; `private boolean`; `added_at datetime NULL`; `integration_id int NULL`; `last_seen_at datetime`; `created_at`, `updated_at` | unique (`user_id`, `github_id`); (`user_id`, `added_at`); (`user_id`, `owner`, `name`); (`integration_id`) |
+| `repositories` | `id`; `user_id int`; `github_id bigint`; `owner varchar(39)`; `name varchar(100)`; `private boolean`; `added_at datetime NULL`; `integration_id int NULL`; `last_seen_at datetime`; `created_at`, `updated_at` | unique (`user_id`, `github_id`); (`user_id`, `added_at`); (`user_id`, `owner`, `name`); (`user_id`, `integration_id`) |
 | `repositories_sources` | `id`; `user_id int`; `repository_id int`; `source_key`; `page smallint` | unique (`repository_id`, `source_key`); (`user_id`, `source_key`, `page`) |
-| `repositories_source_pages` | `id`; `user_id int`; `source_key`; `page smallint`; `etag varchar(255)`; `has_next boolean`; `fetched_at datetime` | unique (`user_id`, `source_key`, `page`) |
-| `repositories_sync_states` | `user_id int`; `state varchar(16)`; `run_id char(36) NULL`; `last_started_at datetime NULL`; `heartbeat_at datetime NULL`; `last_synced_at datetime NULL`; `created_at`, `updated_at` | unique (`user_id`) |
+| `repositories_source_pages` | `id`; `user_id int`; `source_key`; `page smallint`; `etag varchar(255) NULL` (no `If-None-Match` sent when null); `has_next boolean`; `fetched_at datetime` | unique (`user_id`, `source_key`, `page`) |
+| `repositories_sync_states` | `user_id int` **primary key** (one row per user: the exception to the auto-increment `id` convention); `state varchar(16)`; `run_id char(36) NULL`; `last_started_at datetime NULL`; `heartbeat_at datetime NULL`; `last_synced_at datetime NULL`; `created_at`, `updated_at` | primary key (`user_id`) |
 | `repositories_source_statuses` | `id`; `user_id int`; `source_key`; `status varchar(32)`; `synced_at datetime`; `reset_at datetime NULL` | unique (`user_id`, `source_key`) |
 
 - Search (`LIKE '%…%'`) scans, bounded to one user's rows.
@@ -39,7 +39,7 @@ added it.
 |---|---|
 | `id` | Internal primary key. |
 | `user_id` | Owner. Logical FK to `auth_users.id`. |
-| `github_id` | GitHub's numeric repository id. The stable key. `bigint`, mapped to a JS number: GitHub ids will pass 2³¹ but stay far below 2⁵³. |
+| `github_id` | GitHub's numeric repository id. The stable key. `bigint`, mapped to a JS number through a column transformer (`from: Number`), since TypeORM's MySQL driver returns `bigint` as a string by default. GitHub ids will pass 2³¹ but stay far below 2⁵³. |
 | `owner` | Last known owner login (`varchar(39)`, GitHub's limit). |
 | `name` | Last known repository name (`varchar(100)`, GitHub's limit). |
 | `private` | Last known visibility. |
@@ -53,12 +53,13 @@ added it.
   `name` and `private` (`INSERT … ON DUPLICATE KEY UPDATE`, which never touches `added_at` or
   `integration_id`).
 - Indexes: (`user_id`, `added_at`) for the listing filters, (`user_id`, `owner`, `name`) for the
-  sort and `fullName` lookup, (`integration_id`) for the deletion hook.
+  sort and `fullName` lookup, (`user_id`, `integration_id`) for the deletion hook.
 
 ### `repositories_sources`
 
-Which sources returned each repo in the **latest sync** of that source, and on which page: one
-row per (repository, `source_key`).
+Which sources returned each repo, as of each source's **last applied page**, and on which page:
+one row per (repository, `source_key`). A failed or interrupted source keeps its earlier rows
+([sync.md](sync.md#partial-failures)).
 
 - `user_id` is denormalised, for per-user/per-source cleanup without a join.
 - `page` records what each page contained, so a `304` keeps that page's rows and a successful
@@ -74,7 +75,8 @@ shared between users.
 
 ### `repositories_sync_states`
 
-One row per user, created on first use (insert ignoring duplicates):
+One row per user, keyed by `user_id`, created on first use with
+`INSERT … ON DUPLICATE KEY UPDATE user_id = user_id` ([sync.md](sync.md#per-user-lock)):
 
 - `state`: `idle` or `syncing`;
 - `run_id`: the running sync's UUID, `null` when idle; every write of a run is guarded by it;
@@ -122,13 +124,16 @@ Derived from stored data on read, never stored as a column:
 
 | Status | Rule |
 |---|---|
-| **Added** | `added_at` is set, at least one source returned it in its latest sync, and it is not unavailable under the private-link rule below. |
+| **Added** | `added_at` is set, it has at least one source row from a source whose latest status is `ok`, and it is not unavailable under the private-link rule below. |
 | **Not added** | `added_at` is `null`. |
-| **Unavailable** | `added_at` is set, and either the latest sync of **every** source that used to return it succeeded without returning it (deleted, renamed out of reach, access lost, or its only access integration deleted), or it is **private** and its `integration_id` is empty or dangling (its linked integration was deleted, #444). A public repo whose link was cleared stays available through the unauthenticated path. |
-| **Unknown** | `added_at` is set, it is not returned by any source in their latest syncs, and at least one source that used to return it **failed** in its latest sync. |
+| **Unavailable** | `added_at` is set, and either it has **no source row left** (every source that returned it later succeeded without returning it: deleted, renamed out of reach, access lost, or its only access integration deleted), or it is **private** and its `integration_id` is empty or dangling (its linked integration was deleted, #444). A public repo whose link was cleared stays available through the unauthenticated path. |
+| **Unknown** | `added_at` is set, and every source row it has belongs to a source whose latest status is a failure (`error`, `invalid_credentials`, `rate_limited`). |
 
-A failed source never makes a repo unavailable: its rows are kept as they were
-([sync.md](sync.md#partial-failures)).
+Statuses are read from `repositories_sources` together with `repositories_source_statuses`. A
+failed source never makes a repo unavailable: its rows are kept as they were
+([sync.md](sync.md#partial-failures)). Whether a `page_cap_reached` source counts as `ok` or as a
+failure here is part of #450's edge-case matrix ([sync.md](sync.md#edge-cases), "page cap
+reached").
 
 ## Logical foreign keys
 
@@ -141,7 +146,9 @@ Consequences:
 - **Integration deleted:** the Repositories module is told, then drops that integration's source,
   page and status rows, clears `integration_id` wherever it points at it, and
   [prunes](#private-metadata-lifecycle) ([integrations.md](integrations.md#deletion-hook)).
-  Reads treat a dangling `integration_id` as empty.
+  The hook receives the owning `user_id` with the integration id, and every statement in it
+  (the `integration_id` clear, the deletes by `source_key = 'integration:<id>'`, the pruning)
+  includes `AND user_id = :userId`. Reads treat a dangling `integration_id` as empty.
 - **User deleted:** the user's repositories, sources and sync state must not outlive them.
 
 > **Open — settled by #448:** the integration-deletion hook mechanism (a direct call vs an
@@ -164,16 +171,22 @@ returns (page rewrites, cleanup past its last page), and a failed, interrupted o
 keeps its rows, so a failure blocks pruning by construction.
 
 ```sql
-DELETE r FROM repositories r
-WHERE r.user_id = :userId AND r.added_at IS NULL
-  AND NOT EXISTS (SELECT 1 FROM repositories_sources s WHERE s.repository_id = r.id)
+DELETE FROM repositories
+WHERE user_id = :userId AND added_at IS NULL
+  AND NOT EXISTS (
+    SELECT 1 FROM repositories_sources s
+    WHERE s.user_id = :userId AND s.repository_id = repositories.id
+  )
 ```
+
+The single-table form is what TypeORM's `.delete()` query builder can produce; the unique
+(`repository_id`, `source_key`) index covers the subquery.
 
 - **When:** at the end of each sync, in its final `run_id`-guarded transaction
   ([sync.md](sync.md#pruning)); and right after changes that orphan rows outside a sync: an
   integration's source rows dropped by the [deletion hook](#logical-foreign-keys) (#448 picks the
-  mechanism), the handle changed or cleared (its source and page rows dropped; #449 owns the
-  handle edit).
+  mechanism), the handle changed or cleared (its source, page and status rows dropped, so a new
+  handle reads `pending`; #449 owns the handle edit).
 - **Race with Add:** pruning deletes only `added_at IS NULL` rows, and Add's write is
   `UPDATE … WHERE id = :id AND user_id = :userId`. Add commits first ⇒ the row is skipped;
   pruning first ⇒ Add's update affects no row and Add answers `404 NOT_FOUND` (the repo left the

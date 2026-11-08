@@ -247,7 +247,7 @@ listing as added.
 - **The re-check is built only from the stored row** (its `github_id`, or its stored
   `owner`/`name` URL-encoded), never from the request's `fullName`, so no user input reaches the
   GitHub API path ([security.md](security.md#fixed-github-base-url)).
-- When only the public source sees the repo, the re-check goes through a valid integration if the
+- When only the public source sees the repo, the re-check goes through a usable integration if the
   user has one (without linking it), and unauthenticated otherwise. If that re-check shows the
   repo has become **private**, the integration that granted it is linked as `integration_id`, so
   the stored private metadata stays tied to the integration that granted it
