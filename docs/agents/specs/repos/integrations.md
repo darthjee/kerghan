@@ -112,6 +112,8 @@ Integrations module**:
   reused until **`expires_at` − 5 min** (GitHub's tokens last 1 h). Held in a `Secret`, in
   process memory only — never in the database, a log or a response. Expired entries are dropped
   on read; at most one entry per `github_app` integration, so no LRU.
+- **Time:** the "`expires_at` − 5 min" check reads the injected `Clock`
+  ([sync.md](sync.md#time-source)), never `Date.now()` directly.
 - **Single-flight:** concurrent calls for one integration share one in-flight mint (the sync runs
   3 sources in parallel, and the handle may use the same integration).
 - **Least privilege:** minted with `{"permissions": {"metadata": "read"}}`, enough to list repos
@@ -335,6 +337,8 @@ unauthenticated call). Its home, interface, concurrency and thresholds:
   `tryAcquire` decrements the tracked remaining by 1 when it grants a call; `record` then applies
   the min-within-window rule from GitHub's headers. With no data, or once the reset has passed,
   calls are allowed until the first response.
+- **Time:** "reset passed" reads the injected `Clock` ([sync.md](sync.md#time-source)), never
+  `Date.now()` directly.
 - **Two thresholds** (code constants): the **sync** stops at remaining **≤ 10**; **Add** only at
   **≤ 0**. The 10 is then really a reserve for Add re-checks, which are already bounded per user
   (30 per 60 s) and by the 3-call candidate walk.

@@ -91,6 +91,10 @@ One row per user, keyed by `user_id`, created on first use with
 It survives across requests, so staleness and partial failures are known on every listing. The
 lock and its claim are defined in [sync.md](sync.md#per-user-lock).
 
+Every timestamp of these tables (`last_started_at`, `heartbeat_at`, `last_synced_at`,
+`last_seen_at`, `synced_at`, `added_at`, the lease) is set and compared from the injected
+`Clock`, never `NOW()` in SQL ([sync.md](sync.md#time-source)).
+
 ### `repositories_source_statuses`
 
 The **per-source status** of the latest run of each source, one row per (user, `source_key`):

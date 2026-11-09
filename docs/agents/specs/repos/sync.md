@@ -96,6 +96,11 @@ The sync is **asynchronous**: the request that triggers it does not wait for Git
   exception. That release is `run_id`-guarded like every other write
   (`UPDATE … SET state = 'idle', run_id = NULL WHERE user_id = :userId AND run_id = :mine`) and
   never sets `last_synced_at`, so a zombie's exception never releases a newer run's lock.
+- **Injected `SyncLauncher`.** The detached promise is started only through an injected
+  `SyncLauncher`, whose `launch(task)` detaches the run and catches its errors. It is the only way
+  a sync is started (stale listing and Refresh alike), so production behaviour is the detached
+  promise above, and tests swap in a launcher that captures the task
+  ([testing.md](testing.md#detached-sync-and-time)).
 - **No queue.** A job queue (BullMQ/Redis) would add infrastructure to dev, production and the
   standalone image for an on-demand, low-frequency job; rejected.
 - **A sync stuck in `syncing` always returns to `idle`** ([restart recovery](#restart-recovery)),
@@ -127,6 +132,20 @@ WHERE user_id = :userId
 - The row is created on first use, before the claim, with
   `INSERT … ON DUPLICATE KEY UPDATE user_id = user_id` (a no-op on duplicate; not `INSERT IGNORE`,
   which would also hide other errors), so concurrent triggers (two tabs) never start two syncs.
+
+### Time source
+
+- **Injected `Clock`** (`now(): Date`): the only time source of the Repositories module, never
+  `Date.now()` / `new Date()` directly. Every time rule reads it: the TTL, the Refresh cooldown,
+  the lease and its heartbeat, the hard deadline, `resetAt` checks of `rate_limited` sources, and
+  the Add rate-limit window ([api.md](api.md#add-rate-limit)). Every timestamp the module writes
+  (`last_started_at`, `heartbeat_at`, `last_synced_at`, `last_seen_at`, `synced_at`, `added_at`)
+  comes from it.
+- **No `NOW()` / `CURRENT_TIMESTAMP` in SQL time conditions.** Every time condition (lease
+  expiry, TTL, cooldown, heartbeat) compares against an app-supplied timestamp parameter from the
+  `Clock` (the `:now` of the claim above), so the application and the database never disagree
+  about time, and tests drive both with one fake clock
+  ([testing.md](testing.md#detached-sync-and-time)).
 
 ### Restart recovery
 
@@ -371,6 +390,9 @@ WHERE user_id = :userId AND id = :repositoryId
 - The env vars are read with `getNumberConfig` and these defaults; a value that is not a
   positive integer falls back to the default; #452 folds them into
   `environment-variables.md` ([README.md](README.md#product-changes-folded-by-452)).
+- Every duration above is measured against the injected `Clock`, never `NOW()` in SQL
+  ([time source](#time-source)); the per-request GitHub timeout is a timer in the Integrations
+  client.
 
 ## Edge cases
 

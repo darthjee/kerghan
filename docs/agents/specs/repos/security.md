@@ -38,6 +38,24 @@ Guarantees of the exported `IntegrationsGithubService`
 - **Fixed operations:** `GET`-only, with fixed endpoints and parameters; no generic
   `request(path)`, so no caller chooses a path.
 
+### Module boundaries
+
+The boundary is enforced by tooling, not left to review alone
+([testing.md](testing.md#module-boundaries)):
+
+- **ESLint override on `backend/src/repositories/**`:** `no-restricted-imports` allows Integrations
+  and Auth only through their exported entry points (`IntegrationsGithubService` and its typed
+  results, `AccountHandleService`, the `integration.deleted` / `user.deleted` event types) and
+  refuses their entities, the encryption service and the GitHub client; `no-restricted-globals`
+  bans `fetch`, since Repositories holds no HTTP code.
+- **Static boundary spec:** scans the Repositories sources (tests excluded) for the
+  `auth_users` / `integrations` table names, `secret_iv`, and `NOW(` / `CURRENT_TIMESTAMP`;
+  asserts that no Repositories entity maps those tables; and checks the exported
+  `IntegrationsGithubService` result types against a fixed allowlist of keys, so no credential
+  field can be added to them.
+- Both are added by the first implementation sub-issue that needs them. The security and
+  data-access reviews still apply to every implementation PR.
+
 ## User scoping
 
 - Every query is filtered by the session's user id **in the query itself** (`… AND user_id = ?`),
