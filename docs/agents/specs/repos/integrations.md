@@ -112,6 +112,8 @@ Integrations module**:
   reused until **`expires_at` − 5 min** (GitHub's tokens last 1 h). Held in a `Secret`, in
   process memory only — never in the database, a log or a response. Expired entries are dropped
   on read; at most one entry per `github_app` integration, so no LRU.
+- **Time:** the "`expires_at` − 5 min" check reads the injected `Clock`
+  ([sync.md](sync.md#time-source)), never `Date.now()` directly.
 - **Single-flight:** concurrent calls for one integration share one in-flight mint (the sync runs
   3 sources in parallel, and the handle may use the same integration).
 - **Least privilege:** minted with `{"permissions": {"metadata": "read"}}`, enough to list repos
@@ -335,50 +337,98 @@ unauthenticated call). Its home, interface, concurrency and thresholds:
   `tryAcquire` decrements the tracked remaining by 1 when it grants a call; `record` then applies
   the min-within-window rule from GitHub's headers. With no data, or once the reset has passed,
   calls are allowed until the first response.
+- **Time:** "reset passed" reads the injected `Clock` ([sync.md](sync.md#time-source)), never
+  `Date.now()` directly.
 - **Two thresholds** (code constants): the **sync** stops at remaining **≤ 10**; **Add** only at
   **≤ 0**. The 10 is then really a reserve for Add re-checks, which are already bounded per user
   (30 per 60 s) and by the 3-call candidate walk.
 
 ## Required tests
 
-- The exported service never returns, logs or exposes a decrypted credential, a minted
-  installation token or a GitHub response body.
+Tiers, fakes and harnesses: [testing.md](testing.md). Tags: `(db)`, `(e2e)`, `(unit)`,
+`(static)`, `(race)` ([default tiers](testing.md#default-tier-by-category)).
+
+**Exported service:**
+
+- No credential, minted token or GitHub body leaves the service: the
+  [canary sweep](security.md#required-tests).
 - A missing or foreign `integrationId` answers `integration_unusable` with reason `missing`,
   without a GitHub call (a call for an integration deleted mid-sync included).
-- A mint in flight across a Replace is not cached; the next call mints with the new credential.
-- Status compare-and-set: a `401` from a call made before a Replace leaves the replaced
-  integration `active`; a `401` with the current credential sets it `invalid`; the same holds for
-  a mint `404` / `403` and a decrypt failure.
-- The handle listing's `404` answers `not_found`.
-- Each operation calls exactly its fixed endpoint and parameters (per type, the handle, the
-  re-check), builds its own page URL, and reads `Link` only for `rel="next"`.
-- `integrationId: null` sends no `Authorization` header.
-- Malformed repo entries are dropped; a listing body over 2 MiB answers `unavailable`.
-- Each row of the error-mapping table yields its result kind and its effect on the integration
-  status; rate limits are detected from headers only.
-- `3xx` (other than `304`) is never followed and answers `unavailable` (`redirect`).
-- Installation tokens: one mint serves concurrent calls; a cached token is reused until
-  `expires_at` − 5 min; it is minted with `metadata: read` only; it is evicted on `401`, delete
-  and replace credential; a `401` with a cached token re-mints and retries once, and a `401` with
-  a fresh token answers `unavailable` without changing the status; mint `404`/`403`/app-JWT `401`
-  map as specified.
-- Non-usable integrations (`expired`, `invalid`, `undecryptable`, type disabled) are never
-  called; the sync records `invalid_credentials` or `error` and keeps their rows.
 - `listUsableIntegrations` returns only usable integrations, oldest first, filtered by `user_id`
   in the query.
-- Add's candidate walk: `401`/`403`/`404` move to the next candidate; a rate limit, timeout,
-  `5xx` or redirect stops it; it never makes more than 3 GitHub calls; denials everywhere answer
-  `404`; no candidate at all answers `409 REPOSITORY_SOURCE_UNUSABLE` with no GitHub call.
-- Add links the oldest usable integration that sees and grants the repo. When only the public
-  source does, it links none while the repo is public, and links the integration whose re-check
-  found it private.
-- Budget tracker: concurrent acquires reserve the budget (no overshoot); the sync is refused at
-  ≤ 10, Add only at ≤ 0; a refused acquire makes no GitHub call; out-of-order responses never
-  raise the budget.
-- Deleting an integration emits `integration.deleted` after the delete commits; the listener's
-  cleanup is user-scoped; a listener failure is logged and the delete still answers `204`; a
-  delete before any Repositories request still runs the cleanup.
+- Non-usable integrations (`expired`, `invalid`, `undecryptable`, type disabled) are never
+  called: they answer `integration_unusable` with reason `status` or `type_disabled`. (What the
+  sync stores for them is [sync.md](sync.md#required-tests)'s.)
+- **Fake fidelity:** for each shared builder case, the real service's typed result at the `fetch`
+  level equals what `FakeIntegrationsGithubService` returns for the same builder
+  ([testing.md](testing.md#fake-fidelity)).
+
+**Requests:**
+
+- Each operation calls exactly its fixed endpoint and parameters (per type, the handle, the
+  re-check), builds its own page URL (`?per_page=100&page=N`), and reads `Link` only for
+  `rel="next"`, never requesting a URL supplied by a response, even a same-origin one.
+- Every call targets `https://api.github.com`, and `Authorization` is never sent anywhere else.
+- `integrationId: null` sends no `Authorization` header.
+- A stored handle is URL-encoded in the GitHub path.
+- Malformed repo entries are dropped; a listing body over 2 MiB answers `unavailable`.
+
+**Error mapping:**
+
+- Each row of the error-mapping table yields its result kind and its effect on the integration
+  status; rate limits are detected from headers only.
+- `3xx` (other than `304`) is never followed, same-origin `301`/`302` included, and answers
+  `unavailable` (`redirect`).
+- The handle listing's `404` answers `not_found`.
 - The existing `send` callers keep mapping a `3xx` to `network_error` (`redirect: 'error'`
   default).
 - The `502`/`503` helpers answer the same codes, messages and statuses from `core/` as before the
   move.
+
+**Status compare-and-set:**
+
+- A `401` with the current credential sets a `pat` / `oauth_app` integration `invalid`; a `401`
+  from a call made before a Replace leaves the replaced integration `active`; the same holds for
+  a mint `404` / `403` and a decrypt failure.
+
+**Installation tokens:**
+
+- One mint serves concurrent calls (deferred `fetch` reply).
+- A cached token is reused until `expires_at` − 5 min, as read from the `FakeClock`.
+- It is minted with `{"permissions": {"metadata": "read"}}` only.
+- It is evicted on `401`, delete and replace credential; a `401` with a cached token re-mints and
+  retries once, and a `401` with a fresh token answers `unavailable` without changing the
+  status.
+- A mint in flight across a Replace is not cached; the next call mints with the new credential.
+- Mint `404` / `403` / app-JWT `401` map as specified.
+- A cached token never leaves the module (no getter, no log line, no result field).
+
+**Add:**
+
+- The candidate walk: `401` / `403` / `404` move to the next candidate; a rate limit, timeout,
+  `5xx` or redirect stops it; it never makes more than 3 GitHub calls; denials everywhere end
+  the walk as denied; no candidate at all ends it before any GitHub call. (The HTTP answers are
+  [api.md](api.md#required-tests)'s.)
+- Add links the oldest usable integration that sees and grants the repo. When only the public
+  source does, it links none while the repo is public, and links the integration whose re-check
+  found it private.
+
+**Unauthenticated budget tracker:**
+
+- Concurrent acquires reserve the budget and never overshoot it (deferred `fetch` replies).
+- The sync is refused at ≤ 10, Add only at ≤ 0: with remaining between 1 and 10 a sync acquire
+  is refused while an Add acquire is granted; at 0 both are refused.
+- A refused acquire answers `rate_limited` with the window's `resetAt` and makes no GitHub call.
+- It keeps the minimum `Remaining` within a reset window: an older response with a higher
+  `Remaining` arriving late does not raise it; a later `Reset` starts a new window.
+- The reset window is read from the `FakeClock`: once it has passed, calls are allowed until the
+  first response.
+- It is shared by the sync and Add: a low budget recorded by one is seen by the other.
+
+**Deletion hook:**
+
+- Deleting an integration emits `integration.deleted` after the delete commits.
+- A listener failure is logged with safe fields and the delete still answers `204`.
+- A delete before any Repositories request still runs the cleanup (the listener is registered
+  at boot).
+- What the cleanup deletes is [model.md](model.md#required-tests)'s.

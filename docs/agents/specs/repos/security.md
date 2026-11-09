@@ -38,6 +38,24 @@ Guarantees of the exported `IntegrationsGithubService`
 - **Fixed operations:** `GET`-only, with fixed endpoints and parameters; no generic
   `request(path)`, so no caller chooses a path.
 
+### Module boundaries
+
+The boundary is enforced by tooling, not left to review alone
+([testing.md](testing.md#module-boundaries)):
+
+- **ESLint override on `backend/src/repositories/**`:** `no-restricted-imports` allows Integrations
+  and Auth only through their exported entry points (`IntegrationsGithubService` and its typed
+  results, `AccountHandleService`, the `integration.deleted` / `user.deleted` event types) and
+  refuses their entities, the encryption service and the GitHub client; `no-restricted-globals`
+  bans `fetch`, since Repositories holds no HTTP code.
+- **Static boundary spec:** scans the Repositories sources (tests excluded) for the
+  `auth_users` / `integrations` table names, `secret_iv`, and `NOW(` / `CURRENT_TIMESTAMP`;
+  asserts that no Repositories entity maps those tables; and checks the exported
+  `IntegrationsGithubService` result types against a fixed allowlist of keys, so no credential
+  field can be added to them.
+- Both are added by the first implementation sub-issue that needs them. The security and
+  data-access reviews still apply to every implementation PR.
+
 ## User scoping
 
 - Every query is filtered by the session's user id **in the query itself** (`… AND user_id = ?`),
@@ -187,41 +205,57 @@ trigger is therefore not a state change over `GET`, and needs no exception
 
 ## Required tests
 
-- No response of the feature contains a credential or a value derived from one.
-- The Repositories module never handles a decrypted credential.
-- Every route is user-scoped in the query: another user's repository answers the same `404` as a
-  missing one; admins get no access; admin user endpoints carry no repository-derived field.
-- No response reveals that another user holds the same GitHub repository.
-- Add with a GitHub repository id not in the caller's own rows answers `404` without a GitHub
-  call; one GitHub does not grant answers `404` and writes nothing.
-- A `fullName` ref never resolves another user's row; every Add `404` carries the same message
-  ([api.md](api.md#required-tests)).
-- A cached installation token never leaves the Integrations module.
-- A GitHub App mint in flight across a Replace is never cached.
-- No Repositories code, response or log carries `secret_iv` (the status compare-and-set value).
-- The exported service never returns, logs or exposes a decrypted credential, a minted
-  installation token or a GitHub response body; a foreign `integrationId` answers
-  `integration_unusable` without a GitHub call.
-- An unauthenticated call (`integrationId: null`) sends no `Authorization` header.
-- Installation tokens are minted with `{"permissions": {"metadata": "read"}}` only.
-- The handle source stores no private repo.
-- Pagination never requests a URL supplied by a response (a `Link` URL, even same-origin); no
-  redirect is followed, same-origin `301`/`302` included, and `Authorization` never leaves
-  `https://api.github.com`.
-- A zombie sync run cannot write or release a newer run's lock.
-- Deleting an integration purges not-added repos only it could see.
-- An invalid handle is rejected before storage; a stored handle is URL-encoded in the GitHub
-  path.
-- A handle-only `PATCH /auth/account.json` never checks `currentPassword` (a wrong one does not
-  change the answer and is not counted); a request with a managed field still requires it.
-- The default user (feature enabled) can set its handle alone; any request with a managed field
-  answers `409` before the lockout and the password check, and stores nothing.
-- Admin user endpoints neither return nor write `githubHandle`.
-- `POST /auth/account/mine.json` returns only the caller's own account, sends `X-Skip-Cache`, and
-  is rejected from a foreign origin.
-- Saving a handle another user already holds succeeds and reveals nothing.
-- Every GitHub call targets `https://api.github.com`.
-- Every route (listing and sync state included) from a foreign origin is rejected by
-  `OriginGuard`.
-- A GitHub error body is never returned verbatim; no credential is logged.
-- A second concurrent sync and a Refresh inside the cooldown are refused.
+Tiers, fakes and harnesses: [testing.md](testing.md). Tags: `(db)`, `(e2e)`, `(unit)`,
+`(static)`, `(race)` ([default tiers](testing.md#default-tier-by-category)).
+
+**Route access matrix** (one table-driven e2e spec, [testing.md](testing.md#route-access-matrix)):
+
+- Rows: the four Repositories routes, `POST /auth/account/mine.json`, and the handle path of
+  `PATCH /auth/account.json`.
+- Every row: `401 UNAUTHORIZED` without a session; rejected by `OriginGuard` from a foreign
+  origin; `X-Skip-Cache` sent.
+- Repo-ref rows: another user's repository answers a body identical to a missing one (timestamp
+  ignored).
+- An admin session gets no access to another user's repositories; `/admin/users/*` carries no
+  repository-derived field (counts, flags, names, sync state) and no `githubHandle`.
+- **Completeness:** a Repositories route registered in Nest but missing from the table fails the
+  spec.
+- `cache-policy.coverage.spec.ts` asserts `CacheClass.UserScoped` on every Repositories route and
+  the documented class on `POST /auth/account/mine.json` `(static)`.
+
+**Credential canary sweep** ([testing.md](testing.md#credential-canary-sweep)):
+
+- With a PAT, an OAuth token, a GitHub App private key, a minted installation token and a GitHub
+  error body/message seeded as canaries, and the `secret_iv` used by the status compare-and-set,
+  no response body, response header or captured log line contains any of them, across a sync with
+  every source status, the listing, the sync state, Add's success and every Add error (`404`,
+  `409`, `429`, `502`, `503`).
+- A GitHub error body is never returned verbatim.
+
+**User scoping:**
+
+- Every query is filtered by the session's user: with the [two-user baseline](testing.md#two-user-baseline),
+  the intruder's rows are never returned or changed by any route or sync.
+- No response reveals that another user holds or added the same GitHub repository.
+- Add's own-rows lookup and identical `404`s: [api.md](api.md#required-tests).
+
+**Module boundaries** ([module boundaries](#module-boundaries)):
+
+- The ESLint override refuses, in `backend/src/repositories/**`, an import of an Integrations or
+  Auth entity, of the encryption service or of the GitHub client, and any use of `fetch`
+  `(static)`.
+- The static boundary spec finds no `auth_users` / `integrations` table name and no `secret_iv`
+  in the Repositories sources, no Repositories entity mapping those tables, and no key outside
+  the allowlist in the exported `IntegrationsGithubService` result types; so the Repositories
+  module never handles a decrypted credential `(static)`. (Its `NOW()` check is
+  [sync.md](sync.md#required-tests)'s.)
+
+**Owned elsewhere** (linked, not repeated):
+
+- Installation tokens (cache kept in the module, `metadata: read`, a mint across a Replace never
+  cached), fixed host, own page URLs and no redirect followed, no `Authorization` on
+  unauthenticated calls: [integrations.md](integrations.md#required-tests).
+- Zombie runs and the `run_id` lock release, the atomic claim and the cooldown, the handle
+  source storing no private repo: [sync.md](sync.md#required-tests).
+- Integration-deletion cleanup; handle normalisation, validation, edit path, default user and
+  admins: [model.md](model.md#required-tests).

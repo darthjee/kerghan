@@ -127,6 +127,11 @@ Renames and transfers, several sources, failure vs disappearance, page cap, rate
 
 ## Required tests
 
+Tiers, fakes and harnesses: [testing.md](testing.md). Every scenario below is a
+scripted-interleaving race spec, type (b) of [testing.md](testing.md#concurrency-and-races): the
+run is paused at a fake GitHub answer or in the `CapturingLauncher`, the competing action runs,
+then the answer is released.
+
 Only scenario tests that span modules or steps live here. A case settled by a single rule is
 tested from that rule's file.
 

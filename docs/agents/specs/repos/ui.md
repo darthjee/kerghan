@@ -147,7 +147,8 @@ Every Repositories edge case, with its outcome and its rule, is listed in the
 
 ## Required tests
 
-The frontend spec strategy is #451's.
+Tiers, fakes and harnesses: [testing.md](testing.md) (frontend layers:
+[testing.md](testing.md#frontend)).
 
 - The Repositories link shows for a logged-in user and is hidden while awaiting approval.
 - Each row renders `owner/name` linked to `https://github.com/<owner>/<name>` (URL-encoded),
@@ -174,7 +175,11 @@ The frontend spec strategy is #451's.
 - The username / email / password form never sends `githubHandle`.
 - The section works for the default user (no password asked).
 - The admin user list and edit pages show no handle.
-- No frontend request goes to GitHub.
+- The client spec: every `RepositoriesClient` and `AccountsClient` request is a `POST` (or the
+  handle-only `PATCH`) to Kerghan's API base, with the documented URL and body; error answers map
+  to `ApiError`, with `error.retryAfterSeconds`.
+- No frontend source contains `api.github.com`; repo links point to `github.com` web URLs and are
+  never fetched `(static)`.
 - A not-ok source badge renders muted with "<source> could not be refreshed"; a `pending` one
   with "<source> has not been synced yet"; an `ok` or `page_cap_reached` one is not muted.
 - The `not_found` banner shows its text and links to the Account page.

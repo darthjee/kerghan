@@ -96,6 +96,11 @@ The sync is **asynchronous**: the request that triggers it does not wait for Git
   exception. That release is `run_id`-guarded like every other write
   (`UPDATE … SET state = 'idle', run_id = NULL WHERE user_id = :userId AND run_id = :mine`) and
   never sets `last_synced_at`, so a zombie's exception never releases a newer run's lock.
+- **Injected `SyncLauncher`.** The detached promise is started only through an injected
+  `SyncLauncher`, whose `launch(task)` detaches the run and catches its errors. It is the only way
+  a sync is started (stale listing and Refresh alike), so production behaviour is the detached
+  promise above, and tests swap in a launcher that captures the task
+  ([testing.md](testing.md#detached-sync-and-time)).
 - **No queue.** A job queue (BullMQ/Redis) would add infrastructure to dev, production and the
   standalone image for an on-demand, low-frequency job; rejected.
 - **A sync stuck in `syncing` always returns to `idle`** ([restart recovery](#restart-recovery)),
@@ -127,6 +132,20 @@ WHERE user_id = :userId
 - The row is created on first use, before the claim, with
   `INSERT … ON DUPLICATE KEY UPDATE user_id = user_id` (a no-op on duplicate; not `INSERT IGNORE`,
   which would also hide other errors), so concurrent triggers (two tabs) never start two syncs.
+
+### Time source
+
+- **Injected `Clock`** (`now(): Date`): the only time source of the Repositories module, never
+  `Date.now()` / `new Date()` directly. Every time rule reads it: the TTL, the Refresh cooldown,
+  the lease and its heartbeat, the hard deadline, `resetAt` checks of `rate_limited` sources, and
+  the Add rate-limit window ([api.md](api.md#add-rate-limit)). Every timestamp the module writes
+  (`last_started_at`, `heartbeat_at`, `last_synced_at`, `last_seen_at`, `synced_at`, `added_at`)
+  comes from it.
+- **No `NOW()` / `CURRENT_TIMESTAMP` in SQL time conditions.** Every time condition (lease
+  expiry, TTL, cooldown, heartbeat) compares against an app-supplied timestamp parameter from the
+  `Clock` (the `:now` of the claim above), so the application and the database never disagree
+  about time, and tests drive both with one fake clock
+  ([testing.md](testing.md#detached-sync-and-time)).
 
 ### Restart recovery
 
@@ -371,6 +390,9 @@ WHERE user_id = :userId AND id = :repositoryId
 - The env vars are read with `getNumberConfig` and these defaults; a value that is not a
   positive integer falls back to the default; #452 folds them into
   `environment-variables.md` ([README.md](README.md#product-changes-folded-by-452)).
+- Every duration above is measured against the injected `Clock`, never `NOW()` in SQL
+  ([time source](#time-source)); the per-request GitHub timeout is a timer in the Integrations
+  client.
 
 ## Edge cases
 
@@ -381,57 +403,79 @@ concurrency) is listed, with its outcome and its rule, in the
 
 ## Required tests
 
-- Opening the listing with a stale sync starts one; with a fresh sync, or inside the Refresh
-  cooldown, it does not.
-- Refresh forces a sync; a Refresh inside the cooldown is refused, including right after a
-  stale-triggered sync.
-- The triggering request returns stored rows and the sync state without waiting for GitHub.
-- A trigger while a sync runs does not start a second one, and concurrent triggers never
-  duplicate rows.
-- A failing source does not fail the sync: other sources are applied, its rows are kept, and its
-  status is stored.
-- A `401` from an integration sets it `invalid`.
-- The unauthenticated source stops when the budget is low and is marked rate limited.
-- The handle's repos go through the oldest usable integration; unauthenticated only when none is
-  usable.
-- Reaching the page cap stops the source, stores `page_cap_reached`, deletes its source and page
-  rows past the cap, then prunes; `page_cap_reached` counts as `ok` for row statuses.
-- No GitHub call goes to a host other than `https://api.github.com`; no redirect is followed,
-  same-origin `301`/`302` included (the source reads `error`).
-- When an integration sync turns a repo private, its `handle` source row is dropped; a not-added
-  repo then held only by that integration is pruned once the integration is deleted, even if the
-  handle source failed or was skipped.
-- The handle source never stores a private repo, even when fetched through an integration.
+Tiers, fakes and harnesses: [testing.md](testing.md). Tags: `(db)`, `(e2e)`, `(unit)`,
+`(static)`, `(race)` ([default tiers](testing.md#default-tier-by-category)).
 
-**Execution and lock:**
+**Trigger, execution and lock:**
 
-- The atomic claim: two concurrent triggers start exactly one sync; the claim fails inside the
-  cooldown, and while another run holds an unexpired lease; a stale listing also needs the TTL
-  condition, a Refresh does not.
+- Opening the listing with a stale sync starts one; with a fresh sync, during a running sync, or
+  inside the Refresh cooldown (including right after a stale-triggered sync), it does not. The
+  HTTP answers are [api.md](api.md#required-tests)'s.
+- The atomic claim: two concurrent triggers start exactly one sync and never duplicate rows; the
+  claim fails inside the cooldown, and while another run holds an unexpired lease; a stale
+  listing also needs the TTL condition, a Refresh does not.
 - The sync-state row is created on first use without duplicates under concurrent triggers.
-- A zero-row claim answers `202` when a sync with a live heartbeat runs, `429` inside the
-  cooldown otherwise, and retries once when the run ended in between.
-- The triggering request answers before the detached sync finishes; an unexpected exception in
-  the sync still releases the lock, but a zombie's exception never releases a newer run's lock.
-- A sync stuck in `syncing` past its lease reads `idle` on the sync-state route and can be taken
-  over by the next trigger.
-- A zombie run's writes (page, end of source, end of sync) are rejected by `run_id`.
-- The hard deadline stops the sync between pages; applied pages are kept; the run still ends
-  `idle`.
+- A zero-row claim re-reads the row: a live heartbeat means a running sync, otherwise the
+  cooldown; it retries the claim once when the run ended in between.
+- The triggering request answers with the stored rows and the sync state **before** the captured
+  task runs, and the fake logs no GitHub call; after `runAll()` the run's effects are visible
+  `(e2e)`.
+- Every sync is started through the injected `SyncLauncher`; an unexpected exception in the task
+  still releases the lock, but a zombie's exception never releases a newer run's lock.
+- A sync stuck in `syncing` past its lease can be taken over by the next trigger; the sync-state
+  answer is [api.md](api.md#required-tests)'s.
+- A zombie run's writes (page, end of source, end of sync) are rejected by `run_id`: run A paused
+  at a GitHub call, the clock advanced past the lease, run B started `(race)`.
+- The hard deadline stops the sync between pages; applied pages are kept; each source it cut
+  short stores `error`; the run still ends `idle`.
+
+**Time source:**
+
+- Every time rule (TTL, cooldown, lease, heartbeat, hard deadline, `resetAt`, the Add rate-limit
+  window) follows the `FakeClock`: a spec moves it with `set` / `advance` and never waits.
+- No SQL time condition of the Repositories module uses `NOW()` / `CURRENT_TIMESTAMP` `(static)`.
+
+**Sources:**
+
+- The handle's repos go through the oldest usable integration; unauthenticated only when none is
+  usable. After an `invalid_credentials` result it restarts from page 1 with the next usable
+  integration, then unauthenticated; a rate limit, timeout or `5xx` does not fall back. (The
+  `401 → invalid` write itself is [integrations.md](integrations.md#required-tests)'s.)
+- The handle source never stores a private repo, even when fetched through an integration.
+- A non-usable integration's source stores `invalid_credentials` (status) or `error` (type
+  disabled) and keeps its rows and pages. (That it is never called is
+  [integrations.md](integrations.md#required-tests)'s.)
+- A source whose integration is deleted mid-sync (`integration_unusable` with reason `missing`)
+  stops and writes no status `(race)`.
+- A handle source answered `not_found` stores `not_found`, keeps the handle's rows and pages,
+  prunes nothing, tries no other credential, and is retried on the next sync. (The `404 →
+  not_found` mapping is [integrations.md](integrations.md#required-tests)'s; the row status is
+  [model.md](model.md#required-tests)'s.)
+- A sync run reconciles the handle when it starts and fetches the current, normalised handle;
+  with no handle there is no handle source. (Its URL-encoding is
+  [integrations.md](integrations.md#required-tests)'s.)
+- A handle changed while a run is fetching it: the
+  [edge-case scenario](edge-cases.md#required-tests).
 
 **Write path:**
 
 - Each page is applied in its own transaction; a source failing on a later page keeps the pages
   already applied and the old rows of the rest; its status is stored, nothing of it is pruned.
+- A failing source does not fail the sync: the other sources are applied.
 - The upsert never changes `added_at` or `integration_id`.
+- When an integration sync turns a repo private, its `handle` source row is dropped; a not-added
+  repo then held only by that integration is pruned once the integration is deleted, even if the
+  handle source failed or was skipped.
 - The end of a successful source deletes its source and page rows past its last page.
+- Reaching the page cap stops the source, stores `page_cap_reached`, deletes its source and page
+  rows past the cap, then prunes.
 - `last_synced_at` is set at the end of a sync even when every source failed; a run that lost
   its lease never sets it.
 - `last_seen_at` is set on a `200` and on a `304`.
-- A source whose integration is deleted mid-sync (`integration_unusable` with reason `missing`)
-  stops and writes no status.
 - A run whose sync-state row was deleted stops at its next write and never recreates the row,
-  including through its start-of-run handle reconciliation.
+  including through its start-of-run handle reconciliation `(race)`.
+- A redirect answer (`unavailable` with reason `redirect`) makes the source `error`. (That no
+  redirect is followed is [integrations.md](integrations.md#required-tests)'s.)
 
 **Link fill:**
 
@@ -448,50 +492,32 @@ concurrency) is listed, with its outcome and its rule, in the
 - The last stored page (`has_next = false`) is requested without `If-None-Match`; earlier pages
   send their `etag`.
 - With a full last page and a new repo created since, the next sync fetches the new page.
-- Pagination requests `?per_page=100&page=N` and never requests a URL supplied by a response
-  (`Link` or otherwise), even a same-origin one.
-- Deleting an integration drops its page and status rows; changing the handle drops the
-  handle's (reconciliation on the next Repositories request), so a new handle reads `pending`.
-- A sync run reconciles the handle when it starts and fetches the current, normalised handle,
-  URL-encoded in the GitHub path; with no handle there is no handle source.
-- A handle changed while a run is fetching it: the run's next handle write affects no row, the
-  handle source stops without writing a status, no row of the old handle is written after the
-  reconciliation, and the other sources finish normally.
+- Pagination asks for page `N + 1` only while `hasNext` is true, and up to the page cap.
+- Page, status and source rows dropped by an integration deletion or a handle change: the
+  cleanup tests of [model.md](model.md#required-tests).
 
 **Pruning:**
 
-- Only not-added repos with no source row are pruned, at the end of a sync and after an
-  integration deletion or a handle change; a failed source blocks pruning of its repos; added
-  repos are never pruned.
+- Pruning runs in the end-of-sync transaction; a failed or interrupted source blocks pruning of
+  its repos by keeping its rows. (The pruning query itself is
+  [model.md](model.md#required-tests)'s.)
 
-**Handle credential and rate limits:**
+**Rate limits:**
 
-- The handle uses the oldest usable integration; after a `401` it marks it `invalid` and restarts
-  from page 1 with the next one, then unauthenticated; a rate limit, timeout or `5xx` does not
-  fall back.
-- A `rate_limited` source is skipped while its `resetAt` is in the future: no call, status and
-  rows kept.
-- The unauthenticated budget tracker is shared by the sync and Add: once it reports a low budget,
-  the sync marks the unauthenticated source `rate_limited` and Add answers `503`, both without a
-  GitHub call.
-- The tracker keeps the minimum `Remaining` within a reset window: an older response with a
-  higher `Remaining` arriving late does not raise it; a later `Reset` starts a new window.
-- Two thresholds: with remaining between 1 and 10, the sync's unauthenticated source is
-  `rate_limited` without a call while an unauthenticated Add re-check still calls GitHub; at 0
-  both are refused. Concurrent acquires never overshoot the budget.
-- A non-usable integration (`expired`, `invalid`, `undecryptable`, type disabled) is never
-  called: its source stores `invalid_credentials` or `error` and keeps its rows.
-- A `404` on the handle listing stores `not_found`, keeps the handle's rows and pages, prunes
-  nothing, and does not fall back to another credential; the next sync retries it.
+- A `rate_limited` source is skipped while its `resetAt` is in the future, Refresh included: no
+  call, status, `resetAt` and rows kept.
+- A refused budget acquire (a `rate_limited` result with no GitHub call) marks the
+  unauthenticated source `rate_limited` with that reset and keeps its rows. (The tracker itself is
+  [integrations.md](integrations.md#required-tests)'s.)
 
 **Integration deletion:**
 
 - The end-of-sync safety net drops the source, page and status rows of an integration deleted
-  during the sync (a page written after the deletion hook's cleanup, or a failed listener),
-  before pruning; every statement is scoped by `user_id`, and a still-existing non-usable
-  integration's rows are kept.
+  during the sync (a page answer released after the deletion hook's cleanup, or a failed
+  listener), before pruning; every statement is scoped by `user_id`, and a still-existing
+  non-usable integration's rows are kept `(race)`.
 
 **Values:**
 
 - The defaults apply, and the three env vars override the TTL, the cooldown and the page cap; a
-  value that is not a positive integer falls back to the default.
+  value that is not a positive integer falls back to the default `(unit)`.
