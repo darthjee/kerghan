@@ -119,6 +119,15 @@ What this feature changes in the permanent product docs, as a checklist for the 
   ([integrations.md](integrations.md#status-compare-and-set)).
 - **The Repositories module doc, "Edge cases":** built from the
   [edge-case matrix](edge-cases.md).
+- **`architecture/backend.md#testing`:** the DB-backed tier (`*.db-spec.ts`, `yarn test:db`,
+  serial, dedicated schema), replacing the "add a `cimg/mysql` service … when the first spec
+  actually needs a real database" note; and the injected `Clock` / `SyncLauncher` conventions
+  if they generalise beyond Repositories ([testing.md](testing.md#db-backed-tier)).
+- **`architecture/infra.md`:** the MySQL CI job (`cimg/mysql:8.0` service, required by the
+  release and deploy jobs).
+- **The Repositories module doc, "Testing":** built from [testing.md](testing.md).
+- **`contributing.md`:** the Repositories ESLint boundary override, if it needs a mention
+  ([security.md](security.md#module-boundaries)).
 
 ## Decisions summary
 
@@ -229,6 +238,34 @@ What this feature changes in the permanent product docs, as a checklist for the 
 - **Accepted:** rows of non-usable integrations are kept until the integration is fixed or deleted
   ([integrations.md](integrations.md#usable-integrations)).
 
+**Testing (#451)**, all in [testing.md](testing.md):
+
+- **DB-backed tier:** a narrow `*.db-spec.ts` tier on real MySQL 8 (`yarn test:db`, serial,
+  its own CI job) for claims, unique keys, transactions, compare-and-set, conditional writes,
+  pruning and deletion queries, `bigint` and migrations; everything else stays on unit and e2e
+  specs with fakes. Added by the first implementation sub-issue that needs it
+  ([testing.md](testing.md#db-backed-tier)).
+- **GitHub mocking:** Integrations is tested at the `fetch` level; Repositories uses a typed,
+  scriptable `FakeIntegrationsGithubService`; shared typed builders, a fake-fidelity contract
+  spec and a no-network guard ([testing.md](testing.md#github-mocking)).
+- **Time and the detached run:** an injected `Clock`, never `NOW()` / `CURRENT_TIMESTAMP` in SQL
+  time conditions, and an injected `SyncLauncher` ([sync.md](sync.md#time-source),
+  [sync.md](sync.md#execution)); tests use a `FakeClock` and a `CapturingLauncher`.
+- **Races:** true parallelism on the DB tier with invariant assertions, and scripted
+  interleavings paused at fake GitHub answers; no repeat loops, no test-only production hooks
+  ([testing.md](testing.md#concurrency-and-races)).
+- **Access and leaks:** a table-driven route access matrix with a completeness check, a
+  credential canary sweep over responses, headers and logs, and an intruder user in every
+  harness ([testing.md](testing.md#access-control-and-leaks)).
+- **Module boundaries:** an ESLint override on `backend/src/repositories/**` and a static
+  boundary spec ([security.md](security.md#module-boundaries)).
+- **Frontend:** Jasmine client, controller and render specs, shared response builders, and a
+  static "no `api.github.com`" spec ([testing.md](testing.md#frontend)).
+- **Cache:** the cache-policy coverage spec asserts the Repositories routes' class; `navi/` is
+  unchanged ([testing.md](testing.md#cache)).
+- **One owner per test:** each test lives in the "Required tests" section of the file that owns
+  its rule; other files link to it ([testing.md](testing.md#where-tests-live)).
+
 ## Sub-issues
 
 | Issue | Title | Spec files it touches |
@@ -255,22 +292,22 @@ Decisions this folder leaves to later sub-issues. Each is marked in its file as
 `> **Open — settled by #NNN:** …`. Each sub-issue removes its own markers and rows from this
 table, and #452 checks that none remain.
 
-| File | Open decision | Settled by |
-|------|---------------|------------|
-| Every "Required tests" section | The testing strategy: GitHub mocking, sync-engine tests, frontend specs | #451 |
+None.
 
 ## Index
 
 | File | Defines |
 |---|---|
 | [model.md](model.md) | The five tables (columns, types, indexes, `source_key`), `auth_users.github_handle` (column, normalisation, validation, edit and read routes, default user, admins, Auth export, handle-change reconciliation), row statuses, logical FKs and user deletion, private metadata lifecycle and pruning rule, ownership |
-| [sync.md](sync.md) | Sources and the handle's credential, trigger (stale / Refresh), in-process execution, per-user lock, lease recovery, page-number pagination, write path, partial failures, pruning, rate limits and the unauthenticated budget tracker, ETags, values |
+| [sync.md](sync.md) | Sources and the handle's credential, trigger (stale / Refresh), in-process execution and the injected `SyncLauncher`, per-user lock, the injected `Clock` (no `NOW()` in SQL), lease recovery, page-number pagination, write path, partial failures, pruning, rate limits and the unauthenticated budget tracker, ETags, values |
 | [api.md](api.md) | Routes, request/response contract, repo ref, sync state and polling, errors, access rules |
 | [integrations.md](integrations.md) | `IntegrationsGithubService` (operations, typed results), the single GitHub client, endpoints per source, installation-token cache, `401 → invalid`, usable integrations, error mapping, access-link choice and Add candidate walk, `502`/`503` helpers in `core/`, `integration.deleted` hook, unauthenticated budget tracker |
-| [security.md](security.md) | Credentials stay in the backend, user scoping, Add verification, handle validation, fixed base URL, CSRF, logging, abuse limits |
+| [security.md](security.md) | Credentials stay in the backend, module-boundary tooling, user scoping, Add verification, handle validation, fixed base URL, CSRF, logging, abuse limits |
 | [ui.md](ui.md) | Navbar link, table, toolbar, sync UX, source error banners, empty states, GitHub handle field, UI edge cases |
 | [edge-cases.md](edge-cases.md) | Edge-case matrix: every case, its outcome and the rule behind it |
+| [testing.md](testing.md) | Test tiers and default-tier table, GitHub mocking and builders, launcher and clock, race tests, access matrix and canary sweep, module-boundary tooling, frontend spec layers, cache expectations |
 
 ## Required tests
 
-Every rule is tested from the "Required tests" section of the file that defines it.
+Every rule is tested from the "Required tests" section of the file that defines it; tiers, fakes
+and harnesses are in [testing.md](testing.md).
