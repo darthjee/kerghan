@@ -360,22 +360,21 @@ Standard error shape (`core/http-exception.filter.ts`,
 
 ## Required tests
 
-Backend e2e. How GitHub is mocked and how the sync engine is tested is #451's.
+Tiers, fakes and harnesses: [testing.md](testing.md). Tags: `(db)`, `(e2e)`, `(unit)`,
+`(static)`, `(race)` ([default tiers](testing.md#default-tier-by-category)).
 
 **Routes:**
 
-- Each of the four routes is `POST`, answers `401` without a session (same-origin request) and
-  `403` from a foreign origin (`OriginGuard`, also without a session), and declares the
-  `user-scoped` cache class; no repositories route answers `GET`.
+- Per-route `401`, `OriginGuard`, `X-Skip-Cache`, the cache class, another user's repository
+  answering like a missing one, and admins: the [route access matrix](security.md#required-tests).
+- No repositories route answers `GET`.
 - Unknown body properties are stripped and ignored.
-- Authenticated, same-origin responses (success, and handler errors such as `400`, `404`,
-  `429`) send `X-Skip-Cache` + `Cache-Control: no-store`; the headers are not asserted on the
-  guard `401` / `403`.
-- A user never sees, adds or refreshes another user's repositories; another user's repository
-  answers `404`. An admin has no access to another user's repositories.
-- No response body contains credential material, the internal repository `id`, `user_id`, an
-  internal `integrations.id`, `secretHint`, `github_login`, `status_reason`, or any other
-  integration field beyond `uuid` and `label`.
+- Handler errors (`400`, `404`, `429`) send `X-Skip-Cache` + `Cache-Control: no-store` too; the
+  headers are not asserted on the guard `401` / `403`.
+- No response body contains the internal repository `id`, `user_id`, an internal
+  `integrations.id`, `secretHint`, `github_login`, `status_reason`, or any other integration
+  field beyond `uuid` and `label`. (Credential material is the
+  [canary sweep](security.md#required-tests)'s.)
 - A row's `sources[]` and `accessIntegration` never resolve an integration of another user.
 - After the GitHub handle changed or was cleared, each of the four routes, called first, answers
   without the old handle's source rows (and without not-added repos only it returned); a new
@@ -395,8 +394,8 @@ Backend e2e. How GitHub is mocked and how the sync engine is tested is #451's.
 - `%` and `_` in `search` match literally.
 - Exact row shape; `accessIntegration` is `null` in the three documented cases.
 - A row's `sources[]` includes the entry of a failed source that still holds a row for it.
-- A stale listing starts a sync; a fresh one, one during a running sync, or a stale one inside
-  the Refresh cooldown does not.
+- A listing that starts a sync answers `sync.state: "syncing"`; when the sync starts is
+  [sync.md](sync.md#required-tests)'s.
 
 **Sync state:**
 
@@ -412,8 +411,7 @@ Backend e2e. How GitHub is mocked and how the sync engine is tested is #451's.
 - `202` starts a sync; `202` while syncing starts no new sync and does not reset the cooldown.
 - `429 REPOSITORY_REFRESH_COOLDOWN` + `Retry-After` + `error.retryAfterSeconds` inside the
   cooldown, including right after a stale-triggered sync.
-- Two concurrent Refreshes start one sync.
-- A `rate_limited` source whose `resetAt` is in the future is skipped by Refresh.
+- Concurrent Refreshes, and skipping a `rate_limited` source: [sync.md](sync.md#required-tests).
 
 **Add:**
 
@@ -422,23 +420,22 @@ Backend e2e. How GitHub is mocked and how the sync engine is tested is #451's.
   name `.` or `..`, over-long parts).
 - The GitHub re-check request is built from the stored row, never from the request's
   `fullName`.
-- An unlinked re-check that finds the repo private links the granting integration; the row
-  reads Added.
 - `fullName` resolves case-insensitively, only among the caller's rows: absent, or held only by
-  another user, answers `404` without any GitHub call.
+  another user, answers `404` without any GitHub call; so does a `githubId` not in the caller's
+  rows.
 - Already added answers `200`, with no GitHub call and `addedAt` unchanged.
-- A GitHub denial answers `404` and writes nothing.
-- The re-check on a low budget answers `503 GITHUB_RATE_LIMITED`, not `404`; a timeout / `5xx`
-  answers `502 GITHUB_UNAVAILABLE`.
-- The candidate walk: a `401` / `403` / `404` moves to the next candidate, a rate limit, timeout,
-  `5xx` or redirect stops it; never more than 3 GitHub calls; denials everywhere answer `404`.
-- Add on a not-added row pruned concurrently answers `404 NOT_FOUND` and writes nothing.
-- The 31st Add in 60 s answers `429 REPOSITORY_ADD_RATE_LIMITED`, and the env overrides apply.
-- Every `404` carries the same message.
+- A GitHub denial from every candidate answers `404` and writes nothing; every `404` carries the
+  same message.
+- A rate limit or a low budget answers `503 GITHUB_RATE_LIMITED`, not `404`; a timeout, `5xx` or
+  redirect answers `502 GITHUB_UNAVAILABLE`.
+- Add with only non-usable sources (and no handle row) answers `409 REPOSITORY_SOURCE_UNUSABLE`
+  with no GitHub call and no write; with one usable candidate that denies it, Add answers `404`.
+- The candidate walk and the access-link choice: [integrations.md](integrations.md#required-tests).
+- Add on a not-added row pruned concurrently answers `404 NOT_FOUND` and writes nothing `(db)`.
+- Two concurrent Adds of the same repo write once; both answer `200` with the same `addedAt` and
+  access link `(db)`.
+- The 31st Add in 60 s answers `429 REPOSITORY_ADD_RATE_LIMITED`, the window follows the
+  `FakeClock`, and the env overrides apply.
 - With two rows sharing a `fullName`, Add by `fullName` resolves to the latest-seen row, then the
   highest `id`.
 - Add by `githubId` is unaffected by a rename.
-- Two concurrent Adds of the same repo write once; both answer `200` with the same `addedAt` and
-  access link.
-- Add with only non-usable sources (and no handle row) answers `409 REPOSITORY_SOURCE_UNUSABLE`
-  with no GitHub call and no write; with one usable candidate that denies it, Add answers `404`.

@@ -420,16 +420,22 @@ The single-table form is what TypeORM's `.delete()` query builder can produce; t
 
 ## Required tests
 
+Tiers, fakes and harnesses: [testing.md](testing.md). Tags: `(db)`, `(e2e)`, `(unit)`,
+`(static)`, `(race)` ([default tiers](testing.md#default-tier-by-category)).
+
+**Tables:**
+
 - A second row for the same (`user_id`, `github_id`) is rejected; two users can each hold one;
   a `github_id` above 2³¹ is stored and read back exactly.
 - `source_key` uniqueness: one source row per (repository, source), one page row and one status
   row per (user, source[, page]).
-- Pruning deletes only not-added repos with no source row; a repo still held by a failed source's
-  rows, or added, is kept.
-- Add losing the race with pruning answers `404` and writes nothing.
-- A current source with no status row reads `pending`.
+- The Repositories migrations run up and down.
 - A sync that returns a known `github_id` with a new owner/name/visibility updates the row
   instead of creating one.
+- A dangling `integration_id` is read as empty `(unit)`.
+
+**Row statuses:**
+
 - `added_at` null ⇒ Not added; set ⇒ Added while a source returns it.
 - An added repo missing from every successful source ⇒ Unavailable; missing while one of its
   sources failed ⇒ Unknown.
@@ -437,45 +443,58 @@ The single-table form is what TypeORM's `.delete()` query builder can produce; t
   `ok` source makes it Added.
 - An added repo held only by a `page_cap_reached` source's rows reads Added.
 - An added repo held only by a `not_found` handle source's rows reads Unknown.
+- A current source with no status row reads `pending`.
+- An added private repo whose linked integration was deleted ⇒ Unavailable after the deletion
+  and before the next sync, even if another integration still sees it (that sync then
+  [fills the link](sync.md#link-fill)); an added public repo in the same case stays Added.
+
+**Pruning and deletion:**
+
+- Pruning deletes only not-added repos with no source row; a repo still held by a failed source's
+  rows, or added, is kept; another user's rows are untouched.
+- Deleting an integration drops its source, page and status rows, clears `integration_id`,
+  deletes not-added repos left with no source, and keeps added ones (Unavailable); every
+  statement is scoped by `user_id`, so the intruder's rows for the same `github_id` are untouched.
 - The `user.deleted` listener deletes the user's rows from all five tables and no other user's
   rows; its failure is logged at error level and does not throw.
 - A request entry point does not create the sync-state row for a user that no longer exists.
 - A sync run's start-of-run handle reconciliation never creates the sync-state row; with no row,
   the run stops.
-- An added private repo whose linked integration was deleted ⇒ Unavailable after the deletion
-  and before the next sync, even if another integration still sees it (that sync then
-  [fills the link](sync.md#link-fill)); an added public repo in the same case stays Added.
+
+**GitHub handle:**
+
 - The default user's boot sync leaves `github_handle` unchanged.
 - Handle normalisation: `"  @DarthJee "` is stored as `darthjee`; `""`, `"  "`, `"@"` and `null`
   clear it; a number, object, array or boolean answers `400`.
 - Handle validation: `a`, `a-b`, `a1-b2-c3` and a 39-character handle are accepted; a
   40-character handle, `-a`, `a-`, `a--b`, `a_b`, `a.b`, `a/b`, `a b` and non-ASCII letters answer
   `400 VALIDATION_FAILED` with the field message, and nothing is stored.
+- Saving a handle another user already holds succeeds and reveals nothing.
 - A handle-only `PATCH /auth/account.json` succeeds without `currentPassword`, ignores a wrong
-  one, succeeds while the user is locked out, and leaves the abuse-guard counter untouched (no
-  failure, no reset).
+  one (the answer does not change and nothing is counted), succeeds while the user is locked out,
+  and leaves the abuse-guard counter untouched (no failure, no reset).
 - A managed field without `currentPassword` answers `400`; a mixed edit with a wrong
   `currentPassword` answers `400`, counts as a failure, and stores no handle.
 - `{}` and a body with only `currentPassword` answer `400` with the new message;
   `{ "githubHandle": null }` is a valid edit.
 - The response carries `githubHandle` on both paths; `POST /auth/account/mine.json` returns
-  `{ username, email, githubHandle }` for the session's user only, sends `X-Skip-Cache`, and
-  answers `401` without a session or for a deleted user.
+  `{ username, email, githubHandle }` for the session's user only, and answers `401` for a
+  deleted user. (Its `401` without a session, `OriginGuard` and `X-Skip-Cache` are the
+  [route access matrix](security.md#required-tests)'s.)
 - Default user (feature enabled): a handle-only edit answers `200` and stores the handle; a mixed
-  edit answers `409 DEFAULT_USER_MANAGED` and stores nothing; with the feature off both behave as
-  for any user.
-- Admin routes: search items carry no `githubHandle`; `githubHandle` sent to
-  `POST /admin/users/:id/edit.json` is never written.
+  edit answers `409 DEFAULT_USER_MANAGED` before the lockout and the password check, and stores
+  nothing; with the feature off both behave as for any user.
+- `githubHandle` sent to `POST /admin/users/:id/edit.json` is never written. (Admin responses
+  without `githubHandle` are the [route access matrix](security.md#required-tests)'s.)
 - `AccountHandleService#getGithubHandle` returns the stored handle, `null` for no handle and for an
   unknown user.
+
+**Handle changes:**
+
 - Handle reconciliation: changing the handle drops the `handle` source, page and status rows,
   sets `repositories_sync_states.handle`, prunes not-added repos only the old handle returned,
   keeps added ones (Unavailable unless another source returns them), and the new handle reads
   `pending`; clearing it leaves no handle source; an unchanged handle (or a case-only edit) is a
-  no-op; two concurrent requests reconcile once; another user's rows are untouched.
+  no-op; another user's rows are untouched.
+- Two concurrent requests reconcile once.
 - A handle change triggers no sync and does not move `last_started_at`.
-- Deleting an integration drops its source, page and status rows, clears `integration_id`,
-  deletes not-added repos left with no source, and keeps added ones (Unavailable).
-- A dangling `integration_id` is read as empty.
-- No query of the Repositories module reads `auth_users` or `integrations` tables directly.
-- One user's rows are never returned or changed for another user.

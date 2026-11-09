@@ -50,8 +50,10 @@ category's default tier unless it carries an exception tag.
 | Module boundaries, forbidden tokens, cache-policy coverage | **Static** |
 | The Repositories page, its navbar link and the Account handle section | **Frontend** |
 
-**Exception tags**, placed at the end of an item only when its tier differs from its category's
-default:
+**Exception tags** go at the end of an item only when its tier would otherwise be misread: its
+tier differs from its category's default, or it is a DB-backed, static or race item in a list
+whose other items run on another tier (for example the concurrent Adds among `api.md`'s e2e
+items). Untagged items run on their category's default tier.
 
 | Tag | Meaning |
 |---|---|
