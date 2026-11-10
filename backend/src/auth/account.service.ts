@@ -3,14 +3,14 @@ import { InjectRepository } from '@nestjs/typeorm';
 import bcrypt from 'bcryptjs';
 import { Repository } from 'typeorm';
 import { AccountEditAbuseGuardService } from './account-edit-abuse-guard.service.js';
-import { assertAnyFieldPresent, hasManagedField } from './assert-any-field-present.js';
+import { ACCOUNT_EDIT_FIELDS, assertAnyFieldPresent, hasManagedField } from './assert-any-field-present.js';
 import { AuthService } from './auth.service.js';
 import { DefaultUserService } from './default-user.service.js';
 import { UpdateAccountDto } from './dto/update-account.dto.js';
 import { RevokedReason } from './entities/refresh-token.entity.js';
 import { User } from './entities/user.entity.js';
 import { TokenService } from './token.service.js';
-import { AccountSummary, UserUpdateService } from './user-update.service.js';
+import { AccountSummary, toAccountSummary, UserUpdateService } from './user-update.service.js';
 import { LockedException } from '../core/locked.exception.js';
 
 /**
@@ -58,36 +58,53 @@ export class AccountService {
   }
 
   /**
-   * Updates the caller's own username, email, and/or password, always
-   * confirmed by their current password. A successful password change
-   * revokes the caller's other refresh tokens, keeping the presented
-   * `currentRefreshToken` only when it is one of the caller's active tokens —
-   * otherwise (missing, unknown, foreign) all of them are revoked (fail
-   * safe). Username/email-only changes revoke nothing, and a failed attempt
-   * never revokes anything. Any failed
-   * validation (wrong current password, duplicate username/email) counts
-   * toward a per-user cool-off lockout, checked before any other validation
-   * runs and reset on success (see `AccountEditAbuseGuardService`). While
-   * the default user is enabled, a request carrying a managed field for the
-   * default user is refused right after the "any field" check — before the
-   * lockout check, never checking `currentPassword` and never touching the
-   * abuse-guard counter.
+   * Updates the caller's own username, email, password and/or GitHub handle.
+   * The request splits on `hasManagedField`:
+   *
+   * - **Handle-only edit** (only `githubHandle`): loads the user and stores
+   *   the already-normalised handle (`null` clears it). No default-user
+   *   block, no lockout check, no `currentPassword` check (ignored if sent)
+   *   and the abuse guard is never touched — the handle is public,
+   *   non-credential data, so this path is no password oracle. When the
+   *   handle equals the stored one, nothing is written.
+   * - **Managed edit** (`username`, `email` and/or `newPassword`, possibly
+   *   with `githubHandle`): while the default user is enabled, a request for
+   *   the default user is refused right after the "any field" check — before
+   *   the lockout check, never checking `currentPassword` and never touching
+   *   the abuse-guard counter. Otherwise the per-user cool-off lockout is
+   *   checked, then `currentPassword` (required here) and username/email
+   *   availability; any of those failing counts toward the lockout (see
+   *   `AccountEditAbuseGuardService`), which is reset on success. Every
+   *   field, the handle included, is written in one save, so a refusal
+   *   stores nothing. A successful password change revokes the caller's
+   *   other refresh tokens, keeping the presented `currentRefreshToken` only
+   *   when it is one of the caller's active tokens — otherwise (missing,
+   *   unknown, foreign) all of them are revoked (fail safe). Any other change
+   *   revokes nothing, and a failed attempt never revokes anything.
    * @param {number} userId - The id of the authenticated user (from the access-token session).
-   * @param {UpdateAccountDto} dto - The requested changes plus the current password.
+   * @param {UpdateAccountDto} dto - The requested changes, plus the current
+   *   password when a managed field is present.
    * @param {string} [currentRefreshToken] - The caller's refresh token (from
    *   the `refresh_token` cookie), identifying the session to keep on a
    *   password change.
-   * @returns {Promise<AccountSummary>} The user's resulting username and email.
-   * @throws {BadRequestException} When no field is being changed or the
-   *   current password is wrong.
+   * @returns {Promise<AccountSummary>} The user's resulting username, email and GitHub handle.
+   * @throws {BadRequestException} When no field is being changed, or a
+   *   managed field is present and the current password is missing or wrong.
+   * @throws {UnauthorizedException} When the session's user no longer exists.
    * @throws {ConflictException} When the new username/email is already taken,
-   *   or `409 DEFAULT_USER_MANAGED` when the caller is the default user.
-   * @throws {LockedException} `423 Locked` when the caller's per-user cool-off
-   *   lockout is currently active.
+   *   or `409 DEFAULT_USER_MANAGED` when the caller is the default user and a
+   *   managed field is present.
+   * @throws {LockedException} `423 Locked` when a managed field is present and
+   *   the caller's per-user cool-off lockout is currently active.
    */
   async updateAccount(userId: number, dto: UpdateAccountDto, currentRefreshToken?: string): Promise<AccountSummary> {
-    assertAnyFieldPresent(dto);
-    this.#assertNotManaged(userId, dto);
+    assertAnyFieldPresent(dto, ACCOUNT_EDIT_FIELDS);
+
+    if (!hasManagedField(dto)) {
+      return this.#updateHandleOnly(userId, dto.githubHandle ?? null);
+    }
+
+    this.defaultUserService.assertNotDefaultUser(userId);
     await this.#assertNotLockedOut(userId);
 
     const user = await this.#loadUser(userId);
@@ -103,10 +120,24 @@ export class AccountService {
     return result;
   }
 
-  #assertNotManaged(userId: number, dto: UpdateAccountDto): void {
-    if (hasManagedField(dto)) {
-      this.defaultUserService.assertNotDefaultUser(userId);
+  /**
+   * Reads the caller's own account (`POST /auth/account/mine.json`).
+   * @param {number} userId - The id of the authenticated user (from the access-token session).
+   * @returns {Promise<AccountSummary>} The user's username, email and GitHub handle.
+   * @throws {UnauthorizedException} When the session's user no longer exists.
+   */
+  async getAccount(userId: number): Promise<AccountSummary> {
+    return toAccountSummary(await this.#loadUser(userId));
+  }
+
+  async #updateHandleOnly(userId: number, githubHandle: string | null): Promise<AccountSummary> {
+    const user = await this.#loadUser(userId);
+
+    if ((user.githubHandle ?? null) === githubHandle) {
+      return toAccountSummary(user);
     }
+
+    return this.userUpdateService.applyUserUpdate(user, { githubHandle });
   }
 
   async #assertNotLockedOut(userId: number): Promise<void> {
@@ -142,7 +173,11 @@ export class AccountService {
     return user;
   }
 
-  async #verifyCurrentPassword(user: User, currentPassword: string): Promise<void> {
+  async #verifyCurrentPassword(user: User, currentPassword: string | undefined): Promise<void> {
+    if (!currentPassword) {
+      throw new BadRequestException('currentPassword is required');
+    }
+
     const valid = await bcrypt.compare(currentPassword, user.passwordDigest);
 
     if (!valid) {

@@ -14,7 +14,7 @@ import {
 } from './support/default-user-e2e.js';
 
 describe('AuthController default user (e2e)', () => {
-  function patchAccount(app: INestApplication, cookie: string, body: Record<string, string>): request.Test {
+  function patchAccount(app: INestApplication, cookie: string, body: Record<string, unknown>): request.Test {
     return request(app.getHttpServer()).patch('/auth/account.json').set('Cookie', [cookie]).send(body);
   }
 
@@ -81,6 +81,27 @@ describe('AuthController default user (e2e)', () => {
 
       it('still answers 400 when no field is present', async () => {
         await patchAccount(ctx.app, cookie, { currentPassword: DEFAULT_PASSWORD }).expect(400);
+      });
+
+      it('applies a handle-only edit with 200, without currentPassword', async () => {
+        const response = await patchAccount(ctx.app, cookie, { githubHandle: 'DarthJee' }).expect(200);
+
+        expect(response.body).toEqual({ username: 'admin', email: 'admin@kerghan.local', githubHandle: 'darthjee' });
+        expect(defaultUser().githubHandle).toBe('darthjee');
+      });
+
+      it('answers 409 to a mixed edit and stores nothing, the handle included', async () => {
+        const before = { ...defaultUser() };
+
+        const response = await patchAccount(ctx.app, cookie, {
+          currentPassword: DEFAULT_PASSWORD,
+          username: 'renamed',
+          githubHandle: 'darthjee',
+        });
+
+        expectDefaultUserManagedBody(response);
+        expect(defaultUser()).toEqual(before);
+        expect(ctx.accountEditLockoutRepo.rows).toHaveLength(0);
       });
     });
 
@@ -151,6 +172,19 @@ describe('AuthController default user (e2e)', () => {
     });
   });
 
+  describe('when the default user already holds a handle at boot', () => {
+    const ctx = useDefaultUserApp({
+      defaultUserSettings: ENABLED_DEFAULT_USER,
+      beforeInit: async ({ userRepo }) => {
+        await seedUser(userRepo, { username: 'admin', email: 'old@example.com', githubHandle: 'darthjee' });
+      },
+    });
+
+    it('leaves it unchanged after the boot sync', () => {
+      expect(ctx.userRepo.rows[0]).toMatchObject({ email: 'admin@kerghan.local', githubHandle: 'darthjee' });
+    });
+  });
+
   describe('with the feature disabled after an earlier enabled boot', () => {
     const ctx = useDefaultUserApp({
       defaultUserSettings: { ...ENABLED_DEFAULT_USER, enabled: false },
@@ -163,6 +197,19 @@ describe('AuthController default user (e2e)', () => {
       const cookie = await accessCookieFor(ctx.app, 'admin');
 
       await patchAccount(ctx.app, cookie, { currentPassword: DEFAULT_PASSWORD, username: 'renamed' }).expect(200);
+    });
+
+    it('lets the former default user set its handle, alone or with managed fields', async () => {
+      const cookie = await accessCookieFor(ctx.app, 'admin');
+
+      await patchAccount(ctx.app, cookie, { githubHandle: 'first' }).expect(200);
+      const response = await patchAccount(ctx.app, cookie, {
+        currentPassword: DEFAULT_PASSWORD,
+        email: 'renamed@example.com',
+        githubHandle: 'second',
+      }).expect(200);
+
+      expect(response.body).toEqual({ username: 'admin', email: 'renamed@example.com', githubHandle: 'second' });
     });
 
     it('lets the former default user recover and reset its password', async () => {

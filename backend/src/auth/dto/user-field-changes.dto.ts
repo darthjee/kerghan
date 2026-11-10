@@ -2,11 +2,11 @@ import { IsEmail, IsNotEmpty, IsOptional, IsString, MinLength } from 'class-vali
 import { PASSWORD_MIN_LENGTH } from '../password-rules.js';
 
 /**
- * Shared field block for `UpdateAccountDto` and `AdminUpdateUserDto` — the
- * updatable user fields both self-service account updates and admin user
- * edits accept. Also the type `assertAnyFieldPresent` validates against, so
- * a future reader doesn't need to chase both subclasses to understand why
- * it exists.
+ * The managed user fields (`username`, `email`, `newPassword`) admin user
+ * edits accept, extended by `AdminUpdateUserDto`. Also the shape
+ * `assertAnyFieldPresent`/`hasManagedField` check against. `UpdateAccountDto`
+ * matches it structurally but declares its own copies of these fields, so it
+ * can reject `null` for them without changing the admin contract.
  */
 export class UserFieldChangesDto {
   @IsOptional()

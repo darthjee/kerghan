@@ -1,29 +1,63 @@
 import { BadRequestException } from '@nestjs/common';
-import { assertAnyFieldPresent, hasManagedField } from '../assert-any-field-present.js';
+import {
+  ACCOUNT_EDIT_FIELDS,
+  ADMIN_EDIT_FIELDS,
+  assertAnyFieldPresent,
+  hasManagedField,
+} from '../assert-any-field-present.js';
+
+const ACCOUNT_MESSAGE = 'At least one of username, email, newPassword or githubHandle is required';
+const ADMIN_MESSAGE = 'At least one of username, email, or newPassword is required';
 
 describe('assertAnyFieldPresent', () => {
-  it('throws BadRequestException when username, email, and newPassword are all absent', () => {
-    expect(() => assertAnyFieldPresent({})).toThrow(
-      new BadRequestException('At least one of username, email, or newPassword is required'),
-    );
+  describe('with the account edit rule', () => {
+    it('throws BadRequestException with the account message when every field is absent', () => {
+      expect(() => assertAnyFieldPresent({}, ACCOUNT_EDIT_FIELDS)).toThrow(new BadRequestException(ACCOUNT_MESSAGE));
+    });
+
+    it('ignores an undefined githubHandle', () => {
+      expect(() => assertAnyFieldPresent({ githubHandle: undefined }, ACCOUNT_EDIT_FIELDS))
+        .toThrow(new BadRequestException(ACCOUNT_MESSAGE));
+    });
+
+    it.each([
+      ['username', { username: 'alice' }],
+      ['email', { email: 'alice@example.com' }],
+      ['newPassword', { newPassword: 'new-password' }],
+      ['githubHandle', { githubHandle: 'alice' }],
+      ['a null githubHandle (clear)', { githubHandle: null }],
+    ])('does not throw when only %s is present', (_field, dto) => {
+      expect(() => assertAnyFieldPresent(dto, ACCOUNT_EDIT_FIELDS)).not.toThrow();
+    });
   });
 
-  it('does not throw when only username is present', () => {
-    expect(() => assertAnyFieldPresent({ username: 'alice' })).not.toThrow();
-  });
+  describe('with the admin edit rule', () => {
+    it('throws BadRequestException with the unchanged admin message when every field is absent', () => {
+      expect(() => assertAnyFieldPresent({}, ADMIN_EDIT_FIELDS)).toThrow(new BadRequestException(ADMIN_MESSAGE));
+    });
 
-  it('does not throw when only email is present', () => {
-    expect(() => assertAnyFieldPresent({ email: 'alice@example.com' })).not.toThrow();
-  });
+    it('does not count githubHandle', () => {
+      expect(() => assertAnyFieldPresent({ githubHandle: 'alice' }, ADMIN_EDIT_FIELDS))
+        .toThrow(new BadRequestException(ADMIN_MESSAGE));
+    });
 
-  it('does not throw when only newPassword is present', () => {
-    expect(() => assertAnyFieldPresent({ newPassword: 'new-password' })).not.toThrow();
+    it.each([
+      ['username', { username: 'alice' }],
+      ['email', { email: 'alice@example.com' }],
+      ['newPassword', { newPassword: 'new-password' }],
+    ])('does not throw when only %s is present', (_field, dto) => {
+      expect(() => assertAnyFieldPresent(dto, ADMIN_EDIT_FIELDS)).not.toThrow();
+    });
   });
 });
 
 describe('hasManagedField', () => {
   it('is false when no managed field is present', () => {
     expect(hasManagedField({})).toBe(false);
+  });
+
+  it('is false when only githubHandle is present', () => {
+    expect(hasManagedField({ githubHandle: 'alice' } as never)).toBe(false);
   });
 
   it.each([

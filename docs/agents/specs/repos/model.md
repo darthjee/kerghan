@@ -175,14 +175,27 @@ The existing self-edit route gains one optional body field:
 - **Presence:** `assertAnyFieldPresent` counts `githubHandle` as present whenever the key is in
   the body, `null` included. Its message becomes
   `At least one of username, email, newPassword or githubHandle is required`.
+  The admin edit keeps its own three-field rule and message
+  (`At least one of username, email, or newPassword is required`).
+- **`null` managed fields are rejected:** `null` for `username`, `email` or `newPassword` answers
+  `400 VALIDATION_FAILED` on this route (the admin DTO is unchanged). Only `githubHandle` accepts
+  `null`.
 - **`currentPassword` is required only when a managed field is present** (`username`, `email`,
-  `newPassword`; `hasManagedField`). Today it is required on every edit (`UpdateAccountDto`).
+  `newPassword`; `hasManagedField`). It is now optional on `UpdateAccountDto`: an empty string
+  still answers `400 VALIDATION_FAILED`, and a missing one with a managed field present answers
+  `400 BAD_REQUEST` (`currentPassword is required`) from the service. That refusal comes after
+  the default-user block and the lockout check, and counts as an abuse-guard failure like a wrong
+  password. (It used to be a `400 VALIDATION_FAILED` from the DTO.)
 - **Handle-only edit** (no managed field present):
   - needs no `currentPassword` (ignored if sent, never checked);
   - skips the lockout check (`423`) and the abuse guard entirely: it never counts as a failure
     and never resets the counter;
-  - order: `assertAnyFieldPresent` → validation (`400`) → load the user (`401` if missing) →
-    write → `200`.
+  - order: validation (`400 VALIDATION_FAILED`, by the global `ValidationPipe`, before the
+    service runs) → `assertAnyFieldPresent` (`400`) → load the user (`401` if missing) → write →
+    `200`;
+  - **no-op edit:** when the normalised value equals the stored one (same value, a case-only
+    change, an `@`-only change, or clearing an empty handle), nothing is written and the stored
+    value is returned.
   - **Why:** the handle is a public, non-credential preference, so re-authentication adds no
     protection; skipping the password check also means the path is no password oracle. And the
     default user usually cannot know its password (the standalone client generates it), so a
@@ -234,9 +247,9 @@ Admins neither see nor edit the handle:
 
 - `POST /admin/users/search.json` items keep `{ id, username, email, isAdmin, createdAt, status }`.
 - `POST /admin/users/:id/edit.json` keeps `AdminUpdateUserDto` unchanged, so a `githubHandle`
-  field is not part of its contract: the global `ValidationPipe` whitelist rejects it with `400`
-  (or strips it, whichever the pipe's current `forbidNonWhitelisted` setting does; it is never
-  written either way).
+  field is not part of its contract: the global `ValidationPipe` (`whitelist: true`, no
+  `forbidNonWhitelisted`) strips it, and it is never written. A body holding only `githubHandle`
+  therefore answers `400` with the admin's unchanged "at least one field" message.
 - The admin pages are unchanged.
 - **Why:** the handle only drives the user's own listing, which admins cannot see
   ([security.md](security.md#user-scoping)); there is no admin need for it, and it is one less

@@ -278,9 +278,10 @@ What this feature changes in the permanent product docs, as a checklist for the 
 | #450 | Specs: repositories — edge cases matrix | [edge-cases.md](edge-cases.md) (creates it), and every file |
 | #451 | Specs: repositories — testing strategy | every "Required tests" section |
 | #452 | Specs: fold the repositories specs into the permanent docs and remove them | all |
+| #460 | Repositories: Auth — GitHub handle on the account | implementation: [model.md](model.md#github-handle), [security.md](security.md#github-handle) |
 
-Implementation sub-issues are added to #444 later, from the enhanced specs, and listed here when
-they are created.
+The implementation sub-issues are #460–#466, created on #444 from the enhanced specs; each adds
+its own row here.
 
 **Order:** #445 → #446 → #447 → #448 → #449 → #450 → #451 → implementation sub-issues → #452.
 The spec-enhancement sub-issues edit the same folder (the tables in this README, `model.md`,

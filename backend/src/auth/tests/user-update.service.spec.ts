@@ -35,10 +35,10 @@ describe('UserUpdateService', () => {
 
   describe('applyUserUpdate', () => {
     describe('when only a username change is given', () => {
-      it('updates the username and returns the resulting { username, email }', async () => {
+      it('updates the username and returns the resulting { username, email, githubHandle }', async () => {
         const result = await service.applyUserUpdate(user, { username: 'new-username' });
 
-        expect(result).toEqual({ username: 'new-username', email: 'darthjee@example.com' });
+        expect(result).toEqual({ username: 'new-username', email: 'darthjee@example.com', githubHandle: null });
       });
 
       it('leaves the password digest untouched', async () => {
@@ -49,10 +49,10 @@ describe('UserUpdateService', () => {
     });
 
     describe('when only an email change is given', () => {
-      it('updates the email and returns the resulting { username, email }', async () => {
+      it('updates the email and returns the resulting { username, email, githubHandle }', async () => {
         const result = await service.applyUserUpdate(user, { email: 'new-email@example.com' });
 
-        expect(result).toEqual({ username: 'darthjee', email: 'new-email@example.com' });
+        expect(result).toEqual({ username: 'darthjee', email: 'new-email@example.com', githubHandle: null });
       });
     });
 
@@ -64,10 +64,10 @@ describe('UserUpdateService', () => {
         await expect(bcrypt.compare('brand-new-password', user.passwordDigest)).resolves.toBe(true);
       });
 
-      it('returns the unchanged { username, email }', async () => {
+      it('returns the unchanged { username, email, githubHandle }', async () => {
         const result = await service.applyUserUpdate(user, { newPassword: 'brand-new-password' });
 
-        expect(result).toEqual({ username: 'darthjee', email: 'darthjee@example.com' });
+        expect(result).toEqual({ username: 'darthjee', email: 'darthjee@example.com', githubHandle: null });
       });
     });
 
@@ -79,7 +79,7 @@ describe('UserUpdateService', () => {
           newPassword: 'brand-new-password',
         });
 
-        expect(result).toEqual({ username: 'new-username', email: 'new-email@example.com' });
+        expect(result).toEqual({ username: 'new-username', email: 'new-email@example.com', githubHandle: null });
         expect(userRepository.save).toHaveBeenCalledWith(user);
       });
     });
@@ -88,8 +88,45 @@ describe('UserUpdateService', () => {
       it('persists the user unchanged', async () => {
         const result = await service.applyUserUpdate(user, {});
 
-        expect(result).toEqual({ username: 'darthjee', email: 'darthjee@example.com' });
+        expect(result).toEqual({ username: 'darthjee', email: 'darthjee@example.com', githubHandle: null });
         expect(userRepository.save).toHaveBeenCalledWith(user);
+      });
+    });
+
+    describe('when a githubHandle change is given', () => {
+      it('stores the handle and returns it', async () => {
+        const result = await service.applyUserUpdate(user, { githubHandle: 'darthjee' });
+
+        expect(result).toEqual({ username: 'darthjee', email: 'darthjee@example.com', githubHandle: 'darthjee' });
+        expect(userRepository.save).toHaveBeenCalledWith(expect.objectContaining({ githubHandle: 'darthjee' }));
+      });
+
+      it('clears the handle when given null', async () => {
+        user.githubHandle = 'darthjee';
+
+        const result = await service.applyUserUpdate(user, { githubHandle: null });
+
+        expect(result.githubHandle).toBeNull();
+        expect(user.githubHandle).toBeNull();
+      });
+
+      it('applies it together with the other fields in one save', async () => {
+        await service.applyUserUpdate(user, { username: 'new-username', githubHandle: 'darthjee' });
+
+        expect(userRepository.save).toHaveBeenCalledTimes(1);
+        expect(userRepository.save).toHaveBeenCalledWith(
+          expect.objectContaining({ username: 'new-username', githubHandle: 'darthjee' }),
+        );
+      });
+    });
+
+    describe('when the githubHandle key is absent', () => {
+      it('leaves the stored handle untouched', async () => {
+        user.githubHandle = 'darthjee';
+
+        const result = await service.applyUserUpdate(user, { username: 'new-username', githubHandle: undefined });
+
+        expect(result.githubHandle).toBe('darthjee');
       });
     });
   });
