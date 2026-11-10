@@ -35,8 +35,8 @@ import { UpdateAccountDto } from './dto/update-account.dto.js';
  * access token. `@CachePolicy(CacheClass.Never)` is
  * applied once at the controller level so Tent's proxy never caches — and
  * cross-serves — a login/session response between users, and browsers never
- * store it either. No route overrides it: every route here is a write that
- * issues, renews, or revokes credentials.
+ * store it either. No route overrides it: every route here either issues,
+ * renews or revokes credentials, or reads/writes the caller's own account.
  */
 @Controller('auth')
 @CachePolicy(CacheClass.Never)
@@ -78,6 +78,20 @@ export class AuthController {
     @Req() req: Request,
   ): Promise<object> {
     return this.accountService.updateAccount(user.sub, dto, readRefreshToken(req));
+  }
+
+  /**
+   * `POST /auth/account/mine.json`. Authenticated (default `JwtGuard`, no
+   * `@Public()`); a `POST` so `OriginGuard` covers it like every other
+   * user-scoped read, and `Never` cached through the controller-level
+   * `@CachePolicy`. No body and no id: always the session's own user.
+   * Answers Nest's `POST` default, `201`.
+   * @param {AccessTokenPayload} user - The caller's own authenticated user, supplying the user ID.
+   * @returns {Promise<object>} `{ username, email, githubHandle }`.
+   */
+  @Post('account/mine.json')
+  async getAccount(@CurrentUser() user: AccessTokenPayload): Promise<object> {
+    return this.accountService.getAccount(user.sub);
   }
 
   /**

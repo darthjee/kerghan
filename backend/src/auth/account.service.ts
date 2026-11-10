@@ -120,6 +120,16 @@ export class AccountService {
     return result;
   }
 
+  /**
+   * Reads the caller's own account (`POST /auth/account/mine.json`).
+   * @param {number} userId - The id of the authenticated user (from the access-token session).
+   * @returns {Promise<AccountSummary>} The user's username, email and GitHub handle.
+   * @throws {UnauthorizedException} When the session's user no longer exists.
+   */
+  async getAccount(userId: number): Promise<AccountSummary> {
+    return toAccountSummary(await this.#loadUser(userId));
+  }
+
   async #updateHandleOnly(userId: number, githubHandle: string | null): Promise<AccountSummary> {
     const user = await this.#loadUser(userId);
 

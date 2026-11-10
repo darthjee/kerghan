@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AccountEditAbuseGuardService } from './account-edit-abuse-guard.service.js';
+import { AccountHandleService } from './account-handle.service.js';
 import { AccountService } from './account.service.js';
 import { AdminController } from './admin.controller.js';
 import { AdminService } from './admin.service.js';
@@ -32,7 +33,9 @@ import { UserUpdateService } from './user-update.service.js';
  * lazy-loaded), per the issue's module classification. Exports `AuthService`
  * for other modules' direct-DI reads, per the hybrid inter-module
  * communication pattern (a module never writes to another module's tables;
- * reads happen only through the exported service). Also provides and
+ * reads happen only through the exported service), and
+ * `AccountHandleService` so the Repositories module reads the account's
+ * GitHub handle without touching `auth_users`. Also provides and
  * exports Core's `SESSION_LOOKUP` (implemented by `SessionService`), so the
  * global `JwtGuard` can check each request's session without `core/`
  * importing `auth/`.
@@ -53,6 +56,7 @@ import { UserUpdateService } from './user-update.service.js';
     AuthService,
     AccountService,
     AccountEditAbuseGuardService,
+    AccountHandleService,
     AdminService,
     PasswordResetService,
     SessionService,
@@ -76,7 +80,7 @@ import { UserUpdateService } from './user-update.service.js';
         UserApprovalConfig.fromConfigService(configService),
     },
   ],
-  exports: [AuthService, SESSION_LOOKUP],
+  exports: [AuthService, SESSION_LOOKUP, AccountHandleService],
 })
 // NestJS module classes are intentionally empty; all behavior lives in @Module().
 // eslint-disable-next-line @typescript-eslint/no-extraneous-class
