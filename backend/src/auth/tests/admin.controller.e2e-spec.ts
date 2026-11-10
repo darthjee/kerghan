@@ -497,6 +497,46 @@ describe('AdminController (e2e)', () => {
           .expect(400);
       });
 
+      describe('githubHandle', () => {
+        const target = (): User => ctx.userRepo.rows.find((row) => row.id === targetUserId)!;
+
+        it('strips githubHandle from a mixed body and never writes it', async () => {
+          const response = await post(`/admin/users/${targetUserId}/edit.json`, {
+            username: 'darthjee-renamed',
+            githubHandle: 'darthjee',
+          }).expect(201);
+
+          expect(response.body.user).not.toHaveProperty('githubHandle');
+          expect(target()).toMatchObject({ username: 'darthjee-renamed' });
+          expect(target().githubHandle ?? null).toBeNull();
+        });
+
+        it('answers a body holding only githubHandle with 400 and the unchanged admin message', async () => {
+          const response = await post(`/admin/users/${targetUserId}/edit.json`, { githubHandle: 'darthjee' });
+
+          expectErrorBody(response, {
+            status: 400,
+            code: ErrorCodes.BAD_REQUEST,
+            message: 'At least one of username, email, or newPassword is required',
+          });
+          expect(target().githubHandle ?? null).toBeNull();
+        });
+
+        it('never exposes a stored handle in edit or search responses', async () => {
+          target().githubHandle = 'darthjee';
+
+          const edit = await post(`/admin/users/${targetUserId}/edit.json`, { username: 'darthjee-renamed' })
+            .expect(201);
+          const search = await post('/admin/users/search.json', {}).expect(201);
+
+          expect(edit.body.user).not.toHaveProperty('githubHandle');
+          for (const item of search.body.users) {
+            expect(item).not.toHaveProperty('githubHandle');
+          }
+          expect(target().githubHandle).toBe('darthjee');
+        });
+      });
+
       it('responds 400 (not a raw 500) when newPassword is shorter than 8 characters', async () => {
         await request(ctx.app.getHttpServer())
           .post(`/admin/users/${targetUserId}/edit.json`)
