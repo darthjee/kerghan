@@ -1,7 +1,7 @@
 import { Injectable, NotFoundException, UnprocessableEntityException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { ILike, Repository } from 'typeorm';
-import { assertAnyFieldPresent, hasManagedField } from './assert-any-field-present.js';
+import { ADMIN_EDIT_FIELDS, assertAnyFieldPresent, hasManagedField } from './assert-any-field-present.js';
 import { AuthService } from './auth.service.js';
 import { DefaultUserService } from './default-user.service.js';
 import { AdminUpdateUserDto } from './dto/admin-update-user.dto.js';
@@ -165,7 +165,7 @@ export class AdminService {
    * @throws {NotFoundException} When no user matches `userId`.
    */
   async editUser(userId: number, dto: AdminUpdateUserDto): Promise<User> {
-    assertAnyFieldPresent(dto);
+    assertAnyFieldPresent(dto, ADMIN_EDIT_FIELDS);
 
     const user = await this.#findUserOrThrow(userId);
 

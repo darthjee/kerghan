@@ -59,15 +59,17 @@ export class AuthController {
 
   /**
    * `PATCH /auth/account.json`. Authenticated (default `JwtGuard`, no
-   * `@Public()`). Updates the caller's own username, email, and/or password,
-   * always confirmed by their current password (see `AccountService#updateAccount`).
-   * On a password change, the session identified by the `refresh_token`
+   * `@Public()`). Updates the caller's own username, email, password and/or
+   * GitHub handle (see `AccountService#updateAccount`): `currentPassword` is
+   * required only when a managed field (`username`, `email`, `newPassword`)
+   * is present; a handle-only edit needs none. On a password change, the session identified by the `refresh_token`
    * cookie is kept and every other one revoked (missing/unknown cookie:
    * all revoked).
-   * @param {UpdateAccountDto} dto - The requested changes plus the current password.
+   * @param {UpdateAccountDto} dto - The requested changes, plus the current
+   *   password when a managed field is present.
    * @param {AccessTokenPayload} user - The caller's own authenticated user, supplying the user ID.
    * @param {Request} req - Carries the caller's `refresh_token` cookie.
-   * @returns {Promise<object>} `{ username, email }` on success.
+   * @returns {Promise<object>} `{ username, email, githubHandle }` on success.
    */
   @Patch('account.json')
   async updateAccount(
