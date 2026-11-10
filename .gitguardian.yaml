@@ -54,3 +54,7 @@ secret:
       match: "KERGHAN_DEFAULT_USER_PASSWORD=[0-9a-f]{48}$' \"$ENV_FILE\""
     - name: Same wizard bats regex (issue #405), the character class and count only
       match: "[0-9a-f]{48}"
+    - name: UpdateAccountDto spec fixture password (issue #460) — fake newPassword used only in backend/src/auth/tests/update-account.dto.spec.ts to exercise DTO validation, flagged as a false-positive "Username Password" pair
+      match: long-enough
+    - name: Same UpdateAccountDto spec fixture (issue #460) — fake currentPassword on the same flagged line, a non-secret placeholder
+      match: secret
