@@ -24,8 +24,10 @@ export const UserStatus = {
 export type UserStatus = typeof UserStatus[keyof typeof UserStatus];
 
 /**
- * A Kerghan account. Login identity is a username/password pair, independent
- * of any GitHub handle (tracked separately, see docs/agents/product.md).
+ * A Kerghan account. Login identity is a username/password pair. The account
+ * may also store an optional, public GitHub handle (`github_handle`, owned by
+ * Auth, never a login credential): its public repositories feed the
+ * Repositories listing, which reads it only through `AccountHandleService`.
  * Owns table `auth_users` (per the Auth module's table prefix — see
  * docs/agents/architecture/backend.md).
  */
@@ -48,6 +50,9 @@ export class User {
 
   @Column({ type: 'varchar', length: 16 })
     status!: UserStatus;
+
+  @Column({ name: 'github_handle', type: 'varchar', length: 39, nullable: true })
+    githubHandle!: string | null;
 
   @CreateDateColumn({ name: 'created_at' })
     createdAt!: Date;
