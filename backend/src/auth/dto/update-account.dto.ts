@@ -14,7 +14,6 @@ import {
   normalizeGithubHandle,
 } from '../github-handle.js';
 import { PASSWORD_MIN_LENGTH } from '../password-rules.js';
-import { UserFieldChangesDto } from './user-field-changes.dto.js';
 
 /**
  * Normalises `githubHandle` before validation. Only strings are normalised:
@@ -34,9 +33,12 @@ function normalizeHandleValue({ value }: { value: unknown }): unknown {
  * here. `currentPassword` is required only when a managed field (`username`,
  * `email`, `newPassword`) is present, which `AccountService` also enforces.
  *
- * The managed fields are redeclared here with `@ValidateIf(... !== undefined)`
+ * Unlike `AdminUpdateUserDto`, it does not extend `UserFieldChangesDto`: the
+ * managed fields are declared here with `@ValidateIf(... !== undefined)`
  * instead of the shared `@IsOptional()`, so `null` for any of them answers
- * `400` on this route only (`AdminUpdateUserDto` keeps the shared block).
+ * `400` on this route only (the admin DTO keeps the shared block). The shape
+ * still matches `UserFieldChangesDto` structurally, so the shared helpers
+ * accept it.
  * Only `githubHandle` accepts `null`, meaning clear; it lives on this DTO
  * only, so the admin contract never names it.
  *
@@ -45,7 +47,7 @@ function normalizeHandleValue({ value }: { value: unknown }): unknown {
  * check. The session to keep on a password change is identified by the
  * `refresh_token` cookie, not by a body field.
  */
-export class UpdateAccountDto extends UserFieldChangesDto {
+export class UpdateAccountDto {
   @ValidateIf((dto: UpdateAccountDto) => dto.username !== undefined)
   @IsString()
   @IsNotEmpty()
