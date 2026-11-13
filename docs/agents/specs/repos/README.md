@@ -121,8 +121,9 @@ What this feature changes in the permanent product docs, as a checklist for the 
   [edge-case matrix](edge-cases.md).
 - **`architecture/backend.md#testing`:** the DB-backed tier (`*.db-spec.ts`, `yarn test:db`,
   serial, dedicated schema), replacing the "add a `cimg/mysql` service … when the first spec
-  actually needs a real database" note; and the injected `Clock` / `SyncLauncher` conventions
-  if they generalise beyond Repositories ([testing.md](testing.md#db-backed-tier)).
+  actually needs a real database" note (#462 already wrote this part); and the injected
+  `Clock` / `SyncLauncher` conventions if they generalise beyond Repositories
+  ([testing.md](testing.md#db-backed-tier)).
 - **`architecture/infra.md`:** the MySQL CI job (`mysql:8.4.11` service, required by the
   release and deploy jobs). #462 already wrote it.
 - **The Repositories module doc, "Testing":** built from [testing.md](testing.md).
