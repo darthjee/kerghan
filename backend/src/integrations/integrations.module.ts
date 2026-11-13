@@ -1,18 +1,25 @@
 import { Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { Clock, SystemClock } from '../core/clock.js';
 import { IntegrationCredentialLockout } from './entities/integration-credential-lockout.entity.js';
 import { IntegrationGithubAppState } from './entities/integration-github-app-state.entity.js';
 import { IntegrationOauthState } from './entities/integration-oauth-state.entity.js';
 import { Integration } from './entities/integration.entity.js';
 import { GithubAppClientService } from './github-app-client.service.js';
+import { GithubAppRepoCaller } from './github-app-repo-caller.js';
 import { GithubClientService } from './github-client.service.js';
+import { GithubInstallationTokenCache } from './github-installation-token-cache.js';
+import { GithubRepoClientService } from './github-repo-client.service.js';
+import { GithubUnauthenticatedBudget } from './github-unauthenticated-budget.js';
 import { IntegrationConnectionTestService } from './integration-connection-test.service.js';
 import { IntegrationCredentialAbuseGuardService } from './integration-credential-abuse-guard.service.js';
 import { IntegrationCredentialService } from './integration-credential.service.js';
+import { IntegrationLifecycleService } from './integration-lifecycle.service.js';
 import { IntegrationStoreService } from './integration-store.service.js';
 import { IntegrationTestCooldownService } from './integration-test-cooldown.service.js';
 import { IntegrationsEncryptionService } from './integrations-encryption.service.js';
+import { IntegrationsGithubService } from './integrations-github.service.js';
 import { IntegrationsKeyRotationService } from './integrations-key-rotation.service.js';
 import { buildIntegrationsKeys, INTEGRATIONS_KEY } from './integrations-key.js';
 import { IntegrationsController } from './integrations.controller.js';
@@ -47,9 +54,14 @@ import { PatStrategy } from './types/pat/pat.strategy.js';
  * `integrations_credential_lockouts`, `integrations_oauth_states` and
  * `integrations_github_app_states`;
  * `integrations.user_id` carries the project's only physical cross-module FK (`ON DELETE CASCADE` to
- * `auth_users`), declared in its migration only. Exports only
+ * `auth_users`), declared in its migration only. Exports
  * `IntegrationsKeyRotationService`, for the operator-only
- * `integrations-keys` CLI's application context (never used by a request).
+ * `integrations-keys` CLI's application context (never used by a request),
+ * and `IntegrationsGithubService`, the fixed `GET`-only GitHub repo
+ * operations other modules use (imported through
+ * `integrations-github.public.ts`; no credential ever leaves the module).
+ * Its GitHub repo client, installation-token cache and unauthenticated
+ * budget tracker stay internal.
  *
  * `KERGHAN_INTEGRATIONS_KEY` and the optional, decrypt-only
  * `KERGHAN_PREVIOUS_INTEGRATIONS_KEYS` are validated once, in the
@@ -89,8 +101,15 @@ import { PatStrategy } from './types/pat/pat.strategy.js';
       useFactory: (pat: PatStrategy, oauthApp: OauthAppStrategy, githubApp: GithubAppStrategy): IntegrationTypeStrategy[] =>
         [pat, oauthApp, githubApp],
     },
+    { provide: Clock, useClass: SystemClock },
     IntegrationsEncryptionService,
     GithubClientService,
+    GithubRepoClientService,
+    GithubInstallationTokenCache,
+    GithubUnauthenticatedBudget,
+    IntegrationLifecycleService,
+    GithubAppRepoCaller,
+    IntegrationsGithubService,
     IntegrationTypeRegistry,
     PatStrategy,
     OauthAppRevocationService,
@@ -117,7 +136,7 @@ import { PatStrategy } from './types/pat/pat.strategy.js';
     GithubAppFlowService,
     GithubAppEnabledGuard,
   ],
-  exports: [IntegrationsKeyRotationService],
+  exports: [IntegrationsKeyRotationService, IntegrationsGithubService],
 })
 // NestJS module classes are intentionally empty; all behavior lives in @Module().
 // eslint-disable-next-line @typescript-eslint/no-extraneous-class

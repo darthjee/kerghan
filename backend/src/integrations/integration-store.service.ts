@@ -1,9 +1,11 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, MoreThan, QueryFailedError, Repository } from 'typeorm';
+import { In, MoreThan, Repository } from 'typeorm';
 import type { QueryDeepPartialEntity } from 'typeorm/query-builder/QueryPartialEntity.js';
+import { isDuplicateEntry } from './duplicate-entry.js';
 import { Integration } from './entities/integration.entity.js';
 import { ENSURE_LOCKOUT_ROW_SQL } from './integration-credential-abuse-guard.service.js';
+import type { IntegrationStatus } from './integration-enums.js';
 import { integrationNotFound, labelTaken, limitReached } from './integration-http-errors.js';
 import type { EncryptedSecret } from './integrations-encryption.service.js';
 
@@ -34,9 +36,6 @@ export interface SecretKeyIdCount {
   keyId: string;
   count: number;
 }
-
-// MySQL's driver error code for a unique-index violation.
-const MYSQL_DUPLICATE_ENTRY_CODE = 'ER_DUP_ENTRY';
 
 /**
  * Owner-scoped persistence for the `integrations` table. Every query
@@ -78,6 +77,53 @@ export class IntegrationStoreService {
     }
 
     return row;
+  }
+
+  /**
+   * Finds one of the owner's integrations by internal id.
+   * @param {number} userId - The owner's id.
+   * @param {number} id - The internal `integrations.id`.
+   * @returns {Promise<Integration | null>} The row, or `null` when missing or foreign.
+   */
+  findOwnedById(userId: number, id: number): Promise<Integration | null> {
+    return this.repository.findOne({ where: { id, userId } });
+  }
+
+  /**
+   * Lists the owner's integrations, oldest first (`created_at`, then `id`).
+   * @param {number} userId - The owner's id.
+   * @returns {Promise<Integration[]>} The rows.
+   */
+  listOwnedOldestFirst(userId: number): Promise<Integration[]> {
+    return this.repository.find({ where: { userId }, order: { createdAt: 'ASC', id: 'ASC' } });
+  }
+
+  /**
+   * Reads the `secret_iv` an integration holds (owner-scoped; never leaves the module).
+   * @param {number} userId - The owner's id.
+   * @param {number} id - The internal `integrations.id`.
+   * @returns {Promise<Buffer | null>} The IV, or `null` when the row is gone.
+   */
+  async readSecretIv(userId: number, id: number): Promise<Buffer | null> {
+    const row = await this.repository.findOne({ select: { id: true, secretIv: true }, where: { id, userId } });
+
+    return row?.secretIv ?? null;
+  }
+
+  /**
+   * Sets the status only while the row holds the credential a call used
+   * (`… AND secret_iv = ?`), so a Replace or key rotation in between makes it a no-op.
+   * @param {Pick<Integration, 'id' | 'userId'>} row - The row the call loaded.
+   * @param {Buffer} ivUsed - The `secret_iv` read with the decrypted row.
+   * @param {IntegrationStatus} status - The new status.
+   * @param {string | null} statusReason - The new reason.
+   * @returns {Promise<boolean>} `true` when the row changed.
+   */
+  async setStatusIfCredential(row: Pick<Integration, 'id' | 'userId'>, ivUsed: Buffer, status: IntegrationStatus,
+    statusReason: string | null): Promise<boolean> {
+    const result = await this.repository.update({ id: row.id, userId: row.userId, secretIv: ivUsed }, { status, statusReason });
+
+    return (result.affected ?? 0) > 0;
   }
 
   /**
@@ -239,20 +285,4 @@ export class IntegrationStoreService {
       throw isDuplicateEntry(error) ? labelTaken() : error;
     }
   }
-}
-
-/**
- * Whether a write failed on a unique index.
- * @param {unknown} error - The caught value.
- * @returns {boolean} `true` for MySQL's `ER_DUP_ENTRY`.
- */
-function isDuplicateEntry(error: unknown): boolean {
-  if (!(error instanceof QueryFailedError)) {
-    return false;
-  }
-
-  const driverError: unknown = error.driverError;
-
-  return typeof driverError === 'object' && driverError !== null
-    && (driverError as { code?: unknown }).code === MYSQL_DUPLICATE_ENTRY_CODE;
 }

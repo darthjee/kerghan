@@ -1,4 +1,6 @@
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { expectErrorBody } from '../../auth/tests/support/error-body.js';
+import { INTEGRATION_DELETED, IntegrationDeletedEvent } from '../events/integration-deleted.event.js';
 import { GithubClientError } from '../github-client.service.js';
 import { Secret } from '../secret.js';
 import {
@@ -117,6 +119,27 @@ describe('IntegrationsController test connection and delete (e2e)', () => {
 
       await call(ctx.app, 'delete', `/integrations/${id}.json`, ctx.owner).expect(204);
 
+      expect(ctx.repo.rows).toHaveLength(0);
+    });
+
+    it('emits integration.deleted and still answers 204 when a listener throws', async () => {
+      const emitter = ctx.app.get(EventEmitter2);
+      const { id: internalId, userId } = ctx.repo.rows[0];
+      const seen: IntegrationDeletedEvent[] = [];
+      const listener = async (event: IntegrationDeletedEvent): Promise<void> => {
+        seen.push(event);
+        throw new Error('listener failed');
+      };
+
+      emitter.on(INTEGRATION_DELETED, listener);
+
+      try {
+        await call(ctx.app, 'delete', `/integrations/${id}.json`, ctx.owner).expect(204);
+      } finally {
+        emitter.off(INTEGRATION_DELETED, listener);
+      }
+
+      expect(seen).toEqual([new IntegrationDeletedEvent(userId, internalId)]);
       expect(ctx.repo.rows).toHaveLength(0);
     });
   });

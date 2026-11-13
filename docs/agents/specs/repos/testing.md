@@ -43,7 +43,7 @@ category's default tier unless it carries an exception tag.
 
 | Category | Default tier |
 |---|---|
-| Atomic sync claim (conditional `UPDATE`, affected-row count), first-use sync-state row with no duplicates, `run_id`-guarded writes, unique keys (`user_id` + `github_id`, `source_key` rows), per-page transactions (a later page fails, applied pages kept), the `secret_iv` compare-and-set, Add's conditional `added_at IS NULL` write, pruning / integration-deletion / `user.deleted` queries (with two users' rows), `github_id` above 2³¹ (`bigint`), the Repositories migrations up and down | **DB-backed** |
+| Atomic sync claim (conditional `UPDATE`, affected-row count), first-use sync-state row with no duplicates, `run_id`-guarded writes, unique keys (`user_id` + `github_id`, `source_key` rows), per-page transactions (a later page fails, applied pages kept), the `secret_iv` compare-and-set (its call-flow logic is also unit-tested in #461; the DB-backed spec lands with #463), Add's conditional `added_at IS NULL` write, pruning / integration-deletion / `user.deleted` queries (with two users' rows), `github_id` above 2³¹ (`bigint`), the Repositories migrations up and down | **DB-backed** |
 | Routes, DTOs, guards, cache headers, error mapping to HTTP answers | **E2E with fakes** |
 | Service flow (sync orchestration, source handling, row statuses, handle reconciliation flow, Add flow) | **Unit**, or **E2E with fakes** when the HTTP answer is asserted |
 | The Integrations GitHub client and `IntegrationsGithubService` (requests, headers, error mapping, budget tracker, token cache) | **Unit**, at the `fetch` level |
@@ -85,7 +85,9 @@ prove the request and its handling:
 
 Every Repositories spec (unit, e2e and DB) injects a scriptable
 **`FakeIntegrationsGithubService`**. It returns the exported typed results and never touches
-`fetch`, since Repositories holds no HTTP code.
+`fetch`, since Repositories holds no HTTP code. It ships with the Integrations module's test
+support (`integrations/tests/support/fake-integrations-github.service.ts`, #461), next to the
+shared builders, so the fidelity contract spec guards it; Repositories imports it.
 
 - **Scripting:** answers are scripted per (`integrationId` or `null`, operation, page).
 - **Call log:** every call is logged, so specs assert call counts and order, including "no
@@ -95,12 +97,13 @@ Every Repositories spec (unit, e2e and DB) injects a scriptable
 
 ### Shared builders
 
-Typed test-support builders, no recorded JSON:
+Typed test-support builders, no recorded JSON (`integrations/tests/support/github-builders.ts`):
 
 - `githubRepo({ id, private, owner, name })`, with default ids above 2³¹;
 - `listingPage(page, repos, { hasNext, etag })`;
-- `notModified()`, `rateLimited(resetAt)`, `unauthorized()`, `notFound()`, `timeout()`,
-  `serverError()`, `redirect()`, `integrationUnusable(reason)`.
+- `repository(repo)` (a `GET /repositories/{id}` answer);
+- `notModified()`, `rateLimited(resetAt)`, `unauthorized()`, `forbidden()`, `notFound()`,
+  `timeout()`, `serverError()`, `redirect()`, `integrationUnusable(reason)`.
 
 Integrations specs turn a builder into a raw GitHub response (body, `ETag`, `Link`,
 `X-RateLimit-*` headers); the fake returns the matching typed result.
@@ -114,7 +117,8 @@ builder, so the fake cannot drift from the real service.
 ### No-network guard
 
 The Repositories and Integrations GitHub test harnesses replace `globalThis.fetch`, before each
-test, with a function that throws unless the spec mocks it. Other modules' specs are untouched.
+test, with a function that throws unless the spec mocks it
+(`integrations/tests/support/no-network-guard.ts`). Other modules' specs are untouched.
 
 ## Detached sync and time
 
@@ -131,8 +135,9 @@ without running them. A spec can then prove both halves of a trigger:
 
 Race specs can also run a captured task step by step, together with the fake's deferred answers.
 
-**`FakeClock`.** Tests replace the injected `Clock` with one exposing `set(date)` and
-`advance(ms)`, and drive every time rule with it:
+**`FakeClock`.** Tests replace the injected `Clock` (`core/clock.ts`) with the shared
+`FakeClock` (`core/tests/support/fake-clock.ts`), exposing `set(date)` and `advance(ms)`, and
+drive every time rule with it:
 
 - the TTL, the Refresh cooldown, the lease and its heartbeat, the hard deadline;
 - the `resetAt` of a `rate_limited` source and the budget tracker's reset window;
