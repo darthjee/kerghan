@@ -19,6 +19,7 @@ import { HealthController } from './health/health.controller.js';
 import { HealthService } from './health/health.service.js';
 import { IntegrationsModule } from './integrations/integrations.module.js';
 import { MailModule } from './mail/mail.module.js';
+import { RepositoriesModule } from './repositories/repositories.module.js';
 
 // Default access-token lifetime (15 minutes, in milliseconds) used when
 // `KERGHAN_ACCESS_TOKEN_TTL_MS` is unset — must match
@@ -58,6 +59,9 @@ export function buildJwtSignOptions(configService: ConfigService): { expiresIn: 
  * (`ON DELETE CASCADE` to `auth_users`), the documented exception to the
  * logical-FK strategy.
  *
+ * `RepositoriesModule` is always-on too, so its `integration.deleted` and
+ * `user.deleted` listeners are registered at boot.
+ *
  * Global guards run in registration order: `OriginGuard` (CSRF protection
  * for state-changing requests) comes first, so a forged cross-site request
  * is rejected with `403` before `JwtGuard` could answer `401`; then
@@ -83,6 +87,7 @@ export function buildJwtSignOptions(configService: ConfigService): { expiresIn: 
     IntegrationsModule,
     LoggingModule,
     MailModule,
+    RepositoriesModule,
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
