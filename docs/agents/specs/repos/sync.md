@@ -135,8 +135,9 @@ WHERE user_id = :userId
 
 ### Time source
 
-- **Injected `Clock`** (`now(): Date`): the only time source of the Repositories module, never
-  `Date.now()` / `new Date()` directly. Every time rule reads it: the TTL, the Refresh cooldown,
+- **Injected `Clock`** (`now(): Date`, `backend/src/core/clock.ts`, provided as `SystemClock`;
+  shared with the Integrations module, which added it in #461): the only time source of the
+  Repositories module, never `Date.now()` / `new Date()` directly. Every time rule reads it: the TTL, the Refresh cooldown,
   the lease and its heartbeat, the hard deadline, `resetAt` checks of `rate_limited` sources, and
   the Add rate-limit window ([api.md](api.md#add-rate-limit)). Every timestamp the module writes
   (`last_started_at`, `heartbeat_at`, `last_synced_at`, `last_seen_at`, `synced_at`, `added_at`)

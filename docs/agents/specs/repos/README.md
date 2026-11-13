@@ -279,6 +279,7 @@ What this feature changes in the permanent product docs, as a checklist for the 
 | #451 | Specs: repositories — testing strategy | every "Required tests" section |
 | #452 | Specs: fold the repositories specs into the permanent docs and remove them | all |
 | #460 | Repositories: Auth — GitHub handle on the account | implementation: [model.md](model.md#github-handle), [security.md](security.md#github-handle) |
+| #461 | Repositories: Integrations — export IntegrationsGithubService | implementation: [integrations.md](integrations.md), [security.md](security.md#credentials-stay-in-the-backend), [security.md](security.md#fixed-github-base-url); spec sync in [integrations.md](integrations.md), [testing.md](testing.md), [sync.md](sync.md#time-source) |
 
 The implementation sub-issues are #460–#466, created on #444 from the enhanced specs; each adds
 its own row here.
