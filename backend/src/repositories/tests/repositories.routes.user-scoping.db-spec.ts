@@ -1,3 +1,4 @@
+import { HandleReconciler } from '../handle-reconciler.js';
 import { reposOf, seedRepo, seedStatus, sourcesOf } from './support/repo-rows.js';
 import {
   buildRepositoriesHttpDbHarness,
@@ -6,9 +7,8 @@ import {
 } from './support/repositories-http-db-harness.js';
 import { ref } from './support/sync-harness.js';
 import { seedTwoUserBaseline, setHandle, SHARED_GITHUB_ID, snapshotUserRows } from './support/two-user-baseline.js';
-import { githubRepo, listingPage, notFound, repository } from '../../integrations/tests/support/github-builders.js';
 import type { IntegrationRef } from '../../integrations/integrations-github.public.js';
-import { HandleReconciler } from '../handle-reconciler.js';
+import { githubRepo, listingPage, notFound, repository } from '../../integrations/tests/support/github-builders.js';
 
 const ROUTES = ['/repositories/mine.json', '/repositories/sync/state.json', '/repositories/sync.json', '/repositories/add.json'];
 const HANDLE_ONLY_ID = 3_100_000_001;
