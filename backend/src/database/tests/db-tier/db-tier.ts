@@ -1,4 +1,4 @@
-import { DataSource } from 'typeorm';
+import { DataSource, DataSourceOptions } from 'typeorm';
 import { buildDbTierOptions } from './db-tier-options.js';
 
 const MIGRATIONS_TABLE = 'migrations';
@@ -63,4 +63,20 @@ export async function truncateAll(ds: DataSource | Promise<DataSource>): Promise
   } finally {
     await runner.release();
   }
+}
+
+type EntityClass = NonNullable<DataSourceOptions['entities']> extends Array<infer T> ? T : never;
+
+/**
+ * Opens a separate data source on the test database with the given entity
+ * classes registered, for specs that exercise TypeORM repositories or
+ * services. The caller destroys it (typically in `afterAll`).
+ *
+ * @param entities - the entity classes to register.
+ * @returns the initialized data source.
+ */
+export async function openEntityDataSource(entities: EntityClass[]): Promise<DataSource> {
+  const dataSource = new DataSource({ ...buildDbTierOptions(), migrations: [], entities, poolSize: 10 });
+
+  return dataSource.initialize();
 }
