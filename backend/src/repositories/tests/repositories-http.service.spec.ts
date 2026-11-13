@@ -1,6 +1,6 @@
 import { FakeClock } from '../../core/tests/support/fake-clock.js';
-import type { RepositoriesService } from '../repositories.service.js';
 import { RepositoriesHttpService } from '../repositories-http.service.js';
+import type { RepositoriesService } from '../repositories.service.js';
 import type { RepositoryAddService } from '../repository-add.service.js';
 import { FakeRepositoriesService, idleSyncState } from './support/fake-repositories.service.js';
 

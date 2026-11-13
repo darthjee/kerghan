@@ -1,6 +1,6 @@
 import { HttpException, Injectable, UnauthorizedException } from '@nestjs/common';
-import { RepositoriesService } from './repositories.service.js';
 import { addRateLimited, repositoryNotFound, repositorySourceUnusable } from './repositories-http-errors.js';
+import { RepositoriesService } from './repositories.service.js';
 import { RepositoryAddRateLimiter } from './repository-add-rate-limiter.js';
 import { Clock } from '../core/clock.js';
 import { githubRateLimited, githubUnavailable } from '../core/github-http-errors.js';

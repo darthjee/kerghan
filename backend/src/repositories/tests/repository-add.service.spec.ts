@@ -1,7 +1,9 @@
 import { ConfigService } from '@nestjs/config';
+import { FakeRepositoriesService } from './support/fake-repositories.service.js';
 import { FakeClock } from '../../core/tests/support/fake-clock.js';
 import type { IntegrationRef } from '../../integrations/integrations-github.public.js';
 import type { IntegrationsGithubService } from '../../integrations/integrations-github.public.js';
+import { FakeIntegrationsGithubService } from '../../integrations/tests/support/fake-integrations-github.service.js';
 import {
   forbidden,
   notFound,
@@ -11,12 +13,10 @@ import {
   serverError,
   timeout,
 } from '../../integrations/tests/support/github-builders.js';
-import { FakeIntegrationsGithubService } from '../../integrations/tests/support/fake-integrations-github.service.js';
 import { RepositoriesConfig } from '../repositories-config.js';
 import type { RepositoriesService } from '../repositories.service.js';
 import { RepositoryAddRateLimiter } from '../repository-add-rate-limiter.js';
 import { RepositoryAddService } from '../repository-add.service.js';
-import { FakeRepositoriesService } from './support/fake-repositories.service.js';
 
 const OWNER = 1;
 const INTRUDER = 2;
