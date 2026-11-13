@@ -4,8 +4,21 @@ import type { CooldownClaim } from '../../integration-test-cooldown.service.js';
 
 type Where = Partial<Record<keyof Integration, unknown>>;
 
+function sameValue(rowValue: unknown, value: unknown): boolean {
+  return Buffer.isBuffer(rowValue) && Buffer.isBuffer(value) ? rowValue.equals(value) : rowValue === value;
+}
+
 function matches(row: Integration, where: Where): boolean {
-  return Object.entries(where).every(([key, value]) => (row as never)[key] === value);
+  return Object.entries(where).every(([key, value]) => sameValue((row as never)[key], value));
+}
+
+type Order = Partial<Record<'createdAt' | 'id', 'ASC' | 'DESC'>>;
+
+// Newest first by default (the listing's order); `order: { createdAt: 'ASC' }` reads oldest first.
+function compareRows(order: Order | undefined): (a: Integration, b: Integration) => number {
+  const sign = order?.createdAt === 'ASC' ? 1 : -1;
+
+  return (a, b) => sign * (a.createdAt.getTime() - b.createdAt.getTime() || a.id - b.id);
 }
 
 function duplicateEntry(): QueryFailedError {
@@ -57,10 +70,10 @@ export function createInMemoryIntegrationRepo() {
       },
     },
     create: (attributes: Partial<Integration>): Integration => ({ ...attributes }) as Integration,
-    find: async ({ where }: { where: Where }): Promise<Integration[]> =>
+    find: async ({ where, order }: { where: Where; order?: Order }): Promise<Integration[]> =>
       rows
         .filter((row) => matches(row, where))
-        .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime() || b.id - a.id)
+        .sort(compareRows(order))
         .map((row) => ({ ...row })),
     findOne: async ({ where }: { where: Where }): Promise<Integration | null> => {
       const row = rows.find((candidate) => matches(candidate, where));

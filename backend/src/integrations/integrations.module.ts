@@ -8,10 +8,13 @@ import { IntegrationOauthState } from './entities/integration-oauth-state.entity
 import { Integration } from './entities/integration.entity.js';
 import { GithubAppClientService } from './github-app-client.service.js';
 import { GithubClientService } from './github-client.service.js';
+import { GithubInstallationTokenCache } from './github-installation-token-cache.js';
 import { GithubRepoClientService } from './github-repo-client.service.js';
+import { GithubUnauthenticatedBudget } from './github-unauthenticated-budget.js';
 import { IntegrationConnectionTestService } from './integration-connection-test.service.js';
 import { IntegrationCredentialAbuseGuardService } from './integration-credential-abuse-guard.service.js';
 import { IntegrationCredentialService } from './integration-credential.service.js';
+import { IntegrationLifecycleService } from './integration-lifecycle.service.js';
 import { IntegrationStoreService } from './integration-store.service.js';
 import { IntegrationTestCooldownService } from './integration-test-cooldown.service.js';
 import { IntegrationsEncryptionService } from './integrations-encryption.service.js';
@@ -95,6 +98,9 @@ import { PatStrategy } from './types/pat/pat.strategy.js';
     IntegrationsEncryptionService,
     GithubClientService,
     GithubRepoClientService,
+    GithubInstallationTokenCache,
+    GithubUnauthenticatedBudget,
+    IntegrationLifecycleService,
     IntegrationTypeRegistry,
     PatStrategy,
     OauthAppRevocationService,

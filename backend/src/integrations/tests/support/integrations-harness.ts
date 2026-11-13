@@ -7,11 +7,14 @@ import {
   InMemoryIntegrationRepo,
   InMemoryTestCooldown,
 } from './in-memory-integrations.js';
+import { SystemClock } from '../../../core/clock.js';
 import type { LoggerService } from '../../../core/logger.service.js';
 import type { GithubClientService } from '../../github-client.service.js';
+import { GithubInstallationTokenCache } from '../../github-installation-token-cache.js';
 import { IntegrationConnectionTestService } from '../../integration-connection-test.service.js';
 import type { IntegrationCredentialAbuseGuardService } from '../../integration-credential-abuse-guard.service.js';
 import { IntegrationCredentialService } from '../../integration-credential.service.js';
+import { IntegrationLifecycleService } from '../../integration-lifecycle.service.js';
 import { IntegrationStoreService } from '../../integration-store.service.js';
 import type { IntegrationTestCooldownService } from '../../integration-test-cooldown.service.js';
 import { IntegrationsEncryptionService } from '../../integrations-encryption.service.js';
@@ -95,6 +98,7 @@ export function buildIntegrationsHarness(options: HarnessOptions = {}): Integrat
     registry,
     logger as unknown as LoggerService,
     config as unknown as ConfigService,
+    new IntegrationLifecycleService(new GithubInstallationTokenCache(new SystemClock(), store)),
   );
 
   return { service, store, credentials, repo, github, guard, cooldown, encryption, previousEncryption, logger };
