@@ -8,6 +8,7 @@ import { IntegrationOauthState } from './entities/integration-oauth-state.entity
 import { Integration } from './entities/integration.entity.js';
 import { GithubAppClientService } from './github-app-client.service.js';
 import { GithubClientService } from './github-client.service.js';
+import { GithubRepoClientService } from './github-repo-client.service.js';
 import { IntegrationConnectionTestService } from './integration-connection-test.service.js';
 import { IntegrationCredentialAbuseGuardService } from './integration-credential-abuse-guard.service.js';
 import { IntegrationCredentialService } from './integration-credential.service.js';
@@ -93,6 +94,7 @@ import { PatStrategy } from './types/pat/pat.strategy.js';
     { provide: Clock, useClass: SystemClock },
     IntegrationsEncryptionService,
     GithubClientService,
+    GithubRepoClientService,
     IntegrationTypeRegistry,
     PatStrategy,
     OauthAppRevocationService,

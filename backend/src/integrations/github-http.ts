@@ -28,6 +28,20 @@ export function rateLimitFields(headers: Headers): GithubRateLimitFields {
   };
 }
 
+// One `Link` entry whose `rel` is `next`.
+const NEXT_LINK_ENTRY = /<[^>]*>\s*;\s*rel="next"/;
+
+/**
+ * Whether a `Link` header has a `rel="next"` entry. Only its presence is
+ * read: the URL itself is never used, so no response-supplied URL is ever
+ * requested.
+ * @param {string | null} link - The `Link` header.
+ * @returns {boolean} `true` when a next page exists.
+ */
+export function hasNextLink(link: string | null): boolean {
+  return link !== null && NEXT_LINK_ENTRY.test(link);
+}
+
 /**
  * Reads a response body as text, stopping (and cancelling the stream) once
  * it exceeds `maxBytes`.
