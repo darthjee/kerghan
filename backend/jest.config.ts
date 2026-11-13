@@ -8,11 +8,14 @@ import type { Config } from 'jest';
 // strips the explicit `.js` extensions our NodeNext-style source imports
 // use (e.g. `./auth.service.js`) so Jest resolves them back to the `.ts`
 // source files.
-const config: Config = {
+//
+// `baseConfig` holds the parts shared with the DB-backed tier's
+// `jest.db.config.ts` (rootDir, transform, module resolution), so both
+// configs compile and resolve source identically.
+export const baseConfig: Config = {
   rootDir: 'src',
   testEnvironment: 'node',
   moduleFileExtensions: ['js', 'json', 'ts'],
-  testRegex: '.*\\.(spec|e2e-spec)\\.ts$',
   transform: {
     '^.+\\.ts$': [
       '@swc/jest',
@@ -29,10 +32,18 @@ const config: Config = {
   moduleNameMapper: {
     '^(\\.{1,2}/.*)\\.js$': '$1',
   },
+};
+
+// `*.db-spec.ts` files (the DB-backed tier, `yarn test:db`) never match
+// this `testRegex`: `.db-spec` is neither `.spec` nor `.e2e-spec`.
+const config: Config = {
+  ...baseConfig,
+  testRegex: '.*\\.(spec|e2e-spec)\\.ts$',
   collectCoverageFrom: [
     '**/*.(t|j)s',
     '!**/*.spec.ts',
     '!**/*.e2e-spec.ts',
+    '!**/*.db-spec.ts',
     // Bootstrap/wiring and TypeORM migrations are exercised by booting the
     // app and by `yarn migration:run`/`migration:revert` against a real
     // database (see docs/agents/architecture/backend.md), not by unit
