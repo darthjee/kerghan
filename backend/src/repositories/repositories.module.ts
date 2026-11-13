@@ -9,6 +9,7 @@ import { LinkFiller } from './link-filler.js';
 import { PageWriter } from './page-writer.js';
 import { Pruner } from './pruner.js';
 import { RepositoriesConfig } from './repositories-config.js';
+import { RepositoriesEventsListener } from './repositories-events.listener.js';
 import { SourceRunner } from './source-runner.js';
 import { SyncFinisher } from './sync-finisher.js';
 import { DetachedSyncLauncher, SyncLauncher } from './sync-launcher.js';
@@ -30,6 +31,7 @@ export const REPOSITORIES_PROVIDERS: Provider[] = [
   LinkFiller,
   SyncFinisher,
   SyncRunner,
+  RepositoriesEventsListener,
 ];
 
 /**
