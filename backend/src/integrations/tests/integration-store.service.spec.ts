@@ -24,6 +24,49 @@ function build(count: number): { store: IntegrationStoreService; manager: FakeMa
 }
 
 describe('IntegrationStoreService', () => {
+  describe('setStatusIfCredential', () => {
+    it('updates WHERE id, user_id and the secret_iv used, answering whether a row changed', async () => {
+      const update = jest.fn().mockResolvedValueOnce({ affected: 1 }).mockResolvedValueOnce({ affected: 0 });
+      const store = new IntegrationStoreService({ update } as never);
+      const iv = Buffer.from('000102030405060708090a0b', 'hex');
+
+      expect(await store.setStatusIfCredential({ id: 3, userId: 7 }, iv, 'invalid', 'bad_credentials')).toBe(true);
+      expect(await store.setStatusIfCredential({ id: 3, userId: 7 }, iv, 'undecryptable', null)).toBe(false);
+      expect(update).toHaveBeenNthCalledWith(1, { id: 3, userId: 7, secretIv: iv }, { status: 'invalid', statusReason: 'bad_credentials' });
+      expect(update).toHaveBeenNthCalledWith(2, { id: 3, userId: 7, secretIv: iv }, { status: 'undecryptable', statusReason: null });
+    });
+
+    it('treats a missing affected count as no change', async () => {
+      const store = new IntegrationStoreService({ update: jest.fn().mockResolvedValue({}) } as never);
+
+      expect(await store.setStatusIfCredential({ id: 3, userId: 7 }, Buffer.alloc(12), 'invalid', null)).toBe(false);
+    });
+  });
+
+  describe('owner-scoped reads by internal id', () => {
+    it('findOwnedById and readSecretIv filter by id and user_id', async () => {
+      const iv = Buffer.alloc(12, 1);
+      const findOne = jest.fn().mockResolvedValueOnce({ id: 3 }).mockResolvedValueOnce({ id: 3, secretIv: iv })
+        .mockResolvedValueOnce(null);
+      const store = new IntegrationStoreService({ findOne } as never);
+
+      expect(await store.findOwnedById(7, 3)).toEqual({ id: 3 });
+      expect(await store.readSecretIv(7, 3)).toBe(iv);
+      expect(await store.readSecretIv(7, 4)).toBeNull();
+      expect(findOne).toHaveBeenNthCalledWith(1, { where: { id: 3, userId: 7 } });
+      expect(findOne).toHaveBeenNthCalledWith(2, { select: { id: true, secretIv: true }, where: { id: 3, userId: 7 } });
+    });
+
+    it('listOwnedOldestFirst orders by created_at then id', async () => {
+      const find = jest.fn().mockResolvedValue([]);
+      const store = new IntegrationStoreService({ find } as never);
+
+      await store.listOwnedOldestFirst(7);
+
+      expect(find).toHaveBeenCalledWith({ where: { userId: 7 }, order: { createdAt: 'ASC', id: 'ASC' } });
+    });
+  });
+
   describe('insertWithinCap', () => {
     it('locks the owner row, counts and inserts inside one transaction', async () => {
       const { store, manager, transaction } = build(1);

@@ -1,4 +1,5 @@
 import { inspect } from 'node:util';
+import { GithubAppClientService } from '../github-app-client.service.js';
 import {
   UNRECOGNIZED_OAUTH_ERROR,
   GITHUB_API_VERSION,
@@ -6,6 +7,7 @@ import {
   GithubClientError,
   GithubClientService,
   GITHUB_USER_AGENT,
+  send,
 } from '../github-client.service.js';
 import { Secret } from '../secret.js';
 
@@ -422,5 +424,50 @@ describe('GithubClientService', () => {
       expect(error.reason).toBe(reason);
       expectNoCanary(error);
     });
+  });
+});
+
+describe('send redirect option', () => {
+  let fetchMock: jest.SpyInstance;
+
+  beforeEach(() => {
+    fetchMock = jest.spyOn(globalThis, 'fetch');
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  it("defaults to redirect: 'error', so a 3xx surfaces as network_error", async () => {
+    fetchMock.mockRejectedValue(new TypeError('fetch failed', { cause: new Error('unexpected redirect') }));
+
+    expect((await thrown(send('https://api.github.com/user', { method: 'GET' }))).reason).toBe('network_error');
+    expect((fetchMock.mock.calls[0] as [string, RequestInit])[1].redirect).toBe('error');
+  });
+
+  it("passes redirect: 'manual' through, returning the 3xx response unfollowed", async () => {
+    fetchMock.mockResolvedValue(reply(301, '', { Location: 'https://api.github.com/elsewhere' }));
+
+    const { response } = await send('https://api.github.com/user', { method: 'GET' }, 1024, { redirect: 'manual' });
+
+    expect(response.status).toBe(301);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect((fetchMock.mock.calls[0] as [string, RequestInit])[1].redirect).toBe('manual');
+  });
+
+  it("keeps every existing caller on redirect: 'error'", async () => {
+    fetchMock.mockImplementation(async () => reply(200, '{}'));
+    const client = new GithubClientService();
+    const app = new GithubAppClientService();
+
+    await client.getUser(new Secret(CANARY));
+    await client.exchangeOauthCode(exchangeRequest());
+    await client.revokeOauthToken(revokeRequest());
+    await app.listUserInstallations(new Secret(CANARY));
+    await app.getAppInstallation(new Secret(CANARY), 1);
+    await app.createInstallationToken(new Secret(CANARY), 1);
+
+    expect(fetchMock.mock.calls.map((call) => (call as [string, RequestInit])[1].redirect))
+      .toEqual(['error', 'error', 'error', 'error', 'error', 'error']);
   });
 });

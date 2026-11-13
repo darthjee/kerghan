@@ -50,6 +50,8 @@ export interface IntegrationsHarness {
   /** Encrypts under the harness's previous (decrypt-only) key, to seed rows stored before a rotation. */
   previousEncryption: IntegrationsEncryptionService;
   logger: FakeLogger;
+  /** The `EventEmitter2` double (`emitAsync` resolves by default). */
+  eventEmitter: { emitAsync: jest.Mock };
 }
 
 export interface HarnessOptions {
@@ -107,5 +109,5 @@ export function buildIntegrationsHarness(options: HarnessOptions = {}): Integrat
     ),
   );
 
-  return { service, store, credentials, repo, github, guard, cooldown, encryption, previousEncryption, logger };
+  return { service, store, credentials, repo, github, guard, cooldown, encryption, previousEncryption, logger, eventEmitter };
 }
