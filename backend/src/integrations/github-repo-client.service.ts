@@ -46,6 +46,8 @@ const MINT_FAILURES = new Map<number, InstallationTokenMint>([
 export interface RepoCall<T> {
   result: T;
   rateLimit: RateLimitFields | null;
+  /** GitHub's HTTP status, for safe-field logs (`null` without an answer). */
+  status: number | null;
 }
 
 /**
@@ -208,7 +210,7 @@ export class GithubRepoClientService {
         redirect: 'manual',
       });
     } catch (error) {
-      return { result: { kind: 'unavailable', reason: clientErrorReason(error) } as T, rateLimit: null };
+      return { result: { kind: 'unavailable', reason: clientErrorReason(error) } as T, rateLimit: null, status: null };
     }
 
     const { response, body } = answer;
@@ -216,12 +218,12 @@ export class GithubRepoClientService {
     const classified = classifyRepoResponse(operation, response.status, rateLimit, token !== null, this.clock);
 
     if (classified === null) {
-      return { result: body === null ? unexpected() as T : onOk(body, response), rateLimit };
+      return { result: body === null ? unexpected() as T : onOk(body, response), rateLimit, status: response.status };
     }
 
     const result = classified.kind === 'not_modified' ? { kind: 'not_modified', rateLimit } : classified;
 
-    return { result: result as T, rateLimit };
+    return { result: result as T, rateLimit, status: response.status };
   }
 
   /**

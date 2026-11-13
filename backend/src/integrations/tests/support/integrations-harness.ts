@@ -1,5 +1,6 @@
 import { randomBytes } from 'node:crypto';
 import type { ConfigService } from '@nestjs/config';
+import type { EventEmitter2 } from '@nestjs/event-emitter';
 import { FakeGithubClient } from './fake-github-client.js';
 import {
   createInMemoryIntegrationRepo,
@@ -88,6 +89,7 @@ export function buildIntegrationsHarness(options: HarnessOptions = {}): Integrat
     registry,
     logger as unknown as LoggerService,
   );
+  const eventEmitter = { emitAsync: jest.fn().mockResolvedValue([]) };
   const config = { get: (name: string) => (name === 'KERGHAN_INTEGRATIONS_MAX_PER_USER' ? options.maxPerUser : undefined) };
   const service = new IntegrationsService(
     store,
@@ -98,7 +100,11 @@ export function buildIntegrationsHarness(options: HarnessOptions = {}): Integrat
     registry,
     logger as unknown as LoggerService,
     config as unknown as ConfigService,
-    new IntegrationLifecycleService(new GithubInstallationTokenCache(new SystemClock(), store)),
+    new IntegrationLifecycleService(
+      new GithubInstallationTokenCache(new SystemClock(), store),
+      eventEmitter as unknown as EventEmitter2,
+      logger as unknown as LoggerService,
+    ),
   );
 
   return { service, store, credentials, repo, github, guard, cooldown, encryption, previousEncryption, logger };
