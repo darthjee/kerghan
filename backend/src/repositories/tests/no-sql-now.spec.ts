@@ -1,26 +1,18 @@
-import { readdirSync, readFileSync, statSync } from 'fs';
+import { readFileSync } from 'fs';
 import * as path from 'path';
+import { moduleSources, REPOSITORIES_ROOT } from './support/module-sources.js';
 
 // Static check (`sync.md#time-source`): no SQL time condition of the
 // Repositories module uses the database clock; every time value comes from
 // the injected `Clock`.
-const ROOT = path.join(__dirname, '..');
+const ROOT = REPOSITORIES_ROOT;
 // `.now(` (the injected `clock.now()`) is not SQL; the lookbehind skips it.
 const FORBIDDEN = [/(?<!\.)\bNOW\s*\(/i, /\bCURRENT_TIMESTAMP\b/i, /\bSYSDATE\s*\(/i, /\bUTC_TIMESTAMP\b/i];
 // The wall clock is never read directly either (`sync.md#time-source`).
 const WALL_CLOCK = [/\bDate\.now\s*\(/, /new Date\(\s*\)/];
 
-function sources(dir: string): string[] {
-  return readdirSync(dir).flatMap((entry) => {
-    const full = path.join(dir, entry);
-
-    if (statSync(full).isDirectory()) return entry === 'tests' ? [] : sources(full);
-    return full.endsWith('.ts') ? [full] : [];
-  });
-}
-
 describe('Repositories sources (static)', () => {
-  const files = sources(ROOT);
+  const files = moduleSources();
 
   it('scans the module sources, tests excluded', () => {
     expect(files.length).toBeGreaterThan(5);
