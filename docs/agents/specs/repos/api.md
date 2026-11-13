@@ -253,6 +253,9 @@ listing as added.
 | 6 | Write, conditional: `UPDATE … SET added_at, integration_id, snapshot WHERE id = :id AND user_id = :userId AND added_at IS NULL` | **`200`** with the updated row (listing row shape, `status: "added"`). Zero rows ⇒ re-read the row (`WHERE id = :id AND user_id = :userId`): **added** ⇒ `200` with the current row (a concurrent Add won: its `addedAt` and link are kept); **missing** ⇒ `404 NOT_FOUND` (pruned meanwhile). |
 
 - `200`, not `201`: the row already existed; Add only marks it.
+- **The stored link is always the caller's own:** an `integration_id` that is not one of the
+  caller's integrations at write time is stored as `null` (filled by the next sync's link fill),
+  never another user's id ([integrations.md](integrations.md#access-link-on-add)).
 - **Owner lookup first:** a missing row, including one only another user holds, answers the same
   `404` as a GitHub denial, with no GitHub call and no write. Only repos already in the user's own
   listing can be added.
@@ -432,6 +435,8 @@ Tiers, fakes and harnesses: [testing.md](testing.md). Tags: `(db)`, `(e2e)`, `(u
   with no GitHub call and no write; with one usable candidate that denies it, Add answers `404`.
 - The candidate walk and the access-link choice: [integrations.md](integrations.md#required-tests).
 - Add on a not-added row pruned concurrently answers `404 NOT_FOUND` and writes nothing `(db)`.
+- A write whose `integration_id` is another user's integration stores `null`, so the row is never
+  linked to the other user's integration `(db)`.
 - Two concurrent Adds of the same repo write once; both answer `200` with the same `addedAt` and
   access link `(db)`.
 - The 31st Add in 60 s answers `429 REPOSITORY_ADD_RATE_LIMITED`, the window follows the

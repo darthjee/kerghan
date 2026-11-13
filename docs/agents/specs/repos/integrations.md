@@ -267,6 +267,12 @@ When the user adds a repository ([api.md](api.md#add)):
   (oldest first), then unauthenticated. That integration is **not** linked while the repo is
   still public; if the re-check shows the repo is now **private**, the integration that granted
   it is linked as `integration_id`, so the private metadata stays tied to it.
+- **Ownership guard:** the link written is always one of the **caller's own** integrations. The
+  Repositories service checks the chosen `integration_id` against the user's integrations
+  (`listIntegrations(userId)`, usable or not) right before the write; an id that is not the
+  user's (another user's, or deleted meanwhile) is stored as **`null`**, never rejected, and
+  the Add still succeeds. The empty link is then filled at the end of the next sync like any
+  other ([link fill](sync.md#link-fill)).
 - Changing an existing link later is out of scope. An **empty or dangling** link of an added
   private repo (its integration deleted, or a public repo turned private) is filled at the end of
   the next sync with the oldest usable integration that returns it

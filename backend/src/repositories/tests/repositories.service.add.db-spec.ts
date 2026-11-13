@@ -3,7 +3,7 @@ import { RepositoriesService } from '../repositories.service.js';
 import { reposOf, seedRepo, seedStatus, seedSyncState } from './support/repo-rows.js';
 import { buildRepositoriesDbHarness, HARNESS_START, type RepositoriesDbHarness } from './support/repositories-db-harness.js';
 import { ref } from './support/sync-harness.js';
-import { seedUser } from './support/two-user-baseline.js';
+import { seedIntegration, seedUser } from './support/two-user-baseline.js';
 
 const OLD = new Date('2026-05-01T00:00:00Z');
 const NEW = new Date('2026-05-03T00:00:00Z');
@@ -65,6 +65,32 @@ describe('RepositoriesService findByRef / markAdded (real MySQL)', () => {
           accessIntegration: { uuid: 'uuid-1', label: 'label-1' },
         }),
       });
+    });
+
+    it('stores a null link, never another user\'s integration id, when the link is not the user\'s own', async () => {
+      // Real rows on both sides, so the two users' integration ids never collide.
+      const ownIntegrationId = await seedIntegration(harness.ds, userId);
+      const otherId = await seedUser(harness.ds, 'other');
+      const foreignIntegrationId = await seedIntegration(harness.ds, otherId);
+
+      harness.github.setUsable(userId, [ref(ownIntegrationId)]).setUsable(otherId, [ref(foreignIntegrationId)]);
+      await seedRepo(harness.ds, userId, { githubId: 5, private: true, sources: [[`integration:${ownIntegrationId}`, 1]] });
+
+      const outcome = await service.markAdded(userId, { githubId: 5 }, foreignIntegrationId);
+
+      expect(outcome).toEqual({
+        kind: 'added',
+        repository: expect.objectContaining({ githubId: 5, addedAt: HARNESS_START, accessIntegration: null }),
+      });
+      expect(await reposOf(harness.ds, userId)).toMatchObject([{ github_id: '5', integration_id: null }]);
+    });
+
+    it('keeps a link to one of the user\'s own integrations even when it is not usable', async () => {
+      harness.github.setIntegrations(userId, [ref(1), ref(2), ref(3)]);
+      await seedRepo(harness.ds, userId, { githubId: 5, sources: [['integration:1', 1]] });
+
+      expect((await service.markAdded(userId, { githubId: 5 }, 3)).kind).toBe('added');
+      expect(await reposOf(harness.ds, userId)).toMatchObject([{ github_id: '5', integration_id: 3 }]);
     });
 
     it('answers already_added for an added row, keeping its addedAt and link', async () => {

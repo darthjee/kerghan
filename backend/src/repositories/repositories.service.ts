@@ -122,7 +122,9 @@ export class RepositoriesService {
 
   /**
    * Add's conditional write (`api.md#add`): marks a not-added row of the
-   * user as added with its access link.
+   * user as added with its access link. A link that is not one of the user's
+   * own integrations is stored as `null` (the end-of-sync link fill fills it,
+   * `integrations.md#access-link-on-add`), never as another user's id.
    * @param {number} userId - The session's user.
    * @param {RepoRef} ref - The repo (as resolved by `findByRef`; a `githubId` ref is exact).
    * @param {number | null} integrationId - The access link, or `null`.
@@ -134,7 +136,7 @@ export class RepositoriesService {
 
     if (resolved === null) return { kind: 'gone' };
 
-    const kind = await this.addStore.mark(userId, resolved, integrationId, snapshot);
+    const kind = await this.addStore.mark(userId, resolved, await this.#ownedLink(userId, integrationId), snapshot);
     const row = kind === 'gone' ? null : await this.listing.one(userId, resolved, await this.#scope(userId));
 
     return row === null || kind === 'gone' ? { kind: 'gone' } : { kind, repository: row.repository };
@@ -163,6 +165,19 @@ export class RepositoriesService {
       default:
         return outcome;
     }
+  }
+
+  /**
+   * @param {number} userId - The user.
+   * @param {number | null} integrationId - The caller-supplied access link.
+   * @returns {Promise<number | null>} The link when it is one of the user's integrations, else `null`.
+   */
+  async #ownedLink(userId: number, integrationId: number | null): Promise<number | null> {
+    if (integrationId === null) return null;
+
+    const owned = await this.github.listIntegrations(userId);
+
+    return owned.some((integration) => integration.id === integrationId) ? integrationId : null;
   }
 
   /**
