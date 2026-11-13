@@ -5,9 +5,14 @@ import { Clock, SystemClock } from '../core/clock.js';
 import { IntegrationsModule } from '../integrations/integrations-github.public.js';
 import { REPOSITORIES_ENTITIES } from './entities/index.js';
 import { HandleReconciler } from './handle-reconciler.js';
+import { LinkFiller } from './link-filler.js';
+import { PageWriter } from './page-writer.js';
 import { Pruner } from './pruner.js';
 import { RepositoriesConfig } from './repositories-config.js';
+import { SourceRunner } from './source-runner.js';
+import { SyncFinisher } from './sync-finisher.js';
 import { DetachedSyncLauncher, SyncLauncher } from './sync-launcher.js';
+import { SyncRunner } from './sync-runner.js';
 import { SyncStateStore } from './sync-state.store.js';
 
 /**
@@ -20,6 +25,11 @@ export const REPOSITORIES_PROVIDERS: Provider[] = [
   Pruner,
   SyncStateStore,
   HandleReconciler,
+  PageWriter,
+  SourceRunner,
+  LinkFiller,
+  SyncFinisher,
+  SyncRunner,
 ];
 
 /**
