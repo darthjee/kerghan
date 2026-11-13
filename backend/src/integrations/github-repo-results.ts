@@ -18,7 +18,7 @@ export interface GithubRepo {
   private: boolean;
 }
 
-/** A usable integration, as listed by `listUsableIntegrations`. */
+/** An integration, as listed by `listUsableIntegrations` / `listIntegrations`. */
 export interface IntegrationRef {
   /** The internal `integrations.id` (the logical FK Repositories stores). */
   id: number;

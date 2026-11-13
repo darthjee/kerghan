@@ -178,5 +178,28 @@ describe('FakeIntegrationsGithubService', () => {
     fake.setUsable(USER, refs);
 
     expect(await fake.listUsableIntegrations(USER)).toEqual(refs);
+    expect(await fake.listIntegrations(USER)).toEqual(refs);
+  });
+
+  it('answers the full list it was given, logged as a non-GitHub call', async () => {
+    const fake = new FakeIntegrationsGithubService();
+    const usable = [{ id: 1, uuid: 'u', label: 'l', type: 'pat' as const }];
+    const all = [...usable, { id: 2, uuid: 'v', label: 'm', type: 'oauth_app' as const }];
+
+    fake.setUsable(USER, usable).setIntegrations(USER, all);
+
+    expect(await fake.listIntegrations(USER)).toEqual(all);
+    expect(await fake.listUsableIntegrations(USER)).toEqual(usable);
+    expect(fake.calls.map(({ operation }) => operation)).toEqual(['listIntegrations', 'listUsableIntegrations']);
+    expect(fake.githubCalls()).toEqual([]);
+  });
+
+  it('matches the real service: listIntegrations keeps the same allowlisted keys as listUsableIntegrations', async () => {
+    const harness = buildGithubServiceHarness();
+    const row = await harness.seed({ type: 'pat', label: 'kept', status: 'invalid' });
+    const refs = await harness.service.listIntegrations(USER);
+
+    expect(refs).toEqual([{ id: row.id, uuid: row.uuid, label: 'kept', type: 'pat' }]);
+    expect(Object.keys(refs[0]).sort()).toEqual(['id', 'label', 'type', 'uuid']);
   });
 });

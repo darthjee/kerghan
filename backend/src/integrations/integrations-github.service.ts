@@ -14,7 +14,7 @@ import type {
 import { GithubUnauthenticatedBudget, type UnauthenticatedPurpose } from './github-unauthenticated-budget.js';
 import { decryptRow } from './integration-connection-test.service.js';
 import { INTEGRATION_TYPES, type IntegrationType } from './integration-enums.js';
-import { reportedStatus } from './integration-response.js';
+import { integrationRef as toRef, reportedStatus } from './integration-response.js';
 import { IntegrationStoreService } from './integration-store.service.js';
 import { IntegrationsEncryptionService } from './integrations-encryption.service.js';
 import { Secret } from './secret.js';
@@ -77,12 +77,18 @@ export class IntegrationsGithubService {
    * @returns {Promise<IntegrationRef[]>} The usable integrations.
    */
   async listUsableIntegrations(userId: number): Promise<IntegrationRef[]> {
-    const rows = await this.store.listOwnedOldestFirst(userId);
     const now = this.clock.now();
 
-    return rows
-      .filter((row) => this.#unusableReason(row, now) === null)
-      .map((row) => ({ id: row.id, uuid: row.uuid, label: row.label, type: row.type as IntegrationType }));
+    return (await this.store.listOwnedOldestFirst(userId)).filter((row) => this.#unusableReason(row, now) === null).map(toRef);
+  }
+
+  /**
+   * Lists every integration of the user, usable or not, oldest first (same fields as above).
+   * @param {number} userId - The owner's id.
+   * @returns {Promise<IntegrationRef[]>} The user's integrations.
+   */
+  async listIntegrations(userId: number): Promise<IntegrationRef[]> {
+    return (await this.store.listOwnedOldestFirst(userId)).map(toRef);
   }
 
   /**

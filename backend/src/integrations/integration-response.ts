@@ -1,5 +1,6 @@
 import type { Integration } from './entities/integration.entity.js';
-import type { IntegrationStatus, IntegrationTestResult } from './integration-enums.js';
+import type { IntegrationRef } from './github-repo-results.js';
+import type { IntegrationStatus, IntegrationTestResult, IntegrationType } from './integration-enums.js';
 import type { IntegrationView } from './types/integration-type-strategy.js';
 
 /**
@@ -106,4 +107,14 @@ export function toIntegrationView(row: Integration): IntegrationView {
  */
 function isoOrNull(date: Date | null | undefined): string | null {
   return date ? new Date(date).toISOString() : null;
+}
+
+/**
+ * The allowlisted cross-module reference of an integration row (never a
+ * secret field), as `IntegrationsGithubService` lists it.
+ * @param {Integration} row - The row.
+ * @returns {IntegrationRef} `{ id, uuid, label, type }`.
+ */
+export function integrationRef(row: Integration): IntegrationRef {
+  return { id: row.id, uuid: row.uuid, label: row.label, type: row.type as IntegrationType };
 }

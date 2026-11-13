@@ -11,6 +11,7 @@ fixed, `GET`-only operations; there is no generic `request(path)`:
 ```ts
 // Oldest first (created_at, then id); filtered by userId in the query.
 listUsableIntegrations(userId): Promise<IntegrationRef[]>   // { id, uuid, label, type }
+listIntegrations(userId): Promise<IntegrationRef[]>         // every one, usable or not; same fields
 
 listRepositories(userId, integrationId, page, etag?): Promise<RepoPageResult>
 listHandleRepositories(userId, integrationId | null, handle, page, etag?): Promise<RepoPageResult>
@@ -25,6 +26,12 @@ getRepository(userId, integrationId | null, githubId): Promise<RepoResult>
   Repositories computes its inputs and maps its outcome to HTTP answers, while the walk itself
   (order, 3-call cap, stop and link rules) stays here; the real service and the typed fake share
   it.
+
+- **`listIntegrations`** (added by #463) lists every one of the user's integrations, usable or
+  not, oldest first, with the same allowlisted `IntegrationRef` fields and no GitHub call. The sync
+  uses it for the non-usable integrations' sources ([sync.md](sync.md#sources)), the end-of-sync
+  safety net and the link fill's dangling-link check; the listing and the sync state use it for
+  the sources' `uuid` / `label` and to read a dangling link as empty.
 
 - **Integration identity:** callers pass the internal `integrations.id` (the logical FK the
   Repositories tables already store, [model.md](model.md#logical-foreign-keys)). Every call loads
@@ -260,6 +267,12 @@ When the user adds a repository ([api.md](api.md#add)):
   (oldest first), then unauthenticated. That integration is **not** linked while the repo is
   still public; if the re-check shows the repo is now **private**, the integration that granted
   it is linked as `integration_id`, so the private metadata stays tied to it.
+- **Ownership guard:** the link written is always one of the **caller's own** integrations. The
+  Repositories service checks the chosen `integration_id` against the user's integrations
+  (`listIntegrations(userId)`, usable or not) right before the write; an id that is not the
+  user's (another user's, or deleted meanwhile) is stored as **`null`**, never rejected, and
+  the Add still succeeds. The empty link is then filled at the end of the next sync like any
+  other ([link fill](sync.md#link-fill)).
 - Changing an existing link later is out of scope. An **empty or dangling** link of an added
   private repo (its integration deleted, or a public repo turned private) is filled at the end of
   the next sync with the oldest usable integration that returns it
@@ -310,7 +323,10 @@ A direct call would need Integrations to import Repositories, which already impo
 - **Listener:** Repositories' `@OnEvent('integration.deleted')` runs one transaction, every
   statement with `AND user_id = :userId`: delete the source, page and status rows for
   `source_key = 'integration:<id>'`; clear `integration_id` where it points at it; prune
-  not-added repos left with no source row ([model.md](model.md#logical-foreign-keys)).
+  not-added repos left with no source row ([model.md](model.md#logical-foreign-keys)). Its first
+  statement locks the user's sync-state row (`SELECT … FOR UPDATE`), the lock order of every
+  multi-table Repositories write transaction, so a cleanup during a sync serializes with the run's page
+  writes instead of deadlocking with them ([sync.md](sync.md#write-path)).
 - **Failure never blocks the delete:** the listener catches its own error and logs it with safe
   fields (`@OnEvent`'s default `suppressErrors: true` keeps `emitAsync` resolving either way); the
   integration delete is already committed and the `204` stands (same best-effort rule as
@@ -401,7 +417,8 @@ Tiers, fakes and harnesses: [testing.md](testing.md). Tags: `(db)`, `(e2e)`, `(u
   from a call made before a Replace leaves the replaced integration `active`; the same holds for
   a mint `404` / `403` and a decrypt failure `(unit)`. The logic is tested at unit level by #461,
   against the in-memory repository fake; the SQL `secret_iv` compare-and-set itself runs on the
-  DB-backed tier with #463 `(db)`, which already depends on #462's DB tier.
+  DB-backed tier with #463 `(db)`, which already depends on #462's DB tier. **Done in #463:**
+  `integrations/tests/integration-store.compare-and-set.db-spec.ts`.
 
 **Installation tokens:**
 
@@ -442,5 +459,7 @@ Tiers, fakes and harnesses: [testing.md](testing.md). Tags: `(db)`, `(e2e)`, `(u
 - Deleting an integration emits `integration.deleted` after the delete commits.
 - A listener failure is logged with safe fields and the delete still answers `204`.
 - A delete before any Repositories request still runs the cleanup (the listener is registered
-  at boot). Owned by #463, which adds the listener; #461 builds the emitter side only.
+  at boot). Owned by #463, which adds the listener; #461 builds the emitter side only. **Done in
+  #463:** `repositories/tests/integration-deleted.at-boot.db-spec.ts` boots the real `AppModule` on
+  the DB tier.
 - What the cleanup deletes is [model.md](model.md#required-tests)'s.

@@ -8,7 +8,7 @@ export type FakeAnswer = GithubCase | RepoPageResult | RepoResult;
 
 /** One logged call. */
 export interface FakeCall {
-  operation: GithubOperation | 'listUsableIntegrations';
+  operation: GithubOperation | 'listUsableIntegrations' | 'listIntegrations';
   userId: number;
   integrationId?: number | null;
   /** The page (listings) or the `githubId` (`getRepository`). */
@@ -28,7 +28,10 @@ const ANY_PAGE = '*';
  * - **Scripting:** `script(integrationId | null, operation, page | '*', ...answers)`;
  *   for `getRepository` the "page" slot is the `githubId`. Answers are used
  *   in order, the last one sticking. An unscripted call throws.
- * - **Call log:** `calls` records every call, `listUsableIntegrations` included,
+ * - **Integrations:** `setUsable` / `setIntegrations` set what the two list
+ *   operations answer; with no `setIntegrations`, `listIntegrations` answers
+ *   the usable list (every integration usable).
+ * - **Call log:** `calls` records every call, the list operations included,
  *   so a spec asserts counts, order and "no GitHub call" (`githubCalls()`).
  * - **Deferred answers:** `hold(...)` parks the next call of a slot on a
  *   deferred promise, released by the spec (race specs).
@@ -37,10 +40,11 @@ const ANY_PAGE = '*';
  */
 export class FakeIntegrationsGithubService implements Pick<
   IntegrationsGithubService,
-  'listUsableIntegrations' | 'listRepositories' | 'listHandleRepositories' | 'getRepository'
+  'listUsableIntegrations' | 'listIntegrations' | 'listRepositories' | 'listHandleRepositories' | 'getRepository'
 > {
   readonly calls: FakeCall[] = [];
   readonly #usable = new Map<number, IntegrationRef[]>();
+  readonly #all = new Map<number, IntegrationRef[]>();
   readonly #scripts = new Map<string, FakeAnswer[]>();
   readonly #held = new Map<string, Deferred<FakeAnswer>[]>();
 
@@ -52,6 +56,17 @@ export class FakeIntegrationsGithubService implements Pick<
    */
   setUsable(userId: number, refs: IntegrationRef[]): this {
     this.#usable.set(userId, refs);
+    return this;
+  }
+
+  /**
+   * Sets what `listIntegrations` answers for a user (usable or not, oldest first).
+   * @param {number} userId - The user.
+   * @param {IntegrationRef[]} refs - Every integration of the user.
+   * @returns {this} The fake.
+   */
+  setIntegrations(userId: number, refs: IntegrationRef[]): this {
+    this.#all.set(userId, refs);
     return this;
   }
 
@@ -85,16 +100,21 @@ export class FakeIntegrationsGithubService implements Pick<
   }
 
   /**
-   * The logged calls that stand for a GitHub call (every operation but `listUsableIntegrations`).
+   * The logged calls that stand for a GitHub call (every operation but the two list operations).
    * @returns {FakeCall[]} The calls.
    */
   githubCalls(): FakeCall[] {
-    return this.calls.filter((call) => call.operation !== 'listUsableIntegrations');
+    return this.calls.filter((call) => call.operation !== 'listUsableIntegrations' && call.operation !== 'listIntegrations');
   }
 
   async listUsableIntegrations(userId: number): Promise<IntegrationRef[]> {
     this.calls.push({ operation: 'listUsableIntegrations', userId });
     return [...(this.#usable.get(userId) ?? [])];
+  }
+
+  async listIntegrations(userId: number): Promise<IntegrationRef[]> {
+    this.calls.push({ operation: 'listIntegrations', userId });
+    return [...(this.#all.get(userId) ?? this.#usable.get(userId) ?? [])];
   }
 
   listRepositories(userId: number, integrationId: number, page: number, etag?: string | null): Promise<RepoPageResult> {

@@ -127,6 +127,27 @@ describe('IntegrationsGithubService', () => {
     });
   });
 
+  describe('listIntegrations', () => {
+    it('returns every integration of the user, usable or not, oldest first, with allowlisted fields only', async () => {
+      const at = (minutes: number): Date => new Date(START.getTime() - minutes * 60_000);
+      const active = await harness.seed({ type: 'pat', createdAt: at(1), label: 'active' });
+      const invalid = await harness.seed({ status: 'invalid', createdAt: at(9), label: 'invalid' });
+      const app = await harness.seed({ type: 'github_app', createdAt: at(3), label: 'app' });
+
+      await harness.seed({ userId: INTRUDER, createdAt: at(10) });
+      harness.enabled.github_app = false;
+      const find = jest.spyOn(harness.repo, 'find');
+
+      expect(await harness.service.listIntegrations(USER)).toEqual([
+        { id: invalid.id, uuid: invalid.uuid, label: 'invalid', type: 'pat' },
+        { id: app.id, uuid: app.uuid, label: 'app', type: 'github_app' },
+        { id: active.id, uuid: active.uuid, label: 'active', type: 'pat' },
+      ]);
+      expect(find).toHaveBeenCalledWith({ where: { userId: USER }, order: { createdAt: 'ASC', id: 'ASC' } });
+      expect(fetchCalls()).toHaveLength(0);
+    });
+  });
+
   describe('non-usable integrations are never called', () => {
     it.each([
       ['expired', { expiresAt: new Date(START.getTime() - 1) }],

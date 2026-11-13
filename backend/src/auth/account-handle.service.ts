@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { EntityManager, Repository } from 'typeorm';
 import { User } from './entities/user.entity.js';
 
 /**
@@ -33,5 +33,27 @@ export class AccountHandleService {
     });
 
     return user?.githubHandle ?? null;
+  }
+
+  /**
+   * Checks, inside the caller's transaction, that a user still exists, and
+   * holds a shared lock (`SELECT … FOR SHARE`) on its row until that
+   * transaction ends, so a concurrent user delete waits for the caller's
+   * commit (its `user.deleted` listener then removes whatever the caller
+   * wrote). This is the only cross-module read the Repositories module may
+   * run inside its own transaction; Auth still owns the query.
+   * @param {number} userId - The id of the user.
+   * @param {EntityManager} manager - The caller's transactional entity manager.
+   * @returns {Promise<boolean>} Whether the user row exists.
+   */
+  async lockExistingUser(userId: number, manager: EntityManager): Promise<boolean> {
+    const user = await manager.getRepository(User)
+      .createQueryBuilder('user')
+      .select('user.id')
+      .where('user.id = :userId', { userId })
+      .setLock('pessimistic_read')
+      .getOne();
+
+    return user !== null;
   }
 }
