@@ -8,6 +8,10 @@ export const DEFAULT_SYNC_TTL_MS = 3_600_000;
 export const DEFAULT_SYNC_COOLDOWN_MS = 300_000;
 /** Default page cap per source (10 pages of 100). */
 export const DEFAULT_SYNC_PAGE_CAP = 10;
+/** Default Adds allowed per user per window. */
+export const DEFAULT_ADD_MAX_PER_WINDOW = 30;
+/** Default Add rate-limit window (60 s). */
+export const DEFAULT_ADD_WINDOW_MS = 60_000;
 /** A `syncing` row with no heartbeat for this long is dead (2 min). */
 export const SYNC_LEASE_MS = 120_000;
 /** One sync is bounded by this hard deadline, checked between pages (5 min). */
@@ -32,15 +36,19 @@ function positiveInteger(configService: ConfigService, key: string, fallback: nu
 }
 
 /**
- * The Repositories sync values (`docs/agents/specs/repos/sync.md#values`),
- * read once from `KERGHAN_REPOSITORIES_SYNC_TTL_MS`, `_COOLDOWN_MS` and
- * `_PAGE_CAP`.
+ * The Repositories values, read once: the sync values
+ * (`docs/agents/specs/repos/sync.md#values`) from
+ * `KERGHAN_REPOSITORIES_SYNC_TTL_MS`, `_COOLDOWN_MS` and `_PAGE_CAP`, and the
+ * Add rate limit (`api.md#add-rate-limit`) from
+ * `KERGHAN_REPOSITORIES_ADD_MAX_PER_WINDOW` and `_ADD_WINDOW_MS`.
  */
 @Injectable()
 export class RepositoriesConfig {
   readonly ttlMs: number;
   readonly cooldownMs: number;
   readonly pageCap: number;
+  readonly addMaxPerWindow: number;
+  readonly addWindowMs: number;
 
   /**
    * @param {ConfigService} configService - Supplies the env values.
@@ -49,5 +57,11 @@ export class RepositoriesConfig {
     this.ttlMs = positiveInteger(configService, 'KERGHAN_REPOSITORIES_SYNC_TTL_MS', DEFAULT_SYNC_TTL_MS);
     this.cooldownMs = positiveInteger(configService, 'KERGHAN_REPOSITORIES_SYNC_COOLDOWN_MS', DEFAULT_SYNC_COOLDOWN_MS);
     this.pageCap = positiveInteger(configService, 'KERGHAN_REPOSITORIES_SYNC_PAGE_CAP', DEFAULT_SYNC_PAGE_CAP);
+    this.addMaxPerWindow = positiveInteger(
+      configService,
+      'KERGHAN_REPOSITORIES_ADD_MAX_PER_WINDOW',
+      DEFAULT_ADD_MAX_PER_WINDOW,
+    );
+    this.addWindowMs = positiveInteger(configService, 'KERGHAN_REPOSITORIES_ADD_WINDOW_MS', DEFAULT_ADD_WINDOW_MS);
   }
 }
