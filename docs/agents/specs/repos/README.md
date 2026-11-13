@@ -121,10 +121,11 @@ What this feature changes in the permanent product docs, as a checklist for the 
   [edge-case matrix](edge-cases.md).
 - **`architecture/backend.md#testing`:** the DB-backed tier (`*.db-spec.ts`, `yarn test:db`,
   serial, dedicated schema), replacing the "add a `cimg/mysql` service … when the first spec
-  actually needs a real database" note; and the injected `Clock` / `SyncLauncher` conventions
-  if they generalise beyond Repositories ([testing.md](testing.md#db-backed-tier)).
-- **`architecture/infra.md`:** the MySQL CI job (`cimg/mysql:8.0` service, required by the
-  release and deploy jobs).
+  actually needs a real database" note (#462 already wrote this part); and the injected
+  `Clock` / `SyncLauncher` conventions if they generalise beyond Repositories
+  ([testing.md](testing.md#db-backed-tier)).
+- **`architecture/infra.md`:** the MySQL CI job (`mysql:8.4.11` service, required by the
+  release and deploy jobs). #462 already wrote it.
 - **The Repositories module doc, "Testing":** built from [testing.md](testing.md).
 - **`contributing.md`:** the Repositories ESLint boundary override, if it needs a mention
   ([security.md](security.md#module-boundaries)).
@@ -280,6 +281,7 @@ What this feature changes in the permanent product docs, as a checklist for the 
 | #452 | Specs: fold the repositories specs into the permanent docs and remove them | all |
 | #460 | Repositories: Auth — GitHub handle on the account | implementation: [model.md](model.md#github-handle), [security.md](security.md#github-handle) |
 | #461 | Repositories: Integrations — export IntegrationsGithubService | implementation: [integrations.md](integrations.md), [security.md](security.md#credentials-stay-in-the-backend), [security.md](security.md#fixed-github-base-url); spec sync in [integrations.md](integrations.md), [testing.md](testing.md), [sync.md](sync.md#time-source) |
+| #462 | Repositories: Infra — DB-backed test tier and MySQL CI job | implementation: [testing.md](testing.md#db-backed-tier); spec sync in [testing.md](testing.md) |
 
 The implementation sub-issues are #460–#466, created on #444 from the enhanced specs; each adds
 its own row here.

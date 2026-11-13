@@ -246,8 +246,8 @@ once (via `ConfigService`) and injected. See `docs/agents/contributing.md`'s DI 
 
 ## Testing
 
-No live database in CI yet (`backend_tests` has no `cimg/mysql` service container) — specs inject
-mocked/fake TypeORM repositories rather than hitting MySQL:
+The default suite (`yarn test`/`yarn coverage`, CI job `backend_tests`) never touches a database —
+specs inject mocked/fake TypeORM repositories rather than hitting MySQL:
 
 - **Unit specs** (`*.spec.ts`): plain `jest.fn()`-based repository doubles, service instantiated
   directly (no `TestingModule` needed when there's no DI graph to exercise).
@@ -265,6 +265,28 @@ mocked/fake TypeORM repositories rather than hitting MySQL:
   (`NestFactory.createApplicationContext`), not a bare `Test.createTestingModule` — the loader's
   internals (module scanning) aren't fully wired by the lightweight testing container.
 
-Add a `cimg/mysql` service to `.circleci/config.yml` (see `docs/agents/architecture/infra.md`)
-when the first spec actually needs a real database (e.g. testing a TypeORM migration itself, or
-a query too complex to fake convincingly).
+### DB-backed tier
+
+A narrow tier runs on real MySQL (`mysql:8.4.11`), for SQL semantics the fakes cannot prove (atomic
+claims, unique keys, transactions, conditional writes, column type round trips). Everything else
+stays on the fakes.
+
+- **Suffix and script:** `*.db-spec.ts`, run only by `yarn test:db` (`jest.db.config.ts`, which
+  shares its base settings with `jest.config.ts` through the plain CommonJS `jest.base.cjs`),
+  always `--runInBand` and never with coverage. The default `testRegex` does not match
+  `*.db-spec.ts`.
+- **Node versions:** the CI image (Node 22.14) loads TS Jest configs through ts-node, the dev
+  image (Node 22.21) through native type stripping. Neither can load a `.ts` config imported from
+  another `.ts` config in this `"type": "module"` package, so shared config lives in `.cjs`.
+  Likewise `globalSetup` resolves the source's `./x.js` imports to `.ts` by wrapping Node's
+  CommonJS resolver, not with `module.registerHooks` (Node 22.15+).
+- **Where:** locally via `docker-compose run --rm kerghan_db_tests` (`make db-tests`), against
+  the throwaway `kerghan_mysql_test` service; in CI via the `backend_db_tests` job and its MySQL
+  service container. Connection settings are the app's own `KERGHAN_MYSQL_*` vars.
+- **Schema guard:** the tier refuses to start unless `KERGHAN_MYSQL_NAME` ends in `_test`.
+- **Lifecycle:** `globalSetup` retries the connection for up to 60 s, then runs every migration
+  once per run, loaded from the TypeScript sources (`database/tests/db-tier/`). Before each test,
+  every table except `migrations` is truncated (seeded rows included), so each test starts
+  empty. Specs get the file's shared connection from `getTestDataSource()`.
+
+See `database/tests/db-tier.db-spec.ts` for the smoke spec.

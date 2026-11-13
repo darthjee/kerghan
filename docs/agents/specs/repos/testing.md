@@ -20,19 +20,21 @@ race.
 ### DB-backed tier
 
 The in-memory fake cannot prove atomic claims, unique keys, transactions, compare-and-set,
-conditional writes or `bigint` round trips, so a **narrow** tier runs them on real MySQL 8:
+conditional writes or `bigint` round trips, so a **narrow** tier runs them on real MySQL
+(`mysql:8.4.11`, production's version):
 
 - **Suffix:** `*.db-spec.ts`, excluded from the default `yarn test` run.
-- **Runner:** a separate Jest config and script, `yarn test:db`. It runs **serially**, on a
-  dedicated test schema: the migrations run once per run, and the Repositories tables are
-  truncated before each test.
-- **Locally:** through docker-compose, against the existing MySQL service. Never on the host.
-- **CI:** its own job with a `cimg/mysql:8.0` service container; the release and deploy jobs
-  require it, like `backend_tests`.
-- **Who adds it:** the first implementation sub-issue that needs it adds the job, the script and
-  the docs, following [architecture/backend.md](../../architecture/backend.md#testing) ("add a
-  `cimg/mysql` service … when the first spec actually needs a real database"). None of it exists
-  yet.
+- **Runner:** a separate Jest config (`jest.db.config.ts`) and script, `yarn test:db`. It runs
+  **serially**, on a dedicated test schema: the migrations run once per run, loaded from the
+  TypeScript sources, and every table except `migrations` is truncated before each test.
+- **Guard:** the tier refuses to start unless `KERGHAN_MYSQL_NAME` ends in `_test`, so it can
+  never truncate dev or production data.
+- **Locally:** through docker-compose, against the throwaway `kerghan_mysql_test` service, run
+  through `kerghan_db_tests` (`make db-tests`). Never on the host.
+- **CI:** its own job, `backend_db_tests`, with a `mysql:8.4.11` service container; the release
+  and deploy jobs require it, like `backend_tests`.
+- **Who added it:** #462 added the job, the script, the helpers and the docs (see
+  [architecture/backend.md](../../architecture/backend.md#testing)).
 - **Existing specs are unchanged:** the other modules keep their fakes, and the Integrations
   migration specs keep the fake query runner.
 

@@ -1,38 +1,19 @@
 import type { Config } from 'jest';
+import baseConfig from './jest.base.cjs';
 
-// Jest itself always runs as CommonJS regardless of this package's
-// "type": "module" — `@swc/jest` compiles each test/source `.ts` file to
-// CommonJS for Jest's runtime (NestJS's own recommended Jest/SWC setup;
-// unlike `ts-jest`, it isn't affected by `tsconfig.json`'s NodeNext module
-// setting or by `package.json`'s "type": "module"), and `moduleNameMapper`
-// strips the explicit `.js` extensions our NodeNext-style source imports
-// use (e.g. `./auth.service.js`) so Jest resolves them back to the `.ts`
-// source files.
+// Shared rootDir, swc transform and `.js` -> `.ts` module resolution live
+// in `jest.base.cjs` (also used by the DB-backed tier's `jest.db.config.ts`).
+
+// `*.db-spec.ts` files (the DB-backed tier, `yarn test:db`) never match
+// this `testRegex`: `.db-spec` is neither `.spec` nor `.e2e-spec`.
 const config: Config = {
-  rootDir: 'src',
-  testEnvironment: 'node',
-  moduleFileExtensions: ['js', 'json', 'ts'],
+  ...baseConfig,
   testRegex: '.*\\.(spec|e2e-spec)\\.ts$',
-  transform: {
-    '^.+\\.ts$': [
-      '@swc/jest',
-      {
-        jsc: {
-          parser: { syntax: 'typescript', decorators: true },
-          transform: { legacyDecorator: true, decoratorMetadata: true },
-          target: 'es2022',
-        },
-        module: { type: 'commonjs' },
-      },
-    ],
-  },
-  moduleNameMapper: {
-    '^(\\.{1,2}/.*)\\.js$': '$1',
-  },
   collectCoverageFrom: [
     '**/*.(t|j)s',
     '!**/*.spec.ts',
     '!**/*.e2e-spec.ts',
+    '!**/*.db-spec.ts',
     // Bootstrap/wiring and TypeORM migrations are exercised by booting the
     // app and by `yarn migration:run`/`migration:revert` against a real
     // database (see docs/agents/architecture/backend.md), not by unit
