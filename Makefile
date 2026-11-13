@@ -1,4 +1,4 @@
-.PHONY: build-base push-base build build-fe-base push-fe-base build-fe push-fe build-circleci-base push-circleci-base build-production-base push-production-base dev dev-up setup tests integrations-keys-status integrations-keys-reencrypt build-standalone standalone-smoke
+.PHONY: build-base push-base build build-fe-base push-fe-base build-fe push-fe build-circleci-base push-circleci-base build-production-base push-production-base dev dev-up setup tests db-tests integrations-keys-status integrations-keys-reencrypt build-standalone standalone-smoke
 
 PROJECT?=kerghan
 DOCKER_ID_USER?=darthjee
@@ -80,6 +80,10 @@ dev-up:
 
 tests:
 	docker-compose run $(PROJECT)_tests /bin/bash
+
+# DB-backed test tier (yarn test:db) against the throwaway kerghan_mysql_test.
+db-tests:
+	docker-compose run --rm $(PROJECT)_db_tests
 
 # Integrations key rotation (KERGHAN_INTEGRATIONS_KEY / KERGHAN_PREVIOUS_INTEGRATIONS_KEYS).
 # Both build dist/ first; they need a reachable kerghan_mysql, like `make setup`.
