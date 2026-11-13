@@ -300,16 +300,19 @@ listing as added.
 
 ### Add rate limit
 
-Per user, **30 Adds per 60 s** by default, following the abuse-guard services in
-`backend/src/auth/`:
+Per user, **30 Adds per 60 s** by default. The limit is an **in-memory, per-process fixed window**
+per user (`RepositoryAddRateLimiter`), read through the shared `Clock`, with no table and no
+migration: it resets on a restart, and each backend instance counts on its own. Expired windows
+are swept, so idle users do not stay in memory.
 
 | Env var | Default | Meaning |
 |---|---|---|
 | `KERGHAN_REPOSITORIES_ADD_MAX_PER_WINDOW` | `30` | Adds allowed per user per window. |
 | `KERGHAN_REPOSITORIES_ADD_WINDOW_MS` | `60000` | Window length in milliseconds. |
 
-Both are read with `getNumberConfig` like the existing abuse guards, and are listed in
-`docs/agents/environment-variables.md` when implemented.
+Both are read once with `getNumberConfig` (in `repositories-config.ts`; a non-positive or
+non-integer value falls back to the default), and are listed in
+`docs/agents/environment-variables.md`.
 
 ## Errors
 
@@ -319,7 +322,7 @@ Standard error shape (`core/http-exception.filter.ts`,
 | Status | Code | Message | Where |
 |---|---|---|---|
 | `400` | `VALIDATION_FAILED` | standard validation message | Listing body; Add ref (both/neither, malformed `fullName`, non-integer `githubId`) |
-| `401` | `UNAUTHORIZED` | standard | Every route without a session (`JwtGuard`) |
+| `401` | `UNAUTHORIZED` | standard | Every route without a session (`JwtGuard`), or whose session user no longer exists (the handle reconciliation finds no user) |
 | `403` | `FORBIDDEN` | standard | Foreign origin (`OriginGuard`) |
 | `404` | `NOT_FOUND` | `Repository not found` | Add: ref not among the caller's rows, held only by another user, or denied by GitHub. **Same message for every case.** |
 | `409` | `REPOSITORY_SOURCE_UNUSABLE` (new) | `The integration that sees this repository needs attention.` | Add with no candidate: every source holding the repo is a non-usable integration and the handle source does not hold it |
@@ -329,10 +332,11 @@ Standard error shape (`core/http-exception.filter.ts`,
 | `503` | `GITHUB_RATE_LIMITED` (existing) | `GitHub rate limit reached; try again later` | Add re-check on a low budget or a GitHub rate limit |
 
 - **Retry delay:** both `429`s, and the `503` when the reset time is known, send `Retry-After`
-  (whole seconds, rounded up) **and** `error.retryAfterSeconds` in the body. Today the filter
-  turns a throw site's `retryAfterSeconds` into the header only; exposing it in the body is a new,
-  optional field of the standard error shape, added by the implementation and folded into
-  `architecture/backend.md#error-responses` by #452.
+  (whole seconds, rounded up) **and** `error.retryAfterSeconds` in the body, with the same value.
+  The filter (`core/http-exception.filter.ts`) emits both for every throw site that sets
+  `retryAfterSeconds` (so `INTEGRATION_TEST_COOLDOWN` and the Integrations `503` carry the body
+  field too). It is a new, optional field of the standard error shape; folding it into
+  `architecture/backend.md#error-responses` stays #452's.
 - Sync failures never become HTTP errors: they appear only as the per-source `status` in the
   [sync state](#sync-state); the UI maps each to its banner text.
 - GitHub error bodies and messages are never echoed, nor any credential detail. Anything

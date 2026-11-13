@@ -9,13 +9,21 @@ export interface ExpectedErrorBody {
 }
 
 // Asserts `response` carries the standard error body
-// `{ error: { code, message }, statusCode, timestamp }` with no `details`
-// (i.e. not a `ValidationPipe` failure). `message` is matched exactly when
-// given, otherwise only its type is checked.
+// `{ error: { code, message, retryAfterSeconds? }, statusCode, timestamp }`
+// with no `details` (i.e. not a `ValidationPipe` failure). `message` is
+// matched exactly when given, otherwise only its type is checked. When the
+// response sends `Retry-After`, the body must carry the same value as
+// `error.retryAfterSeconds`; otherwise the body must not carry the field.
 export function expectErrorBody(response: request.Response, { status, code, message }: ExpectedErrorBody): void {
+  const retryAfter = response.headers['retry-after'];
+
   expect(response.status).toBe(status);
   expect(response.body).toEqual({
-    error: { code, message: message ?? expect.any(String) },
+    error: {
+      code,
+      message: message ?? expect.any(String),
+      ...(retryAfter === undefined ? {} : { retryAfterSeconds: Number(retryAfter) }),
+    },
     statusCode: status,
     timestamp: expect.stringMatching(ISO_TIMESTAMP),
   });

@@ -2,6 +2,7 @@ import 'reflect-metadata';
 import { readdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { METHOD_METADATA, PATH_METADATA } from '@nestjs/common/constants.js';
+import { CacheClass } from '../cache-class.js';
 import { CACHE_CLASS_KEY } from '../cache-policy.decorator.js';
 
 // Enforces `docs/agents/architecture/caching.md`: every route must declare a cache class via
@@ -17,6 +18,7 @@ const KNOWN_CONTROLLERS = [
   'HealthController',
   'IntegrationsController',
   'OauthAppController',
+  'RepositoriesController',
   'SessionController',
 ];
 
@@ -97,5 +99,18 @@ describe('cache-class coverage', () => {
     }
 
     expect(undeclared).toEqual([]);
+  });
+
+  it('declares user-scoped on every Repositories route (never warmed by Navi)', () => {
+    const repositoryRoutes = routes.filter((route) => route.controller === 'RepositoriesController');
+
+    expect(repositoryRoutes.map((route) => route.method).sort()).toEqual(['add', 'mine', 'refresh', 'syncState']);
+    repositoryRoutes.forEach((route) => expect(route.cacheClass).toBe(CacheClass.UserScoped));
+  });
+
+  it('declares never on POST /auth/account/mine.json', () => {
+    const route = routes.find((entry) => entry.controller === 'AuthController' && entry.method === 'getAccount');
+
+    expect(route?.cacheClass).toBe(CacheClass.Never);
   });
 });

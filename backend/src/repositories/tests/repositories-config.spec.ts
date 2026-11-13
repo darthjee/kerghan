@@ -1,5 +1,7 @@
 import { ConfigService } from '@nestjs/config';
 import {
+  DEFAULT_ADD_MAX_PER_WINDOW,
+  DEFAULT_ADD_WINDOW_MS,
   DEFAULT_SYNC_COOLDOWN_MS,
   DEFAULT_SYNC_PAGE_CAP,
   DEFAULT_SYNC_TTL_MS,
@@ -22,6 +24,19 @@ describe('RepositoriesConfig', () => {
     expect(config.cooldownMs).toBe(300_000);
     expect(config.pageCap).toBe(10);
     expect([DEFAULT_SYNC_TTL_MS, DEFAULT_SYNC_COOLDOWN_MS, DEFAULT_SYNC_PAGE_CAP]).toEqual([3_600_000, 300_000, 10]);
+    expect(config.addMaxPerWindow).toBe(30);
+    expect(config.addWindowMs).toBe(60_000);
+    expect([DEFAULT_ADD_MAX_PER_WINDOW, DEFAULT_ADD_WINDOW_MS]).toEqual([30, 60_000]);
+  });
+
+  it('reads the two Add rate-limit env vars', () => {
+    const config = configOf({
+      KERGHAN_REPOSITORIES_ADD_MAX_PER_WINDOW: '5',
+      KERGHAN_REPOSITORIES_ADD_WINDOW_MS: '1000',
+    });
+
+    expect(config.addMaxPerWindow).toBe(5);
+    expect(config.addWindowMs).toBe(1_000);
   });
 
   it('reads the three env vars', () => {
@@ -41,11 +56,15 @@ describe('RepositoriesConfig', () => {
       KERGHAN_REPOSITORIES_SYNC_TTL_MS: raw,
       KERGHAN_REPOSITORIES_SYNC_COOLDOWN_MS: raw,
       KERGHAN_REPOSITORIES_SYNC_PAGE_CAP: raw,
+      KERGHAN_REPOSITORIES_ADD_MAX_PER_WINDOW: raw,
+      KERGHAN_REPOSITORIES_ADD_WINDOW_MS: raw,
     });
 
     expect(config.ttlMs).toBe(DEFAULT_SYNC_TTL_MS);
     expect(config.cooldownMs).toBe(DEFAULT_SYNC_COOLDOWN_MS);
     expect(config.pageCap).toBe(DEFAULT_SYNC_PAGE_CAP);
+    expect(config.addMaxPerWindow).toBe(DEFAULT_ADD_MAX_PER_WINDOW);
+    expect(config.addWindowMs).toBe(DEFAULT_ADD_WINDOW_MS);
   });
 
   it('exposes the constants', () => {

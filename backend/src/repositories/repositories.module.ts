@@ -8,8 +8,12 @@ import { PageWriter } from './page-writer.js';
 import { Pruner } from './pruner.js';
 import { RepositoriesConfig } from './repositories-config.js';
 import { RepositoriesEventsListener } from './repositories-events.listener.js';
+import { RepositoriesHttpService } from './repositories-http.service.js';
 import { RepositoriesListingQuery } from './repositories-listing.query.js';
+import { RepositoriesController } from './repositories.controller.js';
 import { RepositoriesService } from './repositories.service.js';
+import { RepositoryAddRateLimiter } from './repository-add-rate-limiter.js';
+import { RepositoryAddService } from './repository-add.service.js';
 import { SourceRunner } from './source-runner.js';
 import { SyncFinisher } from './sync-finisher.js';
 import { DetachedSyncLauncher, SyncLauncher } from './sync-launcher.js';
@@ -40,6 +44,9 @@ export const REPOSITORIES_PROVIDERS: Provider[] = [
   SyncStateReader,
   AddStore,
   RepositoriesService,
+  RepositoryAddRateLimiter,
+  RepositoryAddService,
+  RepositoriesHttpService,
 ];
 
 /**
@@ -50,11 +57,13 @@ export const REPOSITORIES_PROVIDERS: Provider[] = [
  * Owns tables `repositories`, `repositories_sources`,
  * `repositories_source_pages`, `repositories_sync_states` and
  * `repositories_source_statuses`; `user_id` / `integration_id` are logical
- * FKs only. It reads Auth only through `AccountHandleService` and calls
+ * FKs only. Its routes (`RepositoriesController`) are all `POST`,
+ * user-scoped and never warmed. It reads Auth only through `AccountHandleService` and calls
  * GitHub only through Integrations' exported `IntegrationsGithubService`.
  */
 @Module({
   imports: [TypeOrmModule.forFeature(REPOSITORIES_ENTITIES), AuthModule, IntegrationsModule],
+  controllers: [RepositoriesController],
   providers: [
     ...REPOSITORIES_PROVIDERS,
     { provide: Clock, useClass: SystemClock },
