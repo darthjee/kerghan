@@ -282,6 +282,7 @@ What this feature changes in the permanent product docs, as a checklist for the 
 | #460 | Repositories: Auth — GitHub handle on the account | implementation: [model.md](model.md#github-handle), [security.md](security.md#github-handle) |
 | #461 | Repositories: Integrations — export IntegrationsGithubService | implementation: [integrations.md](integrations.md), [security.md](security.md#credentials-stay-in-the-backend), [security.md](security.md#fixed-github-base-url); spec sync in [integrations.md](integrations.md), [testing.md](testing.md), [sync.md](sync.md#time-source) |
 | #462 | Repositories: Infra — DB-backed test tier and MySQL CI job | implementation: [testing.md](testing.md#db-backed-tier); spec sync in [testing.md](testing.md) |
+| #463 | Repositories: backend module, tables and sync engine | implementation: [model.md](model.md), [sync.md](sync.md), [edge-cases.md](edge-cases.md); spec sync in [model.md](model.md), [integrations.md](integrations.md), [testing.md](testing.md#repositories-typed-fake) |
 
 The implementation sub-issues are #460–#466, created on #444 from the enhanced specs; each adds
 its own row here.

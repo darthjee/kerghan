@@ -91,6 +91,9 @@ Every Repositories spec (unit, e2e and DB) injects a scriptable
 support (`integrations/tests/support/fake-integrations-github.service.ts`, #461), next to the
 shared builders, so the fidelity contract spec guards it; Repositories imports it.
 
+- **Integrations:** `setUsable(userId, refs)` sets what `listUsableIntegrations` answers and
+  `setIntegrations(userId, refs)` what `listIntegrations` answers (by default, the usable list).
+  Both are logged as non-GitHub calls.
 - **Scripting:** answers are scripted per (`integrationId` or `null`, operation, page).
 - **Call log:** every call is logged, so specs assert call counts and order, including "no
   GitHub call".

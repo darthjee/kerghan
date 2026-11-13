@@ -266,6 +266,18 @@ AccountHandleService#getGithubHandle(userId: number): Promise<string | null>
 It returns the stored, normalised handle, or `null` (no handle, or no such user). It is read-only;
 only Auth writes the column. The Repositories module calls it, never `auth_users`.
 
+It also exports one manager-aware existence read, the only Auth read Repositories runs **inside
+its own transaction**:
+
+```ts
+AccountHandleService#lockExistingUser(userId: number, manager: EntityManager): Promise<boolean>
+```
+
+It selects the user's `id` with a shared lock (`SELECT … FOR SHARE`, TypeORM
+`pessimistic_read`) through the caller's transactional manager, and returns whether the user
+still exists. A request entry point calls it before creating the sync-state row
+([user deletion](#user-deletion)); it never reads another column.
+
 ### Handle changes
 
 When the handle changes or is cleared, the handle source's stored rows (its
@@ -318,7 +330,10 @@ Derived from stored data on read, never stored as a column:
 | **Unavailable** | `added_at` is set, and either it has **no source row left** (every source that returned it later succeeded without returning it: deleted, renamed out of reach, access lost, or its only access integration deleted), or it is **private** and its `integration_id` is empty or dangling (its linked integration was deleted, #444). A public repo whose link was cleared stays available through the unauthenticated path. |
 | **Unknown** | `added_at` is set, and every source row it has belongs to a source that is not ok: its latest status is a failure (`error`, `invalid_credentials`, `rate_limited`, `not_found`), or it has no status row yet (`pending`, for example a first run interrupted after it applied pages). |
 
-Statuses are read from `repositories_sources` together with `repositories_source_statuses`. A
+Statuses are read from `repositories_sources` together with `repositories_source_statuses`,
+over the user's **current** sources only (every integration, usable or not, and the stored
+handle): a leftover row of a deleted integration, before the
+[safety net](sync.md#write-path) drops it, never makes a repo Added or holds it available. A
 failed source never makes a repo unavailable: its rows are kept as they were
 ([sync.md](sync.md#partial-failures)).
 
@@ -360,19 +375,26 @@ Consequences:
 No user-deletion path exists today. This is the Repositories contract for when one does.
 
 - **Event:** the deletion path emits an awaited **`user.deleted`** event
-  (`UserDeletedEvent { userId }`) with `emitAsync`, **after the user row delete commits**: the
-  same pattern as `integration.deleted`.
+  (`UserDeletedEvent { userId }`, exported with the `USER_DELETED` name by
+  `auth/events/user-deleted.event.ts`) with `emitAsync`, **after the user row delete commits**:
+  the same pattern as `integration.deleted`. Nothing emits it yet; Repositories only listens.
 - **Listener:** Repositories' listener, registered at boot like the `integration.deleted` one,
   runs one transaction that deletes the user's rows from all five tables: `repositories`,
   `repositories_sources`, `repositories_source_pages`, `repositories_source_statuses` and
-  `repositories_sync_states`. Every statement has `WHERE user_id = :userId`.
+  `repositories_sync_states`. Every statement has `WHERE user_id = :userId`. Its first statement
+  locks the user's sync-state row (`SELECT … FOR UPDATE`), the lock order every multi-table Repositories
+  write transaction follows ([sync.md](sync.md#write-path)), so it serializes with a running sync's
+  page writes instead of deadlocking with them.
 - **Best-effort:** a listener failure is logged **at error level** with safe fields (`userId`,
   error class), so the rows can be purged, and never blocks the deletion. The future deletion
   path must retry the event or run an orphan sweep ([README](README.md#product-changes-folded-by-452)).
 - **No row created for a deleted user:** a request entry point creates the sync-state row only
   if the user still exists, re-read through Auth's export
-  ([Auth export](#auth-export)) in the same transaction, so a request that passed `JwtGuard`
-  before the delete committed creates no orphan.
+  ([Auth export](#auth-export), `lockExistingUser`) in the same transaction, so a request that
+  passed `JwtGuard` before the delete committed creates no orphan. The shared lock closes the
+  race: while the entry point holds it, the user row delete waits for its commit (and the
+  `user.deleted` listener then deletes the new row); once the delete committed, the read finds
+  no user and nothing is created.
 - **A running sync:** the deleted sync-state row makes the run's next `run_id`-guarded write
   affect no row, so the run rolls back and stops; a run never recreates the row
   ([handle changes](#handle-changes), [sync.md](sync.md#write-path)).
