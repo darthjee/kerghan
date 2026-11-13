@@ -237,7 +237,7 @@ describe('HttpExceptionFilter', () => {
   });
 
   describe('Retry-After header', () => {
-    it('sets the header (rounded up) and keeps retryAfterSeconds out of the body', () => {
+    it('sets the header (rounded up) and the same value as error.retryAfterSeconds', () => {
       const body = catchAndGetBody(
         new HttpException(
           { code: ErrorCodes.INTEGRATION_TEST_COOLDOWN, message: 'wait', retryAfterSeconds: 12.2 },
@@ -247,14 +247,21 @@ describe('HttpExceptionFilter', () => {
 
       expect(response.setHeader).toHaveBeenCalledWith('Retry-After', '13');
       expect(response.status).toHaveBeenCalledWith(429);
-      expect(body.error).toEqual({ code: ErrorCodes.INTEGRATION_TEST_COOLDOWN, message: 'wait' });
+      expect(body.error).toEqual({ code: ErrorCodes.INTEGRATION_TEST_COOLDOWN, message: 'wait', retryAfterSeconds: 13 });
+    });
+
+    it('does not set the header nor the body field when no delay is attached', () => {
+      const body = catchAndGetBody(new HttpException({ code: ErrorCodes.GITHUB_RATE_LIMITED, message: 'slow down' }, 503));
+
+      expect(response.setHeader).not.toHaveBeenCalled();
       expect(JSON.stringify(body)).not.toContain('retryAfter');
     });
 
-    it('does not set the header when no delay is attached', () => {
-      catchAndGetBody(new HttpException({ code: ErrorCodes.GITHUB_RATE_LIMITED, message: 'slow down' }, 503));
+    it('does not expose an invalid delay in the body', () => {
+      const body = catchAndGetBody(new HttpException({ message: 'x', retryAfterSeconds: -1 }, 429));
 
       expect(response.setHeader).not.toHaveBeenCalled();
+      expect(JSON.stringify(body)).not.toContain('retryAfter');
     });
 
     it('does not set the header for a string response or a non-HTTP error', () => {

@@ -11,6 +11,7 @@ export interface ErrorPayload {
   code: string;
   message: string;
   details?: string[];
+  retryAfterSeconds?: number;
 }
 
 /**
@@ -91,7 +92,7 @@ export function retryAfterSecondsOf(exception: unknown): number | undefined {
 /**
  * Global catch-all exception filter (registered via `APP_FILTER`) that
  * reshapes every error into the standard body
- * `{ error: { code, message, details? }, statusCode, timestamp }`.
+ * `{ error: { code, message, details?, retryAfterSeconds? }, statusCode, timestamp }`.
  *
  * - `HttpException`s keep their status; `error.code` is the throw site's
  *   specific `code` when given, otherwise the status's category code
@@ -106,7 +107,7 @@ export function retryAfterSecondsOf(exception: unknown): number | undefined {
  *   the real error and stack are logged, never sent to the client.
  * - An `HttpException` whose response object carries a numeric
  *   `retryAfterSeconds` also gets a `Retry-After` header (integer seconds,
- *   rounded up); the member never reaches the body.
+ *   rounded up) and the same value as `error.retryAfterSeconds` in the body.
  */
 @Catch()
 export class HttpExceptionFilter implements ExceptionFilter {
@@ -128,12 +129,14 @@ export class HttpExceptionFilter implements ExceptionFilter {
   catch(exception: unknown, host: ArgumentsHost): void {
     const response = host.switchToHttp().getResponse<Response>();
     const { status, error } = this.resolve(exception);
-    const body: ErrorResponseBody = { error, statusCode: status, timestamp: new Date().toISOString() };
     const retryAfter = retryAfterSecondsOf(exception);
 
     if (retryAfter !== undefined) {
       response.setHeader('Retry-After', String(retryAfter));
+      error.retryAfterSeconds = retryAfter;
     }
+
+    const body: ErrorResponseBody = { error, statusCode: status, timestamp: new Date().toISOString() };
 
     response.status(status).json(body);
   }
