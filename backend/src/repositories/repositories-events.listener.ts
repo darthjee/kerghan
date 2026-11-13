@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
-import { DataSource } from 'typeorm';
+import { DataSource, type EntityManager } from 'typeorm';
 import { Pruner } from './pruner.js';
 import { integrationSourceKey } from './source-key.js';
 import { USER_DELETED, UserDeletedEvent } from '../auth/events/user-deleted.event.js';
@@ -21,7 +21,8 @@ const USER_TABLES = [
  * module is always-on): `integration.deleted`
  * (`docs/agents/specs/repos/integrations.md#deletion-hook`) and
  * `user.deleted` (`docs/agents/specs/repos/model.md#user-deletion`). Each
- * runs one transaction where every statement is scoped `user_id = :userId`,
+ * runs one transaction where every statement is scoped `user_id = :userId`
+ * and the user's sync-state row is locked first (the shared lock order),
  * catches its own error and logs safe fields only, so the emitter's
  * deletion always stands.
  */
@@ -51,6 +52,7 @@ export class RepositoriesEventsListener {
 
     try {
       await this.dataSource.transaction(async (manager) => {
+        await lockSyncState(manager, userId);
         await this.pruner.dropSources(manager, userId, [integrationSourceKey(integrationId)]);
         await manager.query(
           'UPDATE repositories SET integration_id = NULL WHERE user_id = ? AND integration_id = ?',
@@ -80,6 +82,7 @@ export class RepositoriesEventsListener {
 
     try {
       await this.dataSource.transaction(async (manager) => {
+        await lockSyncState(manager, userId);
         for (const table of USER_TABLES) {
           await manager.query(`DELETE FROM ${table} WHERE user_id = ?`, [userId]);
         }
@@ -92,6 +95,19 @@ export class RepositoriesEventsListener {
       });
     }
   }
+}
+
+/**
+ * Locks the user's sync-state row first, the lock order every Repositories
+ * write transaction follows (a run's guard, the reconciliation), so a
+ * cleanup serializes with a running sync's page writes instead of
+ * deadlocking with them.
+ * @param {EntityManager} manager - The transaction.
+ * @param {number} userId - The user.
+ * @returns {Promise<void>} Resolves once locked (or with no row).
+ */
+async function lockSyncState(manager: EntityManager, userId: number): Promise<void> {
+  await manager.query('SELECT user_id FROM repositories_sync_states WHERE user_id = ? FOR UPDATE', [userId]);
 }
 
 /**
