@@ -3,9 +3,8 @@ workflows:
   version: 2
   test:
     jobs:
-      # No DB service container yet: backend specs inject mocked TypeORM repositories rather than
-      # hitting a live database (see docs/agents/product.md). Add a cimg/mysql:8.0 service alongside
-      # the first spec that actually needs one.
+      # Unit specs only (mocked TypeORM repositories, coverage). Specs that need a live MySQL run
+      # in backend_db_tests below, against a mysql:8.4.11 service container.
       - yarn_project:
           name: backend_tests
           dir: backend
@@ -17,6 +16,9 @@ workflows:
           filters: &all_tags
             tags:
               only: /.*/
+      - backend_db_tests:
+          requires: [release-circleci_kerghan-base, release-circleci_kerghan-base-arm64]
+          filters: *all_tags
       - yarn_project:
           name: backend_checks
           dir: backend
@@ -55,6 +57,7 @@ workflows:
       - build-and-release:
           requires:
             - backend_tests
+            - backend_db_tests
             - backend_checks
             - jasmine
             - frontend-checks
@@ -72,6 +75,7 @@ workflows:
       - release-kerghan:
           requires:
             - backend_tests
+            - backend_db_tests
             - backend_checks
             - jasmine
             - frontend-checks
@@ -86,11 +90,18 @@ workflows:
           requires: [release-kerghan-standalone]
           filters: *tags_only
       - upload_proxy_files:
-          requires: [backend_tests, backend_checks, jasmine, frontend-checks, proxy_extension_tests]
+          requires:
+            - backend_tests
+            - backend_db_tests
+            - backend_checks
+            - jasmine
+            - frontend-checks
+            - proxy_extension_tests
           filters: *tags_only
       - upload_fe_files:
           requires:
             - backend_tests
+            - backend_db_tests
             - backend_checks
             - jasmine
             - frontend-checks
@@ -180,6 +191,32 @@ jobs:
             - run:
                 name: Upload coverage to Codacy
                 command: bash <(curl -Ls https://coverage.codacy.com/get.sh) report --partial -r coverage/lcov.info || true
+
+  # DB-backed backend test tier (`npm run test:db`, never with coverage) against a throwaway
+  # mysql:8.4.11 secondary container, reached on 127.0.0.1. Not a yarn_project instance, since that
+  # job takes a single image. The tier's Jest globalSetup waits for MySQL, so no wait step here.
+  backend_db_tests:
+    docker:
+      - image: darthjee/circleci_kerghan-base:0.1.0
+        environment:
+          KERGHAN_MYSQL_HOST: 127.0.0.1
+          KERGHAN_MYSQL_PORT: "3306"
+          KERGHAN_MYSQL_USER: kerghan
+          KERGHAN_MYSQL_PASSWORD: kerghan
+          KERGHAN_MYSQL_NAME: kerghan_test
+      - image: mysql:8.4.11
+        environment:
+          MYSQL_DATABASE: kerghan_test
+          MYSQL_USER: kerghan
+          MYSQL_PASSWORD: kerghan
+          MYSQL_ROOT_PASSWORD: kerghan
+    steps:
+      - checkout
+      - setup_project:
+          dir: backend
+      - run:
+          name: DB tests
+          command: npm run test:db
 
   # Finalizes the aggregated Codacy coverage report once both partial uploads
   # (backend_tests, jasmine) have completed. Reuses circleci_kerghan-base since the
