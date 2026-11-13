@@ -20,6 +20,7 @@ tag, and `skip_if_unchanged` makes even tag builds a no-op when neither `dockerf
 
 ```
 release-circleci_kerghan-base(-arm64) ─┬─ backend_tests ──┐
+                                        ├─ backend_db_tests┤
                                         └─ backend_checks ─┤
                                           jasmine ─────────┼─ build-and-release ─────────────────┐
                                     frontend-checks ───────┤                                      │
@@ -36,14 +37,15 @@ jasmine ───────┘
 
 release-kerghan-base(-arm64)  — published for local/dev use; nothing in this workflow requires it
 
-backend_tests, backend_checks, jasmine, frontend-checks, proxy_extension_tests ─┐
-                              release-production_kerghan-base(-arm64) ──────────┴─ release-kerghan ─┬─ release-kerghan-standalone ─ release-kerghan-assets
-                                                                                                      └─ build-and-release (above)
+backend_tests, backend_db_tests, backend_checks, jasmine, frontend-checks, proxy_extension_tests ──┐
+                                                 release-production_kerghan-base(-arm64) ──────────┴─ release-kerghan ─┬─ release-kerghan-standalone ─ release-kerghan-assets
+                                                                                                                         └─ build-and-release (above)
 ```
 
-The five boxes feeding `build-and-release`/`upload_proxy_files`/`upload_fe_files`
-(`backend_tests`, `backend_checks`, `jasmine`, `frontend-checks`, `proxy_extension_tests`) are
-each required directly by all three of those jobs — the diagram only draws the edges once to
+The six boxes feeding `build-and-release`/`upload_proxy_files`/`upload_fe_files`
+(`backend_tests`, `backend_db_tests`, `backend_checks`, `jasmine`, `frontend-checks`,
+`proxy_extension_tests`) are each required directly by all three of those jobs (and by
+`release-kerghan`) — the diagram only draws the edges once to
 stay readable. `scripts_tests` and `release-kerghan` are required only by `build-and-release`. `coverage-final` requires only `backend_tests` and `jasmine` (the two jobs that
 upload partial Codacy coverage) and isn't required by anything else — it doesn't gate the release
 chain, it just finalizes the aggregated Codacy report once both partial uploads have completed.
@@ -100,7 +102,7 @@ holds transitively.
 
 `release-kerghan-base(-arm64)` and `release-circleci_kerghan-base(-arm64)` don't need a direct
 `build-and-release`/`release` dependency either: `release-circleci_kerghan-base(-arm64)` is
-already required by `backend_tests`/`backend_checks`, both of which run before
+already required by `backend_tests`/`backend_db_tests`/`backend_checks`, all of which run before
 `build-and-release`/`release` in the graph, so they're safely ordered transitively too.
 `release-kerghan-base(-arm64)` (the dev-only base image) isn't required by anything in this
 workflow at all — nothing downstream depends on it being fresh.
@@ -110,6 +112,7 @@ workflow at all — nothing downstream depends on it being fresh.
 | Job | Image/Executor | Filter | Purpose |
 |-----|-----------------|--------|---------|
 | `backend_tests` | `darthjee/circleci_kerghan-base:0.1.0` | every push | `yarn_project` instance (`dir: backend`, `script: coverage`, `upload_coverage: true`): backend test suite + coverage; uploads a partial Codacy coverage report afterward (best-effort, non-blocking) |
+| `backend_db_tests` | `darthjee/circleci_kerghan-base:0.1.0` + `mysql:8.4.11` service container | every push | DB-backed backend test tier (`npm run test:db`, no coverage) against a throwaway MySQL reached on `127.0.0.1` — see "`backend_db_tests` — the DB-backed tier" below. Gates the release and deploy jobs |
 | `backend_checks` | `darthjee/circleci_kerghan-base:0.1.0` | every push | `yarn_project` instance (`dir: backend`, `script: lint`): backend ESLint |
 | `jasmine` | `darthjee/circleci_node:0.2.1` | every push | `yarn_project` instance (`dir: frontend`, `script: coverage`, `upload_coverage: true`): frontend test suite + coverage; uploads a partial Codacy coverage report afterward (best-effort, non-blocking) |
 | `frontend-checks` | `darthjee/circleci_node:0.2.1` | every push | `yarn_project` instance (`dir: frontend`, `script: lint`): frontend ESLint |
@@ -127,6 +130,50 @@ workflow at all — nothing downstream depends on it being fresh.
 | `upload_extension` | `darthjee/tent:1.0.3` | tag only | Uploads the proxy PHP extension (test files stripped) |
 | `copy_proxy_configuration` | `darthjee/tent:1.0.3` | tag only | Uploads prod proxy config + restores host-only state (`locals.php`, `.htaccess`) |
 | `release` | `darthjee/vite_kerghan-base:0.1.0` | tag only | Atomic swap: only runs once every upload/build job above has succeeded |
+
+### `backend_db_tests` — the DB-backed tier
+
+A standalone job (not a `yarn_project` instance, whose `docker:` takes a single image). The
+primary container is `darthjee/circleci_kerghan-base:0.1.0`; a secondary `mysql:8.4.11` container
+(`MYSQL_DATABASE=kerghan_test`, `MYSQL_USER`/`MYSQL_PASSWORD`/`MYSQL_ROOT_PASSWORD=kerghan`, no
+volume) shares its network, so the tests reach it on `127.0.0.1`. The primary container sets the
+app's own connection variables to the test database:
+
+| Var | Value |
+|---|---|
+| `KERGHAN_MYSQL_HOST` | `127.0.0.1` |
+| `KERGHAN_MYSQL_PORT` | `3306` |
+| `KERGHAN_MYSQL_USER` | `kerghan` |
+| `KERGHAN_MYSQL_PASSWORD` | `kerghan` |
+| `KERGHAN_MYSQL_NAME` | `kerghan_test` |
+
+There is no wait step: the tier's Jest `globalSetup` retries the connection for up to 60 s, and
+refuses to run unless `KERGHAN_MYSQL_NAME` ends in `_test`. The job uploads no coverage, so it
+stays out of `coverage-final`; it is required by `build-and-release`, `release-kerghan`,
+`upload_proxy_files` and `upload_fe_files`, like `backend_tests`.
+
+Locally, the same tier runs with `make db-tests` (`docker-compose run --rm kerghan_db_tests`),
+against the `kerghan_mysql_test` service: `mysql:8.4.11`, data dir on `tmpfs`, no published port
+and no `env_file`. `kerghan_db_tests` reaches it through the `mysql_test` link alias.
+
+### MySQL version
+
+Dev (`kerghan_mysql`), the local test database (`kerghan_mysql_test`) and CI (`backend_db_tests`)
+all use `mysql:8.4.11`, which matches production. The standalone image still bundles
+`mysql:9.3.0`; it moves in #469.
+
+**One-time dev reset.** #462 moved `kerghan_mysql` from `9.3.0` to `8.4.11`. MySQL cannot
+downgrade a data directory, so an existing `docker_volumes/mysql_data` will not start on the new
+image. Recreate it once (this deletes your local dev data):
+
+```sh
+docker-compose stop kerghan_mysql
+rm -rf docker_volumes/mysql_data
+docker-compose up -d kerghan_mysql
+make setup
+```
+
+`make setup` runs `yarn migration:run`.
 
 ### `release-image` instances
 
