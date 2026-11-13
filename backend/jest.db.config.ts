@@ -1,9 +1,5 @@
 import type { Config } from 'jest';
-// Node (22.18+) loads Jest's TypeScript configs as native ES modules with
-// type stripping, so the import must name the real `.ts` file; Jest's
-// ts-node typecheck pass otherwise rejects the extension (TS5097).
-// @ts-expect-error TS5097 — `.ts` extension needed by Node's native loader.
-import { baseConfig } from './jest.config.ts';
+import baseConfig from './jest.base.cjs';
 
 // DB-backed test tier (`yarn test:db`): runs only `*.db-spec.ts` files
 // against a real MySQL test database (`KERGHAN_MYSQL_NAME` must end in

@@ -272,8 +272,14 @@ claims, unique keys, transactions, conditional writes, column type round trips).
 stays on the fakes.
 
 - **Suffix and script:** `*.db-spec.ts`, run only by `yarn test:db` (`jest.db.config.ts`, which
-  shares `baseConfig` with `jest.config.ts`), always `--runInBand` and never with coverage. The
-  default `testRegex` does not match `*.db-spec.ts`.
+  shares its base settings with `jest.config.ts` through the plain CommonJS `jest.base.cjs`),
+  always `--runInBand` and never with coverage. The default `testRegex` does not match
+  `*.db-spec.ts`.
+- **Node versions:** the CI image (Node 22.14) loads TS Jest configs through ts-node, the dev
+  image (Node 22.21) through native type stripping. Neither can load a `.ts` config imported from
+  another `.ts` config in this `"type": "module"` package, so shared config lives in `.cjs`.
+  Likewise `globalSetup` resolves the source's `./x.js` imports to `.ts` by wrapping Node's
+  CommonJS resolver, not with `module.registerHooks` (Node 22.15+).
 - **Where:** locally via `docker-compose run --rm kerghan_db_tests` (`make db-tests`), against
   the throwaway `kerghan_mysql_test` service; in CI via the `backend_db_tests` job and its MySQL
   service container. Connection settings are the app's own `KERGHAN_MYSQL_*` vars.

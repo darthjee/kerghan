@@ -1,38 +1,8 @@
 import type { Config } from 'jest';
+import baseConfig from './jest.base.cjs';
 
-// Jest itself always runs as CommonJS regardless of this package's
-// "type": "module" — `@swc/jest` compiles each test/source `.ts` file to
-// CommonJS for Jest's runtime (NestJS's own recommended Jest/SWC setup;
-// unlike `ts-jest`, it isn't affected by `tsconfig.json`'s NodeNext module
-// setting or by `package.json`'s "type": "module"), and `moduleNameMapper`
-// strips the explicit `.js` extensions our NodeNext-style source imports
-// use (e.g. `./auth.service.js`) so Jest resolves them back to the `.ts`
-// source files.
-//
-// `baseConfig` holds the parts shared with the DB-backed tier's
-// `jest.db.config.ts` (rootDir, transform, module resolution), so both
-// configs compile and resolve source identically.
-export const baseConfig: Config = {
-  rootDir: 'src',
-  testEnvironment: 'node',
-  moduleFileExtensions: ['js', 'json', 'ts'],
-  transform: {
-    '^.+\\.ts$': [
-      '@swc/jest',
-      {
-        jsc: {
-          parser: { syntax: 'typescript', decorators: true },
-          transform: { legacyDecorator: true, decoratorMetadata: true },
-          target: 'es2022',
-        },
-        module: { type: 'commonjs' },
-      },
-    ],
-  },
-  moduleNameMapper: {
-    '^(\\.{1,2}/.*)\\.js$': '$1',
-  },
-};
+// Shared rootDir, swc transform and `.js` -> `.ts` module resolution live
+// in `jest.base.cjs` (also used by the DB-backed tier's `jest.db.config.ts`).
 
 // `*.db-spec.ts` files (the DB-backed tier, `yarn test:db`) never match
 // this `testRegex`: `.db-spec` is neither `.spec` nor `.e2e-spec`.
