@@ -4,8 +4,11 @@ import { AuthModule } from '../auth/auth.module.js';
 import { Clock, SystemClock } from '../core/clock.js';
 import { IntegrationsModule } from '../integrations/integrations-github.public.js';
 import { REPOSITORIES_ENTITIES } from './entities/index.js';
+import { HandleReconciler } from './handle-reconciler.js';
+import { Pruner } from './pruner.js';
 import { RepositoriesConfig } from './repositories-config.js';
 import { DetachedSyncLauncher, SyncLauncher } from './sync-launcher.js';
+import { SyncStateStore } from './sync-state.store.js';
 
 /**
  * The Repositories module's own providers (everything but the injected
@@ -14,6 +17,9 @@ import { DetachedSyncLauncher, SyncLauncher } from './sync-launcher.js';
  */
 export const REPOSITORIES_PROVIDERS: Provider[] = [
   RepositoriesConfig,
+  Pruner,
+  SyncStateStore,
+  HandleReconciler,
 ];
 
 /**
