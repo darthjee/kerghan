@@ -10,6 +10,8 @@ import { RepositoriesConfig } from './repositories-config.js';
 import { RepositoriesEventsListener } from './repositories-events.listener.js';
 import { RepositoriesListingQuery } from './repositories-listing.query.js';
 import { RepositoriesService } from './repositories.service.js';
+import { RepositoryAddRateLimiter } from './repository-add-rate-limiter.js';
+import { RepositoryAddService } from './repository-add.service.js';
 import { SourceRunner } from './source-runner.js';
 import { SyncFinisher } from './sync-finisher.js';
 import { DetachedSyncLauncher, SyncLauncher } from './sync-launcher.js';
@@ -40,6 +42,8 @@ export const REPOSITORIES_PROVIDERS: Provider[] = [
   SyncStateReader,
   AddStore,
   RepositoriesService,
+  RepositoryAddRateLimiter,
+  RepositoryAddService,
 ];
 
 /**
