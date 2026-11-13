@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { Clock, SystemClock } from '../core/clock.js';
 import { IntegrationCredentialLockout } from './entities/integration-credential-lockout.entity.js';
 import { IntegrationGithubAppState } from './entities/integration-github-app-state.entity.js';
 import { IntegrationOauthState } from './entities/integration-oauth-state.entity.js';
@@ -89,6 +90,7 @@ import { PatStrategy } from './types/pat/pat.strategy.js';
       useFactory: (pat: PatStrategy, oauthApp: OauthAppStrategy, githubApp: GithubAppStrategy): IntegrationTypeStrategy[] =>
         [pat, oauthApp, githubApp],
     },
+    { provide: Clock, useClass: SystemClock },
     IntegrationsEncryptionService,
     GithubClientService,
     IntegrationTypeRegistry,

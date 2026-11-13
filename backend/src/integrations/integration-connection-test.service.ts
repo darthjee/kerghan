@@ -1,12 +1,13 @@
 import { Injectable } from '@nestjs/common';
 import { LoggerService } from '../core/logger.service.js';
 import type { Integration } from './entities/integration.entity.js';
-import { githubRateLimited, githubUnavailable, testCooldown } from './integration-http-errors.js';
+import { testCooldown } from './integration-http-errors.js';
 import { toIntegrationView } from './integration-response.js';
 import { IntegrationStoreService } from './integration-store.service.js';
 import { IntegrationTestCooldownService } from './integration-test-cooldown.service.js';
 import { type EncryptedSecret, IntegrationsEncryptionService, type SecretBinding } from './integrations-encryption.service.js';
 import type { Secret } from './secret.js';
+import { githubRateLimited, githubUnavailable } from '../core/github-http-errors.js';
 import { IntegrationTypeRegistry } from './types/integration-type-registry.js';
 import type { IntegrationTypeStrategy, TestOutcome } from './types/integration-type-strategy.js';
 
