@@ -111,7 +111,8 @@ export class RepositoriesService {
    * Resolves a repo ref among the user's own rows (`api.md#repo-ref`).
    * @param {number} userId - The session's user.
    * @param {RepoRef} ref - The validated ref.
-   * @returns {Promise<FoundRepository | null>} What Add needs, or `null` (#464 answers `404`).
+   * @returns {Promise<FoundRepository | null>} What Add needs (the listing row nested under
+   *   `repository`, apart from Add's internal candidate inputs), or `null` (#464 answers `404`).
    */
   async findByRef(userId: number, ref: RepoRef): Promise<FoundRepository | null> {
     const resolved = await this.addStore.resolve(userId, ref);
@@ -193,7 +194,7 @@ export class RepositoriesService {
 
 /**
  * @param {ListingRow} row - A listed row.
- * @returns {FoundRepository} The row plus Add's candidate inputs.
+ * @returns {FoundRepository} The listing row, nested, plus Add's candidate inputs.
  */
 function found(row: ListingRow): FoundRepository {
   const holderIntegrationIds = row.sourceKeys.flatMap((key) => {
@@ -202,5 +203,5 @@ function found(row: ListingRow): FoundRepository {
     return parsed?.kind === 'integration' ? [parsed.integrationId] : [];
   });
 
-  return { ...row.repository, holderIntegrationIds, handleSeesRepo: row.sourceKeys.includes(HANDLE_SOURCE_KEY) };
+  return { repository: row.repository, holderIntegrationIds, handleSeesRepo: row.sourceKeys.includes(HANDLE_SOURCE_KEY) };
 }

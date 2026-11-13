@@ -99,8 +99,14 @@ export type TriggerOutcome =
 /** A repo ref (`api.md#repo-ref`), already validated by the caller. */
 export type RepoRef = { githubId: number } | { fullName: string };
 
-/** What Add needs about one of the caller's rows. */
-export interface FoundRepository extends ListedRepository {
+/**
+ * What Add needs about one of the caller's rows. The listing shape is nested
+ * under `repository` so the internal candidate inputs below are never
+ * serialized with it: only `repository` may reach a response.
+ */
+export interface FoundRepository {
+  /** The listing row (the only part a response may carry). */
+  repository: ListedRepository;
   /** Internal ids of the integrations holding a source row for it (for the candidate walk). */
   holderIntegrationIds: number[];
   /** Whether the handle source holds it. */

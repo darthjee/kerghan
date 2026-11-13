@@ -31,8 +31,10 @@ describe('RepositoriesService findByRef / markAdded (real MySQL)', () => {
     it('finds by githubId with Add\'s candidate inputs, and answers null for an unknown ref', async () => {
       await seedRepo(harness.ds, userId, { githubId: 5, owner: 'o', name: 'r', private: true, sources: [['integration:1', 1], ['handle', 1]] });
 
-      expect(await service.findByRef(userId, { githubId: 5 })).toMatchObject({
-        githubId: 5, fullName: 'o/r', status: 'not_added', addedAt: null, holderIntegrationIds: [1], handleSeesRepo: true,
+      expect(await service.findByRef(userId, { githubId: 5 })).toEqual({
+        repository: expect.objectContaining({ githubId: 5, fullName: 'o/r', status: 'not_added', addedAt: null }),
+        holderIntegrationIds: [1],
+        handleSeesRepo: true,
       });
       expect(await service.findByRef(userId, { githubId: 6 })).toBeNull();
       expect(await service.findByRef(userId, { fullName: 'nope/r' })).toBeNull();
@@ -45,10 +47,10 @@ describe('RepositoriesService findByRef / markAdded (real MySQL)', () => {
       await seedRepo(harness.ds, userId, { githubId: 11, owner: 'darth', name: 'kerghan', lastSeenAt: NEW });
       await seedRepo(harness.ds, userId, { githubId: 12, owner: 'darth', name: 'KERGHAN', lastSeenAt: OLD });
 
-      expect((await service.findByRef(userId, { fullName: 'DARTH/kerghan' }))?.githubId).toBe(11);
+      expect((await service.findByRef(userId, { fullName: 'DARTH/kerghan' }))?.repository.githubId).toBe(11);
 
       await harness.ds.query('UPDATE repositories SET last_seen_at = ? WHERE user_id = ?', [NEW, userId]);
-      expect((await service.findByRef(userId, { fullName: 'darth/kerghan' }))?.githubId).toBe(12);
+      expect((await service.findByRef(userId, { fullName: 'darth/kerghan' }))?.repository.githubId).toBe(12);
     });
   });
 
