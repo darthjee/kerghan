@@ -5,5 +5,6 @@ entity/event-focused `docs/agents/modules/` pages.
 
 - [Auth](routes/auth.md)
 - [Integrations](routes/integrations.md)
+- [Repositories](routes/repositories.md)
 
 Future backend modules add their own entry here as they land.
