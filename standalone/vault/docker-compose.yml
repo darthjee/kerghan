@@ -20,7 +20,7 @@
 
 services:
   mysql:
-    image: mysql:9.3.0
+    image: mysql:8.4.11
     restart: unless-stopped
     environment:
       MYSQL_DATABASE: kerghan
@@ -29,10 +29,30 @@ services:
       MYSQL_PASSWORD: ${KERGHAN_MYSQL_PASSWORD:-kerghan}
       MYSQL_ROOT_PASSWORD: ${KERGHAN_MYSQL_PASSWORD:-kerghan}
     volumes:
-      - mysql-data:/var/lib/mysql
+      - mysql84-data:/var/lib/mysql
     healthcheck:
       # TCP ping: during the first init MySQL runs a socket-only temporary
       # server, so this only succeeds once the real server is up.
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "--silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 120s
+
+  # Exists only to migrate data written by pre-#469 releases (MySQL 9.3.0, volume
+  # mysql-data) into mysql above. Profile-gated: a normal `compose up` never
+  # starts it. The kerghan client starts it on demand. Removed in a later release.
+  mysql-legacy:
+    image: mysql:9.3.0
+    profiles: [migrate-mysql-9]
+    environment:
+      MYSQL_DATABASE: kerghan
+      MYSQL_USER: kerghan
+      MYSQL_PASSWORD: ${KERGHAN_MYSQL_PASSWORD:-kerghan}
+      MYSQL_ROOT_PASSWORD: ${KERGHAN_MYSQL_PASSWORD:-kerghan}
+    volumes:
+      - mysql-data:/var/lib/mysql
+    healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "--silent"]
       interval: 5s
       timeout: 5s
@@ -116,4 +136,6 @@ services:
       - ./tent/extension:/var/www/html/extension:ro
 
 volumes:
+  mysql84-data: {}
+  # Old MySQL 9.3.0 data; only used by mysql-legacy (see above).
   mysql-data: {}

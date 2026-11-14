@@ -460,7 +460,7 @@ x"; do
   refute_restarted
   assert_logged "docker pull $NEWER_IMAGE"
   assert_order "kerghan updated $HIGH_VERSION -> $NEWER_VERSION" \
-    "kerghan: hint: run 'kerghan down && kerghan up' to switch the instance to $NEWER_VERSION (an older version may not read data written by a newer one)"
+    "kerghan: hint: run 'kerghan down && kerghan up' to switch the instance to $NEWER_VERSION (an older version may not read data written by a newer one; releases before the MySQL 8.4.11 move cannot read the migrated data, because the old 9.3 data was removed)"
   refute_output_contains "docker image rm"
 }
 
@@ -690,6 +690,17 @@ x"; do
   refute_output_contains "kerghan.env"
   [ ! -e "$ENV_FILE" ]
   assert_output_contains "kerghan: hint: run 'kerghan up' to start Kerghan on $NEWER_IMAGE"
+}
+
+@test "an update that restarts the instance migrates the MySQL 9.3 data" {
+  write_legacy_env_file
+  write_config "restart-on-update=always"
+  export STUB_RUNNING_IMAGE="$IMAGE" STUB_LEGACY_VOLUME=1
+  run "$CLIENT" update </dev/null
+  [ "$status" -eq 0 ]
+  assert_restarted
+  assert_output_contains "MySQL data migrated from 9.3 to 8.4.11; the old 9.3 data was removed"
+  assert_logged "docker exec vault-kerghan docker volume rm vault_mysql-data"
 }
 
 @test "added keys get the down && up hint when the restart did not recreate the container" {
