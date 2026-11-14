@@ -2,6 +2,9 @@
 # Test stub for the vault CLI: logs its call and the directory it ran from.
 #   STUB_VAULT_UP_EXIT    exit code for `vault up` (default 0)
 #   STUB_VAULT_UP_STDERR  text printed on stderr by a failing `vault up`
+#   STUB_MIG_FAIL         step of the MySQL migration that fails: stop,
+#                         legacy_up, legacy_health, dump, restore, start,
+#                         health or count (unset: none)
 echo "vault $*" >>"$STUB_LOG"
 echo "$PWD" >>"$STUB_LOG.pwd"
 if [ "${1:-}" = "up" ] && [ "${STUB_VAULT_UP_EXIT:-0}" != "0" ]; then
@@ -9,5 +12,29 @@ if [ "${1:-}" = "up" ] && [ "${STUB_VAULT_UP_EXIT:-0}" != "0" ]; then
     echo "$STUB_VAULT_UP_STDERR" >&2
   fi
   exit "$STUB_VAULT_UP_EXIT"
+fi
+if [ "${1:-}" = "compose" ]; then
+  fail_step="${STUB_MIG_FAIL:-}"
+  case "$*" in
+    *" stop kerghan"*) [ "$fail_step" = "stop" ] && exit 1 ;;
+    *"up -d mysql-legacy"*) [ "$fail_step" = "legacy_up" ] && exit 1 ;;
+    *"exec -T mysql-legacy mysqladmin"*) [ "$fail_step" = "legacy_health" ] && exit 1 ;;
+    *"exec -T mysql mysqladmin"*) ;;
+    *"exec -T kerghan node"*) [ "$fail_step" = "health" ] && exit 1 ;;
+    *"exec -T mysql-legacy sh -c"*"mysqldump"*)
+      [ "$fail_step" = "dump" ] && exit 1
+      echo "-- dump"
+      ;;
+    *"exec -T mysql-legacy sh -c"*"COUNT(*)"*) echo "users 3" ;;
+    *"exec -T mysql sh -c"*"COUNT(*)"*)
+      if [ "$fail_step" = "count" ]; then echo "users 2"; else echo "users 3"; fi
+      ;;
+    *"exec -T mysql sh -c"*"DROP DATABASE"*) ;;
+    *"exec -T mysql sh -c"*)
+      cat >/dev/null
+      [ "$fail_step" = "restore" ] && exit 1
+      ;;
+    *" start kerghan"*) [ "$fail_step" = "start" ] && exit 1 ;;
+  esac
 fi
 exit 0

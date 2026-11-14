@@ -1573,28 +1573,28 @@ mysql_migration_pending() {
 mysql_wait_healthy() {
   local service="$1" deadline
   deadline=$(($(date +%s) + MIGRATE_TIMEOUT))
-  while [ "$(date +%s)" -lt "$deadline" ]; do
+  while :; do
     if vault_cmd compose exec -T "$service" mysqladmin ping -h 127.0.0.1 --silent >/dev/null 2>&1; then
       return 0
     fi
+    [ "$(date +%s)" -lt "$deadline" ] || return 1
     sleep 2
   done
-  return 1
 }
 
 # mysql_wait_backend - waits (bounded) for the backend to answer HTTP.
 mysql_wait_backend() {
   local deadline
   deadline=$(($(date +%s) + MIGRATE_TIMEOUT))
-  while [ "$(date +%s)" -lt "$deadline" ]; do
+  while :; do
     if vault_cmd compose exec -T kerghan node -e \
       "fetch('http://127.0.0.1:3000/').then(r=>process.exit(r.status<500?0:1)).catch(()=>process.exit(1))" \
       >/dev/null 2>&1; then
       return 0
     fi
+    [ "$(date +%s)" -lt "$deadline" ] || return 1
     sleep 2
   done
-  return 1
 }
 
 # mysql_migrate_steps <volume> - the migration proper; non-zero on any failure.
