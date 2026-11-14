@@ -16,7 +16,7 @@ import { CachePolicy } from '../core/cache-policy.decorator.js';
 import { CurrentUser } from '../core/current-user.decorator.js';
 
 /**
- * Repositories routes (`docs/agents/specs/repos/api.md`) — thin: each
+ * Repositories routes (`docs/agents/backend/routes/repositories.md`) — thin: each
  * validates through its DTO, calls one `RepositoriesHttpService` method and
  * shapes the answer. Every route is `POST`, behind the global `JwtGuard` and
  * `OriginGuard` (no `@Public()`, no `@AdminOnly()`), scoped to the caller

@@ -18,7 +18,7 @@ export const OK_SOURCE_STATUSES: readonly SourceStatus[] = ['ok', 'page_cap_reac
 /**
  * The status of the latest run of one source of one user. Owns table
  * `repositories_source_statuses` (see
- * `docs/agents/specs/repos/model.md#repositories_source_statuses`).
+ * `docs/agents/modules/repositories.md#repositories_source_statuses`).
  */
 @Entity('repositories_source_statuses')
 @Index('idx_repositories_source_statuses_user_id_source_key', ['userId', 'sourceKey'], { unique: true })

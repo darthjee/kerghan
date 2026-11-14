@@ -21,7 +21,7 @@ A user's sync reads every source they have:
     writes nothing more for it, **no status** either, as for a handle changed mid-sync
     ([write path](#write-path)); the deletion hook and the end-of-sync safety net drop its rows.
     The reason never reaches a response.
-- **The GitHub handle** ([data model](../auth/github-handle.md#github-handle)): the handle's public repositories.
+- **The GitHub handle** ([data model](../auth/github-handle.md)): the handle's public repositories.
   - The run reads the current handle through Auth's export when it starts, after the
     [handle reconciliation](../auth/github-handle.md#handle-changes); no handle ⇒ no handle source. The handle
     it started with is the run's **handle** for the [write guard](#write-path).

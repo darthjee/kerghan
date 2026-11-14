@@ -2,7 +2,7 @@ import ApiClient from './ApiClient.js';
 import pickDefined from './pickDefined.js';
 
 /**
- * HTTP client for the caller's repositories (`docs/agents/specs/repos/api.md`).
+ * HTTP client for the caller's repositories (`docs/agents/backend/routes/repositories.md`).
  *
  * @description Every route is a `POST` scoped to the logged-in user. Like the other clients,
  * each method resolves `undefined` when the session turned out to be expired, and rejects with

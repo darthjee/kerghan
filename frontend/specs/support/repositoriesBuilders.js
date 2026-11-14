@@ -1,5 +1,5 @@
 /**
- * Build a repository listing row (`api.md#listing`), defaulting to a public, not-added
+ * Build a repository listing row (`docs/agents/backend/routes/repositories.md#listing`), defaulting to a public, not-added
  * `darthjee/kerghan` row.
  *
  * @param {object} [overrides] - Fields replacing the defaults.
@@ -22,7 +22,7 @@ export function buildRepository(overrides = {}) {
 }
 
 /**
- * Build a sync-state source entry (`api.md#sync-state`), defaulting to an `ok` integration
+ * Build a sync-state source entry (`docs/agents/backend/routes/repositories.md#sync-state`), defaulting to an `ok` integration
  * source labelled `work-pat`.
  *
  * @param {object} [overrides] - Fields replacing the defaults.
@@ -57,7 +57,7 @@ export function buildSyncState(overrides = {}) {
 }
 
 /**
- * Build a listing response (`api.md#listing`).
+ * Build a listing response (`docs/agents/backend/routes/repositories.md#listing`).
  *
  * @param {{repositories?: Array<object>, pagination?: object, sync?: object}} [overrides] -
  *   Parts replacing the defaults.

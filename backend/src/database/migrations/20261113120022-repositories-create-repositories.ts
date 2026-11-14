@@ -28,7 +28,7 @@ export const REPOSITORIES_INDEXES: TableIndex[] = [
 /**
  * Creates the Repositories module's `repositories` table: one row per (user,
  * GitHub repository) seen in a sync, with a nullable `added_at` (see
- * `docs/agents/specs/repos/model.md#repositories`). `user_id` and
+ * `docs/agents/modules/repositories.md#repositories`). `user_id` and
  * `integration_id` are logical FKs only (no physical constraint). `down`
  * drops the table.
  */

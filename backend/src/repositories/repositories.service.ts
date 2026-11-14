@@ -23,7 +23,7 @@ import type {
  * The Repositories module's only surface for the controller (#464): typed
  * inputs and outputs, no HTTP types. Every method takes `userId` from the
  * caller's session and scopes every query by it
- * (`docs/agents/specs/repos/model.md#ownership`). Nothing here calls GitHub:
+ * (`docs/agents/modules/repositories.md#ownership`). Nothing here calls GitHub:
  * the integrations are read through `listIntegrations` /
  * `listUsableIntegrations`, which read the database.
  */
@@ -51,7 +51,7 @@ export class RepositoriesService {
   ) {}
 
   /**
-   * One page of the user's repositories (`api.md#listing`), filtered and searched before pagination.
+   * One page of the user's repositories (`docs/agents/backend/routes/repositories.md#listing`), filtered and searched before pagination.
    * @param {number} userId - The session's user.
    * @param {ListInput} input - The validated page, filter and search.
    * @returns {Promise<ListResult>} The rows and the filtered totals.
@@ -63,7 +63,7 @@ export class RepositoriesService {
   }
 
   /**
-   * The sync-state object (`api.md#sync-state`). Never starts a sync.
+   * The sync-state object (`docs/agents/backend/routes/repositories.md#sync-state`). Never starts a sync.
    * @param {number} userId - The session's user.
    * @returns {Promise<SyncStateResult>} The object.
    */
@@ -108,7 +108,7 @@ export class RepositoriesService {
   }
 
   /**
-   * Resolves a repo ref among the user's own rows (`api.md#repo-ref`).
+   * Resolves a repo ref among the user's own rows (`docs/agents/backend/routes/repositories.md#repo-ref`).
    * @param {number} userId - The session's user.
    * @param {RepoRef} ref - The validated ref.
    * @returns {Promise<FoundRepository | null>} What Add needs (the listing row nested under
@@ -122,10 +122,10 @@ export class RepositoriesService {
   }
 
   /**
-   * Add's conditional write (`api.md#add`): marks a not-added row of the
+   * Add's conditional write (`docs/agents/backend/routes/repositories.md#add`): marks a not-added row of the
    * user as added with its access link. A link that is not one of the user's
    * own integrations is stored as `null` (the end-of-sync link fill fills it,
-   * `integrations.md#access-link-on-add`), never as another user's id.
+   * `docs/agents/modules/integrations/github-service.md#access-link-on-add`), never as another user's id.
    * @param {number} userId - The session's user.
    * @param {RepoRef} ref - The repo (as resolved by `findByRef`; a `githubId` ref is exact).
    * @param {number | null} integrationId - The access link, or `null`.

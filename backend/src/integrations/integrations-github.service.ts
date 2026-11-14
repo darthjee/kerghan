@@ -37,7 +37,7 @@ const BAD_CREDENTIALS_REASONS: Readonly<Record<string, string>> = {
 
 /**
  * The Integrations module's only cross-module surface for GitHub (see
- * `docs/agents/specs/repos/integrations.md#exported-service`): fixed,
+ * `docs/agents/modules/integrations/github-service.md#exported-service`): fixed,
  * `GET`-only repo operations with typed, normalised results. Credentials,
  * minted installation tokens, `secret_iv` values and GitHub bodies never
  * leave the module; logs carry safe fields only (integration id, operation,

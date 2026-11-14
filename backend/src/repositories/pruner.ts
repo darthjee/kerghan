@@ -6,7 +6,7 @@ const PRUNE_SQL = 'DELETE FROM repositories WHERE user_id = ? AND added_at IS NU
 
 /**
  * The private-metadata lifecycle's writes (see
- * `docs/agents/specs/repos/model.md#private-metadata-lifecycle`): dropping a
+ * `docs/agents/modules/repositories.md#private-metadata-lifecycle`): dropping a
  * source's rows and pruning not-added repos left with no source row. Every
  * statement is scoped `user_id = :userId`; callers run them inside their own
  * transaction.

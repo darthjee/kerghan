@@ -34,7 +34,7 @@ type Step = { kind: 'continue'; hasNext: boolean } | Walk;
 
 /**
  * Runs one source of a sync, page by page up to the page cap
- * (`docs/agents/specs/repos/sync.md#per-source`): conditional requests with
+ * (`docs/agents/modules/repositories/sync.md#per-source`): conditional requests with
  * the stored ETags (the last stored page always without one), each page
  * fetched before its guarded transaction, the handle's credential fallback on
  * `invalid_credentials`, and the end-of-source write.
@@ -169,7 +169,7 @@ function failure(status: Exclude<SourceEndWrite['status'], 'ok' | 'page_cap_reac
 }
 
 /**
- * Maps an integration source's failure (`sync.md#sources`): a non-usable
+ * Maps an integration source's failure (`docs/agents/modules/repositories/sync.md#sources`): a non-usable
  * integration stores `invalid_credentials` (status) or `error` (type
  * disabled); a missing one stops with no status.
  * @param {Failure} result - The answer.
@@ -190,7 +190,7 @@ function integrationFailure(result: Failure): Walk {
 }
 
 /**
- * Maps a handle source's failure (`sync.md#handle-credential`): a `401` (or
+ * Maps a handle source's failure (`docs/agents/modules/repositories/sync.md#handle-credential`): a `401` (or
  * an unusable credential) moves to the next credential; a rate limit, an
  * unavailable answer or a `404` never falls back.
  * @param {Failure} result - The answer.

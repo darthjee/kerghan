@@ -5,7 +5,7 @@ import { seedRepo, syncStateOf } from './support/repo-rows.js';
 import { buildRepositoriesDbHarness, type RepositoriesDbHarness } from './support/repositories-db-harness.js';
 import { seedUser, setHandle } from './support/two-user-baseline.js';
 
-// Type (a) races (`testing.md#concurrency-and-races`): N operations at once
+// Type (a) races (`docs/agents/modules/repositories.md#concurrency-and-races`): N operations at once
 // on separate pool connections, asserting invariants only. No repeat loops.
 const N = 6;
 

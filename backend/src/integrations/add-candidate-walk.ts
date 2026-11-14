@@ -1,6 +1,6 @@
 /**
  * Add's re-check candidate walk (see
- * `docs/agents/specs/repos/integrations.md#add-re-check-candidates` and
+ * `docs/agents/modules/integrations/github-service.md#add-re-check-candidates` and
  * `#access-link-on-add`). A pure function, exported with
  * `IntegrationsGithubService`: Repositories computes its inputs (which
  * integrations hold a source row, whether the handle source sees the repo)

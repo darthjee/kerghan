@@ -40,7 +40,7 @@ interface InFlightMint {
 
 /**
  * The in-memory GitHub App installation-token cache (see
- * `docs/agents/specs/repos/integrations.md#github-app-installation-tokens`).
+ * `docs/agents/modules/integrations/github-service.md#github-app-installation-tokens`).
  * Internal to the Integrations module and never exported; it has no getter
  * for a token outside `acquire`, and logs nothing.
  *

@@ -43,7 +43,7 @@ function IsExactlyOneRef(): PropertyDecorator {
 
 /**
  * Request body for `POST /repositories/add.json`: a repo ref
- * (`api.md#repo-ref`), exactly one of `githubId` (a positive safe integer)
+ * (`docs/agents/backend/routes/repositories.md#repo-ref`), exactly one of `githubId` (a positive safe integer)
  * or `fullName` (`owner/name`). Both or neither answers `400`. `githubId` is
  * validated also when both are absent, so "neither" fails there.
  */

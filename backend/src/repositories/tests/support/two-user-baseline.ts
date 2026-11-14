@@ -65,7 +65,7 @@ export async function deleteIntegration(ds: DataSource, integrationId: number): 
   await ds.query('DELETE FROM integrations WHERE id = ?', [integrationId]);
 }
 
-/** The two-user baseline (`docs/agents/specs/repos/testing.md#two-user-baseline`). */
+/** The two-user baseline (`docs/agents/modules/repositories.md#two-user-baseline`). */
 export interface TwoUserBaseline {
   userId: number;
   intruderId: number;

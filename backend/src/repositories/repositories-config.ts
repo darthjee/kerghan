@@ -37,9 +37,9 @@ function positiveInteger(configService: ConfigService, key: string, fallback: nu
 
 /**
  * The Repositories values, read once: the sync values
- * (`docs/agents/specs/repos/sync.md#values`) from
+ * (`docs/agents/modules/repositories/sync.md#values`) from
  * `KERGHAN_REPOSITORIES_SYNC_TTL_MS`, `_COOLDOWN_MS` and `_PAGE_CAP`, and the
- * Add rate limit (`api.md#add-rate-limit`) from
+ * Add rate limit (`docs/agents/backend/routes/repositories.md#add-rate-limit`) from
  * `KERGHAN_REPOSITORIES_ADD_MAX_PER_WINDOW` and `_ADD_WINDOW_MS`.
  */
 @Injectable()

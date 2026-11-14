@@ -12,7 +12,7 @@ import { LoggerService } from '../core/logger.service.js';
 import { IntegrationsGithubService, type IntegrationRef } from '../integrations/integrations-github.public.js';
 
 /**
- * One sync run of one user (`docs/agents/specs/repos/sync.md`): the
+ * One sync run of one user (`docs/agents/modules/repositories/sync.md`): the
  * start-of-run handle reconciliation (with no sync-state row the run
  * stops), the sources (each integration, usable or not, and the handle),
  * up to `SYNC_PARALLELISM` at once, then the end of sync. A source whose

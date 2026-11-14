@@ -2,7 +2,7 @@
  * GitHub's username format, applied to an already-normalised (lowercased)
  * handle: letters and digits, single hyphens only (no `--`), no leading or
  * trailing hyphen, 1 to 39 characters. See
- * `docs/agents/specs/repos/model.md#validation`.
+ * `docs/agents/modules/auth/github-handle.md#validation`.
  */
 export const GITHUB_HANDLE_FORMAT = /^[a-z0-9](?:[a-z0-9]|-(?=[a-z0-9])){0,38}$/;
 

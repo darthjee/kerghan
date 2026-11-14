@@ -1,6 +1,6 @@
 import { OK_SOURCE_STATUSES, type SourceStatus } from './entities/repository-source-status.entity.js';
 
-/** A listing row's derived status (`docs/agents/specs/repos/model.md#row-statuses`). */
+/** A listing row's derived status (`docs/agents/modules/repositories.md#row-statuses`). */
 export type RowStatus = 'added' | 'not_added' | 'unavailable' | 'unknown';
 
 /** The fields of a repository row the derivation reads. */

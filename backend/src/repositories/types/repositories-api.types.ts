@@ -1,7 +1,7 @@
 import type { RowStatus } from '../row-status.js';
 
 /**
- * The typed surface of `RepositoriesService` (`docs/agents/specs/repos/api.md`):
+ * The typed surface of `RepositoriesService` (`docs/agents/backend/routes/repositories.md`):
  * plain inputs and outputs, no HTTP types and no DTO classes (the controller
  * owns validation and response shaping). The internal repository `id` never
  * appears here.
@@ -76,7 +76,7 @@ export type SourceState = SourceRef & {
   resetAt: Date | null;
 };
 
-/** The sync-state object (`api.md#sync-state`). */
+/** The sync-state object (`docs/agents/backend/routes/repositories.md#sync-state`). */
 export interface SyncStateResult {
   state: 'idle' | 'syncing';
   /** `null` when idle. */
@@ -96,7 +96,7 @@ export type TriggerOutcome =
   /** The session's user no longer exists (nothing created, nothing started). */
   | { kind: 'no_user' };
 
-/** A repo ref (`api.md#repo-ref`), already validated by the caller. */
+/** A repo ref (`docs/agents/backend/routes/repositories.md#repo-ref`), already validated by the caller. */
 export type RepoRef = { githubId: number } | { fullName: string };
 
 /**

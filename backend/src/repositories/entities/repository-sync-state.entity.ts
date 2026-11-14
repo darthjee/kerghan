@@ -7,7 +7,7 @@ export type SyncLockState = 'idle' | 'syncing';
  * One row per user, keyed by `user_id`: the per-user sync lock, its lease,
  * the cooldown anchor and the handle the stored `handle` rows belong to. Owns
  * table `repositories_sync_states` (see
- * `docs/agents/specs/repos/model.md#repositories_sync_states`).
+ * `docs/agents/modules/repositories.md#repositories_sync_states`).
  */
 @Entity('repositories_sync_states')
 export class RepositorySyncState {

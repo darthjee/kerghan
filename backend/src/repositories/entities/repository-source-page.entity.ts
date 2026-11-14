@@ -3,7 +3,7 @@ import { Column, Entity, Index, PrimaryGeneratedColumn } from 'typeorm';
 /**
  * One fetched page of one source of one user: its `etag`, whether a next page
  * existed and when it was fetched. Owns table `repositories_source_pages`
- * (see `docs/agents/specs/repos/model.md#repositories_source_pages`). Never
+ * (see `docs/agents/modules/repositories.md#repositories_source_pages`). Never
  * shared between users.
  */
 @Entity('repositories_source_pages')

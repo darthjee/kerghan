@@ -25,7 +25,7 @@ export const REPOSITORIES_SOURCE_PAGES_INDEXES: TableIndex[] = [
 /**
  * Creates `repositories_source_pages`: one row per (user, source, page) with
  * the page's `etag`, `has_next` and `fetched_at`, for conditional requests
- * (see `docs/agents/specs/repos/model.md#repositories_source_pages`). `down`
+ * (see `docs/agents/modules/repositories.md#repositories_source_pages`). `down`
  * drops the table.
  */
 export class RepositoriesCreateRepositoriesSourcePages20261113120024 implements MigrationInterface {

@@ -8,7 +8,7 @@ import type {
 } from './types/repositories-api.types.js';
 
 /**
- * The wire shapes of the Repositories API (`docs/agents/specs/repos/api.md`).
+ * The wire shapes of the Repositories API (`docs/agents/backend/routes/repositories.md`).
  * These pure functions are the only path from the typed service results to a
  * response: every field is copied explicitly (never spread), so no internal
  * field (the repository `id`, `user_id`, an `integrations.id`) can leak.

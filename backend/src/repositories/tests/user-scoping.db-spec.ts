@@ -10,7 +10,7 @@ import { SHARED_GITHUB_ID, seedTwoUserBaseline, setHandle, snapshotUserRows } fr
 
 const ALL = { page: 1, perPage: 50, filter: 'all' as const, search: '' };
 
-// The sync half of `security.md#required-tests` "User scoping": with the
+// The sync half of `docs/agents/modules/repositories.md#security-tests` "User scoping": with the
 // two-user baseline, no method, sync, listener or reconciliation reads or
 // changes the intruder's rows.
 describe('Repositories user scoping (real MySQL)', () => {

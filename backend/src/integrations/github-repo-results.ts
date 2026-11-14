@@ -1,6 +1,6 @@
 /**
  * The typed, normalised results of the exported `IntegrationsGithubService`
- * (see `docs/agents/specs/repos/integrations.md#exported-service`). They are
+ * (see `docs/agents/modules/integrations/github-service.md#exported-service`). They are
  * part of the module's export surface: no credential, minted token, `secret_iv`
  * or GitHub body ever appears in them.
  */

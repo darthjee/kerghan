@@ -3,7 +3,7 @@ import { Column, Entity, Index, PrimaryGeneratedColumn } from 'typeorm';
 /**
  * Which source returned a repository, as of that source's last applied page,
  * and on which page. Owns table `repositories_sources` (see
- * `docs/agents/specs/repos/model.md#repositories_sources`). `userId` is
+ * `docs/agents/modules/repositories.md#repositories_sources`). `userId` is
  * denormalised for per-user/per-source cleanup without a join.
  */
 @Entity('repositories_sources')

@@ -19,8 +19,8 @@ import {
 import { REPOSITORIES_ENTITIES } from '../entities/index.js';
 import { moduleSources, REPOSITORIES_ROOT } from './support/module-sources.js';
 
-// Static boundary checks (`security.md#module-boundaries`,
-// `testing.md#module-boundaries`): no app boot, no DB. The lint override in
+// Static boundary checks (`docs/agents/modules/repositories.md#module-boundaries`,
+// `docs/agents/modules/repositories.md#module-boundary-tests`): no app boot, no DB. The lint override in
 // `eslint.config.mjs` refuses the imports; `eslint-boundary.spec.ts` proves it.
 
 const FORBIDDEN_TABLES = ['auth_users', 'integrations'];

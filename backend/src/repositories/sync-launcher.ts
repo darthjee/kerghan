@@ -5,7 +5,7 @@ import { LoggerService } from '../core/logger.service.js';
 export type SyncTask = () => Promise<void>;
 
 /**
- * The only way a sync is started (`docs/agents/specs/repos/sync.md#execution`):
+ * The only way a sync is started (`docs/agents/modules/repositories/sync.md#execution`):
  * `launch(task)` detaches the run and catches its errors. Used as its own DI
  * token, so specs swap in a capturing launcher.
  */

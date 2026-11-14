@@ -28,7 +28,7 @@ export type SourceEndWrite =
 
 /**
  * The guarded per-page and end-of-source transactions of a sync run
- * (`docs/agents/specs/repos/sync.md#write-path`). Each transaction's first
+ * (`docs/agents/modules/repositories/sync.md#write-path`). Each transaction's first
  * statement is the run's guard (heartbeat, conditional on `run_id` and, for
  * the handle source, on the handle); when it no longer owns the row nothing
  * is written. Every statement is scoped `user_id = :userId`.

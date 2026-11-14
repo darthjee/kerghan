@@ -12,7 +12,7 @@ import { seedIntegration, seedTwoUserBaseline } from './support/two-user-baselin
 import type { IntegrationRef, RepoPageResult, RepoResult } from '../../integrations/integrations-github.public.js';
 import { githubRepo, listingPage, repository } from '../../integrations/tests/support/github-builders.js';
 
-// The credential canary sweep (`security.md#required-tests`): every place the
+// The credential canary sweep (`docs/agents/modules/repositories.md#security-tests`): every place the
 // fakes and the database can carry credential material or a GitHub error is
 // seeded with a recognisable canary; no response body, header or log line of
 // any route may ever contain one.

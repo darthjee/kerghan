@@ -32,7 +32,7 @@ export interface SyncStateView {
 const TABLE = 'repositories_sync_states';
 
 /**
- * The per-user sync lock (see `docs/agents/specs/repos/sync.md#per-user-lock`
+ * The per-user sync lock (see `docs/agents/modules/repositories/sync.md#per-user-lock`
  * and `#restart-recovery`): row creation for request entry points, the
  * atomic claim, the `run_id`-guarded writes of a run and the lease-aware
  * read. Every time value comes from the injected `Clock` and is passed to SQL

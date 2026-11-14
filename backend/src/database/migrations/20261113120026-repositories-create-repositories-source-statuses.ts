@@ -24,7 +24,7 @@ export const REPOSITORIES_SOURCE_STATUSES_INDEXES: TableIndex[] = [
 /**
  * Creates `repositories_source_statuses`: the status of each source's latest
  * run, one row per (user, source) (see
- * `docs/agents/specs/repos/model.md#repositories_source_statuses`). `down`
+ * `docs/agents/modules/repositories.md#repositories_source_statuses`). `down`
  * drops the table.
  */
 export class RepositoriesCreateRepositoriesSourceStatuses20261113120026 implements MigrationInterface {

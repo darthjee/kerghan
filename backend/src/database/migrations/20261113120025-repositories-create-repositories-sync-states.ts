@@ -20,7 +20,7 @@ const COLUMNS: TableColumnOptions[] = [
  * Creates `repositories_sync_states`: one row per user, keyed by `user_id`
  * (the exception to the auto-increment `id` convention), holding the per-user
  * sync lock, its lease and the reconciled handle (see
- * `docs/agents/specs/repos/model.md#repositories_sync_states`). `down` drops
+ * `docs/agents/modules/repositories.md#repositories_sync_states`). `down` drops
  * the table.
  */
 export class RepositoriesCreateRepositoriesSyncStates20261113120025 implements MigrationInterface {

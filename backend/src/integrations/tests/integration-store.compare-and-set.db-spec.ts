@@ -22,7 +22,7 @@ async function seedRow(ds: DataSource): Promise<Integration> {
   return ds.getRepository(Integration).findOneByOrFail({ id: row.insertId });
 }
 
-// `integrations.md#required-tests` "Status compare-and-set" (moved from #461):
+// `docs/agents/modules/integrations/github-service.md#required-tests` "Status compare-and-set" (moved from #461):
 // a `401` answered for the old credential never marks a replaced one invalid.
 describe('IntegrationStoreService status compare-and-set (real MySQL)', () => {
   let ds: DataSource;
