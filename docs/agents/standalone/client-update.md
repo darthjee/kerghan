@@ -543,6 +543,11 @@ then confirms:
 | No TTY, no `--yes` | `kerghan: error: a downgrade needs a confirmation, but stdin is not a terminal` + `kerghan: hint: run 'kerghan update 0.9.0 --yes' to confirm it`, exit `1`. |
 | End of input at the prompt | Same as answering no. |
 
+- **MySQL 8.4.11 (#469):** the release that moved the stack from MySQL 9.3.0 to 8.4.11 migrates
+  the data during the restart (`update_restart` runs `cmd_up`, which runs the migration; see
+  [standalone.md](../standalone.md#mysql-93--8411-migration)) and deletes the old 9.3 data once
+  verified. Downgrading below that release afterwards is unsupported: its compose would start 9.3
+  on a missing volume, i.e. an empty database. The downgrade hint says so.
 - **`--force` does not change this:** it only affects the same-version case.
 - **`--yes` on an upgrade or a no-op** is accepted with no effect.
 

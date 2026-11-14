@@ -55,8 +55,9 @@ RUN set -e; \
 #######################
 # Offline image: inner images preloaded from /vault/images/*.tar.
 # standalone/images/<arch>/ (amd64, arm64) must exist and hold that
-# architecture's `docker save` tarballs of darthjee/kerghan:<v>, mysql:9.3.0
-# and the matching Tent tag before building this target. They are produced by
+# architecture's `docker save` tarballs of darthjee/kerghan:<v>, mysql:8.4.11
+# (mysql.tar), mysql:9.3.0 (mysql-legacy.tar, only for the #469 migration
+# release) and the matching Tent tag before building this target. They are produced by
 # bin/release_kerghan_standalone.sh; only the folder matching TARGETARCH is
 # copied, so a multi-platform build gives each architecture its own.
 FROM standalone AS standalone-offline
