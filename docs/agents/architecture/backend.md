@@ -188,6 +188,7 @@ through DI and e2e test apps register it the same way (`build-auth-test-app.ts`)
 | `error.code` | Always present. Category code by default; specific code when set at the throw site. |
 | `error.message` | Always present, human-readable. For validation failures: the messages joined with `"; "`. |
 | `error.details` | Only for `ValidationPipe` failures — the full list of validation messages. |
+| `error.retryAfterSeconds` | Optional. Present when the throw site sets `retryAfterSeconds` (e.g. `429` cooldowns and rate limits, some `503`s); the response then also carries a `Retry-After` header with the same whole number of seconds. |
 | `statusCode` | Same as the HTTP status. |
 | `timestamp` | ISO-8601 (`new Date().toISOString()`). |
 
@@ -290,3 +291,13 @@ stays on the fakes.
   empty. Specs get the file's shared connection from `getTestDataSource()`.
 
 See `database/tests/db-tier.db-spec.ts` for the smoke spec.
+
+### Injected time source
+
+Time rules read the injected `Clock` (`core/clock.ts`: `Clock#now()`, with `SystemClock` in
+production and a `FakeClock` under `core/tests/support/` in specs), never `Date.now()` or
+`new Date()` directly, so tests move time with `set` / `advance` and never wait. The Integrations
+module (installation-token cache, unauthenticated budget tracker) and the
+[Repositories module](../modules/repositories/sync.md#time-source) both use it. Time **conditions
+in SQL** (a lease, a cooldown, a staleness check) compare against a value computed from the
+`Clock` and passed as a parameter: never `NOW()` or `CURRENT_TIMESTAMP` in the statement.

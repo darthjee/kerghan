@@ -1,9 +1,9 @@
 # Product Definitions
 
 **Status: partial.** The high-level flow (login, repo selection, on-demand issue fetching) is
-decided — see [Flow](flow.md), and so are [integrations](#integrations). Entity definitions,
-an ownership chain, and role definitions for the core tracked-repo/label-rule data model still
-don't exist, because that model is still open. This file
+decided — see [Flow](flow.md), and so are [integrations](#integrations) and
+[repositories](#repositories). Entity definitions, an ownership chain, and role definitions for
+the label-rule data model still don't exist, because that model is still open. This file
 is the canonical place for the `product-owner`, `data-access`, and `security` agents to check
 "is this decided yet?".
 
@@ -18,9 +18,13 @@ is the canonical place for the `product-owner`, `data-access`, and `security` ag
   based on issues carrying certain labels, across every repo a user tracks, in one place.
 - **Multi-tenant**: each user account registers its own set of repos/orgs to monitor — unlike a
   single shared dataset.
-- **What the backend persists**: account/login state, each user's repo selection, and each
-  user's [integrations](#integrations) (labelled, encrypted GitHub credentials).
-  Issue data itself is **not** persisted by default — see "Issue fetching model" below.
+- **What the backend persists**: account/login state (including an optional GitHub handle), each
+  user's [integrations](#integrations) (labelled, encrypted GitHub credentials), and each user's
+  [repositories](#repositories): a per-user snapshot of **every** GitHub repository seen in a
+  sync, with a mark for the ones the user added. The snapshot includes the metadata of private
+  repositories the user never added; its lifetime is bounded (see
+  [Repositories](#repositories)). Issue data itself is **not** persisted by default — see
+  "Issue fetching model" below.
 - **Issue fetching model**: on demand, live, fetched **client-side** by the frontend directly
   against GitHub's public REST API — not by the backend. This is what lets the backend stay idle
   between visits and moves GitHub's unauthenticated rate limit (60 requests/hour per source IP)
@@ -29,8 +33,8 @@ is the canonical place for the `product-owner`, `data-access`, and `security` ag
 - **GitHub access**: issue data is still fetched unauthenticated and client-side, public-repo
   data only. Users can store GitHub credentials (Personal Access Token, OAuth App
   authorization, GitHub App installation) as [integrations](#integrations), which are the
-  **only** allowed GitHub credential storage; nothing uses them for issue fetching yet (see
-  "Deferred").
+  **only** allowed GitHub credential storage. The backend uses them to list repositories (see
+  [Repositories](#repositories)); nothing uses them for issue fetching yet (see "Deferred").
 - **Frontend surface**: a dashboard/analytics view (issue volume, age, label breakdowns, "needs
   attention" lists), not just CRUD forms — API design should be aggregation-friendly.
 - **No file uploads, no GitHub webhooks.** An admin-role-gated UI is allowed (see #40's admin
@@ -57,6 +61,30 @@ Decided by #295; the full definition is in the
   never returned by the API, never logged; the owner only sees a masked hint.
 - **Credential storage boundary**: integrations are the only allowed way to store GitHub
   credentials. Any other way still needs its own product decision.
+
+## Repositories
+
+Decided by epic #444; the full definition is in the [Repositories module](modules/repositories.md).
+
+- **Entity**: a repository row belongs to exactly one user and is unique per (user, GitHub
+  repository id). The same row is the stored snapshot of the GitHub repo and records whether the
+  user **added** it to Kerghan (`added_at`), so the tracked-repo part of the data model is
+  settled. A row reads **Added**, **Not added**, **Unavailable** (added, but no source returns it
+  any more) or **Unknown** (added, but its only sources failed or were never synced).
+- **Sources**: the listing merges every integration of the user and the public repositories of
+  the optional GitHub handle on their account, deduplicated by GitHub repository id. Every GitHub
+  call is made by the backend; the frontend only talks to Kerghan's API.
+- **Sync**: on demand and asynchronous, when the last one is older than a staleness TTL or when
+  the user hits Refresh. There is no background polling.
+- **Access rules**: user-scoped like integrations. Another user's repository answers 404, like a
+  missing one; admins get no access.
+- **Private metadata**: kept only while a source can still see it. Not-added repos left with no
+  source are deleted; added ones stay, shown Unavailable, so the user's choice is not lost.
+  Exception: the rows of an integration that is not usable are kept until it is fixed or deleted.
+  An added private repo whose integration was deleted reads Unavailable only until the next sync
+  fills its link with a usable integration that returns it.
+- **Not included**: removing an added repo, adding a repo by `owner/name`, issues, label rules,
+  org-wide tracking, scheduled sync.
 
 ## Default user
 
@@ -104,19 +132,19 @@ Decided by epic #389; the full definition is in
   (e.g. for history/trend views). Not built.
 - **Historical/trend collection**: volume-over-time or similar views, which depend on the
   opt-in persistence above. Not built.
-- **Using integration credentials**: credentials can be stored as
-  [integrations](modules/integrations.md), but nothing uses them for issue fetching yet (the
-  backend only calls GitHub with them to test a connection or list GitHub App installations).
-  Backend proxying of GitHub calls with a user's integration, and reading private repositories
-  with it, are not built.
+- **Using integration credentials for issues**: credentials are used by the backend to test a
+  connection, list GitHub App installations and list repositories (see
+  [Repositories](#repositories)), but nothing uses them for issue fetching yet. Backend proxying
+  of issue calls with a user's integration, and reading the issues of private repositories with
+  it, are not built.
 
 ## What's still open
 
-- **The data model**: how a user's tracked repos/orgs and label rules are modeled and scoped per
-  account. This is the single biggest open question blocking real entity/ownership/access-rule
-  documentation here.
-- Everything downstream of the data model: entity definitions, ownership chain, role
-  definitions, editing rules, the real API endpoint shape.
+- **Label rules and org-wide tracking**: the tracked-repos part of the data model is settled (see
+  [Repositories](#repositories)); how label rules are modeled and scoped per account, and whether
+  a whole organization can be tracked as one entry, are still open.
+- Everything downstream of them: the "needs attention" entities, ownership chain for rules, role
+  definitions, editing rules, the real API endpoint shape for issues.
 
 ## Once the data model is decided
 

@@ -19,7 +19,8 @@ never warmed. See [API Caching](architecture/caching.md) for the cache classes.
 ## Per-user cache (upcoming)
 
 Today, the rule for any user-scoped endpoint (e.g. the repo-selection read path described in
-[Flow](flow.md#per-user-cache-upcoming)) is: declare it `@CachePolicy(CacheClass.UserScoped)`, which sets the `X-Skip-Cache` header so
+[Flow](flow.md#per-user-cache-upcoming), `POST /repositories/mine.json` and the other
+[Repositories routes](backend/routes/repositories.md), or `POST /auth/account/mine.json`) is: declare it `@CachePolicy(CacheClass.UserScoped)`, which sets the `X-Skip-Cache` header so
 it bypasses Tent's shared HTTP cache entirely (see [API Caching](architecture/caching.md) and
 `.claude/agents/cache.md`'s cache-class review). That's a
 correctness requirement, not a performance story — user-scoped responses currently get no

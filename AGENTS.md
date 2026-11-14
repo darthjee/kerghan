@@ -4,10 +4,12 @@ _Last updated: 2026-10-02_
 
 Kerghan is a GitHub issue monitoring/dashboard app. Users log into a lightweight Kerghan account
 (username/password, a JWT `access_token` cookie, and a rotating refresh token — not GitHub OAuth;
-users can store GitHub credentials as integrations — see [Specs](docs/agents/specs.md) — not
-yet used for issue fetching), either directly or by approving the login from an
-already-logged-in device via the device-authorization flow, and
-choose which of their repos/orgs to monitor; that selection is what the backend persists. Issue
+users can store GitHub credentials as integrations — see [Specs](docs/agents/specs.md) — used by
+the backend to list their repositories, not for issue fetching), either directly or by approving
+the login from an already-logged-in device via the device-authorization flow, and
+choose which of their repos/orgs to monitor; the backend persists a per-user snapshot of the
+repositories it lists (through an integration's credential or the public repositories of an
+optional GitHub handle) and which of them the user added. Issue
 data itself is fetched live, on demand, by the frontend calling GitHub's public API directly —
 each user's own browser IP (Internet Protocol) address absorbs GitHub's unauthenticated rate
 limit instead of the backend's shared one. Nothing about issues is persisted to MySQL by
@@ -105,8 +107,10 @@ docker-compose run --rm kerghan_tests yarn test
   `production_kerghan-base`) is **not published to Docker Hub** — built locally / in CI only. Only the frontend/proxy
   (`vite_kerghan*`) images are published.
 - Kerghan has a lightweight per-user account/login (not GitHub OAuth) — see
-  [Flow](docs/agents/flow.md). GitHub data itself is still read unauthenticated (public-repo
-  only) for now. Per-user GitHub credentials may be stored only as integrations, exactly as
+  [Flow](docs/agents/flow.md). Repository listing is read by the backend, inside the
+  Integrations module, with an integration's credential or the GitHub handle's public listing;
+  issue data is still read by the browser, unauthenticated (public-repo only). Per-user GitHub
+  credentials may be stored only as integrations, exactly as
   defined by the integrations entry in [Specs](docs/agents/specs.md) (#295 is the product
   decision); any other GitHub credential storage still needs an explicit product decision
   backing it.
