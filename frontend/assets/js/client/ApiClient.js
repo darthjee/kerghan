@@ -66,7 +66,8 @@ function parseRetryAfter(response) {
  * response's `statusText`, then to a generic message, when the body carries no
  * `error.message` (e.g. a proxy-generated or empty error response), so the resulting error's
  * `message` is never `undefined`. Carries the `Retry-After` header (integer seconds), when
- * present and valid, as the error's `retryAfter`.
+ * present and valid, as the error's `retryAfter`; `retryAfterSeconds` prefers the body's
+ * `error.retryAfterSeconds` (a non-negative integer) over that header.
  * @param {Response} response - The raw `fetch` response.
  * @param {object} data - The parsed response body.
  * @returns {ApiError} The error to throw.
@@ -75,8 +76,13 @@ function buildApiError(response, data) {
   const error = data?.error ?? {};
   const message = error.message || response.statusText || FALLBACK_ERROR_MESSAGE;
 
+  const retryAfter = parseRetryAfter(response);
+  const bodySeconds = Number.isInteger(error.retryAfterSeconds) && error.retryAfterSeconds >= 0
+    ? error.retryAfterSeconds
+    : undefined;
+
   return new ApiError(
-    response.status, message, error.code, error.details, parseRetryAfter(response),
+    response.status, message, error.code, error.details, retryAfter, bodySeconds ?? retryAfter,
   );
 }
 

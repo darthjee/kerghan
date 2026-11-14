@@ -15,6 +15,7 @@ const ROUTES = [
   ['/account/integrations', 'integrations'],
   ['/account/sessions', 'sessions'],
   ['/account/my-account', 'my-account'],
+  ['/repositories', 'repositories'],
   ['/', 'home'],
 ];
 

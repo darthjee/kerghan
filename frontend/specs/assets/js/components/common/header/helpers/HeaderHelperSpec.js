@@ -51,7 +51,7 @@ describe('HeaderHelper', () => {
     it('renders no logged-in menu and no login links', () => {
       const markup = pendingMarkup();
 
-      ['My account', 'Logout', 'Admin Users', 'Login', 'Register', 'Recover'].forEach((label) => {
+      ['Repositories', 'My account', 'Logout', 'Admin Users', 'Login', 'Register', 'Recover'].forEach((label) => {
         expect(markup).not.toContain(label);
       });
     });
@@ -97,6 +97,10 @@ describe('HeaderHelper', () => {
       expect(markupOf(false, true)).not.toContain('href="#/admin/users"');
     });
 
+    it('does not render the Repositories link', () => {
+      expect(markupOf(false, false)).not.toContain('href="#/repositories"');
+    });
+
     it('does not render the My account dropdown', () => {
       expect(markupOf(false, false)).not.toContain('My account');
     });
@@ -120,6 +124,15 @@ describe('HeaderHelper', () => {
       expect(markup).not.toContain('>Login<');
       expect(markup).not.toContain('>Register<');
       expect(markup).not.toContain('>Recover<');
+    });
+
+    it('renders the Repositories link for a non-admin and an admin', () => {
+      [false, true].forEach((isAdmin) => {
+        const markup = markupOf(true, isAdmin);
+
+        expect(markup).toContain('href="#/repositories"');
+        expect(markup).toContain('>Repositories<');
+      });
     });
 
     it('does not render the Admin Users link for a non-admin', () => {

@@ -285,6 +285,7 @@ What this feature changes in the permanent product docs, as a checklist for the 
 | #463 | Repositories: backend module, tables and sync engine | implementation: [model.md](model.md), [sync.md](sync.md), [edge-cases.md](edge-cases.md); spec sync in [model.md](model.md), [integrations.md](integrations.md), [testing.md](testing.md#repositories-typed-fake) |
 | #464 | Repositories: API routes | implementation: [api.md](api.md), [security.md](security.md#module-boundaries), [testing.md](testing.md#access-control-and-leaks); spec sync in [api.md](api.md#add-rate-limit), [api.md](api.md#errors) |
 | #465 | Repositories: Frontend — GitHub handle field on the Account page | implementation: [ui.md](ui.md#github-handle-field) |
+| #466 | Repositories: Frontend — Repositories page and navbar link | implementation: [ui.md](ui.md), [testing.md](testing.md#frontend) |
 
 The implementation sub-issues are #460–#466, created on #444 from the enhanced specs; each adds
 its own row here.
