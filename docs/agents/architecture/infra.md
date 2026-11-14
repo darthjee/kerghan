@@ -161,7 +161,7 @@ and no `env_file`. `kerghan_db_tests` reaches it through the `mysql_test` link a
 Dev (`kerghan_mysql`), the local test database (`kerghan_mysql_test`) and CI (`backend_db_tests`)
 all use `mysql:8.4.11`, which matches production. The standalone image also uses `mysql:8.4.11`
 (`mysql:9.3.0` is bundled as `mysql-legacy.tar` only for the one-time migration; see the
-migration section in [standalone.md](../standalone.md)).
+migration section in [standalone.md](../standalone.md#mysql-93-to-8411-migration)).
 
 **One-time dev reset.** #462 moved `kerghan_mysql` from `9.3.0` to `8.4.11`. MySQL cannot
 downgrade a data directory, so an existing `docker_volumes/mysql_data` will not start on the new
