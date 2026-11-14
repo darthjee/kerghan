@@ -220,8 +220,8 @@ const AccountsClient = {
    * @param {{currentPassword: string, username?: string, email?: string,
    *   newPassword?: string}} fields - The current password (always required) plus any fields
    *   to update.
-   * @returns {Promise<{username: string, email: string}>} The account's updated username and
-   *   email.
+   * @returns {Promise<{username: string, email: string, githubHandle: (string|null)}>} The
+   *   account's updated username and email, plus its current GitHub handle.
    */
   async updateAccount({
     currentPassword, username, email, newPassword,
@@ -232,6 +232,28 @@ const AccountsClient = {
         username, email, newPassword,
       }),
     });
+  },
+
+  /**
+   * Read the caller's own account.
+   *
+   * @returns {Promise<{username: string, email: string, githubHandle: (string|null)}>} The
+   *   account's username, email and GitHub handle.
+   */
+  async getMyAccount() {
+    return ApiClient.postJson('/auth/account/mine.json', {});
+  },
+
+  /**
+   * Set or clear the caller's GitHub handle. The body carries only `githubHandle`, never a
+   * `currentPassword`.
+   *
+   * @param {string|null} githubHandle - The handle to set, or `null` to clear it.
+   * @returns {Promise<{username: string, email: string, githubHandle: (string|null)}>} The
+   *   updated account.
+   */
+  async updateGithubHandle(githubHandle) {
+    return ApiClient.patchJson('/auth/account.json', { githubHandle });
   },
 
   /**
