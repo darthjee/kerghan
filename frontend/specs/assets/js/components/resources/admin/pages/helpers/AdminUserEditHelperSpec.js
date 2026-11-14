@@ -19,6 +19,15 @@ describe('AdminUserEditHelper', () => {
     });
   });
 
+  describe('.render (github handle)', () => {
+    it('renders no github handle field', () => {
+      const page = renderPage(buildState(), buildHandlers());
+
+      expect(page.contains('GitHub handle')).withContext('handle text').toBeFalse();
+      expect(page.contains('github-handle')).withContext('handle field').toBeFalse();
+    });
+  });
+
   describe('.render (password hint)', () => {
     it('renders the admin password hint', () => {
       const page = renderPage(buildState(), buildHandlers());

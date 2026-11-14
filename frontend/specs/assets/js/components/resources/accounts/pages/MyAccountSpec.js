@@ -1,6 +1,9 @@
 import MyAccount from '../../../../../../../assets/js/components/resources/accounts/pages/MyAccount.jsx';
+import React from 'react';
 import MyAccountHelper from '../../../../../../../assets/js/components/resources/accounts/pages/helpers/MyAccountHelper.jsx';
 import MyAccountController from '../../../../../../../assets/js/components/resources/accounts/pages/controllers/MyAccountController.js';
+import GithubHandleHelper from '../../../../../../../assets/js/components/resources/accounts/pages/helpers/GithubHandleHelper.jsx';
+import { renderedOutput } from '../../../../../../support/renderedOutput.js';
 import { renderCapturingHandlers } from '../../../../../../support/renderCapturingHandlers.js';
 import { itBehavesLikeAnAccountEditPage } from '../../../../../../support/accountEditPageExamples.js';
 
@@ -44,5 +47,14 @@ describe('MyAccount', () => {
     expect(() => handlers.onChange('username')({ target: { value: 'newname' } }))
       .not.toThrow();
     expect(MyAccountController.prototype.handleSubmit).not.toHaveBeenCalled();
+  });
+
+  it('renders the GitHub handle section below the account form', () => {
+    spyOn(MyAccountHelper, 'render').and.returnValue(React.createElement('div', null, 'account-form'));
+    spyOn(GithubHandleHelper, 'render').and.returnValue(React.createElement('div', null, 'handle-section'));
+
+    const output = renderedOutput(React.createElement(MyAccount));
+
+    expect(output.containsInOrder('account-form', 'handle-section')).toBeTrue();
   });
 });
