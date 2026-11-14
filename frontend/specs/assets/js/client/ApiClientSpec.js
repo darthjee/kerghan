@@ -106,6 +106,42 @@ describe('ApiClient', () => {
           ));
       });
 
+      describe('retryAfterSeconds', () => {
+        const withBody = (seconds) => {
+          const body = errorBody(429, 'X', 'Too soon');
+
+          body.error.retryAfterSeconds = seconds;
+          return body;
+        };
+
+        it('prefers the body value over the header', async () => {
+          globalThis.fetch = fetchSequence([{
+            ok: false, status: 429, json: withBody(120), headers: { 'Retry-After': '30' },
+          }]);
+
+          await expectAsync(ApiClient.postJson('/x.json', {}))
+            .toBeRejectedWith(jasmine.objectContaining({ retryAfter: 30, retryAfterSeconds: 120 }));
+        });
+
+        it('falls back to the header when the body has none', async () => {
+          globalThis.fetch = fetchSequence([{
+            ok: false, status: 429, json: cooldownBody, headers: { 'Retry-After': '30' },
+          }]);
+
+          await expectAsync(ApiClient.postJson('/x.json', {}))
+            .toBeRejectedWith(jasmine.objectContaining({ retryAfterSeconds: 30 }));
+        });
+
+        [-1, 1.5, '10'].forEach((value) => {
+          it(`ignores an invalid body value (${value})`, async () => {
+            globalThis.fetch = fetchSequence([{ ok: false, status: 429, json: withBody(value) }]);
+
+            await expectAsync(ApiClient.postJson('/x.json', {}))
+              .toBeRejectedWith(jasmine.objectContaining({ retryAfterSeconds: undefined }));
+          });
+        });
+      });
+
       it('accepts a zero Retry-After', async () => {
         globalThis.fetch = fetchSequence([{
           ok: false, status: 429, json: cooldownBody, headers: { 'Retry-After': '0' },

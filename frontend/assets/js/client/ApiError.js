@@ -16,13 +16,16 @@ export default class ApiError extends Error {
    *   validation failures, `undefined` otherwise.
    * @param {number} [retryAfter] - Seconds to wait before retrying, read from the response's
    *   `Retry-After` header (e.g. on a `429`); `undefined` when absent or invalid.
+   * @param {number} [retryAfterSeconds] - Seconds to wait before retrying: the error body's
+   *   `retryAfterSeconds` when valid, else the `Retry-After` header; `undefined` when neither.
    */
-  constructor(status, message, code, details, retryAfter) {
+  constructor(status, message, code, details, retryAfter, retryAfterSeconds) {
     super(message);
     this.name = 'ApiError';
     this.status = status;
     this.code = code;
     this.details = details;
     this.retryAfter = retryAfter;
+    this.retryAfterSeconds = retryAfterSeconds;
   }
 }
