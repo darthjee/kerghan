@@ -8,6 +8,7 @@ import AdminUserEdit from '../resources/admin/pages/AdminUserEdit.jsx';
 import AuthorizationRequests from '../resources/accounts/pages/AuthorizationRequests.jsx';
 import Integrations from '../resources/accounts/pages/Integrations.jsx';
 import MyAccount from '../resources/accounts/pages/MyAccount.jsx';
+import Repositories from '../resources/repositories/pages/Repositories.jsx';
 import Sessions from '../resources/accounts/pages/Sessions.jsx';
 
 const PAGES = new Map([
@@ -20,6 +21,7 @@ const PAGES = new Map([
   ['integrations', <Integrations />],
   ['sessions', <Sessions />],
   ['my-account', <MyAccount />],
+  ['repositories', <Repositories />],
   ['home', <Home />],
 ]);
 

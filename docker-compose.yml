@@ -2,7 +2,7 @@ version: '3.8'
 
 services:
   kerghan_mysql:
-    image: mysql:9.3.0
+    image: mysql:8.4.11
     container_name: kerghan_mysql
     env_file: .env
     environment:
@@ -14,6 +14,19 @@ services:
       - 0.0.0.0:$KERGHAN_MYSQL_PORT:3306
     volumes:
       - ./docker_volumes/mysql_data:/var/lib/mysql
+
+  # Throwaway MySQL for the DB-backed test tier (kerghan_db_tests). tmpfs data
+  # dir, no published port and no env_file, so dev .env values never leak in.
+  kerghan_mysql_test:
+    image: mysql:8.4.11
+    container_name: kerghan_mysql_test
+    environment:
+      MYSQL_DATABASE: kerghan_test
+      MYSQL_USER: kerghan
+      MYSQL_PASSWORD: kerghan
+      MYSQL_ROOT_PASSWORD: kerghan
+    tmpfs:
+      - /var/lib/mysql
 
   #################### Base (Node build — Express + Yarn) ####################
 
@@ -69,6 +82,24 @@ services:
     container_name: kerghan_tests
     depends_on:
       - base_build
+
+  # DB-backed test tier (yarn test:db) against kerghan_mysql_test. The
+  # environment values override the anchor's .env, pointing at the test DB.
+  kerghan_db_tests:
+    <<: *base
+    container_name: kerghan_db_tests
+    links:
+      - kerghan_mysql_test:mysql_test
+    depends_on:
+      - base_build
+      - kerghan_mysql_test
+    environment:
+      - KERGHAN_MYSQL_HOST=mysql_test
+      - KERGHAN_MYSQL_PORT=3306
+      - KERGHAN_MYSQL_USER=kerghan
+      - KERGHAN_MYSQL_PASSWORD=kerghan
+      - KERGHAN_MYSQL_NAME=kerghan_test
+    command: yarn test:db
 
   kerghan_prod_app:
     <<: *base_prod

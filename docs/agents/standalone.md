@@ -450,12 +450,64 @@ The inner compose file is `standalone/vault/docker-compose.yml`, copied to `/vau
 
 | Service | Image | Notes |
 |---|---|---|
-| `mysql` | `mysql:9.3.0` | Internal only, never published. Healthcheck (`mysqladmin ping`). Data in the inner `mysql-data` volume. |
+| `mysql` | `mysql:8.4.11` | Internal only, never published. Healthcheck (`mysqladmin ping`). Data in the inner `mysql84-data` volume. |
+| `mysql-legacy` | `mysql:9.3.0` | Profile `migrate-mysql-9`: never started by `compose up`. Only used to migrate pre-#469 data from the old `mysql-data` volume (see [MySQL 9.3 to 8.4.11 migration](#mysql-93--8411-migration)). No restart policy. Removed in a later release. |
 | `kerghan` | `darthjee/kerghan:${KERGHAN_VERSION}` | Runs migrations on boot. Waits for `mysql` to be healthy. Receives only the allowlisted environment (see [environment-variables.md](environment-variables.md#5-standalone-darthjeekerghan-standalone)). |
 | `tent` | `${TENT_IMAGE}` (stock `darthjee/tent`) | Published on Vault port 80. Serves the frontend and proxies `*.json` to `http://kerghan:3000/`. |
 
-All three use `restart: unless-stopped`. With the healthcheck and `depends_on`, a backend started
+`mysql`, `kerghan` and `tent` use `restart: unless-stopped`. With the healthcheck and `depends_on`, a backend started
 before MySQL is ready retries instead of leaving the stack dead.
+
+### MySQL 9.3 to 8.4.11 migration
+
+Releases before #469 ran MySQL 9.3.0 (inner volume `mysql-data`); the stack now runs 8.4.11, the
+production version, on a new volume `mysql84-data`. A 9.x data directory cannot be opened by 8.4,
+so the data is dumped and restored.
+
+**When it runs:** `kerghan up` (including the already-running path, and `kerghan update` when it
+restarts the instance, because that runs `up`) looks for an old inner volume that holds a MySQL data
+directory (`ibdata1` or `mysql.ibd`). Fresh installs have none and skip it, and never pull 9.3.0.
+
+**Steps:**
+
+1. Stop `kerghan` (the backend ran its migrations once on the empty 8.4 database; whatever it wrote
+   there is replaced).
+2. Start `mysql-legacy` (profile `migrate-mysql-9`) and wait, bounded, for it to be healthy.
+3. Record per-table row counts (all base tables except `migrations`).
+4. `DROP DATABASE kerghan; CREATE DATABASE kerghan` in `mysql`, then stream
+   `mysqldump --single-transaction --routines --triggers --databases kerghan` from `mysql-legacy`
+   into `mysql`. The dump is a pipe between two `compose exec` calls: it is never a file and never
+   reaches the host. Passwords come from each container's own `MYSQL_ROOT_PASSWORD`, never a
+   command line.
+5. Remove `mysql-legacy`, start `kerghan`, wait for the backend to answer, and compare row counts.
+6. Only when everything matches, remove the old volume and print
+   `MySQL data migrated from 9.3 to 8.4.11; the old 9.3 data was removed`.
+
+**Failure and retry:** any failure stops `mysql-legacy`, keeps the old volume, prints an `error` and
+a `hint` and exits 1. `kerghan up` again retries from scratch (the restore drops and recreates the
+database). `KERGHAN_MIGRATE_TIMEOUT` (seconds, default 300) bounds each wait.
+
+**Downgrade:** going back to a release before this one is unsupported once the migration succeeded:
+the old volume is gone and the old compose would start 9.3 on a missing volume, an empty database.
+
+**Manual procedure** (running the image without the client; `<vault>` is the container, usually
+`vault-kerghan`, and the inner compose project name may differ from `vault`):
+
+```
+docker exec -w /vault <vault> docker compose stop kerghan
+docker exec -w /vault <vault> docker compose --profile migrate-mysql-9 up -d mysql-legacy
+# wait until both are healthy
+docker exec -w /vault <vault> docker compose exec -T mysql sh -c \
+  'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" mysql -uroot -e "DROP DATABASE IF EXISTS kerghan; CREATE DATABASE kerghan"'
+docker exec -w /vault <vault> docker compose exec -T mysql-legacy sh -c \
+  'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" mysqldump -uroot --single-transaction --routines --triggers --databases kerghan' \
+  | docker exec -i -w /vault <vault> docker compose exec -T mysql sh -c \
+  'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" mysql -uroot'
+docker exec -w /vault <vault> docker compose --profile migrate-mysql-9 rm -s -f mysql-legacy
+docker exec -w /vault <vault> docker compose start kerghan
+# check the app and the data, then delete the old volume
+docker exec <vault> docker volume rm <project>_mysql-data
+```
 
 ### Tent and the frontend
 
@@ -508,9 +560,11 @@ excludes env files.
 ### Online and offline variants
 
 - **Online** (`darthjee/kerghan-standalone:<v>`): small image; the first start pulls
-  `darthjee/kerghan:<v>`, `mysql:9.3.0` and the Tent image.
+  `darthjee/kerghan:<v>`, `mysql:8.4.11` and the Tent image. `mysql:9.3.0` is pulled only when a
+  migration needs it.
 - **Offline** (`darthjee/kerghan-standalone:<v>-offline`): the inner images are preloaded as
-  tarballs (`kerghan.tar`, `mysql.tar`, `tent.tar`, one set per architecture, written by
+  tarballs (`kerghan.tar`, `mysql.tar`, `tent.tar`, plus `mysql-legacy.tar` (`mysql:9.3.0`) for the #469
+  migration release only, one set per architecture, written by
   `bin/release_kerghan_standalone.sh` with `docker save`). Vault runs `docker load` on every
   start, and `--pull never` keeps it off the network. Use it on hosts without access to Docker
   Hub. Costs: a larger image, image data stored twice (tarball plus loaded image), and a slower
@@ -636,7 +690,8 @@ Pinned images:
 | Image | Pin | Architectures |
 |---|---|---|
 | `darthjee/vault` (base) | `0.1.0` | multi-arch manifest |
-| `mysql` (inner) | `9.3.0` | multi-arch manifest |
+| `mysql` (inner) | `8.4.11` | multi-arch manifest |
+| `mysql-legacy` (inner, migration only) | `9.3.0` | multi-arch manifest |
 | `darthjee/tent` (inner) | `1.0.3` (amd64), `1.0.3-arm64` (arm64) | separate tags, selected per architecture |
 
 Changing a pin is a normal change to the Dockerfile or the inner compose file. A Vault pin change

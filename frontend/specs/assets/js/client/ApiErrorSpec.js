@@ -32,6 +32,12 @@ describe('ApiError', () => {
     expect(error.retryAfter).toBe(30);
   });
 
+  it('carries the retryAfterSeconds', () => {
+    const error = new ApiError(429, 'Too soon', 'X', undefined, undefined, 120);
+
+    expect(error.retryAfterSeconds).toBe(120);
+  });
+
   it('leaves code, details and retryAfter undefined when not given', () => {
     const error = new ApiError(500, 'Request failed');
 

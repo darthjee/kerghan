@@ -15,6 +15,7 @@ import {
   IntegrationCredentialError,
 } from './integration-errors.js';
 import { ErrorCodes } from '../core/error-codes.js';
+import { githubRateLimited, githubUnavailable } from '../core/github-http-errors.js';
 import { LockedException } from '../core/locked.exception.js';
 
 // Same message for a missing, foreign or malformed uuid, so existence never leaks.
@@ -85,33 +86,6 @@ export function testCooldown(retryAfterSeconds: number): HttpException {
       retryAfterSeconds,
     },
     HttpStatus.TOO_MANY_REQUESTS,
-  );
-}
-
-/**
- * 502 `GITHUB_UNAVAILABLE`.
- * @returns {HttpException} The exception.
- */
-export function githubUnavailable(): HttpException {
-  return new HttpException(
-    { code: ErrorCodes.GITHUB_UNAVAILABLE, message: 'GitHub is unavailable; try again later' },
-    HttpStatus.BAD_GATEWAY,
-  );
-}
-
-/**
- * 503 `GITHUB_RATE_LIMITED`, with a `Retry-After` header when GitHub gave a delay.
- * @param {number} [retryAfterSeconds] - Seconds until GitHub accepts calls again.
- * @returns {HttpException} The exception.
- */
-export function githubRateLimited(retryAfterSeconds?: number): HttpException {
-  return new HttpException(
-    {
-      code: ErrorCodes.GITHUB_RATE_LIMITED,
-      message: 'GitHub rate limit reached; try again later',
-      ...(retryAfterSeconds === undefined ? {} : { retryAfterSeconds }),
-    },
-    HttpStatus.SERVICE_UNAVAILABLE,
   );
 }
 

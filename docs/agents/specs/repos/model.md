@@ -175,14 +175,27 @@ The existing self-edit route gains one optional body field:
 - **Presence:** `assertAnyFieldPresent` counts `githubHandle` as present whenever the key is in
   the body, `null` included. Its message becomes
   `At least one of username, email, newPassword or githubHandle is required`.
+  The admin edit keeps its own three-field rule and message
+  (`At least one of username, email, or newPassword is required`).
+- **`null` managed fields are rejected:** `null` for `username`, `email` or `newPassword` answers
+  `400 VALIDATION_FAILED` on this route (the admin DTO is unchanged). Only `githubHandle` accepts
+  `null`.
 - **`currentPassword` is required only when a managed field is present** (`username`, `email`,
-  `newPassword`; `hasManagedField`). Today it is required on every edit (`UpdateAccountDto`).
+  `newPassword`; `hasManagedField`). It is now optional on `UpdateAccountDto`: an empty string
+  still answers `400 VALIDATION_FAILED`, and a missing one with a managed field present answers
+  `400 BAD_REQUEST` (`currentPassword is required`) from the service. That refusal comes after
+  the default-user block and the lockout check, and counts as an abuse-guard failure like a wrong
+  password. (It used to be a `400 VALIDATION_FAILED` from the DTO.)
 - **Handle-only edit** (no managed field present):
   - needs no `currentPassword` (ignored if sent, never checked);
   - skips the lockout check (`423`) and the abuse guard entirely: it never counts as a failure
     and never resets the counter;
-  - order: `assertAnyFieldPresent` → validation (`400`) → load the user (`401` if missing) →
-    write → `200`.
+  - order: validation (`400 VALIDATION_FAILED`, by the global `ValidationPipe`, before the
+    service runs) → `assertAnyFieldPresent` (`400`) → load the user (`401` if missing) → write →
+    `200`;
+  - **no-op edit:** when the normalised value equals the stored one (same value, a case-only
+    change, an `@`-only change, or clearing an empty handle), nothing is written and the stored
+    value is returned.
   - **Why:** the handle is a public, non-credential preference, so re-authentication adds no
     protection; skipping the password check also means the path is no password oracle. And the
     default user usually cannot know its password (the standalone client generates it), so a
@@ -234,9 +247,9 @@ Admins neither see nor edit the handle:
 
 - `POST /admin/users/search.json` items keep `{ id, username, email, isAdmin, createdAt, status }`.
 - `POST /admin/users/:id/edit.json` keeps `AdminUpdateUserDto` unchanged, so a `githubHandle`
-  field is not part of its contract: the global `ValidationPipe` whitelist rejects it with `400`
-  (or strips it, whichever the pipe's current `forbidNonWhitelisted` setting does; it is never
-  written either way).
+  field is not part of its contract: the global `ValidationPipe` (`whitelist: true`, no
+  `forbidNonWhitelisted`) strips it, and it is never written. A body holding only `githubHandle`
+  therefore answers `400` with the admin's unchanged "at least one field" message.
 - The admin pages are unchanged.
 - **Why:** the handle only drives the user's own listing, which admins cannot see
   ([security.md](security.md#user-scoping)); there is no admin need for it, and it is one less
@@ -252,6 +265,18 @@ AccountHandleService#getGithubHandle(userId: number): Promise<string | null>
 
 It returns the stored, normalised handle, or `null` (no handle, or no such user). It is read-only;
 only Auth writes the column. The Repositories module calls it, never `auth_users`.
+
+It also exports one manager-aware existence read, the only Auth read Repositories runs **inside
+its own transaction**:
+
+```ts
+AccountHandleService#lockExistingUser(userId: number, manager: EntityManager): Promise<boolean>
+```
+
+It selects the user's `id` with a shared lock (`SELECT … FOR SHARE`, TypeORM
+`pessimistic_read`) through the caller's transactional manager, and returns whether the user
+still exists. A request entry point calls it before creating the sync-state row
+([user deletion](#user-deletion)); it never reads another column.
 
 ### Handle changes
 
@@ -305,7 +330,10 @@ Derived from stored data on read, never stored as a column:
 | **Unavailable** | `added_at` is set, and either it has **no source row left** (every source that returned it later succeeded without returning it: deleted, renamed out of reach, access lost, or its only access integration deleted), or it is **private** and its `integration_id` is empty or dangling (its linked integration was deleted, #444). A public repo whose link was cleared stays available through the unauthenticated path. |
 | **Unknown** | `added_at` is set, and every source row it has belongs to a source that is not ok: its latest status is a failure (`error`, `invalid_credentials`, `rate_limited`, `not_found`), or it has no status row yet (`pending`, for example a first run interrupted after it applied pages). |
 
-Statuses are read from `repositories_sources` together with `repositories_source_statuses`. A
+Statuses are read from `repositories_sources` together with `repositories_source_statuses`,
+over the user's **current** sources only (every integration, usable or not, and the stored
+handle): a leftover row of a deleted integration, before the
+[safety net](sync.md#write-path) drops it, never makes a repo Added or holds it available. A
 failed source never makes a repo unavailable: its rows are kept as they were
 ([sync.md](sync.md#partial-failures)).
 
@@ -347,19 +375,26 @@ Consequences:
 No user-deletion path exists today. This is the Repositories contract for when one does.
 
 - **Event:** the deletion path emits an awaited **`user.deleted`** event
-  (`UserDeletedEvent { userId }`) with `emitAsync`, **after the user row delete commits**: the
-  same pattern as `integration.deleted`.
+  (`UserDeletedEvent { userId }`, exported with the `USER_DELETED` name by
+  `auth/events/user-deleted.event.ts`) with `emitAsync`, **after the user row delete commits**:
+  the same pattern as `integration.deleted`. Nothing emits it yet; Repositories only listens.
 - **Listener:** Repositories' listener, registered at boot like the `integration.deleted` one,
   runs one transaction that deletes the user's rows from all five tables: `repositories`,
   `repositories_sources`, `repositories_source_pages`, `repositories_source_statuses` and
-  `repositories_sync_states`. Every statement has `WHERE user_id = :userId`.
+  `repositories_sync_states`. Every statement has `WHERE user_id = :userId`. Its first statement
+  locks the user's sync-state row (`SELECT … FOR UPDATE`), the lock order every multi-table Repositories
+  write transaction follows ([sync.md](sync.md#write-path)), so it serializes with a running sync's
+  page writes instead of deadlocking with them.
 - **Best-effort:** a listener failure is logged **at error level** with safe fields (`userId`,
   error class), so the rows can be purged, and never blocks the deletion. The future deletion
   path must retry the event or run an orphan sweep ([README](README.md#product-changes-folded-by-452)).
 - **No row created for a deleted user:** a request entry point creates the sync-state row only
   if the user still exists, re-read through Auth's export
-  ([Auth export](#auth-export)) in the same transaction, so a request that passed `JwtGuard`
-  before the delete committed creates no orphan.
+  ([Auth export](#auth-export), `lockExistingUser`) in the same transaction, so a request that
+  passed `JwtGuard` before the delete committed creates no orphan. The shared lock closes the
+  race: while the entry point holds it, the user row delete waits for its commit (and the
+  `user.deleted` listener then deletes the new row); once the delete committed, the read finds
+  no user and nothing is created.
 - **A running sync:** the deleted sync-state row makes the run's next `run_id`-guarded write
   affect no row, so the run rolls back and stops; a run never recreates the row
   ([handle changes](#handle-changes), [sync.md](sync.md#write-path)).

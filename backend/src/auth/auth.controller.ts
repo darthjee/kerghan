@@ -35,8 +35,8 @@ import { UpdateAccountDto } from './dto/update-account.dto.js';
  * access token. `@CachePolicy(CacheClass.Never)` is
  * applied once at the controller level so Tent's proxy never caches — and
  * cross-serves — a login/session response between users, and browsers never
- * store it either. No route overrides it: every route here is a write that
- * issues, renews, or revokes credentials.
+ * store it either. No route overrides it: every route here either issues,
+ * renews or revokes credentials, or reads/writes the caller's own account.
  */
 @Controller('auth')
 @CachePolicy(CacheClass.Never)
@@ -59,15 +59,17 @@ export class AuthController {
 
   /**
    * `PATCH /auth/account.json`. Authenticated (default `JwtGuard`, no
-   * `@Public()`). Updates the caller's own username, email, and/or password,
-   * always confirmed by their current password (see `AccountService#updateAccount`).
-   * On a password change, the session identified by the `refresh_token`
+   * `@Public()`). Updates the caller's own username, email, password and/or
+   * GitHub handle (see `AccountService#updateAccount`): `currentPassword` is
+   * required only when a managed field (`username`, `email`, `newPassword`)
+   * is present; a handle-only edit needs none. On a password change, the session identified by the `refresh_token`
    * cookie is kept and every other one revoked (missing/unknown cookie:
    * all revoked).
-   * @param {UpdateAccountDto} dto - The requested changes plus the current password.
+   * @param {UpdateAccountDto} dto - The requested changes, plus the current
+   *   password when a managed field is present.
    * @param {AccessTokenPayload} user - The caller's own authenticated user, supplying the user ID.
    * @param {Request} req - Carries the caller's `refresh_token` cookie.
-   * @returns {Promise<object>} `{ username, email }` on success.
+   * @returns {Promise<object>} `{ username, email, githubHandle }` on success.
    */
   @Patch('account.json')
   async updateAccount(
@@ -76,6 +78,20 @@ export class AuthController {
     @Req() req: Request,
   ): Promise<object> {
     return this.accountService.updateAccount(user.sub, dto, readRefreshToken(req));
+  }
+
+  /**
+   * `POST /auth/account/mine.json`. Authenticated (default `JwtGuard`, no
+   * `@Public()`); a `POST` so `OriginGuard` covers it like every other
+   * user-scoped read, and `Never` cached through the controller-level
+   * `@CachePolicy`. No body and no id: always the session's own user.
+   * Answers Nest's `POST` default, `201`.
+   * @param {AccessTokenPayload} user - The caller's own authenticated user, supplying the user ID.
+   * @returns {Promise<object>} `{ username, email, githubHandle }`.
+   */
+  @Post('account/mine.json')
+  async getAccount(@CurrentUser() user: AccessTokenPayload): Promise<object> {
+    return this.accountService.getAccount(user.sub);
   }
 
   /**

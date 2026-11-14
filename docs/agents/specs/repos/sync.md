@@ -135,8 +135,9 @@ WHERE user_id = :userId
 
 ### Time source
 
-- **Injected `Clock`** (`now(): Date`): the only time source of the Repositories module, never
-  `Date.now()` / `new Date()` directly. Every time rule reads it: the TTL, the Refresh cooldown,
+- **Injected `Clock`** (`now(): Date`, `backend/src/core/clock.ts`, provided as `SystemClock`;
+  shared with the Integrations module, which added it in #461): the only time source of the
+  Repositories module, never `Date.now()` / `new Date()` directly. Every time rule reads it: the TTL, the Refresh cooldown,
   the lease and its heartbeat, the hard deadline, `resetAt` checks of `rate_limited` sources, and
   the Add rate-limit window ([api.md](api.md#add-rate-limit)). Every timestamp the module writes
   (`last_started_at`, `heartbeat_at`, `last_synced_at`, `last_seen_at`, `synced_at`, `added_at`)
@@ -185,7 +186,10 @@ For each source, the sync reads GitHub page by page, up to the **page cap**:
 **One transaction per page.** The GitHub request is made **before** the transaction opens; the
 transaction holds only the database writes. Step 1 locks the user's sync-state row, so the page
 transactions of one user's parallel sources run one after another, which keeps the upserts free
-of deadlocks.
+of deadlocks. **Every Repositories transaction that writes several tables locks that row first** (a run's
+guarded writes, the handle reconciliation, and the `integration.deleted` / `user.deleted` listeners,
+[integrations.md](integrations.md#deletion-hook), [model.md](model.md#user-deletion)), so a
+cleanup during a sync serializes with the run instead of deadlocking with it.
 
 1. `UPDATE repositories_sync_states SET heartbeat_at = :now WHERE user_id = :userId AND run_id = :mine`;
    zero rows ⇒ the run lost its lease: roll back and stop (zombie guard on every write).

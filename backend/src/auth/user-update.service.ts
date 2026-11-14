@@ -4,14 +4,33 @@ import bcrypt from 'bcryptjs';
 import { Repository } from 'typeorm';
 import { User } from './entities/user.entity.js';
 
-/** The `{username, email}` shape returned to the caller after an account update. */
+/** The `{ username, email, githubHandle }` shape returned to the caller after an account update. */
 export interface AccountSummary {
   username: string;
   email: string;
+  githubHandle: string | null;
+}
+
+/** The changes `UserUpdateService#applyUserUpdate` may apply. */
+export interface UserChanges {
+  username?: string;
+  email?: string;
+  newPassword?: string;
+  githubHandle?: string | null;
 }
 
 /**
- * Applies and persists `username`/`email`/password changes to an
+ * Projects a user row onto the account summary returned to its owner.
+ * @param {User} user - The user row.
+ * @returns {AccountSummary} The user's username, email and GitHub handle.
+ */
+export function toAccountSummary(user: User): AccountSummary {
+  return { username: user.username, email: user.email, githubHandle: user.githubHandle ?? null };
+}
+
+/**
+ * Applies and persists `username`/`email`/password (and, for the account
+ * edit only, `githubHandle`) changes to an
  * already-loaded user row. Split out from `AuthService` (which already
  * handles the availability check via `assertAvailableForUpdate`) rather
  * than growing that file past the project's 300-line-per-file convention.
@@ -35,18 +54,18 @@ export class UserUpdateService {
   /**
    * Applies a set of account changes to a user: mutates the provided
    * `username`/`email` fields, hashes and stores a new password when
-   * given, and persists the result.
+   * given, sets `githubHandle` when given (`null` clears it; the admin path
+   * never passes it), and persists the result.
    * @param {User} user - The user row to update (already loaded by the caller).
    * @param {object} changes - The fields to change.
    * @param {string} [changes.username] - The new username, when being changed.
    * @param {string} [changes.email] - The new email, when being changed.
    * @param {string} [changes.newPassword] - The new plaintext password, when being changed.
-   * @returns {Promise<AccountSummary>} The user's resulting username and email.
+   * @param {string | null} [changes.githubHandle] - The new, already-normalised
+   *   GitHub handle (`null` clears it), when being changed.
+   * @returns {Promise<AccountSummary>} The user's resulting username, email and GitHub handle.
    */
-  async applyUserUpdate(
-    user: User,
-    changes: { username?: string; email?: string; newPassword?: string },
-  ): Promise<AccountSummary> {
+  async applyUserUpdate(user: User, changes: UserChanges): Promise<AccountSummary> {
     if (changes.username) {
       user.username = changes.username;
     }
@@ -59,8 +78,12 @@ export class UserUpdateService {
       user.passwordDigest = await bcrypt.hash(changes.newPassword, 10);
     }
 
+    if (changes.githubHandle !== undefined) {
+      user.githubHandle = changes.githubHandle;
+    }
+
     const saved = await this.userRepository.save(user);
 
-    return { username: saved.username, email: saved.email };
+    return toAccountSummary(saved);
   }
 }

@@ -75,13 +75,13 @@ describe('AccountService', () => {
 
   describe('updateAccount', () => {
     describe('when only the username is provided', () => {
-      it('updates the username and returns the resulting { username, email }', async () => {
+      it('updates the username and returns the resulting { username, email, githubHandle }', async () => {
         const result = await service.updateAccount(1, {
           currentPassword: 'current-password',
           username: 'new-username',
         });
 
-        expect(result).toEqual({ username: 'new-username', email: 'darthjee@example.com' });
+        expect(result).toEqual({ username: 'new-username', email: 'darthjee@example.com', githubHandle: null });
       });
 
       it('resets the abuse-guard lockout counter on success', async () => {
@@ -105,13 +105,13 @@ describe('AccountService', () => {
     });
 
     describe('when only the email is provided', () => {
-      it('updates the email and returns the resulting { username, email }', async () => {
+      it('updates the email and returns the resulting { username, email, githubHandle }', async () => {
         const result = await service.updateAccount(1, {
           currentPassword: 'current-password',
           email: 'new-email@example.com',
         });
 
-        expect(result).toEqual({ username: 'darthjee', email: 'new-email@example.com' });
+        expect(result).toEqual({ username: 'darthjee', email: 'new-email@example.com', githubHandle: null });
       });
 
       it('revokes no sessions, even when a current refresh token is presented', async () => {
@@ -140,13 +140,13 @@ describe('AccountService', () => {
         await expect(bcrypt.compare('brand-new-password', savedUser.passwordDigest)).resolves.toBe(true);
       });
 
-      it('returns the unchanged { username, email }', async () => {
+      it('returns the unchanged { username, email, githubHandle }', async () => {
         const result = await service.updateAccount(1, {
           currentPassword: 'current-password',
           newPassword: 'brand-new-password',
         });
 
-        expect(result).toEqual({ username: 'darthjee', email: 'darthjee@example.com' });
+        expect(result).toEqual({ username: 'darthjee', email: 'darthjee@example.com', githubHandle: null });
       });
 
       it('revokes the caller\'s other sessions, keeping the presented refresh token', async () => {
@@ -189,7 +189,7 @@ describe('AccountService', () => {
           newPassword: 'brand-new-password',
         });
 
-        expect(result).toEqual({ username: 'new-username', email: 'new-email@example.com' });
+        expect(result).toEqual({ username: 'new-username', email: 'new-email@example.com', githubHandle: null });
 
         const savedUser = userRepository.save.mock.calls[0][0];
         await expect(bcrypt.compare('brand-new-password', savedUser.passwordDigest)).resolves.toBe(true);
@@ -411,14 +411,14 @@ describe('AccountService', () => {
         userRepository.findOneBy.mockResolvedValue(other);
 
         await expect(service.updateAccount(2, { currentPassword: 'current-password', username: 'renamed' }))
-          .resolves.toEqual({ username: 'renamed', email: 'darthjee@example.com' });
+          .resolves.toEqual({ username: 'renamed', email: 'darthjee@example.com', githubHandle: null });
       });
     });
 
     describe('when the feature is disabled', () => {
       it('lets a user previously synchronized as default user edit as usual', async () => {
         await expect(service.updateAccount(1, { currentPassword: 'current-password', username: 'renamed' }))
-          .resolves.toEqual({ username: 'renamed', email: 'darthjee@example.com' });
+          .resolves.toEqual({ username: 'renamed', email: 'darthjee@example.com', githubHandle: null });
       });
     });
   });

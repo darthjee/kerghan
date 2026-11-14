@@ -1,5 +1,6 @@
 import { HttpException } from '@nestjs/common';
 import { buildIntegrationsHarness, CANARY_CLASSIC, CANARY_FRAGMENT, IntegrationsHarness } from './support/integrations-harness.js';
+import { IntegrationDeletedEvent } from '../events/integration-deleted.event.js';
 
 const USER = 7;
 const MISSING_UUID = '00000000-0000-4000-8000-000000000000';
@@ -224,6 +225,51 @@ describe('IntegrationsService (list, show, rename, delete, types)', () => {
 
       expect((await statusOf(harness.service.delete(USER, id))).status).toBe(404);
       expect(harness.repo.rows).toHaveLength(1);
+      expect(harness.eventEmitter.emitAsync).not.toHaveBeenCalled();
+    });
+
+    it('emits integration.deleted, awaited, after the row delete commits', async () => {
+      const { id } = await harness.service.create(USER, envelope());
+      const internalId = harness.repo.rows[0].id;
+      let rowsWhenEmitted = -1;
+
+      harness.eventEmitter.emitAsync.mockImplementation(async () => {
+        rowsWhenEmitted = harness.repo.rows.length;
+        return [];
+      });
+
+      await harness.service.delete(USER, id);
+
+      expect(harness.eventEmitter.emitAsync).toHaveBeenCalledWith(
+        'integration.deleted',
+        new IntegrationDeletedEvent(USER, internalId),
+      );
+      expect(rowsWhenEmitted).toBe(0);
+    });
+
+    it('still deletes when a listener fails, logging safe fields only', async () => {
+      const { id } = await harness.service.create(USER, envelope());
+      const internalId = harness.repo.rows[0].id;
+
+      harness.eventEmitter.emitAsync.mockRejectedValue(new TypeError('CANARYcanary listener'));
+
+      await expect(harness.service.delete(USER, id)).resolves.toBeUndefined();
+
+      expect(harness.repo.rows).toHaveLength(0);
+      expect(harness.logger.warn).toHaveBeenCalledWith('integration.deleted listener failed', {
+        integrationId: internalId,
+        userId: USER,
+        error: 'TypeError',
+      });
+    });
+
+    it('logs a non-Error listener failure by its type', async () => {
+      const { id } = await harness.service.create(USER, envelope());
+
+      harness.eventEmitter.emitAsync.mockRejectedValue('nope');
+      await harness.service.delete(USER, id);
+
+      expect(harness.logger.warn).toHaveBeenCalledWith('integration.deleted listener failed', expect.objectContaining({ error: 'string' }));
     });
   });
 

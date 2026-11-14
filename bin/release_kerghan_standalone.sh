@@ -15,7 +15,8 @@ set -euo pipefail
 IMAGE=kerghan-standalone
 PLATFORMS=linux/amd64,linux/arm64
 ARCHES="amd64 arm64"
-MYSQL_IMAGE=mysql:9.3.0
+MYSQL_IMAGE=mysql:8.4.11
+MYSQL_LEGACY_IMAGE=mysql:9.3.0
 TENT_IMAGE=darthjee/tent:1.0.3
 IMAGES_DIR=standalone/images
 DOCKERFILE=dockerfiles/kerghan_standalone/Dockerfile
@@ -78,6 +79,9 @@ function save_images() {
 
     save_image "$arch" "darthjee/kerghan:$version" kerghan
     save_image "$arch" "$MYSQL_IMAGE" mysql
+    # Exists only for the #469 migration (9.3.0 -> 8.4.11); remove it together
+    # with the compose `mysql-legacy` service.
+    save_image "$arch" "$MYSQL_LEGACY_IMAGE" mysql-legacy
     save_image "$arch" "$(tent_image_for "$arch")" tent
   done
 }

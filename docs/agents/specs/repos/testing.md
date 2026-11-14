@@ -20,19 +20,21 @@ race.
 ### DB-backed tier
 
 The in-memory fake cannot prove atomic claims, unique keys, transactions, compare-and-set,
-conditional writes or `bigint` round trips, so a **narrow** tier runs them on real MySQL 8:
+conditional writes or `bigint` round trips, so a **narrow** tier runs them on real MySQL
+(`mysql:8.4.11`, production's version):
 
 - **Suffix:** `*.db-spec.ts`, excluded from the default `yarn test` run.
-- **Runner:** a separate Jest config and script, `yarn test:db`. It runs **serially**, on a
-  dedicated test schema: the migrations run once per run, and the Repositories tables are
-  truncated before each test.
-- **Locally:** through docker-compose, against the existing MySQL service. Never on the host.
-- **CI:** its own job with a `cimg/mysql:8.0` service container; the release and deploy jobs
-  require it, like `backend_tests`.
-- **Who adds it:** the first implementation sub-issue that needs it adds the job, the script and
-  the docs, following [architecture/backend.md](../../architecture/backend.md#testing) ("add a
-  `cimg/mysql` service … when the first spec actually needs a real database"). None of it exists
-  yet.
+- **Runner:** a separate Jest config (`jest.db.config.ts`) and script, `yarn test:db`. It runs
+  **serially**, on a dedicated test schema: the migrations run once per run, loaded from the
+  TypeScript sources, and every table except `migrations` is truncated before each test.
+- **Guard:** the tier refuses to start unless `KERGHAN_MYSQL_NAME` ends in `_test`, so it can
+  never truncate dev or production data.
+- **Locally:** through docker-compose, against the throwaway `kerghan_mysql_test` service, run
+  through `kerghan_db_tests` (`make db-tests`). Never on the host.
+- **CI:** its own job, `backend_db_tests`, with a `mysql:8.4.11` service container; the release
+  and deploy jobs require it, like `backend_tests`.
+- **Who added it:** #462 added the job, the script, the helpers and the docs (see
+  [architecture/backend.md](../../architecture/backend.md#testing)).
 - **Existing specs are unchanged:** the other modules keep their fakes, and the Integrations
   migration specs keep the fake query runner.
 
@@ -43,7 +45,7 @@ category's default tier unless it carries an exception tag.
 
 | Category | Default tier |
 |---|---|
-| Atomic sync claim (conditional `UPDATE`, affected-row count), first-use sync-state row with no duplicates, `run_id`-guarded writes, unique keys (`user_id` + `github_id`, `source_key` rows), per-page transactions (a later page fails, applied pages kept), the `secret_iv` compare-and-set, Add's conditional `added_at IS NULL` write, pruning / integration-deletion / `user.deleted` queries (with two users' rows), `github_id` above 2³¹ (`bigint`), the Repositories migrations up and down | **DB-backed** |
+| Atomic sync claim (conditional `UPDATE`, affected-row count), first-use sync-state row with no duplicates, `run_id`-guarded writes, unique keys (`user_id` + `github_id`, `source_key` rows), per-page transactions (a later page fails, applied pages kept), the `secret_iv` compare-and-set (its call-flow logic is also unit-tested in #461; the DB-backed spec lands with #463), Add's conditional `added_at IS NULL` write, pruning / integration-deletion / `user.deleted` queries (with two users' rows), `github_id` above 2³¹ (`bigint`), the Repositories migrations up and down | **DB-backed** |
 | Routes, DTOs, guards, cache headers, error mapping to HTTP answers | **E2E with fakes** |
 | Service flow (sync orchestration, source handling, row statuses, handle reconciliation flow, Add flow) | **Unit**, or **E2E with fakes** when the HTTP answer is asserted |
 | The Integrations GitHub client and `IntegrationsGithubService` (requests, headers, error mapping, budget tracker, token cache) | **Unit**, at the `fetch` level |
@@ -85,8 +87,13 @@ prove the request and its handling:
 
 Every Repositories spec (unit, e2e and DB) injects a scriptable
 **`FakeIntegrationsGithubService`**. It returns the exported typed results and never touches
-`fetch`, since Repositories holds no HTTP code.
+`fetch`, since Repositories holds no HTTP code. It ships with the Integrations module's test
+support (`integrations/tests/support/fake-integrations-github.service.ts`, #461), next to the
+shared builders, so the fidelity contract spec guards it; Repositories imports it.
 
+- **Integrations:** `setUsable(userId, refs)` sets what `listUsableIntegrations` answers and
+  `setIntegrations(userId, refs)` what `listIntegrations` answers (by default, the usable list).
+  Both are logged as non-GitHub calls.
 - **Scripting:** answers are scripted per (`integrationId` or `null`, operation, page).
 - **Call log:** every call is logged, so specs assert call counts and order, including "no
   GitHub call".
@@ -95,12 +102,13 @@ Every Repositories spec (unit, e2e and DB) injects a scriptable
 
 ### Shared builders
 
-Typed test-support builders, no recorded JSON:
+Typed test-support builders, no recorded JSON (`integrations/tests/support/github-builders.ts`):
 
 - `githubRepo({ id, private, owner, name })`, with default ids above 2³¹;
 - `listingPage(page, repos, { hasNext, etag })`;
-- `notModified()`, `rateLimited(resetAt)`, `unauthorized()`, `notFound()`, `timeout()`,
-  `serverError()`, `redirect()`, `integrationUnusable(reason)`.
+- `repository(repo)` (a `GET /repositories/{id}` answer);
+- `notModified()`, `rateLimited(resetAt)`, `unauthorized()`, `forbidden()`, `notFound()`,
+  `timeout()`, `serverError()`, `redirect()`, `integrationUnusable(reason)`.
 
 Integrations specs turn a builder into a raw GitHub response (body, `ETag`, `Link`,
 `X-RateLimit-*` headers); the fake returns the matching typed result.
@@ -114,7 +122,8 @@ builder, so the fake cannot drift from the real service.
 ### No-network guard
 
 The Repositories and Integrations GitHub test harnesses replace `globalThis.fetch`, before each
-test, with a function that throws unless the spec mocks it. Other modules' specs are untouched.
+test, with a function that throws unless the spec mocks it
+(`integrations/tests/support/no-network-guard.ts`). Other modules' specs are untouched.
 
 ## Detached sync and time
 
@@ -131,8 +140,9 @@ without running them. A spec can then prove both halves of a trigger:
 
 Race specs can also run a captured task step by step, together with the fake's deferred answers.
 
-**`FakeClock`.** Tests replace the injected `Clock` with one exposing `set(date)` and
-`advance(ms)`, and drive every time rule with it:
+**`FakeClock`.** Tests replace the injected `Clock` (`core/clock.ts`) with the shared
+`FakeClock` (`core/tests/support/fake-clock.ts`), exposing `set(date)` and `advance(ms)`, and
+drive every time rule with it:
 
 - the TTL, the Refresh cooldown, the lease and its heartbeat, the hard deadline;
 - the `resetAt` of a `rate_limited` source and the budget tracker's reset window;

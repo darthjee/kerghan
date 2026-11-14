@@ -25,6 +25,17 @@ describe('AdminUsersHelper', () => {
     AdminUsersHelper.render(state, handlers),
   );
 
+  describe('.render (github handle)', () => {
+    it('renders no github handle column or field', () => {
+      const page = renderPage(buildState({
+        users: [{ id: 1, username: 'foo', email: 'foo@example.com', status: 'active' }],
+      }));
+
+      expect(page.contains('GitHub handle')).withContext('handle text').toBeFalse();
+      expect(page.contains('github-handle')).withContext('handle field').toBeFalse();
+    });
+  });
+
   describe('.render', () => {
     it('renders the search input', () => {
       const page = renderPage(buildState());

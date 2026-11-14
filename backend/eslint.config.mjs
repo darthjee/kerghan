@@ -151,8 +151,51 @@ export default [
       'jsdoc/require-returns-description': 'warn',
     },
   },
+  // Repositories module boundary (`docs/agents/specs/repos/security.md#module-boundaries`):
+  // deny by default every Integrations / Auth path, except the allowlisted
+  // entry points, and never call `fetch` directly. Tests are exempt, so their
+  // support code may import the Integrations test fakes.
   {
-    files: ['**/*.spec.ts', '**/*.e2e-spec.ts'],
+    files: ['src/repositories/**/*.ts'],
+    ignores: ['src/repositories/tests/**'],
+    rules: {
+      'no-restricted-imports': ['error', {
+        patterns: [
+          {
+            group: [
+              '**/integrations/**',
+              '!**/integrations/integrations-github.public*',
+              '!**/integrations/github-repo-results*',
+              '!**/integrations/add-candidate-walk*',
+              // gitignore semantics: a file under an excluded directory can only
+              // be re-included once its directory is.
+              '!**/integrations/events/',
+              '**/integrations/events/*',
+              '!**/integrations/events/integration-deleted.event*',
+            ],
+            message: 'Repositories reaches Integrations only through integrations-github.public (security.md#module-boundaries).',
+          },
+          {
+            group: [
+              '**/auth/**',
+              '!**/auth/account-handle.service*',
+              '!**/auth/auth.module*',
+              '!**/auth/events/',
+              '**/auth/events/*',
+              '!**/auth/events/user-deleted.event*',
+            ],
+            message: 'Repositories reaches Auth only through AccountHandleService and the user.deleted event (security.md#module-boundaries).',
+          },
+        ],
+      }],
+      'no-restricted-globals': ['error', {
+        name: 'fetch',
+        message: 'Repositories never calls GitHub directly; use IntegrationsGithubService.',
+      }],
+    },
+  },
+  {
+    files: ['**/*.spec.ts', '**/*.e2e-spec.ts', '**/*.db-spec.ts'],
     languageOptions: {
       globals: {
         ...globals.jest,

@@ -11,11 +11,27 @@ fixed, `GET`-only operations; there is no generic `request(path)`:
 ```ts
 // Oldest first (created_at, then id); filtered by userId in the query.
 listUsableIntegrations(userId): Promise<IntegrationRef[]>   // { id, uuid, label, type }
+listIntegrations(userId): Promise<IntegrationRef[]>         // every one, usable or not; same fields
 
 listRepositories(userId, integrationId, page, etag?): Promise<RepoPageResult>
 listHandleRepositories(userId, integrationId | null, handle, page, etag?): Promise<RepoPageResult>
 getRepository(userId, integrationId | null, githubId): Promise<RepoResult>
 ```
+
+- **Entry point:** other modules import from `integrations/integrations-github.public.ts` only. It
+  re-exports `IntegrationsModule`, `IntegrationsGithubService`, its typed results, the
+  `integration.deleted` event ([deletion hook](#deletion-hook)) and **one extra export, the pure
+  `walkAddCandidates(input, getRepository)`** ([Add re-check candidates](#add-re-check-candidates)).
+  The walk needs to know which integrations hold a source row, which only Repositories knows, so
+  Repositories computes its inputs and maps its outcome to HTTP answers, while the walk itself
+  (order, 3-call cap, stop and link rules) stays here; the real service and the typed fake share
+  it.
+
+- **`listIntegrations`** (added by #463) lists every one of the user's integrations, usable or
+  not, oldest first, with the same allowlisted `IntegrationRef` fields and no GitHub call. The sync
+  uses it for the non-usable integrations' sources ([sync.md](sync.md#sources)), the end-of-sync
+  safety net and the link fill's dangling-link check; the listing and the sync state use it for
+  the sources' `uuid` / `label` and to read a dangling link as empty.
 
 - **Integration identity:** callers pass the internal `integrations.id` (the logical FK the
   Repositories tables already store, [model.md](model.md#logical-foreign-keys)). Every call loads
@@ -28,6 +44,7 @@ getRepository(userId, integrationId | null, githubId): Promise<RepoResult>
   type RepoPageResult =
     | { kind: 'ok'; repos: GithubRepo[]; etag: string | null; hasNext: boolean; rateLimit: RateLimitFields }
     | { kind: 'not_modified'; rateLimit: RateLimitFields }   // 304: the caller reuses its stored has_next
+    | { kind: 'not_found' }                                  // handle listing only: unknown / renamed / suspended / deleted handle
     | { kind: 'invalid_credentials' }                        // 401: the integration is already set invalid
     | { kind: 'rate_limited'; resetAt: Date | null }
     | { kind: 'unavailable'; reason: 'timeout' | 'network_error' | 'server_error' | 'redirect' | 'forbidden' | 'unexpected' }
@@ -112,8 +129,8 @@ Integrations module**:
   reused until **`expires_at` − 5 min** (GitHub's tokens last 1 h). Held in a `Secret`, in
   process memory only — never in the database, a log or a response. Expired entries are dropped
   on read; at most one entry per `github_app` integration, so no LRU.
-- **Time:** the "`expires_at` − 5 min" check reads the injected `Clock`
-  ([sync.md](sync.md#time-source)), never `Date.now()` directly.
+- **Time:** the "`expires_at` − 5 min" check reads the injected `Clock` (`core/clock.ts`, shared
+  with Repositories, [sync.md](sync.md#time-source)), never `Date.now()` directly.
 - **Single-flight:** concurrent calls for one integration share one in-flight mint (the sync runs
   3 sources in parallel, and the handle may use the same integration).
 - **Least privilege:** minted with `{"permissions": {"metadata": "read"}}`, enough to list repos
@@ -220,7 +237,7 @@ One table in the client, for every call:
 | `200`, well-formed body | `ok` | — |
 | `304` (listings) | `not_modified` | — |
 | `401`, authenticated | `invalid_credentials` | set `invalid` + the type's existing bad-credentials reason, as a [compare-and-set](#status-compare-and-set) (`pat`, `oauth_app`; a `github_app` call `401` never invalidates — see [installation tokens](#github-app-installation-tokens)) |
-| `403` / `429` with `X-RateLimit-Remaining: 0` or a `Retry-After` | `rate_limited`, `resetAt` from `X-RateLimit-Reset` or now + `Retry-After` | unchanged |
+| `403` / `429` with `X-RateLimit-Remaining: 0` or a `Retry-After` | `rate_limited`, `resetAt` = now (`Clock`) + `Retry-After` when GitHub sent one (a secondary limit), else `X-RateLimit-Reset`, else `null` | unchanged |
 | any other `403` | listings: `unavailable` (`forbidden`); `getRepository`: `not_found` (denied) | unchanged — the user re-checks with Test |
 | `404` | `getRepository` and the handle listing: `not_found`; other listings: `unavailable` (`unexpected`) | unchanged |
 | `3xx` other than `304` | `unavailable` (`redirect`) — the repo operations pass `redirect: 'manual'`, so it is classified, never followed | unchanged |
@@ -250,6 +267,12 @@ When the user adds a repository ([api.md](api.md#add)):
   (oldest first), then unauthenticated. That integration is **not** linked while the repo is
   still public; if the re-check shows the repo is now **private**, the integration that granted
   it is linked as `integration_id`, so the private metadata stays tied to it.
+- **Ownership guard:** the link written is always one of the **caller's own** integrations. The
+  Repositories service checks the chosen `integration_id` against the user's integrations
+  (`listIntegrations(userId)`, usable or not) right before the write; an id that is not the
+  user's (another user's, or deleted meanwhile) is stored as **`null`**, never rejected, and
+  the Add still succeeds. The empty link is then filled at the end of the next sync like any
+  other ([link fill](sync.md#link-fill)).
 - Changing an existing link later is out of scope. An **empty or dangling** link of an added
   private repo (its integration deleted, or a public repo turned private) is filled at the end of
   the next sync with the oldest usable integration that returns it
@@ -300,7 +323,10 @@ A direct call would need Integrations to import Repositories, which already impo
 - **Listener:** Repositories' `@OnEvent('integration.deleted')` runs one transaction, every
   statement with `AND user_id = :userId`: delete the source, page and status rows for
   `source_key = 'integration:<id>'`; clear `integration_id` where it points at it; prune
-  not-added repos left with no source row ([model.md](model.md#logical-foreign-keys)).
+  not-added repos left with no source row ([model.md](model.md#logical-foreign-keys)). Its first
+  statement locks the user's sync-state row (`SELECT … FOR UPDATE`), the lock order of every
+  multi-table Repositories write transaction, so a cleanup during a sync serializes with the run's page
+  writes instead of deadlocking with them ([sync.md](sync.md#write-path)).
 - **Failure never blocks the delete:** the listener catches its own error and logs it with safe
   fields (`@OnEvent`'s default `suppressErrors: true` keeps `emitAsync` resolving either way); the
   integration delete is already committed and the `204` stands (same best-effort rule as
@@ -337,8 +363,8 @@ unauthenticated call). Its home, interface, concurrency and thresholds:
   `tryAcquire` decrements the tracked remaining by 1 when it grants a call; `record` then applies
   the min-within-window rule from GitHub's headers. With no data, or once the reset has passed,
   calls are allowed until the first response.
-- **Time:** "reset passed" reads the injected `Clock` ([sync.md](sync.md#time-source)), never
-  `Date.now()` directly.
+- **Time:** "reset passed" reads the injected `Clock` (`core/clock.ts`,
+  [sync.md](sync.md#time-source)), never `Date.now()` directly.
 - **Two thresholds** (code constants): the **sync** stops at remaining **≤ 10**; **Add** only at
   **≤ 0**. The 10 is then really a reserve for Add re-checks, which are already bounded per user
   (30 per 60 s) and by the 3-call candidate walk.
@@ -389,7 +415,10 @@ Tiers, fakes and harnesses: [testing.md](testing.md). Tags: `(db)`, `(e2e)`, `(u
 
 - A `401` with the current credential sets a `pat` / `oauth_app` integration `invalid`; a `401`
   from a call made before a Replace leaves the replaced integration `active`; the same holds for
-  a mint `404` / `403` and a decrypt failure.
+  a mint `404` / `403` and a decrypt failure `(unit)`. The logic is tested at unit level by #461,
+  against the in-memory repository fake; the SQL `secret_iv` compare-and-set itself runs on the
+  DB-backed tier with #463 `(db)`, which already depends on #462's DB tier. **Done in #463:**
+  `integrations/tests/integration-store.compare-and-set.db-spec.ts`.
 
 **Installation tokens:**
 
@@ -430,5 +459,7 @@ Tiers, fakes and harnesses: [testing.md](testing.md). Tags: `(db)`, `(e2e)`, `(u
 - Deleting an integration emits `integration.deleted` after the delete commits.
 - A listener failure is logged with safe fields and the delete still answers `204`.
 - A delete before any Repositories request still runs the cleanup (the listener is registered
-  at boot).
+  at boot). Owned by #463, which adds the listener; #461 builds the emitter side only. **Done in
+  #463:** `repositories/tests/integration-deleted.at-boot.db-spec.ts` boots the real `AppModule` on
+  the DB tier.
 - What the cleanup deletes is [model.md](model.md#required-tests)'s.

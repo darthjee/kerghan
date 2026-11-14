@@ -195,21 +195,38 @@ export class GithubClientService {
 }
 
 /**
- * Sends one request with the shared safeguards (no redirects, timeout,
- * capped body read), turning any failure without an HTTP answer into a
- * sanitized `GithubClientError`.
+ * How `send` treats a `3xx`; neither mode ever follows it:
+ * - `'error'` (default): the fetch fails, surfacing as `network_error`;
+ * - `'manual'`: the `3xx` comes back as a response, for the caller to classify.
+ */
+export type GithubRedirectMode = 'error' | 'manual';
+
+/** Per-call options of `send`. */
+export interface GithubSendOptions {
+  /** How a `3xx` is treated; defaults to `'error'`. */
+  redirect?: GithubRedirectMode;
+}
+
+/**
+ * Sends one request with the shared safeguards (no redirects followed,
+ * timeout, capped body read), turning any failure without an HTTP answer
+ * into a sanitized `GithubClientError`.
  * @param {string} url - The GitHub URL.
  * @param {RequestInit} init - Method, headers and body.
  * @param {number} [maxBodyBytes] - The largest body read, in bytes.
+ * @param {GithubSendOptions} [options] - The redirect mode (default `'error'`).
  * @returns {Promise<{ response: Response, body: string | null }>} The response and its capped body.
  */
 export async function send(
   url: string,
   init: RequestInit,
   maxBodyBytes: number = GITHUB_MAX_BODY_BYTES,
+  options: GithubSendOptions = {},
 ): Promise<{ response: Response; body: string | null }> {
+  const redirect = options.redirect ?? 'error';
+
   try {
-    const response = await fetch(url, { ...init, redirect: 'error', signal: AbortSignal.timeout(GITHUB_TIMEOUT_MS) });
+    const response = await fetch(url, { ...init, redirect, signal: AbortSignal.timeout(GITHUB_TIMEOUT_MS) });
     const body = await readCappedBody(response, maxBodyBytes);
 
     return { response, body };

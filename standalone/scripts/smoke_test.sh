@@ -18,7 +18,7 @@
 #                    to test before the inner images are published
 #   SMOKE_EXPECT_OFFLINE  true to also assert, after the first boot, that
 #                    COMPOSE_UP_ARGS holds `--pull never` and that the inner
-#                    daemon has darthjee/kerghan:$KERGHAN_VERSION, mysql:9.3.0
+#                    daemon has darthjee/kerghan:$KERGHAN_VERSION, mysql:8.4.11
 #                    and the TENT_IMAGE from /vault/.env, i.e. that the stack
 #                    started from the preloaded tarballs (default false)
 set -euo pipefail
@@ -95,7 +95,7 @@ check_offline() {
   esac
   tent_image=$(docker exec "$CONTAINER" sh -c 'sed -n "s/^TENT_IMAGE=//p" /vault/.env' || true)
   [ -n "$tent_image" ] || fail "could not read TENT_IMAGE from /vault/.env"
-  for image in "darthjee/kerghan:$KERGHAN_VERSION" "mysql:9.3.0" "$tent_image"; do
+  for image in "darthjee/kerghan:$KERGHAN_VERSION" "mysql:8.4.11" "$tent_image"; do
     docker exec "$CONTAINER" docker image inspect "$image" >/dev/null 2>&1 \
       || fail "inner image $image is missing from the inner daemon (not preloaded)"
   done
@@ -144,6 +144,10 @@ wait_for_200 "$BASE_URL/health.json"
 
 if [ "$SMOKE_EXPECT_OFFLINE" = "true" ]; then
   check_offline
+elif docker exec "$CONTAINER" docker image inspect mysql:9.3.0 >/dev/null 2>&1; then
+  # A fresh install never starts mysql-legacy (profile migrate-mysql-9), so
+  # the online image must not have pulled MySQL 9.3.0 (#469).
+  fail "mysql:9.3.0 was pulled on a fresh install; mysql-legacy must stay off"
 fi
 
 log "checking the frontend at $BASE_URL/"

@@ -1,5 +1,6 @@
 import useAccountEditForm from '../../../common/forms/hooks/useAccountEditForm.js';
 import MyAccountController from './controllers/MyAccountController.js';
+import GithubHandleSection from './GithubHandleSection.jsx';
 import MyAccountHelper from './helpers/MyAccountHelper.jsx';
 
 const INITIAL_FIELDS = {
@@ -15,7 +16,8 @@ const INITIAL_FIELDS = {
  * change confirmed by their current password. There is currently no "get my account" read
  * endpoint, so the username/email fields start blank — leaving one blank keeps its current
  * value; a successful save reflects the backend's authoritative username/email back into the
- * form and clears the password fields. Performs no client-side login check of its own — a
+ * form and clears the password fields. Below the form, {@link GithubHandleSection} manages the
+ * GitHub handle on its own. Performs no client-side login check of its own — a
  * logged-out `401` on submit is handled entirely by `ApiClient`'s existing refresh/login-modal
  * flow.
  *
@@ -28,5 +30,10 @@ export default function MyAccount() {
     submit: (controller, fields) => controller.handleSubmit(fields),
   });
 
-  return MyAccountHelper.render(state, handlers);
+  return (
+    <>
+      {MyAccountHelper.render(state, handlers)}
+      <GithubHandleSection />
+    </>
+  );
 }

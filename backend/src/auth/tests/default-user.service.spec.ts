@@ -72,6 +72,12 @@ describe('DefaultUserService', () => {
         await expect(bcrypt.compare(PASSWORD, user.passwordDigest)).resolves.toBe(true);
       });
 
+      it('creates it without a github handle', async () => {
+        await buildService().onApplicationBootstrap();
+
+        expect(userRepo.rows[0].githubHandle ?? null).toBeNull();
+      });
+
       it('creates it approved', async () => {
         await buildService().onApplicationBootstrap();
 
@@ -132,6 +138,17 @@ describe('DefaultUserService', () => {
 
         expect(existing.isAdmin).toBe(false);
       });
+
+      it.each([['a stored handle', 'darthjee'], ['no handle', null]])(
+        'leaves the github handle unchanged (%s)',
+        async (_label, handle) => {
+          existing.githubHandle = handle;
+
+          await buildService().onApplicationBootstrap();
+
+          expect(existing.githubHandle).toBe(handle);
+        },
+      );
 
       it('records the matched row id', async () => {
         const service = buildService();

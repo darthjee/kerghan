@@ -9,6 +9,7 @@ import type { Integration } from './entities/integration.entity.js';
 import { decryptRow, IntegrationConnectionTestService } from './integration-connection-test.service.js';
 import { IntegrationCredentialService } from './integration-credential.service.js';
 import { limitReached } from './integration-http-errors.js';
+import { IntegrationLifecycleService } from './integration-lifecycle.service.js';
 import { IntegrationResponse, toIntegrationResponse, toIntegrationView } from './integration-response.js';
 import { IntegrationStoreService } from './integration-store.service.js';
 import { IntegrationTestCooldownService } from './integration-test-cooldown.service.js';
@@ -43,6 +44,7 @@ export class IntegrationsService {
   private readonly encryption: IntegrationsEncryptionService;
   private readonly registry: IntegrationTypeRegistry;
   private readonly logger: LoggerService;
+  private readonly lifecycle: IntegrationLifecycleService;
   /** The per-user cap, from `KERGHAN_INTEGRATIONS_MAX_PER_USER` (read once). */
   readonly maxPerUser: number;
 
@@ -55,6 +57,7 @@ export class IntegrationsService {
    * @param {IntegrationTypeRegistry} registry - Resolves type strategies.
    * @param {LoggerService} logger - Logs best-effort delete failures with safe fields only.
    * @param {ConfigService} configService - Supplies `KERGHAN_INTEGRATIONS_MAX_PER_USER`.
+   * @param {IntegrationLifecycleService} lifecycle - Runs the replace and delete hooks (token eviction, deletion event).
    */
   constructor(
     store: IntegrationStoreService,
@@ -65,6 +68,7 @@ export class IntegrationsService {
     registry: IntegrationTypeRegistry,
     logger: LoggerService,
     configService: ConfigService,
+    lifecycle: IntegrationLifecycleService,
   ) {
     this.store = store;
     this.credentials = credentials;
@@ -73,6 +77,7 @@ export class IntegrationsService {
     this.encryption = encryption;
     this.registry = registry;
     this.logger = logger;
+    this.lifecycle = lifecycle;
     this.maxPerUser = getNumberConfig(configService, 'KERGHAN_INTEGRATIONS_MAX_PER_USER', DEFAULT_INTEGRATIONS_MAX_PER_USER);
   }
 
@@ -185,6 +190,8 @@ export class IntegrationsService {
       lastTestResult: 'success',
     });
 
+    this.lifecycle.credentialReplaced(updated);
+
     return this.respond(updated);
   }
 
@@ -200,7 +207,8 @@ export class IntegrationsService {
 
   /**
    * Deletes one of the caller's integrations, after the type's best-effort
-   * cleanup (which never blocks the deletion).
+   * cleanup (which never blocks the deletion); the delete hooks run once the
+   * row delete committed.
    * @param {number} userId - The caller's id.
    * @param {string} uuid - The integration's uuid.
    * @returns {Promise<void>} Resolves once deleted.
@@ -210,6 +218,7 @@ export class IntegrationsService {
 
     await this.cleanUp(row);
     await this.store.deleteOwned(row);
+    await this.lifecycle.deleted(row);
   }
 
   /**
