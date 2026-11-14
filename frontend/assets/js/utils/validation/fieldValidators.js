@@ -47,3 +47,20 @@ export function validatePasswordLength(password, field = 'password') {
 export function validatePasswordConfirmation(password, confirmation, field = 'passwordConfirmation') {
   return password === confirmation ? {} : { [field]: 'Passwords do not match' };
 }
+
+/** Pattern a normalised GitHub handle must match; mirrors the backend's rule. */
+export const GITHUB_HANDLE_PATTERN = /^[a-z0-9](?:[a-z0-9]|-(?=[a-z0-9])){0,38}$/;
+
+/**
+ * Check that a GitHub handle is well-formed. The value is normalised for the check only (one
+ * leading `@` stripped, lowercased); the caller keeps sending the original value.
+ *
+ * @description Returns a boolean; blank values are not valid, callers decide how to treat them.
+ * @param {string} handle - The trimmed handle value to check.
+ * @returns {boolean} `true` when the normalised handle matches {@link GITHUB_HANDLE_PATTERN}.
+ */
+export function isValidGithubHandle(handle) {
+  const normalised = handle.replace(/^@/, '').toLowerCase();
+
+  return GITHUB_HANDLE_PATTERN.test(normalised);
+}
