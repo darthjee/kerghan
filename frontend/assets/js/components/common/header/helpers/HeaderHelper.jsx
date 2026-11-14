@@ -76,6 +76,7 @@ function renderAuthLinks(pending, isLoggedIn, isAdmin, onLogout, onOpenLogin) {
     return (
       <>
         {renderAdminLink(isAdmin)}
+        <Nav.Link href="#/repositories">Repositories</Nav.Link>
         {renderMyAccountDropdown()}
         <Nav.Link href="#" onClick={onLogout}>Logout</Nav.Link>
       </>
