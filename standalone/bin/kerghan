@@ -1541,6 +1541,120 @@ cross_key_warnings() {
   fi
 }
 
+# MIGRATE_TIMEOUT - seconds mysql-legacy and the backend get to become ready
+# during the 9.x -> 8.4 data migration (#469).
+MIGRATE_TIMEOUT="${KERGHAN_MIGRATE_TIMEOUT:-300}"
+# MIGRATE_COUNTS_SH - run inside a mysql container: prints "<table> <rows>" for
+# every user base table of the kerghan database, excluding the migrations
+# table (the backend's own migrations add rows to it). The password comes from
+# the container's own environment, never from this client.
+MIGRATE_COUNTS_SH='export MYSQL_PWD="$MYSQL_ROOT_PASSWORD"; for t in $(mysql -uroot -N -B -e "SELECT table_name FROM information_schema.tables WHERE table_schema=\"kerghan\" AND table_type=\"BASE TABLE\" AND table_name<>\"migrations\" ORDER BY table_name"); do echo "$t $(mysql -uroot -N -B kerghan -e "SELECT COUNT(*) FROM \`$t\`")"; done'
+MIGRATE_DUMP_SH='MYSQL_PWD="$MYSQL_ROOT_PASSWORD" mysqldump -uroot --single-transaction --routines --triggers --databases kerghan'
+MIGRATE_RESTORE_SH='MYSQL_PWD="$MYSQL_ROOT_PASSWORD" mysql -uroot'
+MIGRATE_RESET_SH='MYSQL_PWD="$MYSQL_ROOT_PASSWORD" mysql -uroot -e "DROP DATABASE IF EXISTS kerghan; CREATE DATABASE kerghan"'
+
+# mysql_legacy_volume - prints the name of the old inner MySQL 9.3 data volume
+# (compose prefixes it with its project name), or nothing.
+mysql_legacy_volume() {
+  docker exec "$CONTAINER" docker volume ls -q 2>/dev/null |
+    grep -E '(^|_)mysql-data$' | head -n 1 || true
+}
+
+# mysql_migration_pending <volume> - true when <volume> holds a MySQL data
+# directory. Compose can leave the old volume empty, so existing is not enough.
+mysql_migration_pending() {
+  docker exec "$CONTAINER" sh -c \
+    'd="$(docker volume inspect -f "{{.Mountpoint}}" "$1")" && { [ -e "$d/ibdata1" ] || [ -e "$d/mysql.ibd" ]; }' \
+    sh "$1" >/dev/null 2>&1
+}
+
+# mysql_wait_healthy <service> - waits (bounded) for the inner service's
+# healthcheck to pass.
+mysql_wait_healthy() {
+  local service="$1" deadline
+  deadline=$(($(date +%s) + MIGRATE_TIMEOUT))
+  while [ "$(date +%s)" -lt "$deadline" ]; do
+    if vault_cmd compose exec -T "$service" mysqladmin ping -h 127.0.0.1 --silent >/dev/null 2>&1; then
+      return 0
+    fi
+    sleep 2
+  done
+  return 1
+}
+
+# mysql_wait_backend - waits (bounded) for the backend to answer HTTP.
+mysql_wait_backend() {
+  local deadline
+  deadline=$(($(date +%s) + MIGRATE_TIMEOUT))
+  while [ "$(date +%s)" -lt "$deadline" ]; do
+    if vault_cmd compose exec -T kerghan node -e \
+      "fetch('http://127.0.0.1:3000/').then(r=>process.exit(r.status<500?0:1)).catch(()=>process.exit(1))" \
+      >/dev/null 2>&1; then
+      return 0
+    fi
+    sleep 2
+  done
+  return 1
+}
+
+# mysql_migrate_steps <volume> - the migration proper; non-zero on any failure.
+mysql_migrate_steps() {
+  local volume="$1" before after
+  echo "Migrating MySQL data from 9.3 to 8.4.11; Kerghan is stopped meanwhile (anything the new backend wrote to the empty database is replaced)."
+  vault_cmd compose stop kerghan >/dev/null || return 1
+  echo "Starting the old MySQL 9.3 (mysql-legacy)..."
+  vault_cmd compose --profile migrate-mysql-9 up -d mysql-legacy >/dev/null || return 1
+  mysql_wait_healthy mysql-legacy || return 1
+  mysql_wait_healthy mysql || return 1
+  before="$(vault_cmd compose exec -T mysql-legacy sh -c "$MIGRATE_COUNTS_SH")" || return 1
+  echo "Copying the kerghan database to MySQL 8.4.11..."
+  vault_cmd compose exec -T mysql sh -c "$MIGRATE_RESET_SH" || return 1
+  # The dump is streamed between the inner containers; it never touches a file.
+  local rc
+  set +e
+  vault_cmd compose exec -T mysql-legacy sh -c "$MIGRATE_DUMP_SH" |
+    vault_cmd compose exec -T mysql sh -c "$MIGRATE_RESTORE_SH"
+  rc=("${PIPESTATUS[@]}")
+  set -e
+  [ "${rc[0]}" -eq 0 ] && [ "${rc[1]}" -eq 0 ] || return 1
+  echo "Stopping the old MySQL 9.3..."
+  vault_cmd compose --profile migrate-mysql-9 rm -s -f mysql-legacy >/dev/null || return 1
+  vault_cmd compose start kerghan >/dev/null || return 1
+  mysql_wait_backend || return 1
+  after="$(vault_cmd compose exec -T mysql sh -c "$MIGRATE_COUNTS_SH")" || return 1
+  [ -n "$before" ] || return 1
+  [ "$before" = "$after" ] || return 1
+  # Verified: only now is the old data deleted.
+  docker exec "$CONTAINER" docker volume rm "$volume" >/dev/null || return 1
+  echo "MySQL data migrated from 9.3 to 8.4.11; the old 9.3 data was removed"
+}
+
+# mysql_migrate_if_needed - moves pre-#469 data (MySQL 9.3.0 in the inner
+# mysql-data volume) into MySQL 8.4.11. Skips when there is no such data (fresh
+# installs). On failure the old volume is kept, mysql-legacy is stopped and the
+# client exits non-zero; running `kerghan up` again retries from scratch.
+mysql_migrate_if_needed() {
+  local volume
+  volume="$(mysql_legacy_volume)"
+  [ -n "$volume" ] || return 0
+  mysql_migration_pending "$volume" || return 0
+  local rc=0
+  set +e
+  (
+    set -e
+    mysql_migrate_steps "$volume"
+  )
+  rc=$?
+  set -e
+  if [ "$rc" -ne 0 ]; then
+    vault_cmd compose --profile migrate-mysql-9 rm -s -f mysql-legacy >/dev/null 2>&1 || true
+    vault_cmd compose start kerghan >/dev/null 2>&1 || true
+    error "migrating the MySQL 9.3 data to 8.4.11 failed; the 9.3 data was kept"
+    hint "run 'kerghan up' again to retry the migration (the old data in the $volume volume is untouched)"
+    exit 1
+  fi
+}
+
 cmd_up() {
   local flag_offline=false flag_port="" flag_port_set=false foreground=false
   local flag_auto_login="" flag_bind="" flag_bind_set=false
@@ -1635,6 +1749,7 @@ cmd_up() {
     fi
     if [ -z "$reason" ]; then
       echo "Kerghan is already running at http://localhost:$port"
+      mysql_migrate_if_needed
       return 0
     fi
     echo "$reason"
@@ -1757,6 +1872,7 @@ up_instance() {
 
   if [ "$foreground" != "true" ]; then
     echo "Kerghan is running at http://localhost:$port"
+    mysql_migrate_if_needed
   fi
 }
 
@@ -2487,7 +2603,7 @@ cmd_update_finish() {
 # to <version> by hand after a downgrade (it is never restarted).
 update_downgrade_hint() {
   if [ -n "$2" ]; then
-    hint "run 'kerghan down && kerghan up' to switch the instance to $1 (an older version may not read data written by a newer one)"
+    hint "run 'kerghan down && kerghan up' to switch the instance to $1 (an older version may not read data written by a newer one; releases before the MySQL 8.4.11 move cannot read the migrated data, because the old 9.3 data was removed)"
   else
     hint "run 'kerghan up' to start the instance on $1"
   fi
