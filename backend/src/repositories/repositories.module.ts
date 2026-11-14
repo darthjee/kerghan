@@ -53,7 +53,7 @@ export const REPOSITORIES_PROVIDERS: Provider[] = [
  * The Repositories module — always-on (imported directly into `AppModule`,
  * so its `integration.deleted` / `user.deleted` listeners exist at boot):
  * the per-user snapshot of every GitHub repository seen by a sync, and the
- * in-process sync engine that fills it (see `docs/agents/specs/repos/`).
+ * in-process sync engine that fills it (see `docs/agents/modules/repositories.md`).
  * Owns tables `repositories`, `repositories_sources`,
  * `repositories_source_pages`, `repositories_sync_states` and
  * `repositories_source_statuses`; `user_id` / `integration_id` are logical

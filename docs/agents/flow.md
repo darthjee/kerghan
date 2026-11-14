@@ -9,7 +9,7 @@ toward, and update it as decisions change.
 ## Overview
 
 Kerghan's backend stays deliberately thin: it owns account/login state and each user's repo
-selection, nothing about issue data. Issue fetching happens live, on demand, straight from the
+listing and selection, nothing about issue data. Issue fetching happens live, on demand, straight from the
 user's own browser to GitHub's public API — this is what lets the backend "go back to sleep"
 between visits instead of running a poller, and it moves GitHub's unauthenticated rate limit
 (60 requests/hour/IP) from being shared across every Kerghan user behind the backend's one IP to
@@ -28,11 +28,18 @@ being scoped to each user's own browser IP instead.
    `docs/agents/modules/integrations.md`), but issue fetching doesn't use them yet, and they
    aren't required for the public-repo flow described here.
 
-2. **Repo discovery.** The backend fetches the full list of the handle's public repositories
-   from GitHub (`GET /users/{handle}/repos`, paginated) and shows it to the user.
+2. **Repo discovery.** The backend fetches the user's repositories from GitHub and shows them on
+   the **Repositories** page. The listing merges every source the user has: each of their
+   integrations (private and organization repositories, through the credential) and the public
+   repositories of the optional GitHub handle on their account (`GET /users/{handle}/repos`,
+   paginated, unauthenticated or through an integration). All of it is fetched by the backend,
+   never by the browser. The sync runs on demand: when the last one is older than the staleness
+   TTL, or when the user hits Refresh. See [Repositories](modules/repositories.md).
 
-3. **Repo selection.** The user picks which repos to monitor. This selection — not any issue
-   data — is what the backend persists to MySQL, scoped to the user's account.
+3. **Repo selection.** The user picks which repos to monitor with the **Add** button on a
+   not-added row; the backend re-checks the repo with GitHub before adding it. The persisted
+   per-user snapshot of every repo seen, and the `added_at` mark on the added ones — not any
+   issue data — is what the backend stores in MySQL, scoped to the user's account.
 
 4. **Returning to the dashboard.** On every visit, the frontend loads the user's saved repo
    selection from the backend. This is the one piece of state that's genuinely per-user and
@@ -57,10 +64,10 @@ These are known future directions, not part of the current design:
   future addition — see `docs/agents/product.md`.
 - **Historical/trend collection.** Volume-over-time or similar trend views need periodic
   snapshotting, which depends on the opt-in persistence above. Not built yet.
-- **Private repos via personal GitHub token.** Users can already store their own GitHub
-  credentials as integrations (see `docs/agents/modules/integrations.md`), but issue fetching
-  doesn't use them yet: reading private repos on their behalf (most likely by proxying through
-  the backend) is not built.
+- **Private repos for issue fetching.** Users can store their own GitHub credentials as
+  integrations (see `docs/agents/modules/integrations.md`), and the backend uses them to list
+  private repositories (step 2), but issue fetching doesn't use them yet: reading the issues of
+  private repos on their behalf (most likely by proxying through the backend) is not built.
 
 ## Per-user cache (upcoming)
 
@@ -73,4 +80,6 @@ this section and `cache-warmer.md` together once that lands.
 
 ## Open questions
 
-- Whether repo selection is refreshed periodically or only re-fetched on explicit user action.
+None at the moment. Answered: repo selection is refreshed **on demand**, when the last sync is
+older than the staleness TTL (1 hour by default) or when the user hits Refresh; there is no
+background polling.

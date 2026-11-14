@@ -4,7 +4,7 @@
 
 | Path | Purpose |
 |---|---|
-| `backend/` | Node.js/NestJS app, TypeScript + TypeORM/MySQL (the Auth and Mail modules exist — the tracked-repo/label-rule data model is still open, see `docs/agents/product.md`) |
+| `backend/` | Node.js/NestJS app, TypeScript + TypeORM/MySQL (the Auth, Mail, Integrations and Repositories modules exist — the label-rule data model is still open, see `docs/agents/product.md`) |
 | `frontend/` | React 19 + Vite app — dashboard/analytics UI; the login modal, device-authorization flow, hash routing, and `client/` HTTP layer already exist, the dashboard/analytics views themselves don't yet |
 | `proxy/` | PHP Tent proxy config (`dev_configuration/`, `prod_configuration/`, `extension/`) |
 | `dockerfiles/` | `base/` (one shared Dockerfile for all four `*-base` images) plus one directory per leaf image, including `kerghan_standalone/` |
@@ -34,6 +34,8 @@
 | `src/health/` | `GET /health.json` controller |
 | `src/auth/` | Auth module — see `docs/agents/modules/auth.md` |
 | `src/mail/` | Mail module — always-on, no routes/entities; filesystem email templates live under `mail/templates/` — see `docs/agents/modules/mail.md` |
+| `src/integrations/` | Integrations module — labelled, encrypted GitHub credentials and the exported `IntegrationsGithubService` — see `docs/agents/modules/integrations.md` |
+| `src/repositories/` | Repositories module — the per-user repository listing, sync engine and routes — see `docs/agents/modules/repositories.md` |
 | `dist/` | Compiled build output (gitignored) |
 | `nest-cli.json`, `tsconfig.json`, `tsconfig.build.json`, `jest.config.ts`, `jest.db.config.ts`, `jest.base.cjs`/`jest.base.d.cts`, `package.json`, `eslint.config.mjs` | Tooling config |
 
@@ -100,7 +102,7 @@ Owned by the `standalone` agent. See [standalone.md](standalone.md) for how the 
 | Subdirectory / File | Description |
 |---|---|
 | `architecture/` | Per-area architecture pages (`proxy.md`, `frontend.md`, `backend.md`, `modular-pattern.md`, `infra.md`) |
-| `modules/` | Per-backend-module documentation (routes, entities, events) — `auth.md` today |
+| `modules/` | Per-backend-module documentation (routes, entities, events) — `auth.md`, `mail.md`, `integrations.md` and `repositories.md` |
 | `standalone/` | Sub-docs of `standalone.md` — `client-config.md` (`kerghan configure` / `kerghan wizard` reference), `client-update.md` (`kerghan update` / `restart-on-update` reference) and `client-completion.md` (bash completion reference) |
 | `plans/` | Implementation plans, one directory per issue |
 | `issues/` | Detailed specs for open issues, one file per issue |

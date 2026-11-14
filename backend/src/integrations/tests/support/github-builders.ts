@@ -17,7 +17,7 @@ export {
 } from './github-raw.js';
 
 /**
- * The shared, typed GitHub builders (`docs/agents/specs/repos/testing.md#shared-builders`).
+ * The shared, typed GitHub builders (`docs/agents/modules/repositories.md#shared-builders`).
  * Each case gives both the raw `fetch` answer (body, `ETag`, `Link`,
  * `X-RateLimit-*` headers) the Integrations specs reply with, and the typed
  * result the real service answers for it — which is what

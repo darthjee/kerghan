@@ -27,7 +27,7 @@ export const REPOSITORIES_SOURCES_INDEXES: TableIndex[] = [
 /**
  * Creates `repositories_sources`: which source (`integration:<id>` or
  * `handle`) returned each repository, and on which page (see
- * `docs/agents/specs/repos/model.md#repositories_sources`). Logical FKs only.
+ * `docs/agents/modules/repositories.md#repositories_sources`). Logical FKs only.
  * `down` drops the table.
  */
 export class RepositoriesCreateRepositoriesSources20261113120023 implements MigrationInterface {

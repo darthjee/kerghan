@@ -9,7 +9,7 @@ import { IntegrationsService } from '../../integrations/integrations.service.js'
 // Boots the real `AppModule` wiring on the DB tier: the Repositories
 // listener must be registered at boot, so deleting an integration through
 // the real `IntegrationsService` runs the cleanup even though no
-// Repositories request ever ran (`integrations.md#required-tests`, moved to #463).
+// Repositories request ever ran (`docs/agents/modules/integrations/github-service.md#required-tests`, moved to #463).
 describe('integration.deleted cleanup at boot (real AppModule, real MySQL)', () => {
   let module: TestingModule;
 

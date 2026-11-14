@@ -19,7 +19,7 @@ function trimString({ value }: { value: unknown }): unknown {
 }
 
 /**
- * Request body for `POST /repositories/mine.json` (`api.md#request`). Every
+ * Request body for `POST /repositories/mine.json` (`docs/agents/backend/routes/repositories.md#request`). Every
  * field is optional; an absent field takes its default, while an explicit
  * `null` or any invalid value answers `400`.
  */

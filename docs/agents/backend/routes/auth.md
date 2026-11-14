@@ -337,6 +337,44 @@ intentional: it only happens when the client's refresh-token cookie is already i
 refresh fails too and the client logs out (unlike `authorize.json`, which uses `400` for its
 business rejections precisely to avoid that path).
 
+### `PATCH /auth/account.json`
+
+Self-edit of the logged-in user (`AccountService.updateAccount`, `JwtGuard`).
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `username`, `email`, `newPassword` | strings, optional | The managed fields. A `null` answers `400 VALIDATION_FAILED`. |
+| `currentPassword` | string, optional | Required **only** when a managed field is present. An empty string answers `400 VALIDATION_FAILED`; a missing one with a managed field answers `400 BAD_REQUEST` (`currentPassword is required`) after the default-user block and the lockout check, and counts as an abuse-guard failure like a wrong password. |
+| `githubHandle` | `string \| null`, optional | The [GitHub handle](../../modules/auth/github-handle.md): normalised and validated; `null` or `""` clears it. Absent: unchanged. |
+
+- `assertAnyFieldPresent` counts `githubHandle` as present whenever the key is in the body, `null`
+  included; the message is `At least one of username, email, newPassword or githubHandle is
+  required` (the admin edit keeps its own three-field message).
+- **Handle-only edit** (no managed field): needs no `currentPassword` (ignored if sent), skips the
+  lockout check (`423`) and the abuse guard entirely (it never counts as a failure and never
+  resets the counter), and is a no-op write when the normalised value equals the stored one. Order:
+  validation (`400`) → `assertAnyFieldPresent` (`400`) → load the user (`401` if missing) → write
+  → `200`.
+- **Mixed edit** (a managed field and `githubHandle`): the existing path, unchanged. The handle is
+  written in the same update as the other fields, all or nothing.
+- **Response:** `200 { username, email, githubHandle }` on both paths (`githubHandle` is `null`
+  when unset).
+- Changing the handle never revokes sessions and never triggers a repository sync.
+- A password change revokes the user's sessions, as before.
+
+Rules and rationale: [GitHub handle](../../modules/auth/github-handle.md#setting-it-patch-authaccountjson).
+
+### `POST /auth/account/mine.json`
+
+Reads the logged-in user's own account, so the Account page can show the current handle.
+
+| Property | Value |
+| --- | --- |
+| Request | No body; always the session's own user, no id in the request |
+| Success response | `201` `{ "username": "…", "email": "…", "githubHandle": "darthjee" }` (`githubHandle` is `null` when unset) |
+| Errors | `401` when the session's user no longer exists |
+| Guards and cache | `JwtGuard`; `POST` so `OriginGuard` covers it; `@CachePolicy(CacheClass.Never)` (`X-Skip-Cache: true`) |
+
 ## Default user `409` (`DEFAULT_USER_MANAGED`)
 
 While the default-user feature is enabled (`KERGHAN_DEFAULT_USER_ENABLED` or
@@ -346,7 +384,7 @@ While the default-user feature is enabled (`KERGHAN_DEFAULT_USER_ENABLED` or
 
 | Route | Default-user behavior |
 | --- | --- |
-| `PATCH /auth/account.json` | `409` when the body contains any managed field, even with the stored value. Runs right after the `400` "no field present" check, before the lockout (`423`) and the `currentPassword` check; never counts as a failed attempt and leaves an existing lockout untouched. |
+| `PATCH /auth/account.json` | `409` when the body contains any managed field, even with the stored value. A handle-only edit passes the block and is applied (`200`); a mixed edit is refused whole, the handle is not stored either. Runs right after the `400` "no field present" check, before the lockout (`423`) and the `currentPassword` check; never counts as a failed attempt and leaves an existing lockout untouched. |
 | `POST /auth/recover.json` | Unchanged `200 { sent: true }`, as for an unknown email. No token is created and no email is sent. |
 | `POST /auth/reset-password.json` | Token errors first, unchanged. A valid token for the default user → `409`; the password is unchanged and the token is not consumed. |
 | `POST /admin/users/:id/edit.json`, `recovery-link.json`, `send-recovery-email.json` | `409` after the `404` for an unknown id; nothing is written, no token created, no email sent. See [the Auth module](../../modules/auth.md#admin-tool-routes-admincontroller-admin-prefix). |

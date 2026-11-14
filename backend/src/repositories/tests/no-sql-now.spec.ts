@@ -2,13 +2,13 @@ import { readFileSync } from 'fs';
 import * as path from 'path';
 import { moduleSources, REPOSITORIES_ROOT } from './support/module-sources.js';
 
-// Static check (`sync.md#time-source`): no SQL time condition of the
+// Static check (`docs/agents/modules/repositories/sync.md#time-source`): no SQL time condition of the
 // Repositories module uses the database clock; every time value comes from
 // the injected `Clock`.
 const ROOT = REPOSITORIES_ROOT;
 // `.now(` (the injected `clock.now()`) is not SQL; the lookbehind skips it.
 const FORBIDDEN = [/(?<!\.)\bNOW\s*\(/i, /\bCURRENT_TIMESTAMP\b/i, /\bSYSDATE\s*\(/i, /\bUTC_TIMESTAMP\b/i];
-// The wall clock is never read directly either (`sync.md#time-source`).
+// The wall clock is never read directly either (`docs/agents/modules/repositories/sync.md#time-source`).
 const WALL_CLOCK = [/\bDate\.now\s*\(/, /new Date\(\s*\)/];
 
 describe('Repositories sources (static)', () => {

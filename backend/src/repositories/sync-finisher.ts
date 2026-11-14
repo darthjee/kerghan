@@ -7,7 +7,7 @@ import { SyncStateStore } from './sync-state.store.js';
 import { IntegrationsGithubService } from '../integrations/integrations-github.public.js';
 
 /**
- * The end of a sync (`docs/agents/specs/repos/sync.md#write-path`): one
+ * The end of a sync (`docs/agents/modules/repositories/sync.md#write-path`): one
  * `run_id`-guarded transaction running the safety net, the link fill, the
  * prune, then `finish` (`idle`, `last_synced_at = now`), even when every
  * source failed.

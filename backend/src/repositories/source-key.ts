@@ -9,7 +9,7 @@ export type ParsedSourceKey = { kind: 'handle' } | { kind: 'integration'; integr
 
 /**
  * The source key of an integration (`integration:<id>`), see
- * `docs/agents/specs/repos/model.md#tables`.
+ * `docs/agents/modules/repositories.md#tables`.
  * @param {number} integrationId - The internal `integrations.id`.
  * @returns {string} The source key.
  */

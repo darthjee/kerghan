@@ -1,6 +1,6 @@
 /**
  * The pure halves of the repo client: the error-mapping table and the body
- * parsing (see `docs/agents/specs/repos/integrations.md#error-mapping`).
+ * parsing (see `docs/agents/modules/integrations/github-service.md#error-mapping`).
  * Rate limits are read from headers only; no body is parsed for a message.
  */
 import { type GithubRateLimitFields, parseJsonObject } from './github-http.js';

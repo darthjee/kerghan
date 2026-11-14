@@ -22,7 +22,7 @@ const ANY_PAGE = '*';
 
 /**
  * A scriptable `IntegrationsGithubService` for the Repositories specs
- * (`docs/agents/specs/repos/testing.md#repositories-typed-fake`). It answers
+ * (`docs/agents/modules/repositories.md#repositories-typed-fake`). It answers
  * the exported typed results only and never touches `fetch`.
  *
  * - **Scripting:** `script(integrationId | null, operation, page | '*', ...answers)`;

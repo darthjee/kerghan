@@ -449,10 +449,25 @@ value from the last callback or select.
 
 - `expiresAt` is always `null`: an installation doesn't expire.
 - Installation access tokens last **1 hour**, but they are transient: minted when needed and
-  never stored, so their expiry never reaches the row.
+  never stored in the database, so their expiry never reaches the row. Repository calls reuse a
+  token from an in-memory cache ([Installation token cache](#installation-token-cache)).
 - An installation stops working when it is uninstalled or suspended, or loses permissions; each
   shows up on the next test ([Test connection](#test-connection)). There are no webhooks
   (`product.md`), so nothing notices it earlier.
+
+## Installation token cache
+
+Repository calls made through [`IntegrationsGithubService`](github-service.md) do not mint a token
+per call:
+
+- An installation access token is cached **in process memory only** (never in the database, a log
+  or a response), per integration, until its `expires_at` minus 5 minutes; concurrent calls share
+  one mint (single-flight).
+- It is minted with `metadata: read` only.
+- The mint failure rules (`404`/`403` set the integration `invalid`, a `401` of the app JWT is a
+  server misconfiguration) are in
+  [GitHub App installation tokens](github-service.md#github-app-installation-tokens).
+- **Test connection** still mints a fresh token and drops it, so it checks the real state.
 
 ## Test connection
 

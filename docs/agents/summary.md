@@ -27,10 +27,16 @@ full file before loading it. For a bare link-only table of contents instead, see
   - **[Integrations](modules/integrations.md)** — Always-on module for labelled GitHub
     credentials owned by one user each (`pat`, `oauth_app`, `github_app`, one page per type
     under `modules/integrations/`): data model, owner-only access, AES-256-GCM encryption with
-    `KERGHAN_INTEGRATIONS_KEY`, rate limits, the type contract and the Integrations page. Not yet
-    used for issue fetching.
+    `KERGHAN_INTEGRATIONS_KEY`, rate limits, the type contract and the Integrations page. Its
+    exported `IntegrationsGithubService` (`modules/integrations/github-service.md`) is how the
+    backend reads GitHub with a user's credential; not used for issue fetching.
+  - **[Repositories](modules/repositories.md)** — Per-user GitHub repository listing: the five
+    tables, the on-demand asynchronous sync (`modules/repositories/sync.md`), row statuses
+    (Added / Not added / Unavailable / Unknown), security, the Repositories page, testing and
+    the edge-case matrix (`modules/repositories/edge-cases.md`). The optional GitHub handle on
+    the account is `modules/auth/github-handle.md`.
 - **[Routes](backend/routes.md)** — Per-endpoint backend route reference, one file per domain
-  under `backend/routes/` (`auth.md` and `integrations.md` today), complementing the
+  under `backend/routes/` (`auth.md`, `integrations.md` and `repositories.md` today), complementing the
   entity/event-focused `modules/` pages.
 - **[Standalone Distribution](standalone.md)** — Running all of Kerghan in one Vault
   (Docker-in-Docker) container, `darthjee/kerghan-standalone` (online and offline variants): the

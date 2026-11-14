@@ -1,8 +1,8 @@
-# Repositories — API
+# Routes — Repositories
 
 The HTTP surface of the Repositories module, in the style of
-[`backend/routes/`](../../backend/routes/integrations.md). Part of the
-[Repositories specs](README.md). #452 folds it into `docs/agents/backend/routes/repositories.md`.
+[Routes — Integrations](../../modules/integrations/github-service.md). Entity, sync and security rules live in the
+[Repositories module](../../modules/repositories.md).
 
 ## Every route
 
@@ -14,7 +14,7 @@ The HTTP surface of the Repositories module, in the style of
 - **Auth:** every route sits behind the global `JwtGuard` (no `@Public()`, no `@AdminOnly()`) and
   is scoped to the caller (`req.user.sub`).
 - **CSRF:** every route is `POST`, so the global `OriginGuard` covers all four
-  ([security.md](security.md#csrf)).
+  ([security](../../modules/repositories.md#csrf)).
 - **Caching:** cache class **`user-scoped`** (`@CachePolicy(CacheClass.UserScoped)`,
   [caching.md](../../architecture/caching.md#cache-classes)). As for any non-`GET`, every response
   that passes the global guards (success and handler errors alike) sends `X-Skip-Cache: true`
@@ -27,7 +27,7 @@ The HTTP surface of the Repositories module, in the style of
   [Errors](#errors).
 - Controllers stay thin: validation in DTOs, everything else in the module's services.
 - **Handle reconciliation first:** every route (listing, sync state, Refresh, Add) first runs the
-  [handle reconciliation](model.md#handle-changes), so a changed or cleared GitHub handle's old
+  [handle reconciliation](../../modules/auth/github-handle.md#handle-changes), so a changed or cleared GitHub handle's old
   rows are dropped (and pruned) before anything is read or written. The sync-state route stays a
   pure read of the sync: it never starts one.
 - **Bodies** go through the global `ValidationPipe({ whitelist: true, transform: true })`:
@@ -90,10 +90,10 @@ Every field is optional. Any invalid value answers `400 VALIDATION_FAILED`.
 | `githubId` | GitHub's repository id, the canonical key ([Repository identity](#repository-identity)). |
 | `owner`, `name`, `fullName` | From the latest snapshot; `fullName` is `owner/name`. |
 | `private` | Visibility. |
-| `status` | `added`, `not_added`, `unavailable` or `unknown`, derived on read ([model.md](model.md#row-statuses)). |
+| `status` | `added`, `not_added`, `unavailable` or `unknown`, derived on read ([data model](../../modules/repositories.md#row-statuses)). |
 | `addedAt` | `null` for not-added rows. |
 | `lastSeenAt` | When a source last returned the repo. |
-| `sources[]` | Every **current** source holding a row for the repo, as of that source's last applied page, failed and `pending` sources included ([model.md](model.md#repositories_sources)): `{ kind: "integration", integration: { uuid, label } }` or `{ kind: "handle", handle }` (`handle` is the current, normalised, lowercase handle, [model.md](model.md#normalisation)). The UI matches each entry by key with the sync state's `sources[].status` and mutes a source that is not `ok` ([ui.md](ui.md#table)). |
+| `sources[]` | Every **current** source holding a row for the repo, as of that source's last applied page, failed and `pending` sources included ([data model](../../modules/repositories.md#repositories_sources)): `{ kind: "integration", integration: { uuid, label } }` or `{ kind: "handle", handle }` (`handle` is the current, normalised, lowercase handle, [data model](../../modules/auth/github-handle.md#normalisation)). The UI matches each entry by key with the sync state's `sources[].status` and mutes a source that is not `ok` ([frontend](../../modules/repositories.md#table)). |
 | `accessIntegration` | The access link set on Add, as `{ uuid, label }`. `null` for not-added rows, for added rows only the public source sees, and for a dangling link (its integration was deleted). |
 
 - **Sort:** fixed, case-insensitive `owner`, then `name`, then `githubId`, so pages are stable.
@@ -104,8 +104,8 @@ Every field is optional. Any invalid value answers `400 VALIDATION_FAILED`.
 
 ### Stale-sync trigger
 
-The listing starts a sync when the user's last one is stale ([sync.md](sync.md#trigger); TTL
-1 h, [sync.md](sync.md#values)). The server owns the staleness rule; the frontend makes one call. The listing returns
+The listing starts a sync when the user's last one is stale ([sync](../../modules/repositories/sync.md#trigger); TTL
+1 h, [sync](../../modules/repositories/sync.md#values)). The server owns the staleness rule; the frontend makes one call. The listing returns
 the stored rows at once, with `sync.state` already `syncing` when it started one. A fresh listing,
 or one during a running sync, starts nothing.
 
@@ -142,7 +142,7 @@ Rules:
 - `githubId`: a positive integer, at most `Number.MAX_SAFE_INTEGER`. `0`, negative, fractional or
   larger values (e.g. `1e300`) answer `400`, never reach the database.
 - `fullName`: exactly one `/`. The owner follows the GitHub handle rule, compared
-  case-insensitively ([model.md](model.md#validation): letters, digits, single hyphens, no
+  case-insensitively ([data model](../../modules/auth/github-handle.md#validation): letters, digits, single hyphens, no
   leading or trailing hyphen, at most 39 characters); the name matches `[A-Za-z0-9._-]{1,100}` and is neither `.` nor `..`. Anything
   else answers `400`.
 - `fullName` is resolved **case-insensitively against the caller's own rows** only, so a ref can
@@ -182,38 +182,38 @@ the same object as `sync`.
 
 | Field | Meaning |
 |---|---|
-| `state` | `idle` or `syncing`. A sync whose heartbeat is older than its lease is dead and reads `idle` ([sync.md](sync.md#restart-recovery)). |
+| `state` | `idle` or `syncing`. A sync whose heartbeat is older than its lease is dead and reads `idle` ([sync](../../modules/repositories/sync.md#restart-recovery)). |
 | `startedAt` | Start of the running sync (`last_started_at`); `null` when idle. |
 | `lastSyncedAt` | End of the last finished sync; `null` = never synced (the UI shows its first-sync spinner). |
 | `refreshAvailableAt` | End of the Refresh cooldown (`last_started_at` + cooldown); `null` = Refresh available now. The UI disables Refresh with a countdown; the server still answers `429` + `Retry-After` for races and other clients. |
 | `sources[]` | One entry per **current** source; a deleted integration's entry disappears. |
-| `sources[].status` | `ok`, `error`, `invalid_credentials`, `rate_limited`, `page_cap_reached`, `not_found` (handle only: the handle listing answered `404`, [sync.md](sync.md#handle-credential)), or `pending` (a source added since the last sync: a new integration, a newly set handle; or a fixed integration, below). |
+| `sources[].status` | `ok`, `error`, `invalid_credentials`, `rate_limited`, `page_cap_reached`, `not_found` (handle only: the handle listing answered `404`, [sync](../../modules/repositories/sync.md#handle-credential)), or `pending` (a source added since the last sync: a new integration, a newly set handle; or a fixed integration, below). |
 | `sources[].syncedAt` | When that source last ran; `null` when `pending`. |
 | `sources[].resetAt` | Only for `rate_limited`: GitHub's reset time; `null` otherwise. |
 
 - A source entry never reveals whether the handle went through an integration or the
   unauthenticated path, and carries no integration field beyond `uuid` and `label`.
 - **A fixed integration reads `pending`:** on read, a stored `invalid_credentials` status for an
-  integration that is now **usable** ([usable integrations](integrations.md#usable-integrations))
+  integration that is now **usable** ([usable integrations](../../modules/integrations/github-service.md#usable-integrations))
   reports `pending`, with `syncedAt: null`. The listing and this route already load the user's
   integrations to resolve labels, so it costs no query. No event and no write: the next sync of
   that source replaces the stored status. This removes the stale "Fix it in Integrations" banner
   after a Test or a Replace.
 - The UI shows a banner for every status other than `ok` and `pending`
-  ([ui.md](ui.md#source-errors)).
+  ([frontend](../../modules/repositories.md#source-errors)).
 - **The route never starts a sync**, so polling cannot re-trigger one. Its only possible write is
-  the [handle reconciliation](model.md#handle-changes) shared by every route.
+  the [handle reconciliation](../../modules/auth/github-handle.md#handle-changes) shared by every route.
 
 ### Polling contract
 
 - While `state` is `syncing`, the frontend polls `POST /repositories/sync/state.json` at a fixed
-  **frontend constant** interval of 2 s ([sync.md](sync.md#values)).
+  **frontend constant** interval of 2 s ([sync](../../modules/repositories/sync.md#values)).
 - It stops on `idle` (then reloads the current listing page; the data is fresh, so that reload
   never starts another sync), on unmount, or on `401`. A transient error (network, `5xx`) keeps
   polling at the same interval.
 - There is no scheduled job (#444); each sync is background work started by a request, run
   in-process. A sync stuck in `syncing`, e.g. after a backend restart, reads `idle` once its
-  lease expires, so polling always ends ([sync.md](sync.md#restart-recovery)).
+  lease expires, so polling always ends ([sync](../../modules/repositories/sync.md#restart-recovery)).
 
 ## Refresh
 
@@ -231,12 +231,12 @@ the same object as `sync`.
 - **The cooldown runs from the start of the last sync, whatever triggered it** (stale listing or
   Refresh). It protects the GitHub budget, notably the shared unauthenticated 60/h.
   `refreshAvailableAt` follows the same rule; the duration is 5 min
-  ([sync.md](sync.md#values)).
-- "Already syncing" and "cooldown" are one atomic claim ([sync.md](sync.md#per-user-lock)), so
+  ([sync](../../modules/repositories/sync.md#values)).
+- "Already syncing" and "cooldown" are one atomic claim ([sync](../../modules/repositories/sync.md#per-user-lock)), so
   concurrent Refreshes start one sync.
 - Refresh runs every source; there is no per-source refresh. A `rate_limited` source is skipped
   while its `resetAt` is in the future: no GitHub call, its status, `resetAt` and rows are kept
-  ([sync.md](sync.md#rate-limits)).
+  ([sync](../../modules/repositories/sync.md#rate-limits)).
 
 ## Add
 
@@ -249,13 +249,13 @@ listing as added.
 | 2 | Per-user Add rate limit | `429 REPOSITORY_ADD_RATE_LIMITED` + `Retry-After` |
 | 3 | Ref looked up in the **caller's own rows**, by `user_id` from the session in the query itself | `404 NOT_FOUND`, no GitHub call, no write |
 | 4 | Already added | **`200`** with the current row: idempotent, no GitHub call, no write; the original `addedAt` and access link are kept |
-| 5 | GitHub re-check: one request for that repository, through the chosen access integration ([integrations.md](integrations.md#access-link-on-add)) | **No candidate** before any GitHub call (every source holding the repo is a non-usable integration, and the handle source does not hold it): `409 REPOSITORY_SOURCE_UNUSABLE`, no GitHub call, nothing written. Denied (`404`/`403` from every candidate called): `404 NOT_FOUND`, nothing written. Unauthenticated low budget, or a GitHub rate limit: `503 GITHUB_RATE_LIMITED` + `Retry-After` when known (never `404`, nothing marked `invalid`). Timeout / `5xx`: `502 GITHUB_UNAVAILABLE`. |
+| 5 | GitHub re-check: one request for that repository, through the chosen access integration ([GitHub service](../../modules/integrations/github-service.md#access-link-on-add)) | **No candidate** before any GitHub call (every source holding the repo is a non-usable integration, and the handle source does not hold it): `409 REPOSITORY_SOURCE_UNUSABLE`, no GitHub call, nothing written. Denied (`404`/`403` from every candidate called): `404 NOT_FOUND`, nothing written. Unauthenticated low budget, or a GitHub rate limit: `503 GITHUB_RATE_LIMITED` + `Retry-After` when known (never `404`, nothing marked `invalid`). Timeout / `5xx`: `502 GITHUB_UNAVAILABLE`. |
 | 6 | Write, conditional: `UPDATE … SET added_at, integration_id, snapshot WHERE id = :id AND user_id = :userId AND added_at IS NULL` | **`200`** with the updated row (listing row shape, `status: "added"`). Zero rows ⇒ re-read the row (`WHERE id = :id AND user_id = :userId`): **added** ⇒ `200` with the current row (a concurrent Add won: its `addedAt` and link are kept); **missing** ⇒ `404 NOT_FOUND` (pruned meanwhile). |
 
 - `200`, not `201`: the row already existed; Add only marks it.
 - **The stored link is always the caller's own:** an `integration_id` that is not one of the
   caller's integrations at write time is stored as `null` (filled by the next sync's link fill),
-  never another user's id ([integrations.md](integrations.md#access-link-on-add)).
+  never another user's id ([GitHub service](../../modules/integrations/github-service.md#access-link-on-add)).
 - **Owner lookup first:** a missing row, including one only another user holds, answers the same
   `404` as a GitHub denial, with no GitHub call and no write. Only repos already in the user's own
   listing can be added.
@@ -264,33 +264,33 @@ listing as added.
   caller's own rows.
 - **The re-check is built only from the stored row** (its `github_id`, or its stored
   `owner`/`name` URL-encoded), never from the request's `fullName`, so no user input reaches the
-  GitHub API path ([security.md](security.md#fixed-github-base-url)).
+  GitHub API path ([security](../../modules/repositories.md#fixed-github-base-url)).
 - When only the public source sees the repo, the re-check goes through a usable integration if the
   user has one (without linking it), and unauthenticated otherwise. If that re-check shows the
   repo has become **private**, the integration that granted it is linked as `integration_id`, so
   the stored private metadata stays tied to the integration that granted it
-  ([model.md](model.md#private-metadata-lifecycle)) and the row reads as Added, not
+  ([data model](../../modules/repositories.md#private-metadata-lifecycle)) and the row reads as Added, not
   Unavailable.
 - The unauthenticated re-check goes through the shared process-wide budget tracker with **Add's
   own threshold**: it is refused only when the remaining budget is **≤ 0** (the sync stops at
   ≤ 10, keeping a reserve for Add), answering `503` with no GitHub call
-  ([sync.md](sync.md#rate-limits)).
+  ([sync](../../modules/repositories/sync.md#rate-limits)).
 - **Race with pruning:** the write is `UPDATE … WHERE id = :id AND user_id = :userId AND
   added_at IS NULL`. If a sync's pruning deleted the not-added row first, the update affects no
   row, the re-read finds nothing, and Add answers `404 NOT_FOUND` (the repo left the listing); if
-  Add commits first, pruning skips the row ([model.md](model.md#private-metadata-lifecycle)).
+  Add commits first, pruning skips the row ([data model](../../modules/repositories.md#private-metadata-lifecycle)).
 - **Double Add:** two concurrent Adds of the same repo both pass step 4. Only one write matches
   `added_at IS NULL`; the other affects no row, re-reads the row as added and answers `200` with
   the first Add's `addedAt` and access link. The losing request's GitHub call is wasted, which the
   per-user Add rate limit bounds.
 - **`409 REPOSITORY_SOURCE_UNUSABLE`:** decided after the rate limit and the lookup in the
   caller's own rows, only from the caller's own sources, so it reveals nothing about other users
-  or about GitHub ([integrations.md](integrations.md#add-re-check-candidates)). Once at least one
+  or about GitHub ([GitHub service](../../modules/integrations/github-service.md#add-re-check-candidates)). Once at least one
   candidate was called and every one denied the repo, or the 3-call cap was reached, the answer
   stays `404 NOT_FOUND`.
 - `502 GITHUB_UNAVAILABLE` and `503 GITHUB_RATE_LIMITED` reuse the existing codes and helpers,
-  moved to `core/github-http-errors.ts` ([integrations.md](integrations.md#shared-502--503-helpers)).
-- **Candidate walk** ([integrations.md](integrations.md#add-re-check-candidates)), at most **3
+  moved to `core/github-http-errors.ts` ([GitHub service](../../modules/integrations/github-service.md#shared-502--503-helpers)).
+- **Candidate walk** ([GitHub service](../../modules/integrations/github-service.md#add-re-check-candidates)), at most **3
   GitHub calls** per Add: first the usable integrations holding a source row for the repo, oldest
   first; then, when the handle source sees it, the remaining usable integrations, oldest first,
   then unauthenticated. A `401` (which also marks a `pat` / `oauth_app` integration `invalid`),
@@ -335,8 +335,8 @@ Standard error shape (`core/http-exception.filter.ts`,
   (whole seconds, rounded up) **and** `error.retryAfterSeconds` in the body, with the same value.
   The filter (`core/http-exception.filter.ts`) emits both for every throw site that sets
   `retryAfterSeconds` (so `INTEGRATION_TEST_COOLDOWN` and the Integrations `503` carry the body
-  field too). It is a new, optional field of the standard error shape; folding it into
-  `architecture/backend.md#error-responses` stays #452's.
+  field too). It is a new, optional field of the standard error shape; it is documented in
+  [Backend architecture](../../architecture/backend.md#error-responses).
 - Sync failures never become HTTP errors: they appear only as the per-source `status` in the
   [sync state](#sync-state); the UI maps each to its banner text.
 - GitHub error bodies and messages are never echoed, nor any credential detail. Anything
@@ -345,7 +345,7 @@ Standard error shape (`core/http-exception.filter.ts`,
   Repositories module, like `integrations/integration-http-errors.ts`. The `502`/`503` reuse the
   existing helpers `githubUnavailable()` / `githubRateLimited()`, moved (unchanged) from
   `integrations/integration-http-errors.ts` to `core/github-http-errors.ts`, so Repositories
-  never imports Integrations' HTTP layer ([integrations.md](integrations.md#shared-502--503-helpers)).
+  never imports Integrations' HTTP layer ([GitHub service](../../modules/integrations/github-service.md#shared-502--503-helpers)).
 
 ## Access
 
@@ -354,26 +354,26 @@ Standard error shape (`core/http-exception.filter.ts`,
   one.
 - Admins have no access to anyone's repositories (same rule as integrations).
 - No response includes credential material (secrets, tokens, GitHub App installation tokens) or
-  anything computed from it ([security.md](security.md#credentials-stay-in-the-backend)).
+  anything computed from it ([security](../../architecture/security.md#github-credentials-stay-in-the-backend)).
 - **Exposed identifiers:** no response includes the internal repository `id`, `user_id` or an
   internal `integrations.id`. Integrations are referenced only by their `uuid` and label, and only
   the caller's own. Repo responses carry no other integration field (no `secretHint`,
   `github_login`, `status_reason` or metadata).
 - The field is named `uuid`; it holds the same value the Integrations API exposes as `id`
-  ([routes/integrations.md](../../backend/routes/integrations.md)).
+  ([routes/integrations.md](../../modules/integrations/github-service.md)).
 - `sources[].integration` and `accessIntegration` are resolved through a lookup also filtered by
   the caller's `user_id`: an integration that does not match (another user's, or deleted) is
   dropped from `sources[]` and reads as `null` in `accessIntegration`.
 
 ## Required tests
 
-Tiers, fakes and harnesses: [testing.md](testing.md). Tags: `(db)`, `(e2e)`, `(unit)`,
-`(static)`, `(race)` ([default tiers](testing.md#default-tier-by-category)).
+Tiers, fakes and harnesses: [Testing](../../modules/repositories.md#testing). Tags: `(db)`, `(e2e)`, `(unit)`,
+`(static)`, `(race)` ([default tiers](../../modules/repositories.md#default-tier-by-category)).
 
 **Routes:**
 
 - Per-route `401`, `OriginGuard`, `X-Skip-Cache`, the cache class, another user's repository
-  answering like a missing one, and admins: the [route access matrix](security.md#required-tests).
+  answering like a missing one, and admins: the [route access matrix](../../modules/repositories.md#security-tests).
 - No repositories route answers `GET`.
 - Unknown body properties are stripped and ignored.
 - Handler errors (`400`, `404`, `429`) send `X-Skip-Cache` + `Cache-Control: no-store` too; the
@@ -381,7 +381,7 @@ Tiers, fakes and harnesses: [testing.md](testing.md). Tags: `(db)`, `(e2e)`, `(u
 - No response body contains the internal repository `id`, `user_id`, an internal
   `integrations.id`, `secretHint`, `github_login`, `status_reason`, or any other integration
   field beyond `uuid` and `label`. (Credential material is the
-  [canary sweep](security.md#required-tests)'s.)
+  [canary sweep](../../modules/repositories.md#security-tests)'s.)
 - A row's `sources[]` and `accessIntegration` never resolve an integration of another user.
 - After the GitHub handle changed or was cleared, each of the four routes, called first, answers
   without the old handle's source rows (and without not-added repos only it returned); a new
@@ -402,7 +402,7 @@ Tiers, fakes and harnesses: [testing.md](testing.md). Tags: `(db)`, `(e2e)`, `(u
 - Exact row shape; `accessIntegration` is `null` in the three documented cases.
 - A row's `sources[]` includes the entry of a failed source that still holds a row for it.
 - A listing that starts a sync answers `sync.state: "syncing"`; when the sync starts is
-  [sync.md](sync.md#required-tests)'s.
+  [sync](../../modules/repositories/sync.md#required-tests)'s.
 
 **Sync state:**
 
@@ -418,7 +418,7 @@ Tiers, fakes and harnesses: [testing.md](testing.md). Tags: `(db)`, `(e2e)`, `(u
 - `202` starts a sync; `202` while syncing starts no new sync and does not reset the cooldown.
 - `429 REPOSITORY_REFRESH_COOLDOWN` + `Retry-After` + `error.retryAfterSeconds` inside the
   cooldown, including right after a stale-triggered sync.
-- Concurrent Refreshes, and skipping a `rate_limited` source: [sync.md](sync.md#required-tests).
+- Concurrent Refreshes, and skipping a `rate_limited` source: [sync](../../modules/repositories/sync.md#required-tests).
 
 **Add:**
 
@@ -437,7 +437,7 @@ Tiers, fakes and harnesses: [testing.md](testing.md). Tags: `(db)`, `(e2e)`, `(u
   redirect answers `502 GITHUB_UNAVAILABLE`.
 - Add with only non-usable sources (and no handle row) answers `409 REPOSITORY_SOURCE_UNUSABLE`
   with no GitHub call and no write; with one usable candidate that denies it, Add answers `404`.
-- The candidate walk and the access-link choice: [integrations.md](integrations.md#required-tests).
+- The candidate walk and the access-link choice: [GitHub service](../../modules/integrations/github-service.md#required-tests).
 - Add on a not-added row pruned concurrently answers `404 NOT_FOUND` and writes nothing `(db)`.
 - A write whose `integration_id` is another user's integration stores `null`, so the row is never
   linked to the other user's integration `(db)`.

@@ -1,6 +1,6 @@
 /**
  * The no-network guard of the Integrations GitHub specs
- * (`docs/agents/specs/repos/testing.md#no-network-guard`): before each test,
+ * (`docs/agents/modules/repositories.md#no-network-guard`): before each test,
  * `globalThis.fetch` is replaced with a mock that throws unless the spec
  * scripts it, so no test ever reaches the real GitHub. Other modules' specs
  * do not call it and stay untouched.

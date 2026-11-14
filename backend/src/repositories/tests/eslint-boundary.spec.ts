@@ -2,7 +2,7 @@ import { execFileSync } from 'child_process';
 import * as path from 'path';
 
 // Proves the Repositories ESLint override (`eslint.config.mjs`,
-// `security.md#module-boundaries`) with the real config: a snippet, linted as
+// `docs/agents/modules/repositories.md#module-boundaries`) with the real config: a snippet, linted as
 // if it lived in `src/repositories/`, gets `no-restricted-imports` on every
 // forbidden line and `no-restricted-globals` on `fetch`, and nothing on the
 // allowlisted entry points. ESLint runs as a child process (its flat config

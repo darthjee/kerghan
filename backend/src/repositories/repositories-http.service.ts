@@ -19,7 +19,7 @@ export interface ListingResult {
 
 /**
  * Maps the Repositories service outcomes to HTTP answers for the controller
- * (`docs/agents/specs/repos/api.md#routes`), so the controller only
+ * (`docs/agents/backend/routes/repositories.md#routes`), so the controller only
  * validates, calls one method and shapes: `no_user` → `401`, the Refresh
  * cooldown → `429` with its delay, Add → `RepositoryAddService`.
  */
@@ -78,7 +78,7 @@ export class RepositoriesHttpService {
   }
 
   /**
-   * Add (`api.md#add`).
+   * Add (`docs/agents/backend/routes/repositories.md#add`).
    * @param {number} userId - The session's user.
    * @param {RepoRef} ref - The validated repo ref.
    * @returns {Promise<ListedRepository>} The added row.

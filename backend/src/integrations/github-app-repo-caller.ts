@@ -32,7 +32,7 @@ export interface GithubAppCallTarget {
 /**
  * Makes a repo call for a `github_app` integration with an installation
  * token from the cache (see
- * `docs/agents/specs/repos/integrations.md#github-app-installation-tokens`).
+ * `docs/agents/modules/integrations/github-service.md#github-app-installation-tokens`).
  * Internal to the Integrations module.
  *
  * - A `401` with a cached token evicts it, mints once and retries once; a

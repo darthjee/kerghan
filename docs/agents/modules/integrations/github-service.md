@@ -1,7 +1,8 @@
-# Repositories — Integrations module
+# Integrations — GitHub service
 
-What the Repositories feature needs from the [Integrations module](../../modules/integrations.md),
-which exports nothing today. Part of the [Repositories specs](README.md).
+What the Repositories module gets from the [Integrations module](../integrations.md): the exported
+`IntegrationsGithubService`, the single GitHub client behind it, the `integration.deleted` event
+and the rules for credentials that stop working. Part of the Integrations module.
 
 ## Exported service
 
@@ -29,12 +30,12 @@ getRepository(userId, integrationId | null, githubId): Promise<RepoResult>
 
 - **`listIntegrations`** (added by #463) lists every one of the user's integrations, usable or
   not, oldest first, with the same allowlisted `IntegrationRef` fields and no GitHub call. The sync
-  uses it for the non-usable integrations' sources ([sync.md](sync.md#sources)), the end-of-sync
+  uses it for the non-usable integrations' sources ([sync](../repositories/sync.md#sources)), the end-of-sync
   safety net and the link fill's dangling-link check; the listing and the sync state use it for
   the sources' `uuid` / `label` and to read a dangling link as empty.
 
 - **Integration identity:** callers pass the internal `integrations.id` (the logical FK the
-  Repositories tables already store, [model.md](model.md#logical-foreign-keys)). Every call loads
+  Repositories tables already store, [data model](../repositories.md#logical-foreign-keys)). Every call loads
   it with `WHERE id = ? AND user_id = ?`; a missing or foreign one answers
   `integration_unusable` with reason `missing` and **no GitHub call**. `null` means unauthenticated
   ([unauthenticated calls](#unauthenticated-calls)).
@@ -63,17 +64,17 @@ getRepository(userId, integrationId | null, githubId): Promise<RepoResult>
   as `GET /user/installations` entries are today.
 - **Pagination:** the service builds every page URL from `page` itself
   (`?per_page=100&page=N`); `hasNext` is whether `Link` has a `rel="next"`, whose URL is never
-  used ([security.md](security.md#fixed-github-base-url)).
+  used ([security](../repositories.md#fixed-github-base-url)).
 - **Conditional requests:** a passed `etag` is sent as `If-None-Match`; the response's `ETag`
-  and `X-RateLimit-*` come back in the result ([sync.md](sync.md#conditional-requests)).
-- Every request has the existing 10 s timeout ([sync.md](sync.md#values)).
+  and `X-RateLimit-*` come back in the result ([sync](../repositories/sync.md#conditional-requests)).
+- Every request has the existing 10 s timeout ([sync](../repositories/sync.md#values)).
 - **Credentials, minted installation tokens and GitHub response bodies never leave the module**:
   the Repositories module never sees, stores or logs them
-  ([security.md](security.md#credentials-stay-in-the-backend)).
+  ([security](../../architecture/security.md#github-credentials-stay-in-the-backend)).
 - Integration types in scope: `pat`, `oauth_app`, `github_app`.
 - The handle source's credential walk (oldest usable integration, the next one after a `401`,
   then unauthenticated; no fallback on a rate limit, timeout or `5xx`) is the sync's, built on
-  `listUsableIntegrations` ([sync.md](sync.md#handle-credential)).
+  `listUsableIntegrations` ([sync](../repositories/sync.md#handle-credential)).
 
 ### Unauthenticated calls
 
@@ -105,13 +106,13 @@ with the already-pinned `Accept` and `X-GitHub-Api-Version` headers.
 - **`sort=created&direction=asc`** rather than the default `full_name`: with page-number
   pagination a new repo lands on the last page, so earlier pages keep their ETag (`304`); a name
   sort would shift every page boundary on any creation or rename. Deletions still shift pages,
-  which the sync's page rewrite already handles ([sync.md](sync.md#write-path)).
+  which the sync's page rewrite already handles ([sync](../repositories/sync.md#write-path)).
 - **Explicit `affiliation` / `visibility`** (GitHub's defaults) pin the meaning: private and
   organization repos included. A fine-grained PAT returns only the repos it was granted; an OAuth
   App sees an organization's private repos only once that organization approved it
-  ([oauth-app.md](../../modules/integrations/oauth-app.md)).
+  ([oauth-app.md](oauth-app.md)).
 - **Handle `type=owner`:** the handle's own repos only. The handle source still keeps only
-  `private: false` ([sync.md](sync.md#sources)).
+  `private: false` ([sync](../repositories/sync.md#sources)).
 - **Field mapping:** `id` → `githubId`, `owner.login` → `owner`, `name`, `private`; the rest of the
   body is discarded.
 - **Body cap:** 2 MiB for repo listings (a page of 100 repo objects is ~0.5–1 MB, over today's
@@ -120,7 +121,7 @@ with the already-pinned `Accept` and `X-GitHub-Api-Version` headers.
 
 ### GitHub App installation tokens
 
-Minting per request (today's [github-app.md](../../modules/integrations/github-app.md) rule)
+Minting per request (today's [github-app.md](github-app.md) rule)
 would double the calls of a sync (up to 10 pages per source, plus the handle and Add re-checks)
 and spend the app JWT's rate limit. So repo calls use an **in-memory cache inside the
 Integrations module**:
@@ -130,7 +131,7 @@ Integrations module**:
   process memory only — never in the database, a log or a response. Expired entries are dropped
   on read; at most one entry per `github_app` integration, so no LRU.
 - **Time:** the "`expires_at` − 5 min" check reads the injected `Clock` (`core/clock.ts`, shared
-  with Repositories, [sync.md](sync.md#time-source)), never `Date.now()` directly.
+  with Repositories, [sync](../repositories/sync.md#time-source)), never `Date.now()` directly.
 - **Single-flight:** concurrent calls for one integration share one in-flight mint (the sync runs
   3 sources in parallel, and the handle may use the same integration).
 - **Least privilege:** minted with `{"permissions": {"metadata": "read"}}`, enough to list repos
@@ -158,8 +159,8 @@ Integrations module**:
   | `401` (app JWT rejected) | unchanged — server misconfiguration | `unavailable` (`unexpected`), logged at error level with safe fields |
   | `5xx`, timeout, rate limit | unchanged | `unavailable` / `rate_limited` |
 
-- This supersedes `github-app.md`'s "minted per use" for repo calls; #452 updates that page
-  ([README.md](README.md#product-changes-folded-by-452)). Test connection keeps minting fresh and
+- Repository calls do not mint per use (unlike the app JWT): see
+  [GitHub App](github-app.md#installation-token-cache). Test connection keeps minting fresh and
   dropping the token, so it checks the real state.
 
 ## Invalid on 401
@@ -189,7 +190,7 @@ WHERE id = :id AND user_id = :userId AND secret_iv = :ivUsed
   request made with the old one.
 - No new column. A missed invalidation after a key rotation recurs on the next call.
 - `:ivUsed` stays inside the Integrations module: it never reaches Repositories, a response or a
-  log ([security.md](security.md#credentials-stay-in-the-backend)).
+  log ([security](../../architecture/security.md#github-credentials-stay-in-the-backend)).
 
 ## Usable integrations
 
@@ -213,20 +214,20 @@ server** (a `github_app` integration is unusable when the app's server config is
   set `undecryptable` (existing transition) and answers `integration_unusable`.
 - **Type disabled:** the server's configuration, not the user's credential, so `error`.
 - A non-usable source is a *failed* source: its earlier rows and pages are kept
-  ([partial failures](sync.md#partial-failures)), so its repos stay listed until the integration
+  ([partial failures](../repositories/sync.md#partial-failures)), so its repos stay listed until the integration
   is fixed or deleted. **Accepted:** they hold only the user's own data, visible only to that
   user; the banner says to fix the integration, and deleting it purges its rows at once.
   Rejected: expiring them (for example after 30 days), since added repos would flip to
   Unavailable and a fixed token would re-import everything.
 - A fixed integration (Test or Replace returns it to `active`) reads `pending` until its next
-  sync ([api.md](api.md#sync-state)).
+  sync ([routes](../../backend/routes/repositories.md#sync-state)).
 - `listUsableIntegrations` returns only usable ones, oldest first, filtered by `user_id` in the
   query. The sync builds its sources from **all** the user's integrations; the handle and Add use
   the usable list.
 - `integration_unusable` carries a reason, `'status' | 'type_disabled' | 'missing'`, so the sync
   maps it to `invalid_credentials`, `error`, or, for `missing` (no integration row for that id and
   user, e.g. deleted mid-sync), stops that source with **no status**
-  ([sync.md](sync.md#sources)); the reason never reaches a response.
+  ([sync](../repositories/sync.md#sources)); the reason never reaches a response.
 
 ## Error mapping
 
@@ -253,13 +254,13 @@ One table in the client, for every call:
   logged; logs carry safe fields only (integration id, operation, HTTP status, result kind).
 - The handle listing's `not_found` (an unknown, renamed, suspended or deleted handle) maps to the
   source status **`not_found`**, with no fallback to another credential
-  ([sync.md](sync.md#handle-credential)).
+  ([sync](../repositories/sync.md#handle-credential)).
 - `unavailable` reasons never reach a response; the sync maps them to `error`, Add to
   `502 GITHUB_UNAVAILABLE`.
 
 ## Access link on Add
 
-When the user adds a repository ([api.md](api.md#add)):
+When the user adds a repository ([routes](../../backend/routes/repositories.md#add)):
 
 - Among the **usable** integrations that hold a source row for the repo, the **oldest** one whose
   re-check grants the repo is stored as `integration_id`.
@@ -272,12 +273,12 @@ When the user adds a repository ([api.md](api.md#add)):
   (`listIntegrations(userId)`, usable or not) right before the write; an id that is not the
   user's (another user's, or deleted meanwhile) is stored as **`null`**, never rejected, and
   the Add still succeeds. The empty link is then filled at the end of the next sync like any
-  other ([link fill](sync.md#link-fill)).
+  other ([link fill](../repositories/sync.md#link-fill)).
 - Changing an existing link later is out of scope. An **empty or dangling** link of an added
   private repo (its integration deleted, or a public repo turned private) is filled at the end of
   the next sync with the oldest usable integration that returns it
-  ([link fill](sync.md#link-fill)). This amends #444, which left such a repo Unavailable for
-  good ([README](README.md#scope)).
+  ([link fill](../repositories/sync.md#link-fill)). This amends the product decision (#444), which left such a repo Unavailable for
+  good.
 
 ### Add re-check candidates
 
@@ -294,7 +295,7 @@ Add walks candidates in order, with **at most 3 GitHub calls** per Add:
 - No candidate left, or the cap reached, after denials → `404 NOT_FOUND`.
 - **No candidate at all**, before any GitHub call (every source holding the repo is a non-usable
   integration: `expired`, `invalid`, `undecryptable` or type disabled; and the handle source does
-  not hold it) → `409 REPOSITORY_SOURCE_UNUSABLE`, nothing written ([api.md](api.md#add)).
+  not hold it) → `409 REPOSITORY_SOURCE_UNUSABLE`, nothing written ([routes](../../backend/routes/repositories.md#add)).
 
 ## Shared 502 / 503 helpers
 
@@ -323,10 +324,10 @@ A direct call would need Integrations to import Repositories, which already impo
 - **Listener:** Repositories' `@OnEvent('integration.deleted')` runs one transaction, every
   statement with `AND user_id = :userId`: delete the source, page and status rows for
   `source_key = 'integration:<id>'`; clear `integration_id` where it points at it; prune
-  not-added repos left with no source row ([model.md](model.md#logical-foreign-keys)). Its first
+  not-added repos left with no source row ([data model](../repositories.md#logical-foreign-keys)). Its first
   statement locks the user's sync-state row (`SELECT … FOR UPDATE`), the lock order of every
   multi-table Repositories write transaction, so a cleanup during a sync serializes with the run's page
-  writes instead of deadlocking with them ([sync.md](sync.md#write-path)).
+  writes instead of deadlocking with them ([sync](../repositories/sync.md#write-path)).
 - **Failure never blocks the delete:** the listener catches its own error and logs it with safe
   fields (`@OnEvent`'s default `suppressErrors: true` keeps `emitAsync` resolving either way); the
   integration delete is already committed and the `204` stands (same best-effort rule as
@@ -336,15 +337,15 @@ A direct call would need Integrations to import Repositories, which already impo
   reaches it.
 - **Safety net:** the end-of-sync transaction drops, user-scoped, the rows of any
   `integration:<id>` key not among all the user's integrations (usable or not), covering a failed listener and a parallel sync writing
-  after the cleanup ([sync.md](sync.md#write-path)).
+  after the cleanup ([sync](../repositories/sync.md#write-path)).
 - Inside Integrations, the delete also evicts the cached installation token.
 - There is no database cascade between the two modules. User deletion goes through a separate
-  awaited `user.deleted` event ([model.md](model.md#user-deletion)); the user's integrations
+  awaited `user.deleted` event ([data model](../repositories.md#user-deletion)); the user's integrations
   cascade without emitting `integration.deleted`, and that listener covers their rows.
 
 ## Unauthenticated budget tracker
 
-The behaviour is [sync.md](sync.md#rate-limits)'s (process-wide, in memory, min `Remaining`
+The behaviour is [sync](../repositories/sync.md#rate-limits)'s (process-wide, in memory, min `Remaining`
 within a reset window, window replaced only on a later `Reset`, consulted before every
 unauthenticated call). Its home, interface, concurrency and thresholds:
 
@@ -364,30 +365,30 @@ unauthenticated call). Its home, interface, concurrency and thresholds:
   the min-within-window rule from GitHub's headers. With no data, or once the reset has passed,
   calls are allowed until the first response.
 - **Time:** "reset passed" reads the injected `Clock` (`core/clock.ts`,
-  [sync.md](sync.md#time-source)), never `Date.now()` directly.
+  [sync](../repositories/sync.md#time-source)), never `Date.now()` directly.
 - **Two thresholds** (code constants): the **sync** stops at remaining **≤ 10**; **Add** only at
   **≤ 0**. The 10 is then really a reserve for Add re-checks, which are already bounded per user
   (30 per 60 s) and by the 3-call candidate walk.
 
 ## Required tests
 
-Tiers, fakes and harnesses: [testing.md](testing.md). Tags: `(db)`, `(e2e)`, `(unit)`,
-`(static)`, `(race)` ([default tiers](testing.md#default-tier-by-category)).
+Tiers, fakes and harnesses: [Testing](../repositories.md#testing). Tags: `(db)`, `(e2e)`, `(unit)`,
+`(static)`, `(race)` ([default tiers](../repositories.md#default-tier-by-category)).
 
 **Exported service:**
 
 - No credential, minted token or GitHub body leaves the service: the
-  [canary sweep](security.md#required-tests).
+  [canary sweep](../repositories.md#security-tests).
 - A missing or foreign `integrationId` answers `integration_unusable` with reason `missing`,
   without a GitHub call (a call for an integration deleted mid-sync included).
 - `listUsableIntegrations` returns only usable integrations, oldest first, filtered by `user_id`
   in the query.
 - Non-usable integrations (`expired`, `invalid`, `undecryptable`, type disabled) are never
   called: they answer `integration_unusable` with reason `status` or `type_disabled`. (What the
-  sync stores for them is [sync.md](sync.md#required-tests)'s.)
+  sync stores for them is [sync](../repositories/sync.md#required-tests)'s.)
 - **Fake fidelity:** for each shared builder case, the real service's typed result at the `fetch`
   level equals what `FakeIntegrationsGithubService` returns for the same builder
-  ([testing.md](testing.md#fake-fidelity)).
+  ([Testing](../repositories.md#fake-fidelity)).
 
 **Requests:**
 
@@ -437,7 +438,7 @@ Tiers, fakes and harnesses: [testing.md](testing.md). Tags: `(db)`, `(e2e)`, `(u
 - The candidate walk: `401` / `403` / `404` move to the next candidate; a rate limit, timeout,
   `5xx` or redirect stops it; it never makes more than 3 GitHub calls; denials everywhere end
   the walk as denied; no candidate at all ends it before any GitHub call. (The HTTP answers are
-  [api.md](api.md#required-tests)'s.)
+  [routes](../../backend/routes/repositories.md#required-tests)'s.)
 - Add links the oldest usable integration that sees and grants the repo. When only the public
   source does, it links none while the repo is public, and links the integration whose re-check
   found it private.
@@ -462,4 +463,4 @@ Tiers, fakes and harnesses: [testing.md](testing.md). Tags: `(db)`, `(e2e)`, `(u
   at boot). Owned by #463, which adds the listener; #461 builds the emitter side only. **Done in
   #463:** `repositories/tests/integration-deleted.at-boot.db-spec.ts` boots the real `AppModule` on
   the DB tier.
-- What the cleanup deletes is [model.md](model.md#required-tests)'s.
+- What the cleanup deletes is [data model](../repositories.md#model-tests)'s.

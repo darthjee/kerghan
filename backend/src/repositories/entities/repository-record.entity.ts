@@ -9,7 +9,7 @@ export const BIGINT_TO_NUMBER = {
 /**
  * One row per (user, GitHub repository) seen in a sync: the persisted
  * snapshot of the repo, and whether the user added it (`added_at`). Owns table
- * `repositories` (see `docs/agents/specs/repos/model.md#repositories`).
+ * `repositories` (see `docs/agents/modules/repositories.md#repositories`).
  * `userId` and `integrationId` are logical FKs only: no relation, no join.
  */
 @Entity('repositories')

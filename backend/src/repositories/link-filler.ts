@@ -4,7 +4,7 @@ import { OK_SOURCE_STATUSES } from './entities/repository-source-status.entity.j
 import { integrationSourceKey } from './source-key.js';
 
 /**
- * The end-of-sync link fill (`docs/agents/specs/repos/sync.md#link-fill`):
+ * The end-of-sync link fill (`docs/agents/modules/repositories/sync.md#link-fill`):
  * an added private repo with an empty or dangling `integration_id` is linked
  * to the oldest usable integration holding a source row for it from a source
  * whose status is `ok` or `page_cap_reached`. It never changes an existing

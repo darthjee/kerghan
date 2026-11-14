@@ -14,7 +14,7 @@ export type RunReconciliation = { kind: 'ok'; handle: string | null } | { kind: 
 
 /**
  * The lazy handle reconciliation (see
- * `docs/agents/specs/repos/model.md#handle-changes`): compares the current
+ * `docs/agents/modules/auth/github-handle.md#handle-changes`): compares the current
  * handle (read through Auth's export) with `repositories_sync_states.handle`
  * and, when they differ, drops the old handle's source, page and status rows,
  * stores the new handle and prunes, in one transaction. It triggers no sync

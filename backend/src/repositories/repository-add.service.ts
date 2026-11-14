@@ -15,7 +15,7 @@ import type { FoundRepository, ListedRepository, RepoRef } from './types/reposit
 type FailedWalk = Exclude<AddWalkResult, { kind: 'ok' }>;
 
 /**
- * Runs Add (`docs/agents/specs/repos/api.md#add`) after DTO validation:
+ * Runs Add (`docs/agents/backend/routes/repositories.md#add`) after DTO validation:
  * rate limit → handle reconciliation → lookup among the caller's own rows →
  * already-added shortcut → GitHub re-check (candidate walk, built from the
  * stored row's `githubId`, never from the request) → conditional write. It
@@ -42,7 +42,7 @@ export class RepositoryAddService {
    * @param {number} userId - The session's user.
    * @param {RepoRef} ref - The validated repo ref.
    * @returns {Promise<ListedRepository>} The added row (or the already-added one, unchanged).
-   * @throws {HttpException} `429`, `401`, `404`, `409`, `502` or `503` as in `api.md#add`.
+   * @throws {HttpException} `429`, `401`, `404`, `409`, `502` or `503` as in `docs/agents/backend/routes/repositories.md#add`.
    */
   async add(userId: number, ref: RepoRef): Promise<ListedRepository> {
     this.#consume(userId);

@@ -21,7 +21,7 @@ const CROSS_SITE = { 'Sec-Fetch-Site': 'cross-site', Origin: 'https://evil.examp
 
 type Method = 'post' | 'patch';
 
-/** One row of the route access matrix (`security.md#required-tests`). */
+/** One row of the route access matrix (`docs/agents/modules/repositories.md#security-tests`). */
 interface MatrixRow {
   method: Method;
   path: string;

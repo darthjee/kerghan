@@ -19,8 +19,8 @@ const USER_TABLES = [
 /**
  * The Repositories module's cross-module cleanups, registered at boot (the
  * module is always-on): `integration.deleted`
- * (`docs/agents/specs/repos/integrations.md#deletion-hook`) and
- * `user.deleted` (`docs/agents/specs/repos/model.md#user-deletion`). Each
+ * (`docs/agents/modules/integrations/github-service.md#deletion-hook`) and
+ * `user.deleted` (`docs/agents/modules/repositories.md#user-deletion`). Each
  * runs one transaction where every statement is scoped `user_id = :userId`
  * and the user's sync-state row is locked first (the shared lock order),
  * catches its own error and logs safe fields only, so the emitter's

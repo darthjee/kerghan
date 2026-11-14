@@ -59,7 +59,7 @@ const STATUS_SQL = 'CASE'
 const COLUMNS = 'r.id, r.github_id, r.owner, r.name, r.private, r.added_at, r.integration_id, r.last_seen_at';
 
 /**
- * The listing's SQL (`docs/agents/specs/repos/api.md#listing`): every query
+ * The listing's SQL (`docs/agents/backend/routes/repositories.md#listing`): every query
  * is scoped `user_id = :userId`, the row status is derived in SQL so the
  * filter applies before pagination, the search is a bound, escaped `LIKE`,
  * and the sort is fixed (case-insensitive `owner`, `name`, then `github_id`).

@@ -105,10 +105,22 @@ routes (`login.json`, `register.json`, `recover.json`, `reset-password.json`, `r
 [`docs/agents/architecture/security.md`](../architecture/security.md#csrf) for the full decision
 table, the accepted residual risks and the rules future changes must keep.
 
+## Exports
+
+Besides `AuthService` and Core's `SESSION_LOOKUP` implementation, the Auth module exports
+`AccountHandleService`, so other modules read the GitHub handle without touching `auth_users`:
+`getGithubHandle(userId)` (the stored, normalised handle or `null`) and
+`lockExistingUser(userId, manager)` (a `SELECT … FOR SHARE` existence check inside the caller's
+transaction). Both, and the handle's normalisation, validation and edit routes, are defined in
+[GitHub handle](auth/github-handle.md).
+
 ## Entities (`auth_` table prefix)
 
 - `auth_users` (`entities/user.entity.ts`) — `id`, `username` (unique), `email` (unique),
-  `passwordDigest`, `isAdmin` (boolean, default `false`), `status` (`varchar(16)`, NOT NULL, no
+  `passwordDigest`, `githubHandle` (`github_handle`, nullable `varchar(39)`, the optional
+  [GitHub handle](auth/github-handle.md), the only user-editable field that is not environment-
+  managed for the default user; the admin routes never expose it), `isAdmin` (boolean, default
+  `false`), `status` (`varchar(16)`, NOT NULL, no
   default: one of `pending`, `approved`, `denied`, the `UserStatus` constants; always set
   explicitly by the service that creates the row, so no implicit default can silently grant
   access), `createdAt`, `updatedAt`. Only `approved` users pass the session gate; transitions,
@@ -423,6 +435,14 @@ client IPs. Off by default; aimed at the standalone distribution. Product decisi
 Full definition, including the security warnings (admin access, IP allowlist, production guard):
 [Default user and automatic login](auth/default-user.md).
 
+## GitHub handle
+
+Users have an optional GitHub handle (`auth_users.github_handle`), edited from the Account page
+with a handle-only `PATCH /auth/account.json` (no current password, outside the abuse guard) and
+read with `POST /auth/account/mine.json`. Its public repositories are a source of the
+[Repositories](repositories.md) listing. Product decision: #444. Full definition:
+[GitHub handle](auth/github-handle.md).
+
 ## User approval
 
 Every user has a `status` (`pending`, `approved` or `denied`), and only `approved` users pass
@@ -440,6 +460,18 @@ and the frontend: [User approval](auth/user-approval.md).
 `events/user-registered.event.ts`. No listener consumes it yet; it exists so a future module
 (e.g. a welcome-email or onboarding module) can react without `AuthService` knowing it exists,
 per the modular pattern's event-driven communication rule.
+
+## `user.deleted` event
+
+`UserDeletedEvent { userId }` (`events/user-deleted.event.ts`, name `USER_DELETED` =
+`user.deleted`) is the contract for deleting a user's data in other modules. The
+[Repositories module](repositories.md#user-deletion) listens and deletes the user's rows in its
+five tables.
+
+**Not built yet:** no user-deletion path exists today, so nothing emits the event. Whoever adds a
+deletion path must emit it with `EventEmitter2#emitAsync` **after the user row's delete commits**,
+and must retry it or run an orphan sweep, because a failed listener only logs and never blocks the
+deletion (the same pattern as [`integration.deleted`](integrations/github-service.md#deletion-hook)).
 
 ## `password-recovery.requested` event
 

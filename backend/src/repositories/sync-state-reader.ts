@@ -16,7 +16,7 @@ interface StoredStatus {
 }
 
 /**
- * Derives the sync-state object (`docs/agents/specs/repos/api.md#sync-state`)
+ * Derives the sync-state object (`docs/agents/backend/routes/repositories.md#sync-state`)
  * from the lease-aware row read and the stored source statuses: one entry per
  * current source, `pending` with no status row, and `pending` for a stored
  * `invalid_credentials` of an integration usable again. Reads only; never

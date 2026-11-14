@@ -12,7 +12,7 @@ interface AddWindow {
 }
 
 /**
- * The per-user Add rate limit (`api.md#add-rate-limit`): an in-memory,
+ * The per-user Add rate limit (`docs/agents/backend/routes/repositories.md#add-rate-limit`): an in-memory,
  * per-process fixed window of `addMaxPerWindow` Adds per `addWindowMs`.
  * It has no table: it resets on restart and each instance counts on its own.
  * Time comes from the injected `Clock`. Expired windows are swept at most

@@ -2,7 +2,7 @@ import { SyncLauncher, type SyncTask } from '../../sync-launcher.js';
 
 /**
  * A `SyncLauncher` that records tasks without running them
- * (`docs/agents/specs/repos/testing.md#detached-sync-and-time`). A spec
+ * (`docs/agents/modules/repositories.md#detached-sync-and-time`). A spec
  * asserts the triggering call's answer first, then runs the captured runs.
  */
 export class CapturingLauncher extends SyncLauncher {

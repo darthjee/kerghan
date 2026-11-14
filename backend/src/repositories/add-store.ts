@@ -12,7 +12,7 @@ export interface ResolvedRow {
 export type MarkResult = 'added' | 'already_added' | 'gone';
 
 /**
- * Add's row lookup and conditional write (`docs/agents/specs/repos/api.md#add`
+ * Add's row lookup and conditional write (`docs/agents/backend/routes/repositories.md#add`
  * and `#repo-ref`), over the caller's own rows only.
  */
 @Injectable()

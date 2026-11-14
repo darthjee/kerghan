@@ -19,7 +19,7 @@ export const UNAUTHENTICATED_THRESHOLDS: Readonly<Record<UnauthenticatedPurpose,
 
 /**
  * The process-wide unauthenticated GitHub budget (see
- * `docs/agents/specs/repos/integrations.md#unauthenticated-budget-tracker`).
+ * `docs/agents/modules/integrations/github-service.md#unauthenticated-budget-tracker`).
  * An internal singleton of the Integrations module, never exported:
  * `IntegrationsGithubService` consults it before every unauthenticated call.
  *

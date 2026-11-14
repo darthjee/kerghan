@@ -45,10 +45,9 @@ file changes.
 
 ## Active specs
 
-- **Repositories** (list a user's GitHub repositories and add them to Kerghan):
-  [specs/repos/README.md](specs/repos/README.md). Product decision: #444.
+None.
 
-When no feature is in progress, this list reads "none".
+When no feature is in progress, this list reads "None."
 
 ## Completed specs
 
@@ -63,3 +62,4 @@ Features whose specs were folded into the permanent docs, and where their defini
 | Client config (`kerghan configure` / `kerghan wizard`) | [standalone/client-config.md](standalone/client-config.md) (shared writer, `configure`, `wizard`, security, required tests); [standalone.md](standalone.md) (command list, `configure` and `wizard` summary); `README.md` "Run Kerghan standalone"; `standalone/config.example` | #402 |
 | Client update (`kerghan update` / `restart-on-update`) | [standalone/client-update.md](standalone/client-update.md) (command, versions, setting, security, stable contracts, required tests); [standalone.md](standalone.md) (command list, upgrading, `update` summary); `README.md` "Run Kerghan standalone" (upgrade, first upgrade); `standalone/install.sh` header (installer interface); `standalone/config.example` | #414 |
 | Auto-complete (bash completion for the `kerghan` client: `kerghan completion bash` / `install.sh` setup) | [standalone/client-completion.md](standalone/client-completion.md) (command, what is completed, installer setup, security, stable contracts, testing, required tests); [standalone.md](standalone.md) (command list, `completion` summary, testing); [contributing.md](contributing.md) (sync rule); [standalone/client-update.md](standalone/client-update.md) (installer interface); `README.md` "Run Kerghan standalone"; `standalone/install.sh` header (`KERGHAN_COMPLETION`) | #424 |
+| Repositories (a user's GitHub repositories, listed and added to Kerghan) | [modules/repositories.md](modules/repositories.md) (data model, row statuses, security, frontend, testing), [modules/repositories/sync.md](modules/repositories/sync.md), [modules/repositories/edge-cases.md](modules/repositories/edge-cases.md); [backend/routes/repositories.md](backend/routes/repositories.md); [modules/integrations.md](modules/integrations.md) and [modules/integrations/github-service.md](modules/integrations/github-service.md) (`IntegrationsGithubService`, `integration.deleted`, `401 → invalid`); [modules/integrations/github-app.md](modules/integrations/github-app.md) (installation-token cache); [modules/auth.md](modules/auth.md), [modules/auth/github-handle.md](modules/auth/github-handle.md), [modules/auth/default-user.md](modules/auth/default-user.md) and [backend/routes/auth.md](backend/routes/auth.md) (`github_handle`, `AccountHandleService`, `user.deleted`, narrowed `409 DEFAULT_USER_MANAGED`); [architecture/security.md](architecture/security.md) (GitHub credentials stay in the backend); [architecture/backend.md](architecture/backend.md) (`error.retryAfterSeconds`, DB-backed test tier, injected `Clock`); [architecture/infra.md](architecture/infra.md) (MySQL CI job); [environment-variables.md](environment-variables.md) (`KERGHAN_REPOSITORIES_*`); [product.md](product.md#repositories); [flow.md](flow.md) | #444 |
