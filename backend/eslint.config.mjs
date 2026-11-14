@@ -151,7 +151,7 @@ export default [
       'jsdoc/require-returns-description': 'warn',
     },
   },
-  // Repositories module boundary (`docs/agents/specs/repos/security.md#module-boundaries`):
+  // Repositories module boundary (`docs/agents/modules/repositories.md#module-boundaries`):
   // deny by default every Integrations / Auth path, except the allowlisted
   // entry points, and never call `fetch` directly. Tests are exempt, so their
   // support code may import the Integrations test fakes.
