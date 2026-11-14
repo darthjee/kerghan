@@ -123,3 +123,40 @@ attack.
   alongside the cookie without a security review.
 - **Allowlist changes are trust changes**: `KERGHAN_ALLOWED_ORIGINS`/`FRONTEND_BASE_URL` define
   both CORS and CSRF trust (see `docs/agents/environment-variables.md`).
+
+## GitHub credentials stay in the backend
+
+**Every GitHub call that uses a user's credential is made by the backend, and no endpoint ever
+returns credential material (secrets, tokens, GitHub App installation tokens) or anything
+computed from it, beyond the masked `secretHint` of the Integrations routes.** Data fetched
+*with* a credential (the private-repo listing) is not credential material.
+
+- For the repository listing, every GitHub call happens in the backend, authenticated or not; the
+  frontend never calls GitHub for it. (Issue data is still fetched by the browser,
+  unauthenticated, public repositories only.)
+- Inside the backend, credentials stay **inside the Integrations module**
+  ([GitHub service](../modules/integrations/github-service.md#exported-service)).
+- A minted GitHub App installation token is a credential too: it is cached **in process memory
+  only**, inside the Integrations module (in a `Secret`), never in the database, a log or a
+  response, and minted with `metadata: read` only
+  ([installation tokens](../modules/integrations/github-service.md#github-app-installation-tokens)). Any other persistence
+  needs its own product decision (`CLAUDE.md`, #295).
+- Repo responses carry no integration field beyond its `uuid` and label
+  ([routes](../backend/routes/repositories.md#access)).
+- **The `secret_iv` compare value stays inside the Integrations module.** The status
+  [compare-and-set](../modules/integrations/github-service.md#status-compare-and-set) uses the `secret_iv` of the credential
+  a call used; it never reaches the Repositories module, a response or a log.
+
+Guarantees of the exported `IntegrationsGithubService`
+([GitHub service](../modules/integrations/github-service.md#exported-service)):
+
+- **Nothing sensitive leaves the module:** no decrypted credential, minted installation token or
+  GitHub response body is returned, logged or exposed; callers get typed, normalised results
+  only, and logs carry safe fields (integration id, operation, HTTP status, result kind).
+- **Owner-scoped:** every call loads the integration with `WHERE id = ? AND user_id = ?`; a
+  missing or foreign one answers `integration_unusable` without a GitHub call.
+- **Fixed operations:** `GET`-only, with fixed endpoints and parameters; no generic
+  `request(path)`, so no caller chooses a path.
+
+The boundary is enforced by tooling in the Repositories module, the first consumer of
+`IntegrationsGithubService` ([module boundaries](../modules/repositories.md#module-boundaries)).

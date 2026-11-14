@@ -72,6 +72,9 @@ set). IPv6 zone ids (`fe80::1%eth0`) are malformed entries.
 `auth_users.username` and `auth_users.email` are both unique; the lookup by username uses the
 column's MySQL collation.
 
+Boot sync never reads or writes `github_handle`: the handle is not managed, so turning the feature
+off or on leaves it as it is.
+
 ### Password
 
 - **No rehash on every boot.** The digest is updated only when the configured password differs
@@ -106,7 +109,8 @@ blocked.
 
 - **Managed fields:** `username`, `email`, `newPassword` (the fields of `UserFieldChangesDto`;
   `hasManagedField` in `assert-any-field-present.ts`), plus the admin flag if an endpoint ever
-  edits it. This list is the single source of truth for editable fields. The approval `status`
+  edits it. This list is the single source of truth for the managed fields; the only editable
+  field outside it is `github_handle` ([GitHub handle](github-handle.md)). The approval `status`
   is managed too: boot sync forces it to `approved`, and `POST /admin/users/:id/deny.json`
   answers `409 DEFAULT_USER_MANAGED` for the default user (after the `404` for an unknown id,
   before `CANNOT_DENY_SELF`); see [User approval → Default user](user-approval.md#default-user).
@@ -125,9 +129,10 @@ A blocked write answers `409 DEFAULT_USER_MANAGED` with the message
 variables or their values. The body is the standard error shape, with no `error.details`; see
 [Auth routes](../../backend/routes/auth.md#default-user-409-default_user_managed).
 
-**Why no `error.details`:** every editable field is managed today, so listing them adds nothing.
-A frontend that wants to disable the inputs needs to know before submitting, which is a
-read-side indicator (out of scope).
+**Why no `error.details`:** the managed fields are a fixed, documented list, so a client can tell
+from its own request which field caused the refusal, and the Account page sends the
+[GitHub handle](github-handle.md) from its own section, never mixed with managed fields. A
+read-side indicator that disables the inputs before submitting is not built.
 
 ### Why `409`
 
@@ -159,8 +164,10 @@ comparing usernames.
 
 - A request whose target is the default user is rejected when it **contains any managed field**.
   A field added later that is not managed stays editable.
-- Today all editable fields are managed, so in practice every edit reaching the default user is
-  rejected.
+- `github_handle` is **not managed**: a handle-only edit by the default user passes the block and
+  is applied like any user's (`200`). A **mixed** edit (a managed field and `githubHandle`) is
+  refused whole with `409`: the handle is not stored either. See
+  [GitHub handle](github-handle.md#default-user).
 - A request with no field present is still rejected earlier by `assertAnyFieldPresent` (`400`).
 - **Presence, not value:** a managed field is blocked even when its value equals the stored one.
   **Why:** the response never confirms a stored value (a `409` vs `200` difference would, and for
@@ -174,8 +181,10 @@ The block runs early and never counts as a failed attempt.
 `PATCH /auth/account.json` (`AccountService.updateAccount`):
 
 1. `assertAnyFieldPresent` → `400`.
-2. **Default-user block** → `409 DEFAULT_USER_MANAGED`. It compares the session's `userId` with
-   the default user's id, so no user load is needed.
+2. **Default-user block** → `409 DEFAULT_USER_MANAGED`, only when the body contains a managed
+   field. It compares the session's `userId` with the default user's id, so no user load is
+   needed. A handle-only edit skips steps 2, 3 and 5 and the abuse guard entirely
+   ([GitHub handle](github-handle.md#setting-it-patch-authaccountjson)).
 3. Lockout check → `423`.
 4. Load the user → `401` if missing.
 5. `currentPassword` check → `400`, counts as a failure.
