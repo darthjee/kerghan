@@ -159,8 +159,9 @@ and no `env_file`. `kerghan_db_tests` reaches it through the `mysql_test` link a
 ### MySQL version
 
 Dev (`kerghan_mysql`), the local test database (`kerghan_mysql_test`) and CI (`backend_db_tests`)
-all use `mysql:8.4.11`, which matches production. The standalone image still bundles
-`mysql:9.3.0`; it moves in #469.
+all use `mysql:8.4.11`, which matches production. The standalone image also uses `mysql:8.4.11`
+(`mysql:9.3.0` is bundled as `mysql-legacy.tar` only for the one-time migration; see the
+migration section in [standalone.md](../standalone.md)).
 
 **One-time dev reset.** #462 moved `kerghan_mysql` from `9.3.0` to `8.4.11`. MySQL cannot
 downgrade a data directory, so an existing `docker_volumes/mysql_data` will not start on the new
@@ -285,8 +286,9 @@ Both targets come from `dockerfiles/kerghan_standalone/Dockerfile`, built with
 
 1. **Save the inner images.** For each architecture (amd64, then arm64) it clears
    `standalone/images/<arch>/`, then pulls with `--platform linux/<arch>` and `docker save`s
-   `darthjee/kerghan:<tag>`, `mysql:9.3.0` and the Tent image (`darthjee/tent:1.0.3` for amd64,
-   `darthjee/tent:1.0.3-arm64` for arm64) as `kerghan.tar`, `mysql.tar` and `tent.tar`. It fails if
+   `darthjee/kerghan:<tag>`, `mysql:8.4.11`, the Tent image (`darthjee/tent:1.0.3` for amd64,
+   `darthjee/tent:1.0.3-arm64` for arm64) and, for the #469 migration only, `mysql:9.3.0`, as
+   `kerghan.tar`, `mysql.tar`, `tent.tar` and `mysql-legacy.tar`. It fails if
    a pulled image's architecture does not match. Each architecture is saved before the next one is
    pulled, because a new pull of the same tag replaces the local copy. The offline stage copies
    `standalone/images/${TARGETARCH:-amd64}/`, so each platform gets its own tarballs. The folder is
