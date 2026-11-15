@@ -21,10 +21,12 @@ import { buildSecretKeys } from './core/secret-keys.js';
  * enabled only when `buildCorsOptions` resolves an allowlist (from
  * `KERGHAN_ALLOWED_ORIGINS`, falling back to `FRONTEND_BASE_URL`'s origin);
  * an invalid allowlist throws, failing boot via `bootstrap().catch`.
+ * Shutdown hooks are enabled so SIGTERM drains the background workers.
  * @returns {Promise<void>} Resolves once the HTTP server is listening.
  */
 async function bootstrap(): Promise<void> {
   const app = await NestFactory.create(AppModule);
+  app.enableShutdownHooks();
   const configService = app.get(ConfigService);
   const logger = app.get(LoggerService);
 

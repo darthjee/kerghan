@@ -35,7 +35,14 @@ const baseConfig = {
         module: { type: 'commonjs' },
       },
     ],
+    // `deku-swarm` is ESM-only ("type": "module"); Jest runs CommonJS, so
+    // its JavaScript is compiled the same way (see `transformIgnorePatterns`).
+    '^.+/node_modules/deku-swarm/.+\\.js$': [
+      '@swc/jest',
+      { jsc: { target: 'es2022' }, module: { type: 'commonjs' } },
+    ],
   },
+  transformIgnorePatterns: ['/node_modules/(?!deku-swarm/)'],
   moduleNameMapper: {
     '^(\\.{1,2}/.*)\\.js$': '$1',
   },

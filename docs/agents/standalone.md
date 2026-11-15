@@ -40,6 +40,9 @@ published on `127.0.0.1` only (see [`auto-login` and `bind`](#config-format)).
 - **Rejected:** a fat single image (MySQL, Node and Tent under a process supervisor), an external
   database (not standalone), and Helm or Kubernetes manifests (overkill for self-hosting).
 
+Background workers (the in-process `deku-swarm` pool, see [modules/workers.md](modules/workers.md))
+run inside the standalone backend with no extra service or variables; the defaults apply.
+
 ### Out of scope
 
 Navi (the cache warmer), phpMyAdmin, email (`KERGHAN_EMAILS_ENABLED` stays off), a backup
