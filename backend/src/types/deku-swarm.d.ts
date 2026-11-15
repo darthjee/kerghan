@@ -20,6 +20,7 @@ declare module 'deku-swarm' {
     id: string;
     constructor(params?: JobParams);
     perform(logger?: JobLogger): Promise<unknown>;
+    protected _fail(error: unknown): never;
   }
 
   /** Options accepted by the JobFactory constructor and static build. */
