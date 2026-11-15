@@ -19,3 +19,9 @@ before making changes involving that tool.
   port. Kerghan uses it as the base of `darthjee/kerghan-standalone` (see
   [Standalone Distribution](standalone.md)). Consulted by the `standalone` agent, which owns the
   Vault-based standalone distribution.
+- [How to Use deku-swarm](external/HOW_TO_USE_DEKU_SWARM.md) — a zero-dependency, queue-based
+  worker pool for Node.js (extracted from Navi's job engine): you subclass `Job` with a
+  `perform()`, and it handles queuing, worker allocation, cooldown-based retry, job chaining, and
+  dead-lettering. Kerghan uses it to add background-worker capability to the backend
+  (`backend/`). Consulted by the `backend` agent when defining jobs, registering job factories,
+  or starting/stopping the engine.
