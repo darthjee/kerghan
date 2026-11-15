@@ -156,3 +156,7 @@ docs/agents/plans/<issue_id>_<topic>/<related_files>.md
 
 See `.claude/agents/` for the full roster (`architect`, `backend`, `infra`, `frontend`, `proxy`,
 `cache`, `standalone`, `security`, `data-access`, `product-owner`).
+
+## Commit Attribution
+
+Commit co-author trailers follow arcanum's resolved `git.omit_model_coauthor` and `git.remove_coauthors` config (check them with `/arcanum-check-config`); this overrides Claude Code's own attribution reminder for every commit, including ones written by hand.
