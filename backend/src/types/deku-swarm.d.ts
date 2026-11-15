@@ -7,11 +7,19 @@ declare module 'deku-swarm' {
     [key: string]: unknown;
   }
 
+  /** Logger handed to `Job#perform` by its worker. */
+  export interface JobLogger {
+    debug(message: string): void;
+    info(message: string): void;
+    warn(message: string): void;
+    error(message: string): void;
+  }
+
   /** Abstract base class for units of work. */
   export class Job {
     id: string;
     constructor(params?: JobParams);
-    perform(): Promise<unknown>;
+    perform(logger?: JobLogger): Promise<unknown>;
   }
 
   /** Options accepted by the JobFactory constructor and static build. */
@@ -58,7 +66,7 @@ declare module 'deku-swarm' {
     klass?: new (params: Record<string, unknown>) => Worker;
     jobRegistry?: unknown;
     workersRegistry?: unknown;
-    loggerFactory?: (...args: unknown[]) => unknown;
+    loggerFactory?: (ids: { workerId: string; jobId: string }) => JobLogger;
   }
 
   /** Builds Worker instances. */
