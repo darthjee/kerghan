@@ -22,7 +22,8 @@ plans point at.
    updates the spec in the same PR.
 3. The feature's **last** sub-issue folds the lasting content into the permanent docs
    (`product.md`, `modules/`, `backend/routes/`, `environment-variables.md`, …).
-4. That last sub-issue then deletes `docs/agents/specs/<feature>/` and moves its entry from
+4. That last sub-issue then deletes `docs/agents/specs/<feature>/` (and, for a feature that uses
+   an index file beside its folder, `docs/agents/specs/<feature>.md` too) and moves its entry from
    [Active specs](#active-specs) to [Completed specs](#completed-specs), pointing at the permanent
    docs that now hold it.
 
@@ -35,7 +36,10 @@ file changes.
 ## Conventions
 
 - **One `README.md` per feature**: overview, purpose, scope, the product decision behind it, and
-  an index linking every other file in the folder.
+  an index linking every other file in the folder. **Exception:** a feature may use an index file
+  beside its folder instead (`docs/agents/specs/<feature>.md` plus
+  `docs/agents/specs/<feature>/*.md`), used by Issues and Projects. For that layout, the fold step
+  deletes **both** the index file and the folder.
 - **Files split by concern** (e.g. `model.md`, `api.md`, `security.md`, `ui.md`), so each
   implementation issue reads only what it needs.
 - **Per-variant files in a subfolder** (e.g. `types/<type>.md`), each added by its own sub-issue.
@@ -45,7 +49,9 @@ file changes.
 
 ## Active specs
 
-None.
+- **Issues and Projects** ([specs/issues.md](specs/issues.md), epic #483): projects (optionally
+  connected to one repository) and Kerghan issues that may be linked one to one to a GitHub
+  issue, kept in sync both ways by background workers.
 
 When no feature is in progress, this list reads "None."
 
