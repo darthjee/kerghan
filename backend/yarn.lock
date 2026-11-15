@@ -2583,6 +2583,11 @@ define-properties@^1.2.1:
     has-property-descriptors "^1.0.0"
     object-keys "^1.1.1"
 
+deku-swarm@1.12.0:
+  version "1.12.0"
+  resolved "https://registry.yarnpkg.com/deku-swarm/-/deku-swarm-1.12.0.tgz#2147883c78f87193739de6821af81acefe64fff1"
+  integrity sha512-0yxRuy5n/eyx66TkeBmw4LTfixvrcwtjH8qBYkG5E3xeuQiszvk4WMj1WHRRlEl0gR9D9FsGPEZ6QRumIw7LEg==
+
 delayed-stream@~1.0.0:
   version "1.0.0"
   resolved "https://registry.yarnpkg.com/delayed-stream/-/delayed-stream-1.0.0.tgz#df3ae199acadfb7d440aaae0b29e2272b24ec619"
