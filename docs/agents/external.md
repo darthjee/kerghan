@@ -19,3 +19,7 @@ before making changes involving that tool.
   port. Kerghan uses it as the base of `darthjee/kerghan-standalone` (see
   [Standalone Distribution](standalone.md)). Consulted by the `standalone` agent, which owns the
   Vault-based standalone distribution.
+- [How to use Deku Swarm](external/vault.md) — the Docker-in-Docker image that runs a `docker compose` stack
+  inside a single container, shipping an app and its dependencies as one image exposing one
+  port. Kerghan uses it as the base of `darthjee/kerghan-standalone` (see
+  [Standalone Distribution](external/HOW_TO_USE_DEKU_SWARM.md)). (needs to be updated with the actual infomation of the package)
