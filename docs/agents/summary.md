@@ -14,7 +14,7 @@ full file before loading it. For a bare link-only table of contents instead, see
   frontend, backend, modular pattern, infra) to keep agent contexts small. Read the linked area
   page relevant to your task instead of loading everything.
 - **[Modules](modules/)** — Per-backend-module documentation (routes, entities, events), one
-  file per module (`modules/auth.md`, `modules/mail.md` and `modules/integrations.md` today).
+  file per module (`modules/auth.md`, `modules/mail.md`, `modules/integrations.md` and `modules/workers.md` today).
   Read the module's page before extending or consuming it.
   - **[Auth](modules/auth.md)** — Kerghan's always-on login module: `/auth/*.json` routes, the
     `auth_` tables, the JWT/refresh-token flow, and the `user.registered` and
@@ -24,6 +24,10 @@ full file before loading it. For a bare link-only table of contents instead, see
     surface; consumed via the exported `MailService`. `KERGHAN_EMAIL_*` config read once at boot;
     disabled by default (log-and-skip). Templated sends via `sendEmailTemplate`, backed by
     filesystem templates under `mail/templates/` read once at boot. First consumer: #39.
+  - **[Workers](modules/workers.md)** — Always-on in-process background worker pool
+    (`deku-swarm`). No HTTP surface; consumed via the exported `WorkersService` (`register`,
+    `enqueue`). In-memory queues, bounded shutdown drain, four optional `KERGHAN_WORKERS_*`
+    variables. No job exists yet.
   - **[Integrations](modules/integrations.md)** — Always-on module for labelled GitHub
     credentials owned by one user each (`pat`, `oauth_app`, `github_app`, one page per type
     under `modules/integrations/`): data model, owner-only access, AES-256-GCM encryption with

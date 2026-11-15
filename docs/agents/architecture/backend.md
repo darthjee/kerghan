@@ -66,6 +66,12 @@ backend/src/
     ├── template-registry.ts
     ├── templates/            # Filesystem email templates — subject.txt / body.txt / body.html per <name>/
     └── tests/
+└── workers/                   # Workers module — always-on in-process background worker pool (deku-swarm), no HTTP surface
+    ├── workers.module.ts
+    ├── workers.service.ts
+    ├── workers-config.ts
+    ├── workers-logger.ts
+    └── tests/
 ```
 
 ## Owned tables
