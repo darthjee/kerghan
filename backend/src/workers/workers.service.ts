@@ -8,8 +8,8 @@ import {
   WorkerFactory,
   WorkersRegistry,
 } from 'deku-swarm';
-import { buildWorkersLoggerFactory } from './workers-logger.js';
 import { WorkersConfig } from './workers-config.js';
+import { buildWorkersLoggerFactory } from './workers-logger.js';
 import { LoggerService } from '../core/logger.service.js';
 
 /** A job class that can be registered under a name. */
