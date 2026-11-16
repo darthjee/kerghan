@@ -13,6 +13,8 @@ Part of the [Issues and Projects specs](../issues.md).
 - Creating a project and attaching a repository never sync or enqueue a job ([projects.md](projects.md#creation-paths)).
 - A queued or in-flight job for a deleted project or user is a no-op (no error, no retry), and deleting a project discards its markers ([projects.md](projects.md#deletion)).
 - GitHub work uses the project owner's integrations, whoever triggers it ([projects.md](projects.md#room-for-sharing-members-and-roles)).
+- Marker rules ([model.md](model.md#issues_pending_writes-the-pending-marker)): coalesced with a revision and no payload, compare-and-clear, re-enqueued at boot oldest first, attempts kept in memory; exhausted retries set the link `status` to `sync_failed` and keep the marker.
+- Only title, body and state are stored, so only they can sync; the base snapshot exists for #488's conflict rules (it may be dropped for last-write-wins).
 
 ## Open questions
 

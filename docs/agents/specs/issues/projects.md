@@ -3,7 +3,7 @@
 The project as the home of issues.
 Part of the [Issues and Projects specs](../issues.md).
 
-Routes, payloads and error codes stay with #489, columns and types with #486, sync mechanics with #488 and UI with #491.
+Routes, payloads and error codes stay with #489, columns and types in [model.md](model.md#issues_projects), sync mechanics with #488 and UI with #491.
 
 ## Naming
 
@@ -29,7 +29,7 @@ Routes, payloads and error codes stay with #489, columns and types with #486, sy
 
 - There is no status or archive state in v1.
 - The read model adds a repository summary (owner, name, private and the row status Added, Unavailable or Unknown), derived on read and never stored on the project. There are no issue counts or sync info in v1.
-- Column types and lengths stay with #486.
+- Columns, types and lengths (name 100, description 2000) are in [model.md](model.md#issues_projects).
 
 ## Creation paths
 
@@ -45,13 +45,13 @@ Routes, payloads and error codes stay with #489, columns and types with #486, sy
 - A dangling repository reference reads like an Unavailable repository with no summary fields.
 - The future "remove an added repository" feature (not built) must refuse with `409` while a non-deleted project of the user uses the repository. #492 is told to copy that rule into `modules/repositories.md`.
 - If the integration is deleted, the project is unaffected directly.
-- If the user is deleted, their projects (including soft-deleted ones), issues, links and markers are removed for real (mechanism: #486, #493).
+- If the user is deleted, their projects (including soft-deleted ones), issues, links and markers are removed for real (the `user.deleted` contract is in [model.md](model.md#cleanup); remaining cases stay with #493).
 
 ## Deletion
 
 - Soft delete: the project gets a deletion timestamp.
 - A deleted project answers `404` for every read or write and is excluded from listings, like another user's project. Its issues are kept in the database but are unreachable through the API.
-- Uniqueness of name and repository covers only non-deleted projects, so both can be reused after deletion (how it is enforced in MySQL is for #486).
+- Uniqueness of name and repository covers only non-deleted projects, so both can be reused after deletion (enforced by the `deleted_token` unique indexes, see [model.md](model.md#issues_projects)).
 - The project's GitHub links are deleted on deletion, which frees their GitHub issues for another project.
 - Pending markers are discarded. Queued or in-flight jobs for a deleted project or user are a no-op (no error, no retry).
 - The confirmation warns that unsent changes will not be written to GitHub, and the response says how many issues had them.

@@ -10,8 +10,9 @@ The project cases are owned by [projects.md](projects.md#edge-cases); this file 
 - Repository renamed or transferred on GitHub: [projects.md](projects.md#edge-cases).
 - Repository Unavailable and returning, or Unavailable at creation: [projects.md](projects.md#edge-cases).
 - Job or request for a deleted project or user: [projects.md](projects.md#edge-cases).
+- Data-level cases (marker, compare-and-clear, boot, cleanup, constraints) are owned by the [model.md edge-case table](model.md#edge-cases).
 
-"A repository removed from the user's repositories" and "An integration or a user deleted" are partly answered in [projects.md](projects.md#linked-repository-unavailable-or-removed) and stay open for #493.
+"A repository removed from the user's repositories" and "An integration or a user deleted" are partly answered in [projects.md](projects.md#linked-repository-unavailable-or-removed) and stay open for #493, except for the data-level rows now in [model.md](model.md#edge-cases) (user deletion, restart with markers, concurrent edits as markers).
 
 ## Open questions
 

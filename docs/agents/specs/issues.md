@@ -10,7 +10,7 @@ model, API, security or UI.
 
 > **Supersedes `product.md`.** Until these specs are folded into the permanent docs, they
 > supersede [product.md](../product.md)'s statement that issue data is not persisted by default:
-> this feature persists Kerghan issues, projects and the link to GitHub issues.
+> this feature persists Kerghan issues, projects and the link to GitHub issues. The statements to rewrite at fold time are listed in [issues/model.md](issues/model.md#persistence-statement-and-fold-list).
 
 ## Overview and purpose
 
@@ -45,6 +45,7 @@ background workers (in-process, from #479). A project may be about code or anyth
 - A Kerghan issue links one to one to a GitHub issue, per user (unique on user and GitHub issue);
   the link is optional, created from a GitHub issue or by attaching one to an existing Kerghan
   issue; the GitHub issue must belong to the project's linked repository.
+- One `issues` module and four tables (`issues_projects`, `issues`, `issues_github_links`, `issues_pending_writes`); the link is its own table; project soft delete uses a `deleted_token`; a base snapshot supports conflict rules; outbound writes use a coalesced marker ([issues/model.md](issues/model.md)).
 - Sync is two-way; fields, conflict rules and states are decided in the enhancement issues.
 - Workers: on-demand triggers only; outbound writes use a durable pending marker in the database
   re-enqueued at boot; rate limits reuse `retryAfterSeconds` with retry and cooldown, exhausted

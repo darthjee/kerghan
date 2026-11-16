@@ -9,6 +9,7 @@ Part of the [Issues and Projects specs](../issues.md).
 - The GitHub issue must belong to the project's linked repository; a project with no repository cannot link.
 - A project's links are deleted when the project is deleted, which frees their GitHub issues for another project ([projects.md](projects.md#deletion)).
 - A project's repository cannot be changed or detached in v1, only attached to a project that has none, so a project that gets a repository later has no links yet ([projects.md](projects.md#changing-a-project-later)). Changing or detaching while no links exist depends on unlinking (#487).
+- Stored in `issues_github_links`: unique on (`user_id`, `github_issue_id`) and on `issue_id`; keyed by GitHub's global issue id plus its number; issues only (pull requests are #487's rule); a base snapshot of title, body and state ([model.md](model.md#issues_github_links)).
 
 ## Open questions
 
@@ -17,6 +18,8 @@ Part of the [Issues and Projects specs](../issues.md).
 - [ ] Which link states exist? (#487)
 
 ## Required tests
+
+The unique indexes and link cleanup are tested in [model.md](model.md#required-tests).
 
 - Linking a GitHub issue from another repository is refused.
 - A project with no repository cannot link.
