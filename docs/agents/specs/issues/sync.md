@@ -14,15 +14,19 @@ Part of the [Issues and Projects specs](../issues.md).
 - A queued or in-flight job for a deleted project or user is a no-op (no error, no retry), and deleting a project discards its markers ([projects.md](projects.md#deletion)).
 - GitHub work uses the project owner's integrations, whoever triggers it ([projects.md](projects.md#room-for-sharing-members-and-roles)).
 - Marker rules ([model.md](model.md#issues_pending_writes-the-pending-marker)): coalesced with a revision and no payload, compare-and-clear, re-enqueued at boot oldest first, attempts kept in memory; exhausted retries set the link `status` to `sync_failed` and keep the marker.
+- Outcomes of the edge cases are fixed in [edge-cases.md](edge-cases.md): conflicts (E6 to E11), duplicate jobs, crashes and shutdown (E13, E15, E16), rate limits (E17), exhausted retries and their recovery (E18), the no-credential and revoked-credential outcomes (E19 to E21) and non-approved users (E24); #488 owns the mechanics.
+- A rate limit pauses calls for the credential until the reset and **does not count toward the retry limit**: it never sets `sync_failed` or loses a write (E17).
+- A revoked, missing or read-only credential is not transient: the job stops with no retry loop, the marker is kept and the link shows sync failed with a credential reason (E19 to E21). Fixing the integration does not push by itself.
+- Jobs make no GitHub call for a user who is not `approved`; markers stay and resume on approval (E24).
 - Only title, body and state are stored, so only they can sync; the base snapshot exists for #488's conflict rules (it may be dropped for last-write-wins).
 
 ## Open questions
 
 - [ ] Which fields are synced in each direction? (#488)
-- [ ] Conflict rules when both sides change. (#488)
+- [ ] Mechanics of the conflict rules (the outcome, newest timestamp wins per field, is fixed in [edge-cases.md](edge-cases.md), E6 to E11). (#488)
 - [ ] The full set of link states. (#488)
 - [ ] Staleness and when a refresh is triggered. (#488)
-- [ ] Behavior when no write-capable credential is available. (#488)
+- [ ] Retry limits and cooldown values, and which integration is used when several can see the repository (the no-credential outcome is fixed in E19 and E20). (#488)
 
 ## Required tests
 
@@ -31,3 +35,6 @@ Part of the [Issues and Projects specs](../issues.md).
 - Job params and logs carry no secrets.
 - A job for a deleted project or user is a no-op.
 - Sync is refused while the repository is Unavailable and allowed while it is Unknown.
+- Conflicts, duplicate jobs and crashes resolve as E6 to E11, E13, E15 and E16 of [edge-cases.md](edge-cases.md).
+- A rate limit pauses calls and never sets `sync_failed` (E17); exhausted retries set it and each recovery path re-enqueues (E18).
+- A revoked, missing or read-only credential stops the job and keeps the marker (E19 to E21); a non-approved user's job makes no call (E24).

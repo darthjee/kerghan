@@ -73,9 +73,9 @@ Part of the [Issues and Projects specs](../issues.md).
 | `link_id` | `int` | Logical FK to `issues_github_links.id`; unique, so one marker per link. |
 | `revision` | `int` | Starts at 1; bumped by every edit of a synced field. |
 | `marked_at` | `datetime` | Set when first created; the boot re-enqueue goes oldest first. |
-| `updated_at` | `datetime` | |
+| `updated_at` | `datetime` | Time of the last local edit of a synced field; used by the conflict rule E7 of [edge-cases.md](edge-cases.md). |
 
-- **Only linked issues get markers** (the epic has no "create a GitHub issue from a Kerghan issue" path). An edit of an unlinked issue creates none.
+- **Only linked issues get markers** (the epic has no "create a GitHub issue from a Kerghan issue" path). An edit of an unlinked issue creates none, and an edit that changes no value creates no marker and bumps no revision (E12).
 - **Coalesced, no payload.** An edit does `INSERT … ON DUPLICATE KEY UPDATE revision = revision + 1`, in the same transaction as the issue update. The job diffs the current issue against the base snapshot to learn what to push.
 - **Compare-and-clear.** A job reads the revision, pushes, then in one transaction updates the base snapshot (with the values pushed) and deletes the marker `WHERE link_id = ? AND revision = ?`. If no row is deleted, an edit landed during the push and the job re-enqueues itself.
 - **Attempts are in memory** (retry and cooldown, from #479); after a restart the marker is re-enqueued fresh. Exhausted retries set the link `status` to `sync_failed` and keep the marker.
@@ -141,7 +141,7 @@ Statements to rewrite at fold time:
 
 ## Edge cases
 
-Each row is also a required test.
+Each row is also a required test. The cross-file matrix is [edge-cases.md](edge-cases.md); these rows are indexed there as E41 to E56.
 
 | # | Case | Expected behavior |
 |---|---|---|
