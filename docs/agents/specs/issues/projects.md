@@ -105,6 +105,8 @@ None.
 
 ## Required tests
 
+Default tier: e2e with fakes; the cleanup queries and concurrency are DB-backed ([testing.md](testing.md#default-tier-by-category)).
+
 - Another user's project and a deleted project answer `404` on every read and write, and a deleted project is absent from listings.
 - A project without a repository can be created; several such projects are allowed.
 - A project can link one added repository, in any derived status (Added, Unavailable, Unknown).
@@ -118,4 +120,4 @@ None.
 - Attaching a repository to a project without one works and never syncs; attaching a repository that already has a project is rejected; changing or detaching a repository is refused with `409`.
 - Project and issue access goes through the single access check.
 - GitHub work uses the owner's credentials, whoever triggers it.
-- The simultaneous cases of the edge-case table resolve as stated.
+- The simultaneous cases of the edge-case table resolve as stated `(db)`.

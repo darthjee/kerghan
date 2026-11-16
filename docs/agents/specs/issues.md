@@ -64,7 +64,7 @@ background workers (in-process, from #479). A project may be about code or anyth
 | [issues/security.md](issues/security.md) | Security | [open](issues/security.md#open-questions) |
 | [issues/ui.md](issues/ui.md) | UI | [open](issues/ui.md#open-questions) |
 | [issues/edge-cases.md](issues/edge-cases.md) | Edge-cases matrix | [open](issues/edge-cases.md#open-questions) |
-| [issues/testing.md](issues/testing.md) | Test strategy | [open](issues/testing.md#open-questions) |
+| [issues/testing.md](issues/testing.md) | Test strategy | [decided](issues/testing.md#open-questions) (names owned by #487/#488 remain open) |
 
 ## Lifecycle
 

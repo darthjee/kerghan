@@ -8,7 +8,7 @@ Part of the [Issues and Projects specs](../issues.md).
 - The matrix is an **index, not a second source of truth** (same shape as the [Repositories matrix](../../modules/repositories/edge-cases.md)): one line of outcome per row, linking to the rule in its owning file. A change of outcome is made in the owning file first, then reflected here.
 - Columns: `#` | Case | Expected behavior (data, GitHub calls, what the user sees) | Rule (owning file) | Check (the required test) | Status.
 - Status: `Decided` (the rule is already written in `projects.md` or `model.md`) or `Contract` (the outcome is fixed here; the owner issue refines the mechanics and updates the row in its own PR if the outcome changes).
-- Row ids are stable (`E1…E56`), so tests, [testing.md](testing.md) (#494) and other files can cite them. Ids are not renumbered when a group is reordered.
+- Row ids are stable (`E1…E56`), so tests, [testing.md](testing.md) and other files can cite them. Ids are not renumbered when a group is reordered.
 - Groups, in order: projects; GitHub issue and link; edits and conflicts; jobs, restart and rate limits; credentials and integrations; repository; users and cleanup.
 - Each row is one required test; rows already tested in `projects.md` or `model.md` point there instead of repeating.
 
@@ -123,7 +123,14 @@ The data rows of [model.md](model.md#edge-cases) keep their own tests; they are 
 
 ## Required tests
 
-One test per row, citing its id. Rows touching rows in the database (uniqueness, concurrency, transactions) run in the DB-backed tier; sync rows run against a fake GitHub client (fixtures owned by #494).
+One test per row, citing its id. Rows touching rows in the database (uniqueness, concurrency, transactions) run in the DB-backed tier; sync rows run against the fake GitHub client of [testing.md](testing.md#fixtures).
+
+**Tier of each row** (default tiers and tags in [testing.md](testing.md#tiers)):
+
+- DB-backed: E4, E12, E14, E16, E31, E34 `(db)`, E35 `(db)`, E42 `(db)`, E43, E45, E46 `(db)`, E47, E48 `(db)`, E49 `(db)`, E50 to E56. E14 and E16 are the restart spec of [testing.md](testing.md#worker-tests).
+- Scripted interleaving `(race)`: E10, E15, E32, E41, E44; E13 as a duplicate-jobs spec.
+- Unit: E1 to E3, E5 to E9, E11, E17 to E24, E27, E28; E17 and E18 exhaustion marking also run once on the real engine `(engine)`.
+- E2E with fakes: E25 (when built), E26, E29, E30, E33, E36 to E40 (status mapping, access and gating); E18 recovery paths (retry sync route) once #489 fixes it.
 
 - E1 to E3, E5 to E13, E15 to E22, E24, E27 and E28: new tests defined by the Check column above.
 - E4, E14, E23, E25, E26, E29 to E33: tested where the owning file lists them ([model.md](model.md#required-tests), [projects.md](projects.md#required-tests)); E25 waits for the removal feature.

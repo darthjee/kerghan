@@ -18,4 +18,11 @@ Part of the [Issues and Projects specs](../issues.md).
 
 ## Required tests
 
-None yet beyond the existence of the project list, the issue list and the link state views.
+Frontend tier ([testing.md](testing.md#frontend-tests)):
+
+- The project list, the issue list and the link and sync state views exist: "GitHub issue gone" (E1, E2), "rate limited until X" (E17), sync failed with a distinct credential reason (E19 to E21).
+- The retry sync action (E18) and the unlink action are offered where the states call for them.
+- The deletion confirmation shows the count of issues with unsent changes.
+- A project description renders as text, never as markup `(static)`.
+
+Screens and wording are #491's.

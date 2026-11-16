@@ -30,11 +30,13 @@ Part of the [Issues and Projects specs](../issues.md).
 
 ## Required tests
 
-- A restart does not lose a pending write.
-- A job that exhausts its retries marks the link failed.
-- Job params and logs carry no secrets.
+Tiers, fixtures and tags: [testing.md](testing.md).
+
+- A restart does not lose a pending write `(db)`.
+- A job that exhausts its retries marks the link failed `(engine)`.
+- Job params and logs carry no secrets (the ids-only allowlist and the canary sweep of [testing.md](testing.md#security-verification)).
 - A job for a deleted project or user is a no-op.
 - Sync is refused while the repository is Unavailable and allowed while it is Unknown.
-- Conflicts, duplicate jobs and crashes resolve as E6 to E11, E13, E15 and E16 of [edge-cases.md](edge-cases.md).
+- Conflicts, duplicate jobs and crashes resolve as E6 to E11, E13, E15 and E16 of [edge-cases.md](edge-cases.md); the scripted-interleaving ones are `(race)`.
 - A rate limit pauses calls and never sets `sync_failed` (E17); exhausted retries set it and each recovery path re-enqueues (E18).
 - A revoked, missing or read-only credential stops the job and keeps the marker (E19 to E21); a non-approved user's job makes no call (E24).

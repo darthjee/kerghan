@@ -20,6 +20,8 @@ Part of the [Issues and Projects specs](../issues.md).
 
 ## Required tests
 
+Default tier: unit on the sync service with the fake GitHub client; the attach and unlink answers are e2e ([testing.md](testing.md#fixtures)).
+
 The unique indexes and link cleanup are tested in [model.md](model.md#required-tests).
 
 - Linking a GitHub issue from another repository is refused.
