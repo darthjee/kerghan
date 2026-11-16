@@ -8,6 +8,9 @@ Part of the [Issues and Projects specs](../issues.md).
 - No endpoint returns a credential or anything derived from it beyond the masked `secretHint`.
 - The frontend never calls GitHub with a credential.
 - Logs and job params carry only safe fields (ids).
+- Another user's or a deleted project answers 404 ([projects.md](projects.md#deletion)).
+- A project description is plain text and never rendered as markup ([projects.md](projects.md#fields)).
+- Sharing guardrails ([projects.md](projects.md#room-for-sharing-members-and-roles)): one access check for every project and issue read or write, with no scattered `user_id` filters; issues derive access from their project; the owner's credentials do all GitHub work and link uniqueness stays per owner; the actor is not assumed to equal the owner.
 
 ## Open questions
 
@@ -17,3 +20,4 @@ Part of the [Issues and Projects specs](../issues.md).
 ## Required tests
 
 - No credential appears in any response, job param or log.
+- A project and its issues go through the single access check, and a non-owner gets 404 for both.

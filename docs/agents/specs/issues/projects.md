@@ -3,22 +3,119 @@
 The project as the home of issues.
 Part of the [Issues and Projects specs](../issues.md).
 
-- A project is the home of issues; every Kerghan issue belongs to exactly one project. A project may be about code or anything else.
+Routes, payloads and error codes stay with #489, columns and types with #486, sync mechanics with #488 and UI with #491.
+
+## Naming
+
+"Project" is Kerghan's concept: an application (backed by a repository) or a life/other project (no repository). It is not a GitHub Project. In these specs "project" always means Kerghan's; the GitHub feature is always written in full as "GitHub Project". No Kerghan-side term is coined for GitHub Projects (out of scope for the epic).
+
+## Repository and ownership
+
+- A project is the home of issues; every Kerghan issue belongs to exactly one project.
 - A project has 0 or 1 linked repository (one of the user's repository rows). No repository means a non-code project.
-- A project has one owner and is private: another user's project answers 404.
-- Sharing, members and roles are out of scope, but nothing here may make them impossible later.
-- Creation is explicit (optionally picking an added repository, the only way to make a non-code project), plus a shortcut that creates a project from an added repository.
+- One repository backs at most one project per user: unique on (user, repository) among non-deleted projects. Several projects with no repository are allowed.
+- A project has one owner, taken from the session and never from the request, and is private: another user's project answers `404`.
+
+## Fields
+
+| Field | Rule |
+|---|---|
+| `name` | Required, trimmed, 1 to 100 characters (counted in characters). Unique per user, case-insensitively, among non-deleted projects (`409` on a duplicate). A blank name is a validation error. |
+| `description` | Optional, trimmed plain text of at most 2000 characters, never rendered as markup. An empty or whitespace-only description is stored as none. |
+| Repository | Optional, 0 or 1. |
+| Owner | The session's user. |
+| Timestamps | Creation and update. |
+| Deletion marker | See [Deletion](#deletion). |
+
+- There is no status or archive state in v1.
+- The read model adds a repository summary (owner, name, private and the row status Added, Unavailable or Unknown), derived on read and never stored on the project. There are no issue counts or sync info in v1.
+- Column types and lengths stay with #486.
+
+## Creation paths
+
+- **Explicit:** name, optional description, optional repository. The repository must be one of the caller's own repository rows with `added_at` set, in any derived status (Added, Unavailable and Unknown are all allowed). A row that is not added, belongs to another user or does not exist is rejected without revealing that it exists. A repository that already has a project of the user is rejected with `409`, pointing at the existing project. A taken name is `409`. This is the only way to make a non-code project.
+- **Shortcut** (from an added repository): takes a repository reference plus an optional `name` and `description`. A repository that is not added is rejected (`409`); the shortcut never adds one. If the user already has a project on the repository it returns it (`200`, ignoring `name` and `description`), otherwise it creates one (`201`). The default name is `owner/name` from the repository's latest snapshot, and a name collision answers `409` (no automatic suffix).
+- **Both:** creation is a pure database write; it never enqueues a job or calls GitHub (the first import or sync is a separate, explicit, on-demand action). Both paths share one service method.
+
+## Linked repository unavailable or removed
+
+- A project never loses its repository automatically.
+- Local work (reading and editing issues) continues whatever the status.
+- GitHub sync is refused while the repository is Unavailable and allowed while it is Unknown; pending writes stay in their markers under the normal retry and sync-failed rules (#488).
+- A dangling repository reference reads like an Unavailable repository with no summary fields.
+- The future "remove an added repository" feature (not built) must refuse with `409` while a non-deleted project of the user uses the repository. #492 is told to copy that rule into `modules/repositories.md`.
+- If the integration is deleted, the project is unaffected directly.
+- If the user is deleted, their projects (including soft-deleted ones), issues, links and markers are removed for real (mechanism: #486, #493).
+
+## Deletion
+
+- Soft delete: the project gets a deletion timestamp.
+- A deleted project answers `404` for every read or write and is excluded from listings, like another user's project. Its issues are kept in the database but are unreachable through the API.
+- Uniqueness of name and repository covers only non-deleted projects, so both can be reused after deletion (how it is enforced in MySQL is for #486).
+- The project's GitHub links are deleted on deletion, which frees their GitHub issues for another project.
+- Pending markers are discarded. Queued or in-flight jobs for a deleted project or user are a no-op (no error, no retry).
+- The confirmation warns that unsent changes will not be written to GitHub, and the response says how many issues had them.
+- Deletion never makes a GitHub call.
+- No restore and no purge in v1.
+
+## Changing a project later
+
+- Name and description can be edited under the creation rules.
+- A repository can be attached to a project that has none (same checks as creation; it never syncs).
+- Changing to another repository, or detaching, is refused in v1 (`409`).
+- Issues cannot be moved between projects in v1.
+
+## Room for sharing, members and roles
+
+No schema, endpoint or concept for them in v1. Guardrails, so they stay possible later:
+
+1. One service-level access check for every project or issue read or write (today owner only, otherwise `404`), with no scattered `user_id` filters.
+2. Issues derive access from their project and carry no authorization owner.
+3. The owner's credentials do all GitHub work, whoever triggers it, and link uniqueness stays per owner.
+4. The actor is not assumed to equal the owner.
+
+## Edge cases
+
+| Case | Expected behavior | Check |
+|---|---|---|
+| Two simultaneous creations on one repository | The database uniqueness decides. The loser answers `409` on the explicit path; the shortcut re-reads and returns the winner (`200`). | Concurrency test on both paths. |
+| Two simultaneous creations or renames to one name | One wins, the other answers `409`. | Concurrency test. |
+| Create or attach on a repository that has only a deleted project | Allowed. | Create and attach after deletion. |
+| Repository renamed or transferred on GitHub | Nothing happens to the project; its name is just text and the summary shows the current `owner/name`. | Summary read after a rename. |
+| Repository goes Unavailable and returns | The project is untouched; sync is refused only while Unavailable. | Sync gating by status. |
+| Repository added but Unavailable at creation | Allowed. | Create with an Unavailable repository. |
+| Job or request for a deleted project or user | A job is a no-op; a request answers `404`. | Job and request after deletion. |
+
+## Not decided
+
+Left open on purpose; none has an owner issue yet.
+
+- Members and roles: out of scope for the epic.
+- Invitations: out of scope for the epic.
+- Ownership transfer: out of scope for the epic.
+- Shared visibility, including a member's view when the owner's integration is revoked: out of scope for the epic.
+- Archive status: not needed in v1.
+- Restore and purge of deleted projects: not needed in v1.
+- Moving issues between projects: not needed in v1.
+- Changing or detaching a repository while no links exist: depends on the unlinking action from #487.
 
 ## Open questions
 
-- [ ] May one repository back several projects of the same user? (#485)
-- [ ] Which fields does a project have? (#485)
-- [ ] What happens to a project when its linked repository is removed? (#485)
-- [ ] How is a project deleted, and what happens to its issues? (#485)
-- [ ] What room is left for sharing, members and roles? (#485)
+None.
 
 ## Required tests
 
-- Another user's project answers 404.
-- A project without a repository can be created.
-- A project can link one added repository.
+- Another user's project and a deleted project answer `404` on every read and write, and a deleted project is absent from listings.
+- A project without a repository can be created; several such projects are allowed.
+- A project can link one added repository, in any derived status (Added, Unavailable, Unknown).
+- A repository that is not added, belongs to another user or does not exist is rejected without revealing it exists.
+- A repository that already has a project of the user is rejected with `409` on the explicit path, pointing at the existing project.
+- The shortcut returns the existing project with `200` (ignoring `name` and `description`) and creates one with `201`; it rejects a not-added repository with `409`, defaults the name to `owner/name` and answers `409` on a name collision.
+- Creation, by either path, makes no GitHub call and enqueues no job.
+- Name rules: trimmed, 1 to 100 characters, blank rejected, case-insensitive uniqueness per user with `409`. Description rules: trimmed, at most 2000 characters, blank stored as none.
+- Uniqueness of name and repository covers only non-deleted projects; both can be reused after deletion.
+- Deleting a project releases its links, discards its markers, makes queued jobs a no-op, makes no GitHub call and reports the count of issues with unsent changes; deleting a user removes their projects (including soft-deleted ones), issues, links and markers.
+- Attaching a repository to a project without one works and never syncs; attaching a repository that already has a project is rejected; changing or detaching a repository is refused with `409`.
+- Project and issue access goes through the single access check.
+- GitHub work uses the owner's credentials, whoever triggers it.
+- The simultaneous cases of the edge-case table resolve as stated.

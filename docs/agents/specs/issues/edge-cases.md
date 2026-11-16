@@ -1,9 +1,17 @@
 # Issues and Projects — Edge cases
 
-Purpose: a matrix of edge cases across projects, issues, the link and the sync, each row giving the expected behavior, the owning file and the verifying check. No rows exist yet beyond cases already decided in the epic, which are covered in their owning files.
+Purpose: a matrix of edge cases across projects, issues, the link and the sync, each row giving the expected behavior, the owning file and the verifying check. The project cases are owned by `projects.md`; the other rows do not exist yet.
 Part of the [Issues and Projects specs](../issues.md).
 
-No matrix rows yet.
+The project cases are owned by [projects.md](projects.md#edge-cases); this file points to them.
+
+- Two simultaneous creations on one repository or on one name: [projects.md](projects.md#edge-cases).
+- Create or attach on a repository that has only a deleted project: [projects.md](projects.md#edge-cases).
+- Repository renamed or transferred on GitHub: [projects.md](projects.md#edge-cases).
+- Repository Unavailable and returning, or Unavailable at creation: [projects.md](projects.md#edge-cases).
+- Job or request for a deleted project or user: [projects.md](projects.md#edge-cases).
+
+"A repository removed from the user's repositories" and "An integration or a user deleted" are partly answered in [projects.md](projects.md#linked-repository-unavailable-or-removed) and stay open for #493.
 
 ## Open questions
 
