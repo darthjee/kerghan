@@ -3,7 +3,7 @@
 Purpose: the test strategy of the feature (tiers, fixtures, how workers and security rules are tested).
 Part of the [Issues and Projects specs](../issues.md).
 
-No strategy decided yet.
+No strategy decided yet. Data-model tests run in the DB-backed tier, as Repositories; [model.md's required tests](model.md#required-tests) feed #494.
 
 ## Open questions
 

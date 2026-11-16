@@ -10,6 +10,7 @@ Part of the [Issues and Projects specs](../issues.md).
 - The shortcut answers `200` for an existing project and `201` for a new one ([projects.md](projects.md#creation-paths)).
 - `409` answers a name collision, a repository that already has a project (explicit path and attach), a not-added repository on the shortcut, and a change or detach of a repository ([projects.md](projects.md)).
 - A deleted project answers `404` like another user's; a rejected repository reference never reveals whether the row exists ([projects.md](projects.md#deletion)).
+- Title and body length caps (256 and 65536 characters) come from [model.md](model.md#issues-kerghan-issues); the issues listing sort and its index are #489's decision.
 
 ## Open questions
 
