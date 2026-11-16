@@ -18,7 +18,7 @@ Part of the [Issues and Projects specs](../issues.md).
 - [ ] Error codes and shapes. (#489)
 - [ ] Pagination and filtering. (#489)
 - [ ] Input validation. (#489)
-- [ ] How sync state is exposed. (#489)
+- [ ] How sync state is exposed, including the failed and rate-limited states with their reason, and the "retry sync" trigger (E18 of [edge-cases.md](edge-cases.md)). (#489)
 - [ ] Cache classes of each endpoint. (#489)
 
 ## Required tests
