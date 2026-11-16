@@ -23,5 +23,8 @@ Part of the [Issues and Projects specs](../issues.md).
 
 ## Required tests
 
-- Another user's project or issue answers 404, and so does a deleted project.
+Default tier: e2e with fakes ([testing.md](testing.md#default-tier-by-category)).
+
+- Another user's project or issue answers 404, and so does a deleted project (one row of the route access matrix, [testing.md](testing.md#security-verification)).
 - The `200`/`201`/`409` outcomes of the project creation paths in [projects.md](projects.md#creation-paths).
+- Every route answers `401` without a session, runs `OriginGuard` and sends `X-Skip-Cache` (the access matrix, complete against the registered routes).

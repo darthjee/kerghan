@@ -191,14 +191,14 @@ Each row is also a required test. The cross-file matrix is [edge-cases.md](edge-
 
 ## Required tests
 
-All in the DB-backed tier (uniqueness, concurrency and transactions need real MySQL), as Repositories.
+All in the DB-backed tier (uniqueness, concurrency and transactions need real MySQL), as Repositories; the tier table, seed builders, intruder user and the restart spec are in [testing.md](testing.md#tiers).
 
 - The three unique constraints are enforced: (`user_id`, `github_issue_id`) on links, `issue_id` on links, `link_id` on markers.
 - Project name and repository are unique among non-deleted projects only; `deleted_at` and `deleted_token` are always written together, and a `NULL` repository never collides.
 - Names differing only by case or accents are duplicates.
 - Compare-and-clear: a changed revision deletes no row and the job re-enqueues itself; an unchanged one clears the marker and updates the base snapshot.
 - An edit of a linked issue upserts the marker in the same transaction; an edit of an unlinked issue creates none.
-- Boot re-enqueues every marker once, oldest first, by `link_id`.
+- Boot re-enqueues every marker once, oldest first, by `link_id` (the restart spec of [testing.md](testing.md#worker-tests)).
 - Cleanup contracts: `user.deleted` removes markers, links, issues and projects (including soft-deleted) in lock order, and a listener failure is logged without blocking; project soft delete removes markers and links and keeps the `issues` rows; single issue deletion removes marker, link, then the issue.
 - utf8mb4 (a 4-byte character) and `bigint` (an id above 2³¹) round-trip.
 - The migration `up` creates the four tables and `down` drops them in reverse.

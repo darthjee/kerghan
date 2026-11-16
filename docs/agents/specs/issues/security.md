@@ -27,6 +27,8 @@ Part of the [Issues and Projects specs](../issues.md).
 
 ## Required tests
 
-- No credential appears in any response, job param or log.
+- No credential appears in any response, job param or log (the canary sweep of [testing.md](testing.md#security-verification)).
 - A revoked, missing or read-only credential stops the job without retry and keeps the marker (E19 to E21); a `404` with an unreadable repository discards no marker (E22); a non-approved user's job makes no call (E24).
-- A project and its issues go through the single access check, and a non-owner gets 404 for both.
+- A project and its issues go through the single access check, and a non-owner gets 404 for both (the route access matrix and the two-user baseline of [testing.md](testing.md#security-verification)).
+- No `fetch`, `secret_iv` or `NOW(` in the Issues sources, no Integrations or Auth mapping, and no secret or payload column `(static)`.
+- A project description is rendered as text, never as markup (frontend static spec).
