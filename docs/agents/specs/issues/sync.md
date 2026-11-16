@@ -9,6 +9,10 @@ Part of the [Issues and Projects specs](../issues.md).
 - Outbound writes use a durable pending marker in the database, re-enqueued at boot, so a restart does not lose a pending write.
 - Rate limits reuse `retryAfterSeconds`, with retry and cooldown. A job that exhausts its retries marks the link as sync failed.
 - Jobs receive ids only. Credentials stay in the Integrations module and never appear in job params or logs.
+- Sync is refused while the project's repository is Unavailable and allowed while it is Unknown; pending writes stay in their markers under the normal retry and sync-failed rules ([projects.md](projects.md#linked-repository-unavailable-or-removed)).
+- Creating a project and attaching a repository never sync or enqueue a job ([projects.md](projects.md#creation-paths)).
+- A queued or in-flight job for a deleted project or user is a no-op (no error, no retry), and deleting a project discards its markers ([projects.md](projects.md#deletion)).
+- GitHub work uses the project owner's integrations, whoever triggers it ([projects.md](projects.md#room-for-sharing-members-and-roles)).
 
 ## Open questions
 
@@ -23,3 +27,5 @@ Part of the [Issues and Projects specs](../issues.md).
 - A restart does not lose a pending write.
 - A job that exhausts its retries marks the link failed.
 - Job params and logs carry no secrets.
+- A job for a deleted project or user is a no-op.
+- Sync is refused while the repository is Unavailable and allowed while it is Unknown.

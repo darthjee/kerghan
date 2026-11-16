@@ -20,7 +20,7 @@ background workers (in-process, from #479). A project may be about code or anyth
 
 ## Glossary
 
-- **Project**: the home of issues. Owned by one user, private.
+- **Project**: the home of issues. Owned by one user, private. Always Kerghan's project (an application backed by a repository, or a life/other project); the GitHub feature is always written "GitHub Project".
 - **Issue** (Kerghan issue): a record that belongs to exactly one project.
 - **GitHub issue**: an issue living on GitHub, in the repository linked to the project.
 - **Link**: the optional one-to-one connection between a Kerghan issue and a GitHub issue.
@@ -36,7 +36,9 @@ background workers (in-process, from #479). A project may be about code or anyth
 
 - A project is the home of issues; every Kerghan issue belongs to exactly one project.
 - A project has 0 or 1 linked repository (one of the user's repository rows); no repository means a
-  non-code project.
+  non-code project. At most one project per repository per user, among non-deleted projects.
+- Deleting a project is a soft delete that frees its name, repository and GitHub links, and never
+  touches GitHub.
 - A project has one owner, is private, and another user's project answers 404.
 - Creation is explicit (optionally picking an added repository, the only way to make a non-code
   project), plus a shortcut that creates a project from an added repository.
