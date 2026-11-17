@@ -67,7 +67,7 @@ Every trigger enqueues the same reconcile job with a link id. No trigger fires f
 
 - **No approval trigger (E24).** `denied` is final in [user-approval](../../modules/auth/user-approval.md) (approve only moves `pending` to `approved`; there is no un-deny), and `authorization-request.approved` is login authorization, not account approval. So no listener re-enqueues a user's markers: they stay until the user is deleted, and boot or retry jobs stop at the approval guard with no call. A future un-deny feature must re-enqueue the user's markers itself.
 - **No trigger** for link creation or attach (the request already reads GitHub, E61), unlinking, `gone`, a repository change, or fixing or adding an integration (E19: fixing the integration does not push by itself; the user retries).
-- Routes and payloads for T2 to T4 are #489's; wording and placement are #491's.
+- Routes and payloads for T2 to T4 are decided in [api.md](api.md#trigger-routes); wording and placement are #491's.
 
 ## Job
 
@@ -117,7 +117,7 @@ Every trigger enqueues the same reconcile job with a link id. No trigger fires f
 - **Left** (back to `linked`, reason `NULL`) by:
   - a push whose compare-and-clear deletes the marker;
   - a successful reconcile when no marker exists (a refresh never clears a failure that belongs to an unsent write);
-  - the **retry sync** action, which resets the status to `linked` at once and enqueues T4; the UI then shows the derived *pending* state, and the job sets the failure again if it still fails;
+  - the **retry sync** action, which resets the status to `linked` at once and enqueues T4; the UI then shows the derived *pending* state, and the job sets the failure again if it still fails. Exception: while the repository is Unavailable (or dangling) the retry is refused with `409 PROJECT_REPOSITORY_UNAVAILABLE` before the reset, because the reset would clear the failure reason and the job would stop at the repository guard without setting a new one ([api.md](api.md#trigger-routes));
   - `gone`, which replaces it.
 - An edit never writes a status; it only creates the marker and enqueues T1. `sync_failed` never blocks a job: every trigger still runs, and credential reasons stop at the guards with no call where they can.
 - The reason set stays at the four values of [model.md](model.md#issues_github_links); no `access_lost` reason is added.
@@ -125,9 +125,9 @@ Every trigger enqueues the same reconcile job with a link id. No trigger fires f
 ## Staleness
 
 - **`last_synced_at`** is set by every successful reconcile and by link creation or attach (which read GitHub in the request, E61), so a link is never "never synced".
-- **Stale** means `last_synced_at` is older than `KERGHAN_ISSUES_SYNC_STALE_AFTER_SECONDS` (default 3600). The backend derives a `stale` flag next to `lastSyncedAt` (#489 exposes both, #491 words them). It is never stored and never a link state. A `gone` link is never reported stale.
+- **Stale** means `last_synced_at` is older than `KERGHAN_ISSUES_SYNC_STALE_AFTER_SECONDS` (default 3600). The backend derives a `stale` flag next to `lastSyncedAt` ([api.md](api.md#link-object) exposes both, #491 words them). It is never stored and never a link state. A `gone` link is never reported stale.
 - **Display only.** A stale link is shown as such ("last synced X ago" plus a stale hint) and the user refreshes it (T2 or T3). A read never enqueues a job, so every GET stays side-effect free; no auto-refresh on open or on the issue list.
-- **Manual refresh skips fresh links.** T2 and T3 skip any link **without a marker** whose `last_synced_at` is under 60 seconds old; a single-issue refresh of such a link answers "already fresh" (shape owned by #489). A link with a marker is never skipped, since it has a write to push. No cooldown state or `429` is needed.
+- **Manual refresh skips fresh links.** T2 and T3 skip any link **without a marker** whose `last_synced_at` is under 60 seconds old; a single-issue refresh of such a link answers "already fresh" (`200` with `alreadyFresh: true`, [api.md](api.md#trigger-routes)). A link with a marker is never skipped, since it has a write to push. No cooldown state or `429` is needed.
 
 ## Integration selection
 
@@ -163,7 +163,7 @@ Added to `IntegrationsGithubService`, following its existing shape (`(userId, in
 - `changes` holds only the fields to push (`title?`, `body?`, `state?`); never `state_reason`.
 - `renamed` stays adapter-internal: the client retries once at the `Location` and returns the result with a `renamedTo` hint, which the caller hands to Repositories (E65).
 - **`forbidden` is its own kind** (a non-rate-limit `403`) for issue operations, rather than `unavailable{reason:'forbidden'}`, so the sync tells E5 and E21 apart from transient failures without inspecting reasons.
-- Listing for import is not part of this spec (link creation, #487 and #489).
+- Listing for import is not part of this spec (link creation, #487 and [api.md](api.md)).
 
 ## Configuration
 
@@ -199,7 +199,7 @@ Added to `IntegrationsGithubService`, following its existing shape (`(userId, in
 
 Owned elsewhere; none is owned by #488.
 
-- [ ] Routes and payloads of refresh, retry sync and the exposed `lastSyncedAt`/`stale` fields. (#489)
+- [x] Routes and payloads of refresh, retry sync and the exposed `lastSyncedAt`/`stale` fields: decided in [api.md](api.md) (#489).
 - [ ] Wording and placement of the stale hint and states. (#491)
 - [ ] Whether the GitHub App gets issue write permission. (#490)
 - [ ] Per-field timestamps (E7 uses one per-issue timestamp): accepted limitation, no owner issue.
@@ -215,7 +215,7 @@ Tiers, fixtures and tags: [testing.md](testing.md).
 - **Job.** Outcome mapping per row of the table; a transient failure retries with the issues retry config and exhaustion sets `retries_exhausted` through the job's own attempt counter `(engine)`; a rate-limited job finishes without `_fail`; params are `{ linkId }` only and logs carry only the allowlisted fields (the canary sweep of [testing.md](testing.md#security-verification)).
 - **Guards.** A deleted project or user, a gone link, a non-approved user (no call and no listener, E24), an Unavailable repository (no call, marker kept) and an Unknown repository (allowed).
 - **Rate limits** (with `FakeClock` and the injected scheduler). No call while paused; one enqueue per waiting link at the reset, oldest marker first; the 60-second fallback; waits never consume attempts and never set `sync_failed` (E17); a pause on one integration leaves another working.
-- **`sync_failed`.** Each reason is set by its trigger (E18 to E22) and each exit (clearing push, refresh with no marker, retry sync resetting to `linked` at once, `gone`); a refresh never clears a failure with an unsent marker; `sync_failed` never blocks a job.
+- **`sync_failed`.** Each reason is set by its trigger (E18 to E22) and each exit (clearing push, refresh with no marker, retry sync resetting to `linked` at once, `gone`); a retry while the repository is Unavailable is refused and keeps the reason; a refresh never clears a failure with an unsent marker; `sync_failed` never blocks a job.
 - **Integration selection.** Candidates, order, credential-only fallback restarting from the `GET`, the aggregate reason, paused candidates skipped, handle-only is no candidate (E20) and the probe uses the same candidate.
 - **Staleness.** The stale flag at the threshold, never for `gone`, reads never enqueue, and the 60-second fresh skip (never for a link with a marker).
 - **Client.** `getIssue`, `updateIssue` and `probeIssues` map each kind of the table, with `renamed` handled inside the adapter.

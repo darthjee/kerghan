@@ -60,7 +60,7 @@ background workers (in-process, from #479). A project may be about code or anyth
 | [issues/model.md](issues/model.md) | Data model | [open](issues/model.md#open-questions) |
 | [issues/github-link.md](issues/github-link.md) | GitHub link | [open](issues/github-link.md#open-questions) |
 | [issues/sync.md](issues/sync.md) | Two-way sync and workers | [decided](issues/sync.md#open-questions) |
-| [issues/api.md](issues/api.md) | API | [open](issues/api.md#open-questions) |
+| [issues/api.md](issues/api.md) | API | [decided](issues/api.md#open-questions) |
 | [issues/security.md](issues/security.md) | Security | [open](issues/security.md#open-questions) |
 | [issues/ui.md](issues/ui.md) | UI | [open](issues/ui.md#open-questions) |
 | [issues/edge-cases.md](issues/edge-cases.md) | Edge-cases matrix | [open](issues/edge-cases.md#open-questions) |

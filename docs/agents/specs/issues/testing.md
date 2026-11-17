@@ -70,7 +70,7 @@ Both kinds assert invariants, never timing, and never loop to catch a race.
 
 - **Canary sweep.** Seed canaries (a PAT, an OAuth token, a GitHub App key, an installation token, a GitHub error body); run every sync outcome (success, rate limit, E19 to E22, E24, exhausted retries) and every project, issue and link route, errors included; assert that no response body or header, no captured log line and no recorded job param contains one.
 - **Job params.** An exact key allowlist of numeric ids, checked in the `FakeWorkersService` call log.
-- **Route access matrix.** One table-driven e2e spec over the routes: `401` without a session, `OriginGuard`, `X-Skip-Cache`, a foreign or deleted project answering a body identical to a missing one, no admin access, and a completeness check against the registered routes (a new route without a row fails).
+- **Route access matrix.** One table-driven e2e spec over the routes: `401` without a session, `OriginGuard`, `X-Skip-Cache`, a foreign or deleted project answering a body identical to a missing one, an issue of another project answering the same `404`, a malformed uuid answering `400`, no `GET` answered, no admin access, and a completeness check against the registered routes (a new route without a row fails). The rows are the 18 routes of [api.md](api.md#every-route): `/projects/mine.json`, `create.json`, `from-repository.json`, and under `/projects/:projectId/` `show`, `edit`, `repository`, `delete`, `refresh`, `issues`, `issues/create`, `issues/import`, and under `/issues/:issueId/` `show`, `edit`, `delete`, `attach`, `unlink`, `refresh`, `retry-sync`, all with the `.json` suffix.
 - **Two-user baseline** in every e2e and DB-backed harness (the intruder user above).
 - **Static specs `(static)`.** The Issues sources contain no `fetch`, `secret_iv` or `NOW(`, map no Integrations or Auth table or entity, and their columns match an allowlist (the marker has no payload column). The cache-policy coverage spec gains the new controllers.
 - **Frontend static spec.** A project description is rendered as text, never as markup. How GitHub-sourced content is rendered stays with #490.
@@ -103,6 +103,7 @@ The checks of the testing infrastructure itself:
 - The **fidelity contract**: every builder case of each new GitHub operation, run through the real service at the `fetch` level, equals the fake's answer.
 - The **no-network guard** fails a test of the module that reaches the real `fetch`.
 - The **access matrix** is complete against the registered routes.
+- The **API cases** of [api.md](api.md#required-tests) run in the e2e tier, including the attach stale confirmation within the same second (`datetime(3)`, with `FakeClock`) and the code-point length case (a 4-byte character counts once).
 - The **static specs** pass: forbidden tokens, no Integrations or Auth mapping, the column allowlist and cache-policy coverage.
 - **Job params** hold only the allowed numeric ids, and the **canary sweep** finds no credential in any response, header, log line or job param.
 - The **real-engine specs** (registration by name, retry after `_fail`, exhaustion marking `sync_failed` detected through the job's own attempt counter, a rate-limited job finishing without `_fail`) run on the real engine with the issues retry config (`maxRetries` from `KERGHAN_ISSUES_SYNC_MAX_RETRIES`, cooldown 1 ms).
