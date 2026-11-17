@@ -8,7 +8,7 @@ Part of the [Issues and Projects specs](../issues.md).
 - The matrix is an **index, not a second source of truth** (same shape as the [Repositories matrix](../../modules/repositories/edge-cases.md)): one line of outcome per row, linking to the rule in its owning file. A change of outcome is made in the owning file first, then reflected here.
 - Columns: `#` | Case | Expected behavior (data, GitHub calls, what the user sees) | Rule (owning file) | Check (the required test) | Status.
 - Status: `Decided` (the rule is already written in `projects.md` or `model.md`) or `Contract` (the outcome is fixed here; the owner issue refines the mechanics and updates the row in its own PR if the outcome changes).
-- Row ids are stable (`E1…E64`), so tests, [testing.md](testing.md) and other files can cite them. Ids are not renumbered when a group is reordered.
+- Row ids are stable (`E1…E65`), so tests, [testing.md](testing.md) and other files can cite them. Ids are not renumbered when a group is reordered.
 - Groups, in order: projects; GitHub issue and link; link creation, unlinking and repository change; edits and conflicts; jobs, restart and rate limits; credentials and integrations; repository; users and cleanup.
 - Each row is one required test; rows already tested in `projects.md` or `model.md` point there instead of repeating.
 
@@ -30,15 +30,15 @@ The seven project rows are owned by [projects.md](projects.md#edge-cases).
 
 | # | Case | Expected behavior | Rule | Check | Status |
 |---|---|---|---|---|---|
-| E1 | GitHub issue deleted (`404` or `410` on a read or a push, repository Added) | The Kerghan issue is never deleted or closed. The link enters the `gone` state (reason `deleted`), its marker is discarded, and edits stop creating markers (nothing to push to). Local edits continue with no further GitHub call for that link; the user unlinks to clean up. No retry loop and no endless boot re-enqueue. | [github-link.md](github-link.md#gone-transferred-and-repository-unreachable) | Gone state after a `404` or `410`; marker discarded; a later edit creates no marker; no job re-enqueued at boot. | Contract |
-| E2 | GitHub issue transferred to another repository | A `301` makes the link `gone` with reason `moved`. Kerghan never follows a transfer: a link stays inside the project's repository. | [github-link.md](github-link.md#gone-transferred-and-repository-unreachable) | A `301` answers `gone` with reason `moved`; no link to the new repository. | Contract |
+| E1 | GitHub issue deleted (`404` or `410` on a read or a push, repository Added) | The Kerghan issue is never deleted or closed. The link enters the `gone` state (reason `deleted`) only after the issues probe passes (E22), its marker is discarded in the same transaction, and edits stop creating markers (nothing to push to); an edit racing the job that sets `gone` leaves no marker. Local edits continue with no further GitHub call for that link; the user unlinks to clean up. No retry loop and no endless boot re-enqueue. | [github-link.md](github-link.md#gone-transferred-and-repository-unreachable) | Gone state after a `404` or `410`; marker discarded; a later edit creates no marker; an edit racing the `gone` job leaves no marker `(race)`; no job re-enqueued at boot. | Contract |
+| E2 | GitHub issue transferred to another repository | A `301` to any target other than the same repository id and issue number makes the link `gone` with reason `moved` (E65). Kerghan never follows a transfer: a link stays inside the project's repository. | [github-link.md](github-link.md#gone-transferred-and-repository-unreachable) | A transfer `301` answers `gone` with reason `moved`; no link to the new repository. | Contract |
 | E3 | The GitHub issue is a pull request | Attaching it is refused and an import skips it (a refresh skips it too). | [github-link.md](github-link.md#creating-a-link) | Attach refused; import skips pull requests. | Contract |
 | E4 | A GitHub issue already linked by this user | Refused by the unique (`user_id`, `github_issue_id`) index. | [model.md](model.md#edge-cases) row 6 | The `model.md` row 6 test. | Decided |
 | E5 | Repository archived or read-only on GitHub (`403` on a push) | A permission refusal, not a transient error: same outcome as a revoked credential (E19). Reads still work. | [sync.md](sync.md) (#488) | A `403` on a push follows E19. | Contract |
 
 ## Link creation, unlinking and repository change
 
-Owned by [github-link.md](github-link.md); ids continue after E56.
+Owned by [github-link.md](github-link.md); ids continue after E56 (E65 was added later).
 
 | # | Case | Expected behavior | Rule | Check | Status |
 |---|---|---|---|---|---|
@@ -46,10 +46,11 @@ Owned by [github-link.md](github-link.md); ids continue after E56.
 | E58 | Link creation while rate limited | Refused with `retryAfterSeconds`; nothing stored, no job, no wait. | [github-link.md](github-link.md#creating-a-link) | A rate-limited read refuses with the delay and stores nothing. | Contract |
 | E59 | Link creation with no usable integration, a `401` or a `403` | Refused with the credential reason; a `401` invalidates the integration, a `403` does not; a handle alone is not enough (E20). | [github-link.md](github-link.md#creating-a-link) | Each case refuses with its reason; only a `401` invalidates. | Contract |
 | E60 | Link creation with a timeout, network error or `5xx` | Refused as GitHub unavailable; nothing stored. | [github-link.md](github-link.md#creating-a-link) | Each failure refuses and stores nothing. | Contract |
-| E61 | Attach where local values differ from GitHub's | Refused without the confirmation; with it the local values are replaced, no marker, no GitHub write. | [github-link.md](github-link.md#creating-a-link) | Without the flag nothing changes; with it the values equal GitHub's and no call writes. | Contract |
+| E61 | Attach where local values differ from GitHub's | Confirmed by the issue's `updated_at`, compared under the issue lock: a stale value is refused with `409` and the current differences; equal values need no confirmation; with a current value the local values are replaced, no marker, no GitHub write, and the base equals the local columns. | [github-link.md](github-link.md#creating-a-link) | A stale value changes nothing and lists the differences; a current one makes the values equal GitHub's, base equal local, and no call writes. | Contract |
 | E62 | Repository change or detach with links, and the race with a link creation | Refused with `409` carrying the link count; a concurrent link is never left against a changed repository. | [github-link.md](github-link.md#same-repository-rule-and-repository-changes) | Refused with links, allowed at zero; the race leaves no link on a changed repository. | Contract |
 | E63 | Unlink with unsent changes | Refused without the confirmation; with it the marker is discarded and the response says so. | [github-link.md](github-link.md#unlinking) | Without the flag link and marker stay; with it both are deleted and the issue is kept. | Contract |
-| E64 | Attach to an already linked Kerghan issue, or unlink an issue with no link | Both refused, never silent. | [github-link.md](github-link.md#unlinking) | Both answer a refusal and change nothing. | Contract |
+| E64 | Attach to an already linked Kerghan issue, or unlink an issue with no link | Both refused, never silent; the repeat unlink is a distinct "not linked" refusal, separate from issue not found, and the UI treats it as already unlinked. | [github-link.md](github-link.md#unlinking) | Both answer a refusal, the second distinct from not found, and change nothing. | Contract |
+| E65 | A `301` on a read or push | Classified by its `Location`: same repository id and issue number is a rename (retry once at the `Location`, stored owner and name refreshed, no state change); any other target is a transfer (`gone`, reason `moved`, E2); an unclassifiable `Location` or a second `301` in one attempt is GitHub unavailable, never `moved` or `gone`. | [github-link.md](github-link.md#gone-transferred-and-repository-unreachable) | Rename, transfer, unclassifiable `Location` and second `301` each end as stated; the contract spec records the rename `Location`. | Contract |
 
 ## Edits and conflicts
 
@@ -83,7 +84,7 @@ Owned by [github-link.md](github-link.md); ids continue after E56.
 | E19 | Credential revoked or invalid with a pending write (`401`, the integration becomes `invalid`) | Not transient: no retry loop. The job stops, the marker is kept, and the link shows sync failed with a credential reason ("Fix it in Integrations"). Fixing the integration does not push by itself (on-demand triggers only). | [security.md](security.md) (#488, #490) | A `401` stops the job, keeps the marker and shows the credential reason. | Contract |
 | E20 | No integration at all, or only a GitHub handle | Local edits work and the marker is created; the job refuses before any GitHub call, with the same outcome as E19 (reason: no credential). | [sync.md](sync.md) (#488) | No call is made; the marker stays; the reason is "no credential". | Contract |
 | E21 | Read-only credential or no write permission (`403` on a push) | Same as E19. Only a `401` invalidates an integration (existing rule). | [security.md](security.md) (#488, #490) | A `403` does not invalidate the integration and follows E19. | Contract |
-| E22 | `404` on a linked GitHub issue | "Gone" (E1) only if a read of the repository with the same credential succeeds; otherwise it is access loss, handled as E19. This avoids discarding a marker because a credential lost access. | [github-link.md](github-link.md#gone-transferred-and-repository-unreachable) | `404` with a readable repository is gone; with an unreadable one it follows E19. | Contract |
+| E22 | `404` on a linked GitHub issue | "Gone" (E1) only if the probe `GET /repos/{owner}/{name}/issues?per_page=1` answers `200` with the same credential; otherwise it is access loss, handled as E19. This avoids discarding a marker because a credential lost access. | [github-link.md](github-link.md#gone-transferred-and-repository-unreachable) | `404` with a passing probe is gone; with a failing probe it follows E19; a metadata-only credential never turns a link `gone`. | Contract |
 | E23 | Integration deleted with pending writes | No hook; once no usable integration remains, this is E20. | [model.md](model.md) (#486) | Delete the last integration; the next job follows E20. | Decided |
 | E24 | Account denied (admin ban) | Jobs make no GitHub call for a user who is not `approved`; markers stay and resume when the user is approved again. | [sync.md](sync.md) (#488) | A denied user's job makes no call; approval resumes it. | Contract |
 
@@ -93,7 +94,7 @@ Owned by [github-link.md](github-link.md); ids continue after E56.
 |---|---|---|---|---|---|
 | E25 | Repository removed by the future "remove repository" feature | Refused with `409` while a live project of the user uses it. | [projects.md](projects.md#linked-repository-unavailable-or-removed) | Tested by the removal feature when it exists. | Decided |
 | E26 | Repository Unavailable, then back | Sync is refused only while Unavailable and allowed while Unknown; markers are kept; local work continues. | [projects.md](projects.md#linked-repository-unavailable-or-removed) | Sync gating by status. | Decided |
-| E27 | Repository deleted on GitHub or lost to the credential | It becomes Unavailable through Repositories' sync (E26); nothing is discarded; linked issues are not marked "gone" (E22 needs a successful repository read). | [projects.md](projects.md#linked-repository-unavailable-or-removed) | An Unavailable repository leaves links and markers untouched. | Contract |
+| E27 | Repository deleted on GitHub or lost to the credential | It becomes Unavailable through Repositories' sync (E26); nothing is discarded; linked issues are not marked "gone" (E22 needs a passing issues probe). | [projects.md](projects.md#linked-repository-unavailable-or-removed) | An Unavailable repository leaves links and markers untouched. | Contract |
 | E28 | Repository turns private or public | No change in Kerghan; issue content stays private to the owner; sync follows credential access. | [projects.md](projects.md) | Issue reads stay owner-only after the change. | Contract |
 | E29 | Repository renamed or transferred | Nothing happens to the project; the link survives (keyed by `github_issue_id`). | [projects.md](projects.md#edge-cases) | Link and project read after a rename. | Decided |
 
@@ -142,12 +143,12 @@ One test per row, citing its id. Rows touching rows in the database (uniqueness,
 **Tier of each row** (default tiers and tags in [testing.md](testing.md#tiers)):
 
 - DB-backed: E4, E12, E62 `(db)` (the race), E14, E16, E31, E34 `(db)`, E35 `(db)`, E42 `(db)`, E43, E45, E46 `(db)`, E47, E48 `(db)`, E49 `(db)`, E50 to E56. E14 and E16 are the restart spec of [testing.md](testing.md#worker-tests).
-- Scripted interleaving `(race)`: E10, E15, E32, E41, E44; E13 as a duplicate-jobs spec.
-- Unit: E1 to E3, E5 to E9, E57 to E61, E11, E17 to E24, E27, E28; E17 and E18 exhaustion marking also run once on the real engine `(engine)`.
+- Scripted interleaving `(race)`: E1 (an edit against the job that sets `gone`), E10, E15, E32, E41, E44; E13 as a duplicate-jobs spec.
+- Unit: E1 to E3, E5 to E9, E57 to E61, E65 (classification on the Integrations client, plus the contract spec), E11, E17 to E24, E27, E28; E17 and E18 exhaustion marking also run once on the real engine `(engine)`.
 - E2E with fakes: E25 (when built), E26, E29, E30, E33, E36 to E40 (status mapping, access and gating); E18 recovery paths (retry sync route) once #489 fixes it; E62 to E64 answers (E62's race is the `(db)` item above).
 
-- E1 to E3, E5 to E13, E15 to E22, E24, E27, E28 and E57 to E64: new tests defined by the Check column above.
+- E1 to E3, E5 to E13, E15 to E22, E24, E27, E28 and E57 to E65: new tests defined by the Check column above.
 - E4, E14, E23, E25, E26, E29 to E33: tested where the owning file lists them ([model.md](model.md#required-tests), [projects.md](projects.md#required-tests)); E25 waits for the removal feature.
 - E34 to E40 are tested in [projects.md](projects.md#required-tests); E41 to E56 in [model.md](model.md#required-tests).
-- A rate limit alone never produces `sync_failed` (E17), and a `404` never discards a marker without a successful repository read (E22).
+- A rate limit alone never produces `sync_failed` (E17), and a `404` never discards a marker without a passing issues probe (E22).
 - Jobs make no GitHub call for a user who is not `approved` (E24).
