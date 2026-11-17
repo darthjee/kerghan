@@ -7,7 +7,8 @@ Part of the [Issues and Projects specs](../issues.md).
 - GitHub credentials stay in the backend: every GitHub call that uses a user's credential is made by the backend inside the Integrations module.
 - No endpoint returns a credential or anything derived from it beyond the masked `secretHint`.
 - The frontend never calls GitHub with a credential.
-- Logs and job params carry only safe fields (ids).
+- Logs and job params carry only safe fields (ids). Job params are `{ linkId }`; the log field allowlist is `jobId`, `linkId`, the outcome kind and the error class ([sync.md](sync.md#job)).
+- Rate-limit pauses and waiting sets are keyed by integration id only. Credentials are resolved at job time inside the Integrations module and never stored by Issues ([sync.md](sync.md#rate-limits)).
 - Another user's or a deleted project answers 404 ([projects.md](projects.md#deletion)).
 - A project description is plain text and never rendered as markup ([projects.md](projects.md#fields)).
 - Sharing guardrails ([projects.md](projects.md#room-for-sharing-members-and-roles)): one access check for every project and issue read or write, with no scattered `user_id` filters; issues derive access from their project; the owner's credentials do all GitHub work and link uniqueness stays per owner; the actor is not assumed to equal the owner.
@@ -28,7 +29,7 @@ Part of the [Issues and Projects specs](../issues.md).
 
 ## Required tests
 
-- No credential appears in any response, job param or log (the canary sweep of [testing.md](testing.md#security-verification)).
+- No credential appears in any response, job param or log (the canary sweep of [testing.md](testing.md#security-verification)); logs carry only the allowlisted fields and job params only `{ linkId }`.
 - A revoked, missing or read-only credential stops the job without retry and keeps the marker (E19 to E21); a `404` with a failing issues probe discards no marker (E22); a non-approved user's job makes no call (E24).
 - A project and its issues go through the single access check, and a non-owner gets 404 for both (the route access matrix and the two-user baseline of [testing.md](testing.md#security-verification)).
 - No `fetch`, `secret_iv` or `NOW(` in the Issues sources, no Integrations or Auth mapping, and no secret or payload column `(static)`.
