@@ -10,6 +10,11 @@ Part of the [Issues and Projects specs](../issues.md).
 - The shortcut answers `200` for an existing project and `201` for a new one ([projects.md](projects.md#creation-paths)).
 - `409` answers a name collision, a repository that already has a project (explicit path and attach), a not-added repository on the shortcut, and a change or detach of a repository only while links exist; the refusal carries the link count, and the exact payload and code are #489's ([projects.md](projects.md#changing-a-project-later)). An unlink without the plain confirmation while unsent changes exist, and an attach whose `updated_at` confirmation is stale when the local values differ from GitHub's (the refusal carries the current differences), are also `409` refusals whose codes #489 names; unlinking an issue with no link is a distinct refusal from "issue not found" ([github-link.md](github-link.md)).
 - A deleted project answers `404` like another user's; a rejected repository reference never reveals whether the row exists ([projects.md](projects.md#deletion)).
+- From the [sync spec](sync.md), inputs for #489 (shapes are #489's):
+  - A linked issue exposes `lastSyncedAt` and a derived `stale` flag next to the primary state and the list of states ([sync.md](sync.md#staleness)).
+  - A single-issue refresh (T2) and a project refresh (T3); a single refresh of a fresh marker-less link answers "already fresh".
+  - Retry sync (T4) resets the status to `linked` at once and enqueues; the response reflects the derived *pending* state.
+  - No read endpoint enqueues a job.
 - Title and body length caps (256 and 65536 characters) come from [model.md](model.md#issues-kerghan-issues); the issues listing sort and its index are #489's decision.
 
 ## Open questions

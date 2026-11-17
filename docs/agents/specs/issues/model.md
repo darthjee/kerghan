@@ -44,7 +44,7 @@ Part of the [Issues and Projects specs](../issues.md).
 - **No `user_id` on issues.** Access and cleanup go through the project (issues derive access from their project and carry no authorization owner).
 - No per-project issue number in v1 (the `id` is the reference), and no `created_by` (the actor is the owner in v1).
 - Deleting a single issue is a hard delete, if the API offers it ([#489](api.md#open-questions) decides); its link and marker go with it, and GitHub is never touched.
-- **Labels are not in v1.** Only title, body and state are stored, so #488 may only sync those three fields. Adding another field (labels, assignees, milestone, comments, reactions) means adding its column or table to this file in the same PR. Labels are a follow-up with their own table and sync rules.
+- **Labels are not in v1.** Only title, body and state are stored, so the sync ([sync.md](sync.md#fields-and-ownership)) only handles those three fields. Adding another field (labels, assignees, milestone, comments, reactions) means adding its column or table to this file in the same PR. Labels are a follow-up with their own table and sync rules.
 
 ## `issues_github_links`
 
@@ -56,15 +56,15 @@ Part of the [Issues and Projects specs](../issues.md).
 | `github_issue_id` | `bigint` | GitHub's global issue id, the stable key; unique with `user_id`. Mapped to a JS number with a `from: Number` transformer, as Repositories does for `github_id`. |
 | `github_number` | `int` | The number inside the repository, for display and API calls (owner and name come from the project's repository row). |
 | `status` | `varchar(32)` | The stored link state: `linked`, `gone` or `sync_failed`, with the reason in `status_reason` ([github-link.md](github-link.md#link-states)). Other states (pending, rate limited, repository unavailable) are derived at read time and never stored. |
-| `status_reason` | `varchar(32) NULL` | `NULL` for `linked`; `deleted` or `moved` for `gone`; the reasons of `sync_failed` are owned by #488 (`retries_exhausted`, `no_credential`, `credential_invalid`, `forbidden`). |
-| `base_title`, `base_body`, `base_state` | `varchar(256)`, `mediumtext NULL`, `varchar(16)` | The values as last synced (the **base snapshot**), so #488 can tell which side changed which field. If #488 picks plain last-write-wins it may drop them in its own PR. |
-| `github_updated_at`, `last_synced_at` | `datetime NULL` | GitHub's `updated_at` as last seen; the last successful sync. |
-| `etag` | `varchar(255) NULL` | For conditional requests. |
+| `status_reason` | `varchar(32) NULL` | `NULL` for `linked`; `deleted` or `moved` for `gone`; the `sync_failed` reasons are final and owned by [sync.md](sync.md#retries-and-sync_failed): `retries_exhausted`, `no_credential`, `credential_invalid`, `forbidden`. |
+| `base_title`, `base_body`, `base_state` | `varchar(256)`, `mediumtext NULL`, `varchar(16)` | The values as last synced (the **base snapshot**), so the sync can tell which side changed which field ([sync.md](sync.md#reconcile)); it is kept, not dropped for last-write-wins. |
+| `github_updated_at`, `last_synced_at` | `datetime NULL` | `github_updated_at`: GitHub's `updated_at` from the `PATCH` response, or from the `GET` when nothing was pushed. `last_synced_at`: set by every successful reconcile and on link creation ([sync.md](sync.md#staleness)). |
+| `etag` | `varchar(255) NULL` | For conditional requests: stored from each `200` `GET`, set to `NULL` after a `PATCH` ([sync.md](sync.md#reconcile)). |
 | `created_at`, `updated_at` | `datetime` | |
 
 - No `repository_id` on the link: a project's repository can change only while it has zero links, under the project-row lock, and the repository check happens when the link is created ([github-link.md](github-link.md#same-repository-rule-and-repository-changes)).
 - The link is for issues only; GitHub's issues endpoint also returns pull requests, which are refused or skipped ([github-link.md](github-link.md#gone-transferred-and-repository-unreachable), E3). A transferred issue makes the link `gone` with reason `moved`; Kerghan never follows it.
-- Any column #488 needs is added to this file in the same PR.
+- Any column the sync needs is added to this file in the same PR; [sync.md](sync.md) needs none beyond those above.
 
 ## `issues_pending_writes` (the pending marker)
 
@@ -81,6 +81,7 @@ Part of the [Issues and Projects specs](../issues.md).
 - **Compare-and-clear.** A job reads the revision, pushes, then in one transaction updates the base snapshot (with the values pushed) and deletes the marker `WHERE link_id = ? AND revision = ?`. If no row is deleted, an edit landed during the push and the job re-enqueues itself.
 - **Attempts are in memory** (retry and cooldown, from #479); after a restart the marker is re-enqueued fresh. Exhausted retries set the link `status` to `sync_failed` and keep the marker.
 - **Boot.** Every marker is re-enqueued by `link_id`, oldest first (ids only; no credentials or content in job params or logs). Inbound refresh has no marker (it is on demand).
+- **Lifecycle details** (creation for `linked` and `sync_failed` links only, timestamps from the injected `Clock`, compare-and-clear miss re-read, boot enqueues all, markers never expire, several instances) are in [sync.md](sync.md#marker-lifecycle).
 - Cleanup needs no `user_id` on the marker: user cleanup goes marker, then link (links carry `user_id`); project deletion goes through the project's issues.
 
 ## Indexes
@@ -95,14 +96,14 @@ Part of the [Issues and Projects specs](../issues.md).
 | `issues_pending_writes` | unique (`link_id`) | One marker per link; marker lookup from a job. |
 
 - The "live project" predicate is `deleted_token = 0` (not `deleted_at IS NULL`), so reads use the unique indexes.
-- Not added on purpose: a separate index on `issues_projects.user_id` (the unique indexes cover it), any index on the marker table (it holds only unsent changes), and one for "links by status" (#488 adds one if needed). The issues listing index is minimal: #489 decides the sort and adds a sort index in the same PR if needed.
+- Not added on purpose: a separate index on `issues_projects.user_id` (the unique indexes cover it), any index on the marker table (it holds only unsent changes), and one for "links by status" (the status is read per link, so none is needed). The issues listing index is minimal: #489 decides the sort and adds a sort index in the same PR if needed.
 - The longest index name is 55 characters, under MySQL's 64.
 
 ## Cleanup
 
 - **Lock order.** Every multi-table write in the module locks projects, then issues, then links, then markers, so cleanups never deadlock with a running job or a project deletion.
 - **`user.deleted`** (an awaited event after the user-row delete commits; nothing emits it yet). The Issues module listens, as Repositories does. One transaction deletes the markers (through links), the links by `user_id`, the issues (through the user's projects) and the user's projects, including soft-deleted ones. A failure is logged at error level with safe fields (`userId`, error class) and never blocks the deletion; a future deletion path must retry the event or run an orphan sweep. Creating a project re-reads the user through Auth's export (`lockExistingUser`) in the same transaction, so no orphan is created for a user deleted a moment earlier. A job after the delete only updates or deletes guarded rows and never inserts.
-- **`integration.deleted`: no hook.** Nothing in the module stores an integration id; the owner's integrations are resolved at job time through the Integrations module. If none is usable the job follows #488's no-credential rule and the markers stay.
+- **`integration.deleted`: no hook.** Nothing in the module stores an integration id; the owner's integrations are resolved at job time through the Integrations module. If none is usable the job follows the no-credential rule of [sync.md](sync.md#integration-selection) and the markers stay.
 - **Project deletion (soft)**, one transaction: count the project's issues that have markers (the number the response reports), set `deleted_at` and `deleted_token`, delete the markers and the links of its issues. The `issues` rows stay, unreachable, with no purge in v1.
 - **Single issue deletion:** marker, link, then the issue, in lock order.
 - **Unlinking:** project, issue, link, marker in lock order; it deletes the link and its marker and keeps the issue ([github-link.md](github-link.md#unlinking)).
@@ -161,13 +162,13 @@ Each row is also a required test. The cross-file matrix is [edge-cases.md](edge-
 | 12 | A crash between the issue update and the marker upsert | One transaction: both roll back or both stay. |
 | 13 | A user is deleted and the listener fails | Rows are orphaned and logged; jobs for them are no-ops; a later sweep or retry cleans them. |
 | 14 | A 4-byte character (emoji) in a title or body | Stored intact (utf8mb4; lengths count characters). |
-| 15 | A GitHub issue with a `state_reason` (not planned, reopened) | Only `open` and `closed` are stored; the reason is not stored in v1, so a close pushed from Kerghan uses GitHub's default reason; #488 decides whether that loss matters. |
+| 15 | A GitHub issue with a `state_reason` (not planned, reopened) | Only `open` and `closed` are stored; the reason is not stored in v1, so a close pushed from Kerghan uses GitHub's default reason. An accepted loss in v1 ([sync.md](sync.md#fields-and-ownership), E55). |
 | 16 | A GitHub id above 2³¹ | `bigint` with the `from: Number` transformer round-trips it. |
 
 ## Scope boundaries
 
 - **In scope:** the four tables, constraints and indexes; the logical FKs and ownership; the marker and its compare-and-clear rule; the stored GitHub data and the fold list; the cleanup contracts and lock order; the required tests.
-- **Owned elsewhere:** routes, payloads and the issues listing sort (#489); link states, unlinking and transfers are decided in [github-link.md](github-link.md); synced fields, conflict rules, staleness and retry values (#488); encryption at rest of issue content, retention of soft-deleted projects and quotas (#490); UI (#491); code and migrations (spawned by #492).
+- **Owned elsewhere:** routes, payloads and the issues listing sort (#489); link states, unlinking and transfers are decided in [github-link.md](github-link.md); encryption at rest of issue content, retention of soft-deleted projects and quotas (#490); UI (#491); code and migrations (spawned by #492).
 - **Not stored in v1:** labels, assignees, milestones, comments and reactions; a per-project issue number; `created_by`; an audit of edits; any schema for sharing, members or roles.
 
 ## Backward compatibility
@@ -189,7 +190,6 @@ Each row is also a required test. The cross-file matrix is [edge-cases.md](edge-
 - [ ] Retention of the issue content of soft-deleted projects: their `issues` rows stay forever in v1 and can hold private-repository titles and bodies. (#490)
 - [ ] Encryption at rest of issue content, and per-user quotas on projects and issues. (#490)
 - [ ] The mechanism by which the future repository-removal feature learns that a live project uses a repository, without an import cycle (the rule and the read-only check are fixed here). Not decided: the removal feature is not built and has no issue yet.
-- [ ] Synced fields, conflict rules, staleness, retry values and the `sync_failed` reasons (#488): this file only reserves the columns.
 
 ## Required tests
 
