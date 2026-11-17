@@ -62,7 +62,7 @@ Routes, payloads and error codes stay with #489, columns and types in [model.md]
 
 - Name and description can be edited under the creation rules.
 - A repository can be attached to a project that has none (same checks as creation; it never syncs).
-- Changing to another repository, or detaching, is refused in v1 (`409`).
+- Changing to another repository, or detaching, is allowed only while the project has zero links; with any link it is refused with `409` carrying the link count, and the user unlinks first. The same checks as creation apply and it never syncs. The project row is locked first, so a concurrent link creation cannot race it ([github-link.md](github-link.md#same-repository-rule-and-repository-changes), E62).
 - Issues cannot be moved between projects in v1.
 
 ## Room for sharing, members and roles
@@ -97,7 +97,6 @@ Left open on purpose; none has an owner issue yet.
 - Archive status: not needed in v1.
 - Restore and purge of deleted projects: not needed in v1.
 - Moving issues between projects: not needed in v1.
-- Changing or detaching a repository while no links exist: depends on the unlinking action from #487.
 
 ## Open questions
 
@@ -117,7 +116,7 @@ Default tier: e2e with fakes; the cleanup queries and concurrency are DB-backed 
 - Name rules: trimmed, 1 to 100 characters, blank rejected, case-insensitive uniqueness per user with `409`. Description rules: trimmed, at most 2000 characters, blank stored as none.
 - Uniqueness of name and repository covers only non-deleted projects; both can be reused after deletion.
 - Deleting a project releases its links, discards its markers, makes queued jobs a no-op, makes no GitHub call and reports the count of issues with unsent changes; deleting a user removes their projects (including soft-deleted ones), issues, links and markers.
-- Attaching a repository to a project without one works and never syncs; attaching a repository that already has a project is rejected; changing or detaching a repository is refused with `409`.
+- Attaching a repository to a project without one works and never syncs; attaching a repository that already has a project is rejected; changing or detaching a repository is allowed at zero links and refused with `409` carrying the link count otherwise, and a concurrent link creation never leaves a link against a changed repository `(db)` (E62).
 - Project and issue access goes through the single access check.
 - GitHub work uses the owner's credentials, whoever triggers it.
 - The simultaneous cases of the edge-case table resolve as stated `(db)`.

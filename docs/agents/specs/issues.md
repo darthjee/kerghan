@@ -44,7 +44,7 @@ background workers (in-process, from #479). A project may be about code or anyth
   project), plus a shortcut that creates a project from an added repository.
 - A Kerghan issue links one to one to a GitHub issue, per user (unique on user and GitHub issue);
   the link is optional, created from a GitHub issue or by attaching one to an existing Kerghan
-  issue; the GitHub issue must belong to the project's linked repository.
+  issue; the GitHub issue must belong to the project's linked repository. Link creation is a synchronous read where GitHub's values win after confirmation; the link states are `linked`, `gone` and `sync_failed` plus derived ones; unlinking is explicit; a project's repository can change only while it has no links ([issues/github-link.md](issues/github-link.md)).
 - One `issues` module and four tables (`issues_projects`, `issues`, `issues_github_links`, `issues_pending_writes`); the link is its own table; project soft delete uses a `deleted_token`; a base snapshot supports conflict rules; outbound writes use a coalesced marker ([issues/model.md](issues/model.md)).
 - Sync is two-way; fields, conflict rules and states are decided in the enhancement issues.
 - Workers: on-demand triggers only; outbound writes use a durable pending marker in the database
@@ -64,7 +64,7 @@ background workers (in-process, from #479). A project may be about code or anyth
 | [issues/security.md](issues/security.md) | Security | [open](issues/security.md#open-questions) |
 | [issues/ui.md](issues/ui.md) | UI | [open](issues/ui.md#open-questions) |
 | [issues/edge-cases.md](issues/edge-cases.md) | Edge-cases matrix | [open](issues/edge-cases.md#open-questions) |
-| [issues/testing.md](issues/testing.md) | Test strategy | [decided](issues/testing.md#open-questions) (names owned by #487/#488 remain open) |
+| [issues/testing.md](issues/testing.md) | Test strategy | [decided](issues/testing.md#open-questions) (operation names owned by #488 remain open) |
 
 ## Lifecycle
 
