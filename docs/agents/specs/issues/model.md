@@ -55,7 +55,7 @@ Part of the [Issues and Projects specs](../issues.md).
 | `issue_id` | `int` | Logical FK to `issues.id`; unique, so an issue has at most one link. |
 | `github_issue_id` | `bigint` | GitHub's global issue id, the stable key; unique with `user_id`. Mapped to a JS number with a `from: Number` transformer, as Repositories does for `github_id`. |
 | `github_number` | `int` | The number inside the repository, for display and API calls (owner and name come from the project's repository row). |
-| `status` | `varchar(32)` | The stored link state: `linked`, `gone` or `sync_failed` ([github-link.md](github-link.md#link-states)). Other states (pending, rate limited, repository unavailable, paused) are derived at read time and never stored. |
+| `status` | `varchar(32)` | The stored link state: `linked`, `gone` or `sync_failed`, with the reason in `status_reason` ([github-link.md](github-link.md#link-states)). Other states (pending, rate limited, repository unavailable) are derived at read time and never stored. |
 | `status_reason` | `varchar(32) NULL` | `NULL` for `linked`; `deleted` or `moved` for `gone`; the reasons of `sync_failed` are owned by #488 (`retries_exhausted`, `no_credential`, `credential_invalid`, `forbidden`). |
 | `base_title`, `base_body`, `base_state` | `varchar(256)`, `mediumtext NULL`, `varchar(16)` | The values as last synced (the **base snapshot**), so #488 can tell which side changed which field. If #488 picks plain last-write-wins it may drop them in its own PR. |
 | `github_updated_at`, `last_synced_at` | `datetime NULL` | GitHub's `updated_at` as last seen; the last successful sync. |

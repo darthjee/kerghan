@@ -13,12 +13,14 @@ Routes, payloads and refusal codes stay with #489; synced fields, conflicts, ret
 ## Creating a link
 
 - **Two ways, one service method.** *Import* creates a new Kerghan issue from a GitHub issue; *attach* links a GitHub issue to an existing, unlinked Kerghan issue.
-- **Synchronous read.** The request makes one `GET` of the GitHub issue with the project owner's credential (inside the Integrations module), validates it and stores the link in one transaction. There is no job and no marker, so no half-done "linking" state exists and a refusal is immediate.
-- **Identifier.** The API takes the **issue number in the project's repository**. The repository is always the project's, so the same-repository rule is structural; a pasted URL is parsed into a number by the UI, which refuses another repository. The stored `github_issue_id` comes from GitHub's answer.
+- **Synchronous read, outside the transaction.** The request reads the project and its repository, makes one `GET` of the GitHub issue with the project owner's credential (inside the Integrations module) and only then opens the transaction: it locks the project row (and, on attach, the issue row), re-checks that the repository is unchanged and not Unavailable, re-checks E4 and, on attach, that the issue still has no link, and writes. No lock is held across the network call. A repository changed in between is refused as retryable (E62). There is no job and no marker, so no half-done "linking" state exists and a refusal is immediate.
+- **Identifier.** The API takes the **issue number in the project's repository**. The repository is always the project's, so the same-repository rule is structural; a pasted URL is parsed into a number by the UI, which refuses another repository. The issue number must be a positive integer. The stored `github_issue_id` comes from GitHub's answer.
 - **Validation,** all before any write: the project has a repository that is not Unavailable; the issue exists and is readable; it is not a pull request (E3); it is not already linked by this user (E4, E46: the unique index decides races); the Kerghan issue (attach) has no link yet (E64).
-- **GitHub's values win, with confirmation.** On attach the local title, body and state are replaced by GitHub's and the base snapshot equals them, so attach never writes to GitHub and creates no marker. The request needs an explicit confirmation when the local values differ from GitHub's (the UI warns first, E61). Import takes GitHub's values and needs no confirmation. A closed GitHub issue is allowed and stored as `closed`.
+- **GitHub's values win, with confirmation bound to `updated_at`.** On attach the local title, body and state are replaced by GitHub's and the base snapshot equals them, so attach never writes to GitHub and creates no marker. When the local values differ from GitHub's the UI warns first and the request carries the Kerghan issue's `updated_at` as the confirmation. It is compared under the issue row lock: a stale value (the issue was edited after the warning) is refused with `409` and the current differences (which of title, body and state differ), so an edit made after the warning is never silently replaced (E61). Equal values need no confirmation. Import takes GitHub's values and needs no confirmation. A closed GitHub issue is allowed and stored as `closed`.
+- **Normalization invariant.** One function produces the stored local values, the base snapshot and the operands of the "values differ" test, so after creation the base equals the local columns. The exact rules are #488's.
+- **Stored on creation:** `github_issue_id`, `github_number`, the base snapshot, `github_updated_at`, `etag`, `last_synced_at`, `status` `linked` and no reason.
 - **One at a time.** There is no list call, bulk import or pagination in v1; a bulk import can later reuse the same method.
-- **A failed creation stores nothing, creates no job and never waits.** The failure outcomes are E57 to E60 of [edge-cases.md](edge-cases.md#link-creation-unlinking-and-repository-change): not found, `410` or `301` (refused as not found); rate limited (refused with `retryAfterSeconds`); no usable integration, `401` or `403` (refused with the credential reason; a `401` invalidates the integration, a `403` does not, and a handle alone is not enough, E20); timeout, network error or `5xx` (refused as GitHub unavailable).
+- **A failed creation stores nothing, creates no job and never waits.** The failure outcomes are E57 to E60 of [edge-cases.md](edge-cases.md#link-creation-unlinking-and-repository-change): not found, `410` or a `301` that is not a rename (refused as not found); rate limited (refused with `retryAfterSeconds`); no usable integration, `401` or `403` (refused with the credential reason; a `401` invalidates the integration, a `403` does not, and a handle alone is not enough, E20); timeout, network error or `5xx` (refused as GitHub unavailable).
 
 ## Same-repository rule and repository changes
 
@@ -32,23 +34,30 @@ Routes, payloads and refusal codes stay with #489; synced fields, conflicts, ret
 - **Who:** the project's owner, through the single access check (another user's or a deleted project answers `404`).
 - **When:** in any link state, including gone, sync failed and repository Unavailable. Unlinking never makes a GitHub call.
 - **Effect,** in one transaction in lock order (project, issue, link, marker): the link row and its marker are deleted. The Kerghan issue is kept as it is, GitHub is never touched, and the GitHub issue is freed: this user may link it again, from this or another project (E47).
-- **Unsent changes need a confirmation.** If a marker exists the request must carry an explicit confirmation, otherwise it is refused with `409` saying unsent changes exist; with it the marker is discarded and the response says changes were dropped (E63). Pushing first is rejected: it needs GitHub and a working credential exactly when they fail.
-- An in-flight push finds no link or marker and is a no-op (E44). Unlinking an issue with no link is not a success but a missing resource; the code is #489's (E64).
-- Relinking is a new attach, so local edits made after the unlink are replaced after confirmation. One issue at a time: no project-level "unlink all" in v1. No history or audit of unlinks.
+- **Unsent changes need a plain confirmation.** If a marker exists the request must carry an explicit confirmation flag, otherwise it is refused with `409` saying unsent changes exist; with it the marker is discarded and the response says changes were dropped (E63). The flag is not bound to a version: unlinking never destroys local data, it only drops the push. It never travels in a `DELETE` body (the route shape is #489's). Pushing first is rejected: it needs GitHub and a working credential exactly when they fail.
+- An in-flight push finds no link or marker and is a no-op (E44). A push whose request was already sent before the unlink can still land on GitHub; no state is written for it, and the window cannot be closed without a GitHub call inside the unlink.
+- Unlinking an issue with no link is a distinct refusal, separate from "issue not found" (E64); the code is #489's and the UI treats it as already unlinked.
+- Relinking is a new attach, so local edits made after the unlink are replaced after confirmation. One issue at a time: no project-level "unlink all" in v1; the rejection holds only while link creation is one at a time, a later bulk import reopens it. No history or audit of unlinks.
 
 ## Gone, transferred and repository unreachable
 
 | GitHub answers | Meaning | Outcome |
 |---|---|---|
-| `404`, repository readable with the same credential | Issue deleted | Link `gone`, reason `deleted` (E1, E22) |
+| `404`, and the probe `GET /repos/{owner}/{name}/issues?per_page=1` answers `200` with the same credential | Issue deleted | Link `gone`, reason `deleted` (E1, E22) |
 | `410` | Issue deleted, or issues disabled on the repository | Link `gone`, reason `deleted` (the label says only that it is no longer available on GitHub) |
-| `404`, repository not readable | Access lost | Not `gone`; follows E19, the marker is kept (E22) |
-| `301` | Issue transferred | Link `gone`, reason `moved` (E2) |
+| `404`, and the probe fails | Access lost | Not `gone`; follows E19, the marker is kept (E22) |
+| `301`, same repository id and issue number | Repository renamed | Retry once at the `Location`, refresh the stored owner and name, no state change (E65) |
+| `301`, any other target | Issue transferred | Link `gone`, reason `moved` (E2, E65) |
+| `301`, unclassifiable `Location` or a second `301` in one attempt | Unclear | GitHub unavailable, never `moved` or `gone` (E65) |
 | `403` on a push | Read-only credential or archived repository | E5 and E21, unchanged |
 | Repository Unavailable | Repository deleted or lost to the credential | Links and markers untouched, not `gone` (E27) |
 
-- **By repository id.** Reads and pushes of a linked issue address the repository by its stable GitHub id (`/repositories/{id}/issues/{number}`), so a rename or transfer of the repository never redirects and any `301` means the issue moved. The implementation proves the id-based path in a recorded contract spec ([testing.md](testing.md#fixtures)). Fallback if GitHub does not honour it: owner/name URLs and, on a `301`, a re-read of the repository by id (a changed full name is a rename, no state change; otherwise a transfer).
-- The Integrations client gains a distinct `moved` result (`301`, today `unavailable/redirect`) and a `gone` result (`410`); operation names and the other result kinds are #488's.
+- **Addressing.** Reads and pushes use the documented `/repos/{owner}/{name}/issues/{number}` with the repository's stored owner and name, and never follow a redirect automatically; a `301` is classified by its `Location` as in the table (E65). The id form is reached only through GitHub's own redirect: Kerghan never builds an id-path URL, because that path is not in GitHub's REST reference and its removal would make every read answer `404` and look like a mass deletion. A rename refreshes the stored owner and name, an outcome owned by Repositories and reached through an event or service call.
+- **Normalized outcomes only.** The link layer and the sync service see only ok, `deleted`, `moved`, not found, unavailable, rate limited and credential results. URLs, status codes and redirect headers stay in the provider adapter, so a future provider is a new adapter. The addressing scheme is never a user setting: all current credential types call the same GitHub API.
+- The Integrations client gains `moved`, `gone` (`410`) and an adapter-internal `renamed` outcome; operation names and the other result kinds are #488's.
+- **Contract spec.** A recorded contract spec ([testing.md](testing.md#fixtures)) records the `200`, `404`, `410` and `301` answers, including the rename redirect and its `Location` form, and is runnable against live GitHub on demand. The `Location` of a transferred issue has not been observed yet: the spec must record it, and until then "any other target means moved" is an assumption.
+- **The `gone` guard.** A `404` sets `gone` only after the probe answers `200` with the same credential; a failing probe is access loss (E19 path) and keeps the marker. The probe runs only after a `404`. A credential with metadata permission only reads the repository but gets `404` on every issue, so a repository read would turn every link `gone`; the issues probe does not. A transfer to a repository the credential cannot read also answers `404` and is labelled `deleted`.
+- Setting `gone` and deleting the marker is one transaction in lock order. The edit path locks the link row and creates a marker only while the link is not `gone` (E1 `(race)`).
 - **Gone is left only by unlinking.** A gone link creates no marker, makes no push and no refresh, and its edits are local only (E1). The Kerghan issue is never deleted or closed. The GitHub issue id stays reserved by the unique index until the unlink. Kerghan never follows a transfer (E2).
 - Pull requests are refused on attach and skipped on import and refresh (E3); GitHub never converts an issue to a pull request, so no state exists for it.
 
@@ -60,21 +69,22 @@ Routes, payloads and refusal codes stay with #489; synced fields, conflicts, ret
   |---|---|---|---|
   | `linked` | none | Link creation; any successful push or refresh | `gone` or `sync_failed` |
   | `gone` | `deleted`, `moved` | The rules above | Unlinking only |
-  | `sync_failed` | `retries_exhausted`, `no_credential`, `credential_invalid`, `forbidden` | #488 (E18 to E21) | A successful push or refresh, or the retry sync action; or `gone` if a later read says so |
+  | `sync_failed` | `retries_exhausted`, `no_credential`, `credential_invalid`, `forbidden` | #488 (E18 to E21) | A successful push that clears the marker; a successful refresh only when no marker exists; the retry sync action; or `gone` |
 
-  #488 may add reasons to the same column in its own PR; this file fixes only `linked`, `gone` and its two reasons.
-- **Derived at read time, never stored:** *pending* (a marker exists), *rate limited until X* (in memory, E17), *repository unavailable* (the repository's status) and *paused* (user not `approved`, E24). An edit never writes a status.
-- **Precedence** when several apply: `gone`, `sync_failed`, repository unavailable, paused, rate limited, pending, `linked`. A read exposes the primary state and the list of all that apply; #489 and #491 decide wording and placement. An unlinked issue has no state.
+  A refresh never clears a failure that belongs to an unsent write, so a read-only credential (which still reads, E5) cannot flip `forbidden` back to `linked` while the marker is unsent. `forbidden` is reached in one attempt, with no retry loop. #487 owns the stored vocabulary and `gone`; #488 owns the `sync_failed` reasons and transitions (it may add reasons to the same column in its own PR), and there is no "links by status" index in v1.
+- **The GitHub App** is registered with Issues: read and no write permission, so a push with that credential ends in `sync_failed`, reason `forbidden`. Whether it gains write permission is #490's decision, and link creation does not warn about a read-only credential.
+- **Derived at read time, never stored:** *pending* (a marker exists), *rate limited until X* (in memory, E17) and *repository unavailable* (the repository's status). An edit never writes a status. There is no *paused* link state: a user who is not `approved` is signed out and cannot read it; only the worker-side pause remains (E24).
+- **Precedence** when several apply: `gone`, `sync_failed`, repository unavailable, rate limited, pending, `linked`. A read exposes the primary state and the list of all that apply; #489 and #491 decide wording and placement. An unlinked issue has no state.
 - Gone offers unlink and no retry sync; sync failed offers retry sync and, for a credential reason, a pointer to Integrations ([ui.md](ui.md)).
 
 ## Edge cases
 
-The rows live in [edge-cases.md](edge-cases.md), the single index: E1 to E5 and E22 (gone, transferred, pull request, already linked, access loss) and E57 to E64 (link creation failures, attach confirmation, repository change, unlink). A change of outcome is made here first, then reflected there.
+The rows live in [edge-cases.md](edge-cases.md), the single index: E1 to E5 and E22 (gone, transferred, pull request, already linked, access loss) and E57 to E65 (link creation failures, attach confirmation, repository change, unlink, redirects). A change of outcome is made here first, then reflected there.
 
 ## Not decided
 
 - Out of scope in v1: creating a GitHub issue from a Kerghan issue, bulk import, following transfers, labels, assignees, milestones, comments, pull requests as links, projects backed by several repositories.
-- Rejected alternatives: asynchronous link creation (needs a "linking" state); Kerghan's values winning on attach (can destroy remote content); a URL as identifier (one more refusal case); following a transfer (a link would leave the project's repository); a manual refresh reviving a gone link (a second exit, more tests; E22 already guards against a false `gone`); "unlink all"; pushing before unlinking; storing `synced` and `pending` (duplicates the marker, can disagree after a crash); encoding the reason in the status value.
+- Rejected alternatives: asynchronous link creation (needs a "linking" state); Kerghan's values winning on attach (can destroy remote content); a URL as identifier (one more refusal case); following a transfer (a link would leave the project's repository); a manual refresh reviving a gone link (a second exit, more tests; the issues probe already guards against a false `gone`); "unlink all"; pushing before unlinking; the undocumented `/repositories/{id}/issues/{number}` path as primary address; a user-selectable addressing scheme per integration; a repository read as the `gone` guard; storing `synced` and `pending` (duplicates the marker, can disagree after a crash); encoding the reason in the status value.
 
 ## Open questions
 
@@ -85,7 +95,7 @@ None owned by #487. What remains is owned elsewhere:
 - [ ] Wording and placement of the states and confirmations. (#491)
 - [ ] Rendering of GitHub content. (#490)
 
-The id-based path and the `301`, `404` and `410` answers are proven by the contract spec of [testing.md](testing.md#fixtures), not an open question.
+The `200`, `404`, `410` and `301` answers, including the rename `Location`, are recorded by the contract spec of [testing.md](testing.md#fixtures); the `Location` of a transferred issue is still to be recorded there.
 
 ## Compatibility, performance and security
 
@@ -97,12 +107,14 @@ The id-based path and the `301`, `404` and `410` answers are proven by the contr
 
 Tiers follow [testing.md](testing.md#tiers): unit on the sync service with the fake GitHub client for the failure mapping, e2e for the attach, unlink and repository-change answers, `(db)` for the unique indexes, the project-row lock race and unlink cleanup. The unique indexes and link cleanup are also in [model.md](model.md#required-tests).
 
-- Import creates a Kerghan issue with GitHub's values; attach replaces the local values only with the confirmation, writes nothing to GitHub and creates no marker (E61); a closed GitHub issue is stored as `closed`.
-- A project with no repository cannot link; link creation is refused with no GitHub call while the repository is Unavailable and allowed while Unknown; the issue number is read in the project's repository.
+- Import creates a Kerghan issue with GitHub's values; attach replaces the local values only with the confirmation, a stale `updated_at` is refused with `409` and the differences, equal values need none, writes nothing to GitHub and creates no marker (E61); a closed GitHub issue is stored as `closed`.
+- A project with no repository cannot link; link creation is refused with no GitHub call while the repository is Unavailable and allowed while Unknown; the issue number is read in the project's repository and must be a positive integer; the GitHub read happens outside the transaction and a repository changed in between is refused as retryable (E62); after creation the base equals the local columns (normalization invariant).
 - A pull request is refused on attach and skipped on import (E3); an already linked GitHub issue (E4, E46 `(db)`) and an already linked Kerghan issue (E64) are refused. Two users may link the same GitHub issue (E45).
-- Failed link creation stores nothing, creates no job and never waits: not found, `410`, `301` (E57), rate limited (E58), no integration, `401`, `403` (E59), timeout, network error, `5xx` (E60).
+- Failed link creation stores nothing, creates no job and never waits: not found, `410`, `301` that is not a rename (E57), rate limited (E58), no integration, `401`, `403` (E59), timeout, network error, `5xx` (E60).
 - Changing or detaching a repository is allowed at zero links and refused with `409` and the link count otherwise; a concurrent link creation is never left against a changed repository `(db)` (E62).
-- Unlinking deletes the link and its marker, keeps the issue, makes no GitHub call and frees the GitHub issue (E47); it is refused without the confirmation while a marker exists, and with it the marker is discarded (E63); it works in every state; another user's or a deleted project answers `404`; an in-flight push is a no-op (E44) `(race)`; unlinking an unlinked issue is refused (E64).
-- A deleted issue (`404` with a readable repository, `410`) and a transferred one (`301`) make the link `gone` with reason `deleted` or `moved` (E1, E2); a `404` with an unreadable repository does not (E22); a gone link creates no marker, makes no push or refresh and leaves only by unlinking.
-- The id-based path and the `301`, `404` and `410` answers are covered by the recorded contract spec ([testing.md](testing.md#fixtures)).
+- Unlinking deletes the link and its marker, keeps the issue, makes no GitHub call and frees the GitHub issue (E47); it is refused without the confirmation while a marker exists, and with it the marker is discarded (E63); it works in every state; another user's or a deleted project answers `404`; an in-flight push is a no-op (E44) `(race)`; unlinking an unlinked issue is a distinct "not linked" refusal (E64).
+- A deleted issue (`404` with a passing probe, `410`) and a transferred one (a `301` to another repository) make the link `gone` with reason `deleted` or `moved` (E1, E2); a `404` with a failing probe does not (E22); a gone link creates no marker, makes no push or refresh and leaves only by unlinking; an edit racing the job that sets `gone` leaves no marker on the gone link (E1 `(race)`).
+- A rename `301` retries once at the `Location`, refreshes the stored owner and name and changes no state; an unclassifiable `Location` or a second `301` is GitHub unavailable, never `moved` or `gone` (E65).
+- `sync_failed` is left only by a push that clears the marker, a refresh with no marker, the retry action or `gone`; a refresh never clears a failure of an unsent write; `forbidden` is reached in one attempt.
+- The `200`, `404`, `410` and `301` answers and the rename `Location` are covered by the contract spec ([testing.md](testing.md#fixtures)).
 - Deleting a project releases its links and frees their GitHub issues.

@@ -18,7 +18,7 @@ Part of the [Issues and Projects specs](../issues.md).
 - A rate limit pauses calls for the credential until the reset and **does not count toward the retry limit**: it never sets `sync_failed` or loses a write (E17).
 - A revoked, missing or read-only credential is not transient: the job stops with no retry loop, the marker is kept and the link shows sync failed with a credential reason (E19 to E21). Fixing the integration does not push by itself.
 - Jobs make no GitHub call for a user who is not `approved`; markers stay and resume on approval (E24).
-- Link states: `linked`, `gone` and `sync_failed` (with a reason) are stored, the rest (pending, rate limited, repository unavailable, paused) are derived, with the precedence of [github-link.md](github-link.md#link-states). #488 owns the `sync_failed` reasons and transitions.
+- Link states: `linked`, `gone` and `sync_failed` (with a reason) are stored, the rest (pending, rate limited, repository unavailable) are derived; `paused` is not a link state, the worker-side pause stays as E24, with the precedence of [github-link.md](github-link.md#link-states). #488 owns the `sync_failed` reasons and transitions.
 - A gone link creates no marker and gets no push or refresh; it is left only by unlinking ([github-link.md](github-link.md#gone-transferred-and-repository-unreachable)).
 - Reads and pushes of a linked issue address the repository by its GitHub id, so a rename or transfer never redirects and a `301` means the issue moved.
 - Only title, body and state are stored, so only they can sync; the base snapshot exists for #488's conflict rules (it may be dropped for last-write-wins).
