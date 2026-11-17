@@ -3,7 +3,7 @@
 The project as the home of issues.
 Part of the [Issues and Projects specs](../issues.md).
 
-Routes, payloads and error codes stay with #489, columns and types in [model.md](model.md#issues_projects), sync mechanics in [sync.md](sync.md) and UI with #491.
+Routes, payloads and error codes are decided in [api.md](api.md); columns and types in [model.md](model.md#issues_projects), sync mechanics in [sync.md](sync.md) and UI with #491.
 
 ## Naming
 
@@ -20,7 +20,7 @@ Routes, payloads and error codes stay with #489, columns and types in [model.md]
 
 | Field | Rule |
 |---|---|
-| `name` | Required, trimmed, 1 to 100 characters (counted in characters). Unique per user, case-insensitively, among non-deleted projects (`409` on a duplicate). A blank name is a validation error. |
+| `name` | Required, trimmed, 1 to 100 characters (counted in characters). Unique per user, case-insensitively, among non-deleted projects (`409 PROJECT_NAME_TAKEN` on a duplicate). A blank name is a validation error. |
 | `description` | Optional, trimmed plain text of at most 2000 characters, never rendered as markup. An empty or whitespace-only description is stored as none. |
 | Repository | Optional, 0 or 1. |
 | Owner | The session's user. |
@@ -33,8 +33,8 @@ Routes, payloads and error codes stay with #489, columns and types in [model.md]
 
 ## Creation paths
 
-- **Explicit:** name, optional description, optional repository. The repository must be one of the caller's own repository rows with `added_at` set, in any derived status (Added, Unavailable and Unknown are all allowed). A row that is not added, belongs to another user or does not exist is rejected without revealing that it exists. A repository that already has a project of the user is rejected with `409`, pointing at the existing project. A taken name is `409`. This is the only way to make a non-code project.
-- **Shortcut** (from an added repository): takes a repository reference plus an optional `name` and `description`. A repository that is not added is rejected (`409`); the shortcut never adds one. If the user already has a project on the repository it returns it (`200`, ignoring `name` and `description`), otherwise it creates one (`201`). The default name is `owner/name` from the repository's latest snapshot, and a name collision answers `409` (no automatic suffix).
+- **Explicit:** name, optional description, optional repository. The repository must be one of the caller's own repository rows with `added_at` set, in any derived status (Added, Unavailable and Unknown are all allowed). A row of another user or a missing one is hidden behind the same `404` as Add; a row of the caller that is not added answers `409 PROJECT_REPOSITORY_NOT_ADDED` (it reveals only the caller's own row). A repository that already has a project of the user is rejected with `409 PROJECT_REPOSITORY_TAKEN`, pointing at the existing project (`meta.projectId`). A taken name is `409 PROJECT_NAME_TAKEN`. This is the only way to make a non-code project.
+- **Shortcut** (from an added repository): takes a repository reference plus an optional `name` and `description`. A repository that is not added is rejected (`409 PROJECT_REPOSITORY_NOT_ADDED`); the shortcut never adds one. If the user already has a project on the repository it returns it (`200`, ignoring `name` and `description`), otherwise it creates one (`201`). The default name is `owner/name` from the repository's latest snapshot, and a name collision answers `409 PROJECT_NAME_TAKEN` (no automatic suffix).
 - **Both:** creation is a pure database write; it never enqueues a job or calls GitHub (the first import or sync is a separate, explicit, on-demand action). Both paths share one service method.
 
 ## Linked repository unavailable or removed
@@ -62,7 +62,7 @@ Routes, payloads and error codes stay with #489, columns and types in [model.md]
 
 - Name and description can be edited under the creation rules.
 - A repository can be attached to a project that has none (same checks as creation; it never syncs).
-- Changing to another repository, or detaching, is allowed only while the project has zero links; with any link it is refused with `409` carrying the link count, and the user unlinks first. The same checks as creation apply and it never syncs. The project row is locked first, so a concurrent link creation cannot race it ([github-link.md](github-link.md#same-repository-rule-and-repository-changes), E62).
+- Changing to another repository, or detaching, is allowed only while the project has zero links; with any link it is refused with `409 PROJECT_HAS_LINKS` carrying the link count (`meta.linkCount`), and the user unlinks first. The same checks as creation apply and it never syncs. The project row is locked first, so a concurrent link creation cannot race it ([github-link.md](github-link.md#same-repository-rule-and-repository-changes), E62).
 - Issues cannot be moved between projects in v1.
 
 ## Room for sharing, members and roles
@@ -109,14 +109,14 @@ Default tier: e2e with fakes; the cleanup queries and concurrency are DB-backed 
 - Another user's project and a deleted project answer `404` on every read and write, and a deleted project is absent from listings.
 - A project without a repository can be created; several such projects are allowed.
 - A project can link one added repository, in any derived status (Added, Unavailable, Unknown).
-- A repository that is not added, belongs to another user or does not exist is rejected without revealing it exists.
-- A repository that already has a project of the user is rejected with `409` on the explicit path, pointing at the existing project.
-- The shortcut returns the existing project with `200` (ignoring `name` and `description`) and creates one with `201`; it rejects a not-added repository with `409`, defaults the name to `owner/name` and answers `409` on a name collision.
+- A repository of another user or a missing one answers `404` like Add; a not-added repository of the caller answers `409 PROJECT_REPOSITORY_NOT_ADDED`.
+- A repository that already has a project of the user is rejected with `409 PROJECT_REPOSITORY_TAKEN` on the explicit path, pointing at the existing project; a not-added repository of the caller answers `409 PROJECT_REPOSITORY_NOT_ADDED` on both paths, while another user's or a missing row answers `404` like Add.
+- The shortcut returns the existing project with `200` (ignoring `name` and `description`) and creates one with `201`; it defaults the name to `owner/name` and answers `409 PROJECT_NAME_TAKEN` on a name collision.
 - Creation, by either path, makes no GitHub call and enqueues no job.
-- Name rules: trimmed, 1 to 100 characters, blank rejected, case-insensitive uniqueness per user with `409`. Description rules: trimmed, at most 2000 characters, blank stored as none.
+- Name rules: trimmed, 1 to 100 characters, blank rejected, case-insensitive uniqueness per user with `409 PROJECT_NAME_TAKEN`. Description rules: trimmed, at most 2000 characters, blank stored as none.
 - Uniqueness of name and repository covers only non-deleted projects; both can be reused after deletion.
-- Deleting a project releases its links, discards its markers, makes queued jobs a no-op, makes no GitHub call and reports the count of issues with unsent changes; deleting a user removes their projects (including soft-deleted ones), issues, links and markers.
-- Attaching a repository to a project without one works and never syncs; attaching a repository that already has a project is rejected; changing or detaching a repository is allowed at zero links and refused with `409` carrying the link count otherwise, and a concurrent link creation never leaves a link against a changed repository `(db)` (E62).
+- Deleting a project releases its links, discards its markers, makes queued jobs a no-op, makes no GitHub call and answers `unsentIssueCount`, the count of issues with unsent changes; deleting a user removes their projects (including soft-deleted ones), issues, links and markers.
+- Attaching a repository to a project without one works and never syncs; attaching a repository that already has a project is rejected with `409 PROJECT_REPOSITORY_TAKEN`; changing or detaching a repository is allowed at zero links and refused with `409 PROJECT_HAS_LINKS` carrying the link count otherwise, and a concurrent link creation never leaves a link against a changed repository `(db)` (E62).
 - Project and issue access goes through the single access check.
 - GitHub work uses the owner's credentials, whoever triggers it.
 - The simultaneous cases of the edge-case table resolve as stated `(db)`.
