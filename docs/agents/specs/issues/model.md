@@ -55,15 +55,16 @@ Part of the [Issues and Projects specs](../issues.md).
 | `issue_id` | `int` | Logical FK to `issues.id`; unique, so an issue has at most one link. |
 | `github_issue_id` | `bigint` | GitHub's global issue id, the stable key; unique with `user_id`. Mapped to a JS number with a `from: Number` transformer, as Repositories does for `github_id`. |
 | `github_number` | `int` | The number inside the repository, for display and API calls (owner and name come from the project's repository row). |
-| `status` | `varchar(32)` | The link state. Values are owned by #487 and #488; this spec only fixes that the column exists and that `sync_failed` is one of the values. |
+| `status` | `varchar(32)` | The stored link state: `linked`, `gone` or `sync_failed` ([github-link.md](github-link.md#link-states)). Other states (pending, rate limited, repository unavailable, paused) are derived at read time and never stored. |
+| `status_reason` | `varchar(32) NULL` | `NULL` for `linked`; `deleted` or `moved` for `gone`; the reasons of `sync_failed` are owned by #488 (`retries_exhausted`, `no_credential`, `credential_invalid`, `forbidden`). |
 | `base_title`, `base_body`, `base_state` | `varchar(256)`, `mediumtext NULL`, `varchar(16)` | The values as last synced (the **base snapshot**), so #488 can tell which side changed which field. If #488 picks plain last-write-wins it may drop them in its own PR. |
 | `github_updated_at`, `last_synced_at` | `datetime NULL` | GitHub's `updated_at` as last seen; the last successful sync. |
 | `etag` | `varchar(255) NULL` | For conditional requests. |
 | `created_at`, `updated_at` | `datetime` | |
 
-- No `repository_id` on the link: the project's repository cannot change in v1, and the repository check happens when the link is created.
-- The link is for issues only; GitHub's issues endpoint also returns pull requests, and refusing or ignoring them is #487's rule. If a transfer changes an issue's id or number, #487 settles it.
-- Any column #487 or #488 needs is added to this file in the same PR.
+- No `repository_id` on the link: a project's repository can change only while it has zero links, under the project-row lock, and the repository check happens when the link is created ([github-link.md](github-link.md#same-repository-rule-and-repository-changes)).
+- The link is for issues only; GitHub's issues endpoint also returns pull requests, which are refused or skipped ([github-link.md](github-link.md#gone-transferred-and-repository-unreachable), E3). A transferred issue makes the link `gone` with reason `moved`; Kerghan never follows it.
+- Any column #488 needs is added to this file in the same PR.
 
 ## `issues_pending_writes` (the pending marker)
 
@@ -94,7 +95,7 @@ Part of the [Issues and Projects specs](../issues.md).
 | `issues_pending_writes` | unique (`link_id`) | One marker per link; marker lookup from a job. |
 
 - The "live project" predicate is `deleted_token = 0` (not `deleted_at IS NULL`), so reads use the unique indexes.
-- Not added on purpose: a separate index on `issues_projects.user_id` (the unique indexes cover it), any index on the marker table (it holds only unsent changes), and one for "links by status" (#487 and #488 add one if needed). The issues listing index is minimal: #489 decides the sort and adds a sort index in the same PR if needed.
+- Not added on purpose: a separate index on `issues_projects.user_id` (the unique indexes cover it), any index on the marker table (it holds only unsent changes), and one for "links by status" (#488 adds one if needed). The issues listing index is minimal: #489 decides the sort and adds a sort index in the same PR if needed.
 - The longest index name is 55 characters, under MySQL's 64.
 
 ## Cleanup
@@ -104,6 +105,7 @@ Part of the [Issues and Projects specs](../issues.md).
 - **`integration.deleted`: no hook.** Nothing in the module stores an integration id; the owner's integrations are resolved at job time through the Integrations module. If none is usable the job follows #488's no-credential rule and the markers stay.
 - **Project deletion (soft)**, one transaction: count the project's issues that have markers (the number the response reports), set `deleted_at` and `deleted_token`, delete the markers and the links of its issues. The `issues` rows stay, unreachable, with no purge in v1.
 - **Single issue deletion:** marker, link, then the issue, in lock order.
+- **Unlinking:** project, issue, link, marker in lock order; it deletes the link and its marker and keeps the issue ([github-link.md](github-link.md#unlinking)).
 - **Repository removal (not built).** It must refuse with `409` while a live project of the user uses the repository. A project requires `added_at`, so its repository row is never pruned; a dangling `repository_id` reads as Unavailable. The spec fixes the rule and a read-only check the Issues module exposes ("does a live project of this user use repository X?"). Because Issues already depends on Repositories, the removal feature must not create an import cycle; the mechanism is chosen when that feature is built (not decided, no owner issue yet).
 
 ## Persistence statement and fold list
@@ -150,7 +152,7 @@ Each row is also a required test. The cross-file matrix is [edge-cases.md](edge-
 | 3 | An edit reverts to the base values | The job diffs, finds nothing to push, clears the marker and makes no GitHub call. |
 | 4 | Unlink, project delete or user delete during a push | Guarded writes affect no row, so the job stops (no insert, no error); a change GitHub already received stays there. |
 | 5 | Two users link the same GitHub issue | Allowed (the unique index includes `user_id`). |
-| 6 | One user links one GitHub issue twice at once, or attaches two to one issue | Unique (`user_id`, `github_issue_id`) and unique (`issue_id`) decide; the other is refused (the code is #487's). |
+| 6 | One user links one GitHub issue twice at once, or attaches two to one issue | Unique (`user_id`, `github_issue_id`) and unique (`issue_id`) decide; the other is refused (the code is #489's). |
 | 7 | A project is deleted and its GitHub issue is linked again from another project | Allowed (the link was deleted); the old project's issue rows stay, unreachable. |
 | 8 | Two projects race for one repository, including an attach | The unique index decides; the loser gets `409`. |
 | 9 | Soft-deleting an already-deleted project | Answers `404`; the update is also guarded by `deleted_token = 0`, so the token is set once. |
@@ -165,7 +167,7 @@ Each row is also a required test. The cross-file matrix is [edge-cases.md](edge-
 ## Scope boundaries
 
 - **In scope:** the four tables, constraints and indexes; the logical FKs and ownership; the marker and its compare-and-clear rule; the stored GitHub data and the fold list; the cleanup contracts and lock order; the required tests.
-- **Owned elsewhere:** routes, payloads and the issues listing sort (#489); link states, unlinking and transfers (#487); synced fields, conflict rules, staleness and retry values (#488); encryption at rest of issue content, retention of soft-deleted projects and quotas (#490); UI (#491); code and migrations (spawned by #492).
+- **Owned elsewhere:** routes, payloads and the issues listing sort (#489); link states, unlinking and transfers are decided in [github-link.md](github-link.md); synced fields, conflict rules, staleness and retry values (#488); encryption at rest of issue content, retention of soft-deleted projects and quotas (#490); UI (#491); code and migrations (spawned by #492).
 - **Not stored in v1:** labels, assignees, milestones, comments and reactions; a per-project issue number; `created_by`; an audit of edits; any schema for sharing, members or roles.
 
 ## Backward compatibility
@@ -187,12 +189,13 @@ Each row is also a required test. The cross-file matrix is [edge-cases.md](edge-
 - [ ] Retention of the issue content of soft-deleted projects: their `issues` rows stay forever in v1 and can hold private-repository titles and bodies. (#490)
 - [ ] Encryption at rest of issue content, and per-user quotas on projects and issues. (#490)
 - [ ] The mechanism by which the future repository-removal feature learns that a live project uses a repository, without an import cycle (the rule and the read-only check are fixed here). Not decided: the removal feature is not built and has no issue yet.
-- [ ] Link states and the unlinking action (#487); synced fields, conflict rules, staleness and retry values (#488): this file only reserves the columns.
+- [ ] Synced fields, conflict rules, staleness, retry values and the `sync_failed` reasons (#488): this file only reserves the columns.
 
 ## Required tests
 
 All in the DB-backed tier (uniqueness, concurrency and transactions need real MySQL), as Repositories; the tier table, seed builders, intruder user and the restart spec are in [testing.md](testing.md#tiers).
 
+- A link's `status_reason` is `NULL` for `linked` and holds `deleted` or `moved` for `gone`; unlinking deletes the link and marker and keeps the issue.
 - The three unique constraints are enforced: (`user_id`, `github_issue_id`) on links, `issue_id` on links, `link_id` on markers.
 - Project name and repository are unique among non-deleted projects only; `deleted_at` and `deleted_token` are always written together, and a `NULL` repository never collides.
 - Names differing only by case or accents are duplicates.
