@@ -20,6 +20,7 @@ For a short abstract of each doc's content, see [summary.md](summary.md) instead
 - [Contributing](contributing.md)
 - [Product Definitions](product.md)
 - [Issue Enhancement](issue-enhancement.md)
+- [Future](future.md)
 - [Environment Variables](environment-variables.md)
 
 ## External tooling
