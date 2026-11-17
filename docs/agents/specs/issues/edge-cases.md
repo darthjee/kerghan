@@ -34,7 +34,7 @@ The seven project rows are owned by [projects.md](projects.md#edge-cases).
 | E2 | GitHub issue transferred to another repository | A `301` to any target other than the same repository id and issue number makes the link `gone` with reason `moved` (E65). Kerghan never follows a transfer: a link stays inside the project's repository. | [github-link.md](github-link.md#gone-transferred-and-repository-unreachable) | A transfer `301` answers `gone` with reason `moved`; no link to the new repository. | Contract |
 | E3 | The GitHub issue is a pull request | Attaching it is refused and an import skips it (a refresh skips it too). | [github-link.md](github-link.md#creating-a-link) | Attach refused; import skips pull requests. | Contract |
 | E4 | A GitHub issue already linked by this user | Refused by the unique (`user_id`, `github_issue_id`) index. | [model.md](model.md#edge-cases) row 6 | The `model.md` row 6 test. | Decided |
-| E5 | Repository archived or read-only on GitHub (`403` on a push) | A permission refusal, not a transient error: same outcome as a revoked credential (E19). Reads still work. | [sync.md](sync.md) (#488) | A `403` on a push follows E19. | Contract |
+| E5 | Repository archived or read-only on GitHub (`403` on a push) | A permission refusal, not a transient error: same outcome as a revoked credential (E19). Reads still work. | [sync.md](sync.md#retries-and-sync_failed) | A `403` on a push follows E19. | Decided |
 
 ## Link creation, unlinking and repository change
 
@@ -56,12 +56,12 @@ Owned by [github-link.md](github-link.md); ids continue after E56 (E65 was added
 
 | # | Case | Expected behavior | Rule | Check | Status |
 |---|---|---|---|---|---|
-| E6 | Both sides change **different** fields | Both changes are kept: the refresh updates the field GitHub changed, and the marker pushes only the field Kerghan changed (per field, using the base snapshot). | [sync.md](sync.md) (#488) | Title changed on one side, body on the other; both survive. | Contract |
-| E7 | Both sides change the **same** field to different values | **Newest timestamp wins, per field**: the time of the last Kerghan edit (the marker's `updated_at`) against GitHub's `updated_at` as last read. A tie goes to Kerghan (deterministic). If GitHub wins, the base takes GitHub's value and the field is dropped from the push; if Kerghan wins, it is pushed. | [sync.md](sync.md) (#488) | Kerghan newer, GitHub newer and tie, each checked. | Contract |
-| E8 | Both sides change the same field to the **same** value | Not a conflict: the base is updated and the marker cleared with no GitHub call. | [sync.md](sync.md) (#488) | Equal values clear the marker and make no call. | Contract |
-| E9 | Inbound refresh while a marker exists | Applied per field with the base snapshot; a field with an unsent local change is never blindly overwritten (E6 and E7 decide). | [sync.md](sync.md) (#488) | A refresh keeps a field with an unsent edit unless E7 says GitHub wins. | Contract |
-| E10 | A local edit lands while an inbound refresh is applied | The refresh applies in one guarded transaction and skips any field whose marker revision changed since it was read, then re-reads. | [sync.md](sync.md) (#488) | Concurrent edit and refresh; the edit is not lost. | Contract |
-| E11 | Ping-pong | An inbound apply never creates a marker; a push writes the pushed values to the base, so GitHub's own `updated_at` bump after our push is not a remote change. | [sync.md](sync.md) (#488) | A push followed by a refresh creates no marker and no further push. | Contract |
+| E6 | Both sides change **different** fields | Both changes are kept: the refresh updates the field GitHub changed, and the marker pushes only the field Kerghan changed (per field, using the base snapshot). | [sync.md](sync.md#reconcile) | Title changed on one side, body on the other; both survive. | Decided |
+| E7 | Both sides change the **same** field to different values | **Newest timestamp wins, per field**: the time of the last Kerghan edit (the marker's `updated_at`) against GitHub's `updated_at` as last read. A tie goes to Kerghan (deterministic). If GitHub wins, the base takes GitHub's value and the field is dropped from the push; if Kerghan wins, it is pushed. | [sync.md](sync.md#reconcile) | Kerghan newer, GitHub newer and tie, each checked. | Decided |
+| E8 | Both sides change the same field to the **same** value | Not a conflict: the base is updated and the marker cleared with no GitHub call. | [sync.md](sync.md#reconcile) | Equal values clear the marker and make no call. | Decided |
+| E9 | Inbound refresh while a marker exists | Applied per field with the base snapshot; a field with an unsent local change is never blindly overwritten (E6 and E7 decide). | [sync.md](sync.md#reconcile) | A refresh keeps a field with an unsent edit unless E7 says GitHub wins. | Decided |
+| E10 | A local edit lands while an inbound refresh is applied | The refresh applies in one guarded transaction and skips any field whose marker revision changed since it was read, then re-reads. | [sync.md](sync.md#reconcile) | Concurrent edit and refresh; the edit is not lost. | Decided |
+| E11 | Ping-pong | An inbound apply never creates a marker; a push writes the pushed values to the base, so GitHub's own `updated_at` bump after our push is not a remote change. | [sync.md](sync.md#reconcile) | A push followed by a refresh creates no marker and no further push. | Decided |
 | E12 | An edit that changes no value | No marker and no revision bump. | [model.md](model.md#issues_pending_writes-the-pending-marker) (#486) | A no-op edit leaves the marker table and the revision unchanged. | Contract |
 
 **Known limitation of E7 (accepted).** The timestamps are per issue, not per field. GitHub's `updated_at` also moves on a comment, label or assignee change, so a later comment on GitHub can make GitHub look newer for a field it did not touch, but only when both sides changed that very field. The marker's `updated_at` moves on any synced-field edit. Per-field timestamps would need a column per field (not in v1). GitHub keeps the edit history of titles and bodies; Kerghan keeps none.
@@ -70,23 +70,23 @@ Owned by [github-link.md](github-link.md); ids continue after E56 (E65 was added
 
 | # | Case | Expected behavior | Rule | Check | Status |
 |---|---|---|---|---|---|
-| E13 | Duplicate jobs for one link | Harmless by design: each job diffs against the base and uses compare-and-clear; the worst case is one redundant `PATCH` with the same values. An in-memory per-link dedupe is optional; correctness never depends on it. | [sync.md](sync.md) (#488) | Two jobs for one link leave one correct state. | Contract |
+| E13 | Duplicate jobs for one link | Harmless by design: each job diffs against the base and uses compare-and-clear; the worst case is one redundant `PATCH` with the same values. An in-memory per-link dedupe is optional; correctness never depends on it. | [sync.md](sync.md#job) | Two jobs for one link leave one correct state. | Decided |
 | E14 | Restart with pending writes | Every marker is re-enqueued once, oldest first. | [model.md](model.md#edge-cases) row 11 | The `model.md` row 11 test. | Decided |
-| E15 | Crash after GitHub accepted a push, before the marker was cleared | The marker survives; the next job re-pushes the same values (an idempotent `PATCH`), or a refresh finds GitHub equal to local (E8). | [sync.md](sync.md) (#488) | Simulated crash before the clear; the next job converges. | Contract |
-| E16 | Shutdown mid-job | The in-memory queue is lost; markers are the source of truth; an unmarked on-demand refresh is lost and re-triggered by the user. | [sync.md](sync.md) (#488) | Restart after a mid-job stop re-enqueues the marker. | Contract |
-| E17 | Rate limit with `retryAfterSeconds` | The marker stays; calls for that credential pause until the reset with no call made while waiting. **Waits do not count toward the retry limit**: a rate limit alone never sets `sync_failed` or loses a write; the link shows "rate limited until X". | [sync.md](sync.md) (#488) | Rate-limited jobs make no call until the reset and never reach `sync_failed`. | Contract |
-| E18 | Retries exhausted | The link becomes `sync_failed` and the marker is kept. Recovery: a manual "retry sync" action, a later edit, or a restart (attempts are in memory). | [sync.md](sync.md) (#488) | Exhausted retries set `sync_failed`; each recovery path re-enqueues. | Contract |
+| E15 | Crash after GitHub accepted a push, before the marker was cleared | The marker survives; the next job re-pushes the same values (an idempotent `PATCH`), or a refresh finds GitHub equal to local (E8). | [sync.md](sync.md#marker-lifecycle) | Simulated crash before the clear; the next job converges. | Decided |
+| E16 | Shutdown mid-job | The in-memory queue is lost; markers are the source of truth; an unmarked on-demand refresh is lost and re-triggered by the user. | [sync.md](sync.md#marker-lifecycle) | Restart after a mid-job stop re-enqueues the marker. | Decided |
+| E17 | Rate limit with `retryAfterSeconds` | The marker stays; calls for that credential pause until the reset with no call made while waiting. **Waits do not count toward the retry limit**: a rate limit alone never sets `sync_failed` or loses a write; the link shows "rate limited until X". | [sync.md](sync.md#rate-limits) | Rate-limited jobs make no call until the reset and never reach `sync_failed`. | Decided |
+| E18 | Retries exhausted | The link becomes `sync_failed` and the marker is kept. Recovery: the "retry sync" action (resets the link to `linked` at once and enqueues), a later edit, or a restart (attempts are in memory). | [sync.md](sync.md#retries-and-sync_failed) | Exhausted retries set `sync_failed`; each recovery path re-enqueues. | Decided |
 
 ## Credentials and integrations
 
 | # | Case | Expected behavior | Rule | Check | Status |
 |---|---|---|---|---|---|
-| E19 | Credential revoked or invalid with a pending write (`401`, the integration becomes `invalid`) | Not transient: no retry loop. The job stops, the marker is kept, and the link shows sync failed with a credential reason ("Fix it in Integrations"). Fixing the integration does not push by itself (on-demand triggers only). | [security.md](security.md) (#488, #490) | A `401` stops the job, keeps the marker and shows the credential reason. | Contract |
-| E20 | No integration at all, or only a GitHub handle | Local edits work and the marker is created; the job refuses before any GitHub call, with the same outcome as E19 (reason: no credential). | [sync.md](sync.md) (#488) | No call is made; the marker stays; the reason is "no credential". | Contract |
-| E21 | Read-only credential or no write permission (`403` on a push) | Same as E19. Only a `401` invalidates an integration (existing rule). | [security.md](security.md) (#488, #490) | A `403` does not invalidate the integration and follows E19. | Contract |
+| E19 | Credential revoked or invalid with a pending write (`401`, the integration becomes `invalid`) | Not transient: no retry loop. The job stops, the marker is kept, and the link shows sync failed with a credential reason ("Fix it in Integrations"). Fixing the integration does not push by itself (on-demand triggers only). | [sync.md](sync.md#retries-and-sync_failed) | A `401` stops the job, keeps the marker and shows the credential reason. | Decided |
+| E20 | No integration at all, or only a GitHub handle | Local edits work and the marker is created; the job refuses before any GitHub call, with the same outcome as E19 (reason: no credential). | [sync.md](sync.md#integration-selection) | No call is made; the marker stays; the reason is "no credential". | Decided |
+| E21 | Read-only credential or no write permission (`403` on a push) | Same as E19. Only a `401` invalidates an integration (existing rule). | [sync.md](sync.md#retries-and-sync_failed) | A `403` does not invalidate the integration and follows E19. | Decided |
 | E22 | `404` on a linked GitHub issue | "Gone" (E1) only if the probe `GET /repos/{owner}/{name}/issues?per_page=1` answers `200` with the same credential; otherwise it is access loss, handled as E19. This avoids discarding a marker because a credential lost access. | [github-link.md](github-link.md#gone-transferred-and-repository-unreachable) | `404` with a passing probe is gone; with a failing probe it follows E19; a metadata-only credential never turns a link `gone`. | Contract |
 | E23 | Integration deleted with pending writes | No hook; once no usable integration remains, this is E20. | [model.md](model.md) (#486) | Delete the last integration; the next job follows E20. | Decided |
-| E24 | Account denied (admin ban) | Jobs make no GitHub call for a user who is not `approved`; markers stay and resume when the user is approved again. | [sync.md](sync.md) (#488) | A denied user's job makes no call; approval resumes it. | Contract |
+| E24 | Account denied (admin ban) | Jobs make no GitHub call for a user who is not `approved`; the markers stay until the user is deleted. `denied` is final (no un-deny, [user-approval](../../modules/auth/user-approval.md)), so nothing resumes them, and a future un-deny feature must re-enqueue the user's markers itself. | [sync.md](sync.md#triggers) | A non-approved user's job makes no call and keeps its markers; no listener re-enqueues them. | Decided |
 
 ## Repository
 
@@ -132,7 +132,6 @@ The data rows of [model.md](model.md#edge-cases) keep their own tests; they are 
 
 ## Open questions
 
-- [ ] Retry limits and cooldown values; which integration is used when several can see the repository. (#488)
 - [ ] The "retry sync" route and how failed and rate-limited states are exposed. (#489, #491)
 - [ ] Per-field timestamps for conflicts: not v1, no owner issue yet.
 
@@ -151,4 +150,4 @@ One test per row, citing its id. Rows touching rows in the database (uniqueness,
 - E4, E14, E23, E25, E26, E29 to E33: tested where the owning file lists them ([model.md](model.md#required-tests), [projects.md](projects.md#required-tests)); E25 waits for the removal feature.
 - E34 to E40 are tested in [projects.md](projects.md#required-tests); E41 to E56 in [model.md](model.md#required-tests).
 - A rate limit alone never produces `sync_failed` (E17), and a `404` never discards a marker without a passing issues probe (E22).
-- Jobs make no GitHub call for a user who is not `approved` (E24).
+- Jobs make no GitHub call for a user who is not `approved`, and no listener re-enqueues their markers (E24).
