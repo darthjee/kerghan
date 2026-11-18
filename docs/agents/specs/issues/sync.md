@@ -58,13 +58,14 @@ Every trigger enqueues the same reconcile job with a link id. No trigger fires f
 
 | # | Event | Enqueues |
 |---|---|---|
-| T1 | A local edit that changes a synced field of a linked issue | The marker upsert (same transaction as the edit), then one reconcile, enqueued **after the commit** so the job never reads uncommitted rows. A crash between commit and enqueue is covered by T5. Enqueued on every such edit with no dedupe: duplicates are harmless by E13 (a later job finds no marker and costs at most a `304` `GET`). |
+| T1 | A local edit that changes a synced field of a linked issue | The marker upsert (same transaction as the edit), then one reconcile, enqueued **after the commit** so the job never reads uncommitted rows. A crash between commit and enqueue is covered by T5. Enqueued through the mandatory per-link dedupe ([below](#queued-jobs-are-deduplicated-per-link)); duplicates across instances are harmless by E13 (a later job finds no marker and costs at most a `304` `GET`). |
 | T2 | The user's manual refresh of one issue | One reconcile, with or without a marker. |
 | T3 | The user's manual refresh of a project | One reconcile per non-`gone` link of the project's issues, oldest `last_synced_at` first (never-synced first). The burst is governed by the rate-limit rules. |
 | T4 | The user's manual "retry sync" on a link | One reconcile (state transitions are in [Retries and `sync_failed`](#retries-and-sync_failed)). |
 | T5 | Boot | One reconcile per marker, oldest `marked_at` first. |
 | T6 | A reconcile whose compare-and-clear deletes no row (the revision changed) | The same reconcile again. |
 
+- <a id="queued-jobs-are-deduplicated-per-link"></a>**Mandatory per-link dedupe.** While a reconcile for a link is queued and not yet started, enqueuing the same link again is a no-op. The link leaves the queued set when its job starts, so an edit during a running job still enqueues the next one (T6 is unaffected). Every trigger (T1 to T6) and the rate-limit timer go through it, so the in-memory queue holds at most one waiting job per link. Per process, lost on restart; correctness never depends on it (E13). Decided in [security.md](security.md#queued-jobs-are-deduplicated-per-link).
 - **No approval trigger (E24).** `denied` is final in [user-approval](../../modules/auth/user-approval.md) (approve only moves `pending` to `approved`; there is no un-deny), and `authorization-request.approved` is login authorization, not account approval. So no listener re-enqueues a user's markers: they stay until the user is deleted, and boot or retry jobs stop at the approval guard with no call. A future un-deny feature must re-enqueue the user's markers itself.
 - **No trigger** for link creation or attach (the request already reads GitHub, E61), unlinking, `gone`, a repository change, or fixing or adding an integration (E19: fixing the integration does not push by itself; the user retries).
 - Routes and payloads for T2 to T4 are decided in [api.md](api.md#trigger-routes); wording and placement are #491's.
@@ -90,7 +91,7 @@ Every trigger enqueues the same reconcile job with a link id. No trigger fires f
   4. At least one candidate integration resolves ([Integration selection](#integration-selection)). Otherwise `sync_failed` with `no_credential` (E20) or `credential_invalid`, no call.
   5. At least one candidate is not paused by a rate limit. Otherwise the link joins a waiting set, no call.
 - **Idempotence** comes from guarded writes, compare-and-clear and a fixed-value `PATCH` (E13, E15); the job holds no state beyond its attempt counter, and correctness never depends on dedupe.
-- **Logs** carry safe fields only: `jobId`, `linkId`, the outcome kind and, on failure, the error class. Never a title, body, URL with a token, header or credential.
+- **Logs** carry safe fields only, as listed in the table of [security.md](security.md#logs-and-job-params): `jobId`, `linkId`, the outcome kind and, on failure, the error class. Never a title, body, owner/name, URL, header or credential.
 
 ## Rate limits
 
@@ -133,7 +134,7 @@ Every trigger enqueues the same reconcile job with a link id. No trigger fires f
 
 - **Candidates.** The project owner's **usable** integrations (`listUsableIntegrations`: `active` and type enabled) whose source lists the project's repository in `repositories_sources`, read through Repositories' exported service (never a join). A handle-only listing is not a candidate (E20). Resolved at job time; nothing in the feature stores an integration id ([model.md](model.md#cleanup)), and the owner's integrations are used whoever triggered the job.
 - **None.** No candidate: `sync_failed` with `no_credential`, or `credential_invalid` when an integration lists the repository but is not usable (`expired`, `invalid`, `undecryptable`). No call is made.
-- **Order.** Write-capable types first (PAT and OAuth app before GitHub App, which is read-only until #490 decides), oldest first within a type.
+- **Order.** By **known write capability**, oldest first within a group: (1) known writable: OAuth app, classic PAT, and a GitHub App whose recorded installation permissions have `issues: write`; (2) unknown: fine-grained PAT; (3) known read-only: a GitHub App whose recorded permissions have `issues: read`. The recorded permissions can be stale (an owner who accepts the update on GitHub is seen at the next test connection); this never causes a wrong outcome, because the credential-only fallback below moves to the next candidate on a `403`, and the aggregate reason stays `forbidden` only when every candidate refuses ([security.md](security.md#write-access-to-github)).
 - **Fallback on credential failures only**, mirroring Repositories' sync: on a `401`, a non-rate-limit `403` or `integration_unusable`, the reconcile restarts from its `GET` with the next candidate, within the same attempt (a `401` still marks that integration `invalid`). A rate limit, timeout or `5xx` never falls back. When every candidate fails on credentials, the reason is `forbidden` if any answered a `403`, else `credential_invalid`.
 - **Paused candidates are skipped.** When every candidate is paused, the link joins the waiting set of the one whose reset comes first.
 - **The E22 probe** runs with the same candidate that got the `404`.
@@ -152,7 +153,7 @@ Complements the marker rules of [model.md](model.md#issues_pending_writes-the-pe
 
 ## GitHub issue client operations
 
-Added to `IntegrationsGithubService`, following its existing shape (`(userId, integrationId, …)`, `kind` unions sharing `RepoFailure` = `invalid_credentials | rate_limited{resetAt} | unavailable{reason} | integration_unusable{reason}`). `repo` is `{ owner, name }` from the repository row; `issue` is `{ id, number, title, body, state, updatedAt, isPullRequest }`.
+`getIssue` and `probeIssues` are added to `IntegrationsGithubService`, which stays `GET`-only; `updateIssue` lives on the separate exported `IntegrationsGithubIssueWriter`, injected only by the issues sync service ([security.md](security.md#the-integrations-boundary)). Both follow the existing service shape (`(userId, integrationId, …)`, `kind` unions sharing `RepoFailure` = `invalid_credentials | rate_limited{resetAt} | unavailable{reason} | integration_unusable{reason}`). `repo` is `{ owner, name }` from the repository row; `issue` is `{ id, number, title, body, state, updatedAt, isPullRequest }`.
 
 | Operation | Success kinds | Issue-specific kinds (plus `RepoFailure`) |
 |---|---|---|
@@ -160,7 +161,9 @@ Added to `IntegrationsGithubService`, following its existing shape (`(userId, in
 | `updateIssue(userId, integrationId, repo, number, changes)` | `ok{issue}` | `not_found`, `gone`, `moved`, `forbidden` |
 | `probeIssues(userId, integrationId, repo)` | `ok` | `not_found`, `forbidden` |
 
-- `changes` holds only the fields to push (`title?`, `body?`, `state?`); never `state_reason`.
+- `changes` holds only the fields to push (`title?`, `body?`, `state?`); never `state_reason`. The writer rejects any other field before a call.
+- **Token permissions per operation** (GitHub App): `getIssue` and `probeIssues` mint `{ issues: read, metadata: read }`, `updateIssue` mints `{ issues: write }`; the token cache is keyed by installation and permission set ([security.md](security.md#the-github-app-gains-issues-write)).
+- **Redirect host check.** No client follows a redirect automatically. A rename is followed once only when the `Location` is `https://api.github.com/` in the rename form; any other scheme, host, port or path shape is unclassifiable: not followed, no credential sent, outcome `transient` (E65). This applies to `updateIssue` too.
 - `renamed` stays adapter-internal: the client retries once at the `Location` and returns the result with a `renamedTo` hint, which the caller hands to Repositories (E65).
 - **`forbidden` is its own kind** (a non-rate-limit `403`) for issue operations, rather than `unavailable{reason:'forbidden'}`, so the sync tells E5 and E21 apart from transient failures without inspecting reasons.
 - Listing for import is not part of this spec (link creation, #487 and [api.md](api.md)).
@@ -172,6 +175,14 @@ Added to `IntegrationsGithubService`, following its existing shape (`(userId, in
 | `KERGHAN_ISSUES_SYNC_MAX_RETRIES` | 5 | Positive integer; otherwise the default. |
 | `KERGHAN_ISSUES_SYNC_COOLDOWN_MS` | 30000 | Positive integer; otherwise the default. |
 | `KERGHAN_ISSUES_SYNC_STALE_AFTER_SECONDS` | 3600 | Positive integer; otherwise the default. |
+| `KERGHAN_ISSUES_MAX_PROJECTS_PER_USER` | 100 | Positive integer; otherwise the default. |
+| `KERGHAN_ISSUES_MAX_ISSUES_PER_PROJECT` | 5000 | Positive integer; otherwise the default. |
+| `KERGHAN_ISSUES_LINK_MAX_PER_WINDOW` | 30 | Positive integer; otherwise the default. |
+| `KERGHAN_ISSUES_LINK_WINDOW_MS` | 60000 | Positive integer; otherwise the default. |
+| `KERGHAN_ISSUES_EDIT_MAX_PER_WINDOW` | 120 | Positive integer; otherwise the default. |
+| `KERGHAN_ISSUES_EDIT_WINDOW_MS` | 60000 | Positive integer; otherwise the default. |
+
+The last six are the caps and request rate limits decided in [security.md](security.md#quotas-and-abuse-limits).
 
 `environment-variables.md` and `modules/workers.md` describe what the code does today, so the implementation issue adds these keys and the `issues.reconcile` job (with its per-class retry override) to them in the same change that reads them.
 
@@ -201,7 +212,7 @@ Owned elsewhere; none is owned by #488.
 
 - [x] Routes and payloads of refresh, retry sync and the exposed `lastSyncedAt`/`stale` fields: decided in [api.md](api.md) (#489).
 - [ ] Wording and placement of the stale hint and states. (#491)
-- [ ] Whether the GitHub App gets issue write permission. (#490)
+- [x] Whether the GitHub App gets issue write permission: decided in [security.md](security.md#the-github-app-gains-issues-write) (#490): Issues: write, with per-operation tokens.
 - [ ] Per-field timestamps (E7 uses one per-issue timestamp): accepted limitation, no owner issue.
 
 ## Required tests
@@ -216,6 +227,7 @@ Tiers, fixtures and tags: [testing.md](testing.md).
 - **Guards.** A deleted project or user, a gone link, a non-approved user (no call and no listener, E24), an Unavailable repository (no call, marker kept) and an Unknown repository (allowed).
 - **Rate limits** (with `FakeClock` and the injected scheduler). No call while paused; one enqueue per waiting link at the reset, oldest marker first; the 60-second fallback; waits never consume attempts and never set `sync_failed` (E17); a pause on one integration leaves another working.
 - **`sync_failed`.** Each reason is set by its trigger (E18 to E22) and each exit (clearing push, refresh with no marker, retry sync resetting to `linked` at once, `gone`); a retry while the repository is Unavailable is refused and keeps the reason; a refresh never clears a failure with an unsent marker; `sync_failed` never blocks a job.
-- **Integration selection.** Candidates, order, credential-only fallback restarting from the `GET`, the aggregate reason, paused candidates skipped, handle-only is no candidate (E20) and the probe uses the same candidate.
+- **Integration selection.** Candidates, order by the three write-capability groups (a stale App record corrected by the `403` fallback), credential-only fallback restarting from the `GET`, the aggregate reason, paused candidates skipped, handle-only is no candidate (E20) and the probe uses the same candidate.
 - **Staleness.** The stale flag at the threshold, never for `gone`, reads never enqueue, and the 60-second fresh skip (never for a link with a marker).
-- **Client.** `getIssue`, `updateIssue` and `probeIssues` map each kind of the table, with `renamed` handled inside the adapter.
+- **Client.** `getIssue`, `updateIssue` and `probeIssues` map each kind of the table, with `renamed` handled inside the adapter; a `301` to another host, scheme or port is not followed and sends no credential.
+- **Dedupe.** Enqueuing a queued link is a no-op; an edit during a running job enqueues once more; a burst of edits leaves one waiting job.

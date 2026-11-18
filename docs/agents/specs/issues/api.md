@@ -101,7 +101,8 @@ Checks in order, for both routes:
 3. A row that is not added answers `409 PROJECT_REPOSITORY_NOT_ADDED` on both routes; the shortcut never adds one. This reveals only the caller's own row.
 4. Explicit: a repository that already has a live project of the user answers `409 PROJECT_REPOSITORY_TAKEN` with `meta.projectId`. Shortcut: returns that project with `200`, ignoring `name` and `description`.
 5. A taken name answers `409 PROJECT_NAME_TAKEN` (the shortcut's default name is `owner/name` from the latest snapshot; no automatic suffix).
-6. Write. Simultaneous creations are decided by the unique indexes: the explicit loser answers the matching `409`, the shortcut loser re-reads and returns the winner with `200`.
+6. Live-project cap: inside the transaction, under the user row lock, `409 PROJECTS_LIMIT_REACHED` (the shortcut's existing-project `200` is never refused).
+7. Write. Simultaneous creations are decided by the unique indexes: the explicit loser answers the matching `409`, the shortcut loser re-reads and returns the winner with `200`.
 
 No GitHub call and no job, on either route.
 
@@ -120,8 +121,8 @@ No GitHub call and no job, on either route.
 
 ### Project delete
 
-- Soft delete as in [projects.md](projects.md#deletion); no confirmation flag (the UI warns beforehand, decided there).
-- Answers `200` `{ "unsentIssueCount": 2 }`, the number of issues whose markers were discarded. `200` rather than `204` because it has a body.
+- Soft delete of the project row, hard delete of its issues, as in [projects.md](projects.md#deletion); no confirmation flag (the UI warns beforehand, decided there).
+- Answers `200` `{ "unsentIssueCount": 2 }`, the number of issues whose markers were discarded, counted before the issues are deleted. `200` rather than `204` because it has a body.
 - A second delete, or any route on a deleted project, answers `404`.
 
 ### Refusal data: `error.meta`
@@ -168,8 +169,8 @@ Field rules are in [Input validation](#input-validation). Every route goes throu
 
 ### Issue create and edit
 
-- Create makes an unlinked issue (`state` defaults to `open`); it never calls GitHub and enqueues nothing. Linking is a separate step (import creates an issue from GitHub directly).
-- Edit: an omitted field is unchanged; `body: null` or `''` clears it. Values equal to the stored ones make no write, no marker and no revision bump (E12).
+- Create makes an unlinked issue (`state` defaults to `open`); it never calls GitHub and enqueues nothing. It answers `409 ISSUES_LIMIT_REACHED` when the project is full (checked under the project row lock). Linking is a separate step (import creates an issue from GitHub directly).
+- Edit: the edit rate limit applies first (`429 ISSUE_EDIT_RATE_LIMITED`, after DTO validation and before the access check, [security.md](security.md#request-rate-limits)). An omitted field is unchanged; `body: null` or `''` clears it. Values equal to the stored ones make no write, no marker and no revision bump (E12).
 - Editing a synced field of a `linked` or `sync_failed` link upserts the marker in the same transaction and enqueues T1 after the commit; a `gone` link's edits are local only ([sync.md](sync.md#triggers)). The response's link object reflects the derived *pending* state.
 
 ### Issue delete
@@ -190,12 +191,12 @@ Field rules are in [Input validation](#input-validation). Every route goes throu
 
 ### Order of checks (import and attach)
 
-1. DTO and path validation (`400`), then the single access check (`404`).
+1. DTO and path validation (`400`), then the link rate limit (`429 ISSUE_LINK_RATE_LIMITED`, import and attach share one window, [security.md](security.md#request-rate-limits)), then the single access check (`404`). Import only: the issue cap pre-check, `409 ISSUES_LIMIT_REACHED`, before any GitHub call.
 2. Attach only: the Kerghan issue already has a link: `409 ISSUE_ALREADY_LINKED` (E64).
 3. The project has no repository: `409 PROJECT_HAS_NO_REPOSITORY`. Its repository is Unavailable (or dangling): `409 PROJECT_REPOSITORY_UNAVAILABLE`. Neither makes a GitHub call; Unknown is allowed.
 4. One `GET` of the GitHub issue with the owner's credential, outside any transaction. Failures map as below; nothing is stored, no job, no wait.
 5. A pull request: `422 GITHUB_ISSUE_IS_PULL_REQUEST` (E3; the input is of the wrong kind, not a conflict).
-6. Transaction, locking the project then (attach) the issue: the repository changed meanwhile, `409 PROJECT_REPOSITORY_CHANGED` (retryable, E62); the GitHub issue is already linked by this user, `409 GITHUB_ISSUE_ALREADY_LINKED` with `meta.projectId` and `meta.issueId` of the existing link (E4, E46, also when the unique index decides a race); attach only, the issue gained a link meanwhile, `409 ISSUE_ALREADY_LINKED`; attach only, the [confirmation check](#attach-confirmation-e61).
+6. Transaction, locking the project then (attach) the issue: import only, the issue cap again under the project lock (`409 ISSUES_LIMIT_REACHED`); the repository changed meanwhile, `409 PROJECT_REPOSITORY_CHANGED` (retryable, E62); the GitHub issue is already linked by this user, `409 GITHUB_ISSUE_ALREADY_LINKED` with `meta.projectId` and `meta.issueId` of the existing link (E4, E46, also when the unique index decides a race); attach only, the issue gained a link meanwhile, `409 ISSUE_ALREADY_LINKED`; attach only, the [confirmation check](#attach-confirmation-e61).
 7. Write: the link with status `linked`; import also creates the issue with GitHub's values.
 
 ### GitHub failures on link creation (E57 to E60)
@@ -215,7 +216,7 @@ A rename `301` is followed once inside the adapter and is not a failure (E65). G
 - Under the issue-row lock, `confirmUpdatedAt` must equal the stored `updated_at` exactly; a missing or stale value while values differ answers the same `409` with the current differences and `updatedAt`. Each call makes one GitHub read; there is no separate preview route.
 - A confirmation sent while the values are equal is ignored.
 - **Precision:** `issues.updated_at` is `datetime(3)` (milliseconds from the injected `Clock`), so an edit made in the same second as the warning still changes it. The other `datetime` columns are unchanged.
-- `meta.differences` names fields only, never GitHub content (rendering GitHub content is #490's).
+- `meta.differences` names fields only, never GitHub content (rendering rules are in [security.md](security.md#github-and-user-content)).
 
 ### Unlink (E63, E64)
 
@@ -285,6 +286,8 @@ Standard error shape ([backend.md](../../architecture/backend.md#error-responses
 | `404` | `NOT_FOUND` (existing) | `Issue not found` | | Issue missing or in another project (the project resolved) |
 | `404` | `NOT_FOUND` (existing) | `Repository not found` | | Repo ref not among the caller's rows (same message as Add) |
 | `404` | `GITHUB_ISSUE_NOT_FOUND` | `GitHub issue not found` | | Import/attach: not found, `410`, non-rename `301` (E57) |
+| `409` | `PROJECTS_LIMIT_REACHED` | `You reached the maximum number of projects` | | Create, shortcut (not the shortcut's existing-project `200`) |
+| `409` | `ISSUES_LIMIT_REACHED` | `This project reached the maximum number of issues` | | Issue create, import |
 | `409` | `PROJECT_NAME_TAKEN` | `A project with this name already exists` | | Create, shortcut, edit |
 | `409` | `PROJECT_REPOSITORY_TAKEN` | `This repository already has a project` | `projectId` | Explicit create, repository change |
 | `409` | `PROJECT_REPOSITORY_NOT_ADDED` | `Add this repository first` | | Create, shortcut, repository change |
@@ -302,9 +305,11 @@ Standard error shape ([backend.md](../../architecture/backend.md#error-responses
 | `409` | `GITHUB_CREDENTIAL_UNUSABLE` | `The integration for this repository needs attention` | `reason` | Import/attach: no usable integration, `401`, `403` (E59) |
 | `422` | `GITHUB_ISSUE_IS_PULL_REQUEST` | `This is a pull request, not an issue` | | Import, attach (E3) |
 | `502` | `GITHUB_UNAVAILABLE` (existing) | existing | | Import/attach: timeout, network, `5xx`, unclassifiable `301` (E60) |
+| `429` | `ISSUE_LINK_RATE_LIMITED` | `Too many link requests; try again later` | | Import, attach; with `Retry-After` and `retryAfterSeconds` |
+| `429` | `ISSUE_EDIT_RATE_LIMITED` | `Too many edits; try again later` | | Issue edit; with `Retry-After` and `retryAfterSeconds` |
 | `503` | `GITHUB_RATE_LIMITED` (existing) | existing | | Import/attach rate limited (E58), with `retryAfterSeconds` |
 
-- 17 new codes; none is used outside this module.
+- 21 new codes; none is used outside this module.
 - **Not-found messages:** project first, then issue, so a foreign project never reveals its issues. The issue lookup is always inside the resolved project.
 - `meta` values are public ids (uuids), counts, field names, timestamps or the sync reason vocabulary; never internal ids, GitHub content or credential material.
 - Messages are final English strings; the UI may map codes to its own wording (#491).
@@ -333,7 +338,7 @@ Every failure answers `400 VALIDATION_FAILED` (with `error.details`) before any 
 | `search` | both listings | String, trimmed, at most 100 code points; empty means no search; `LIKE` metacharacters escaped. |
 
 - **Output timestamps** are ISO 8601 UTC strings. An issue's `updatedAt` carries milliseconds (`datetime(3)`); other timestamps carry the second precision of their columns.
-- No content rules beyond these (no markup stripping or control-character filtering): titles and bodies may hold Markdown, and how they are rendered is #490's.
+- No content rules beyond these (no markup stripping or control-character filtering): titles and bodies may hold Markdown, and how they are rendered is decided in [security.md](security.md#bodies-restricted-markdown).
 - Validation runs on input only. Values pulled from GitHub are stored as GitHub returns them, and an edit sends only the fields it changes, so an inbound value outside these rules (an untrimmed title, for instance) never blocks an unrelated edit.
 
 ## Open questions
@@ -341,7 +346,7 @@ Every failure answers `400 VALIDATION_FAILED` (with `error.details`) before any 
 None left in this file. What remains belongs to its owner:
 
 - Wording, screens, placement of every state and the polling cadence after a trigger. (#491)
-- Rendering of GitHub content, encryption, retention, quotas and request rate limits on the creation routes. (#490)
+- [x] Rendering of GitHub content, encryption, retention, quotas and request rate limits: decided in [security.md](security.md) (#490); the codes are in the catalogue above.
 
 ## Required tests
 
@@ -353,4 +358,5 @@ Default tier: e2e with fakes ([testing.md](testing.md#default-tier-by-category))
 - Listing defaults, bounds, sort, filters, literal search and totals; issue rows without `body`.
 - The link object: `states` precedence, `linked` alone, `reason`, `rateLimitedUntil`, `stale` never for `gone`; reads never enqueue.
 - T2 `202`/`200 alreadyFresh`, T3 counts, T4 reset and no-op, the refusals, and retry refused while Unavailable keeping the reason.
+- The four codes of #490 (`PROJECTS_LIMIT_REACHED`, `ISSUES_LIMIT_REACHED`, `ISSUE_LINK_RATE_LIMITED`, `ISSUE_EDIT_RATE_LIMITED`) at their place in the order of checks, with the cases of [security.md](security.md#required-tests).
 - Validation: strict types, code-point lengths with a 4-byte character, trimming rules, `null` handling, `number` bounds.

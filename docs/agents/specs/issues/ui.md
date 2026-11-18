@@ -10,6 +10,8 @@ Part of the [Issues and Projects specs](../issues.md).
 - From the [sync spec](sync.md#staleness), inputs for #491: a stale link shows a stale hint and "last synced X ago"; refresh actions exist for one issue and for a project; retry sync turns the state to pending at once.
 - Unlinking asks for a plain confirmation when unsent changes exist (E63); attaching asks for one when the local values differ from GitHub's and would be replaced, and the confirmation is bound to the issue's `updated_at`, so an edit made after the warning is shown again with the current differences instead of being replaced (E61). Unlinking an issue that is already unlinked is treated as done (E64).
 - From [api.md](api.md), inputs for #491 (no wording decided): the attach `409 ISSUE_ATTACH_CONFIRMATION_REQUIRED` is the warning and carries `meta.differences` and `meta.updatedAt` for the retry with `confirmUpdatedAt`; `ISSUE_NOT_LINKED` is treated as already unlinked; the single-issue refresh answers `alreadyFresh` when skipped; a retry sync refused with `PROJECT_REPOSITORY_UNAVAILABLE` keeps the failure reason visible; the issues listing offers the `state` filter (open by default, closed, all) and a title search, newest created first, without `body`; a linked issue cannot be deleted until unlinked (`ISSUE_LINKED`).
+- Issue bodies render through one shared `IssueBody` component under the restricted-Markdown rules of [security.md](security.md#bodies-restricted-markdown); titles and project descriptions render as text; a link's GitHub URL renders only when it starts with `https://github.com/`.
+- From [security.md](security.md#quotas-and-abuse-limits), inputs for #491 (wording to decide): the refusals `PROJECTS_LIMIT_REACHED`, `ISSUES_LIMIT_REACHED`, `ISSUE_LINK_RATE_LIMITED` and `ISSUE_EDIT_RATE_LIMITED` (the last two carry `retryAfterSeconds`) need messages; a `forbidden` sync failure points to Integrations.
 - Creating a project offers an optional repository among the user's added repositories, and the shortcut starts from an added repository ([projects.md](projects.md#creation-paths)).
 
 ## Open questions
@@ -28,6 +30,6 @@ Frontend tier ([testing.md](testing.md#frontend-tests)):
 - The link states display in the precedence order of [github-link.md](github-link.md#link-states).
 - The unlink action asks for the unsent-changes confirmation (E63) and the attach action for the replace confirmation bound to `updated_at` (E61).
 - The deletion confirmation shows the count of issues with unsent changes.
-- A project description renders as text, never as markup `(static)`.
+- A project description and every title render as text, never as markup `(static)`; bodies render through the shared component, with the unit specs of [security.md](security.md#required-tests).
 
 Screens and wording are #491's.

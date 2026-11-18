@@ -37,7 +37,7 @@ background workers (in-process, from #479). A project may be about code or anyth
 - A project is the home of issues; every Kerghan issue belongs to exactly one project.
 - A project has 0 or 1 linked repository (one of the user's repository rows); no repository means a
   non-code project. At most one project per repository per user, among non-deleted projects.
-- Deleting a project is a soft delete that frees its name, repository and GitHub links, and never
+- Deleting a project soft-deletes the project row (a tombstone) and hard-deletes its issues, links and markers; it frees its name, repository and GitHub links, and never
   touches GitHub.
 - A project has one owner, is private, and another user's project answers 404.
 - Creation is explicit (optionally picking an added repository, the only way to make a non-code
@@ -61,7 +61,7 @@ background workers (in-process, from #479). A project may be about code or anyth
 | [issues/github-link.md](issues/github-link.md) | GitHub link | [open](issues/github-link.md#open-questions) |
 | [issues/sync.md](issues/sync.md) | Two-way sync and workers | [decided](issues/sync.md#open-questions) |
 | [issues/api.md](issues/api.md) | API | [decided](issues/api.md#open-questions) |
-| [issues/security.md](issues/security.md) | Security | [open](issues/security.md#open-questions) |
+| [issues/security.md](issues/security.md) | Security | [decided](issues/security.md#open-questions) |
 | [issues/ui.md](issues/ui.md) | UI | [open](issues/ui.md#open-questions) |
 | [issues/edge-cases.md](issues/edge-cases.md) | Edge-cases matrix | [open](issues/edge-cases.md#open-questions) |
 | [issues/testing.md](issues/testing.md) | Test strategy | [decided](issues/testing.md#open-questions) |

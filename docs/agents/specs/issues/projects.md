@@ -50,10 +50,11 @@ Routes, payloads and error codes are decided in [api.md](api.md); columns and ty
 ## Deletion
 
 - Soft delete: the project gets a deletion timestamp.
-- A deleted project answers `404` for every read or write and is excluded from listings, like another user's project. Its issues are kept in the database but are unreachable through the API.
+- A deleted project answers `404` for every read or write and is excluded from listings, like another user's project. Its issues, links and markers are deleted in the same transaction; the project row stays as a tombstone with its description cleared ([security.md](security.md#project-deletion-removes-the-issues-at-once)).
 - Uniqueness of name and repository covers only non-deleted projects, so both can be reused after deletion (enforced by the `deleted_token` unique indexes, see [model.md](model.md#issues_projects)).
 - The project's GitHub links are deleted on deletion, which frees their GitHub issues for another project.
-- Pending markers are discarded. Queued or in-flight jobs for a deleted project or user are a no-op (no error, no retry).
+- Pending markers are discarded.
+- A live project counts toward the per-user cap (`409 PROJECTS_LIMIT_REACHED`, default 100); tombstones do not count, and the shortcut's existing-project `200` is never refused ([security.md](security.md#per-user-caps-on-stored-data)). Queued or in-flight jobs for a deleted project or user are a no-op (no error, no retry).
 - The confirmation warns that unsent changes will not be written to GitHub, and the response says how many issues had them.
 - Deletion never makes a GitHub call.
 - No restore and no purge in v1.
@@ -115,7 +116,7 @@ Default tier: e2e with fakes; the cleanup queries and concurrency are DB-backed 
 - Creation, by either path, makes no GitHub call and enqueues no job.
 - Name rules: trimmed, 1 to 100 characters, blank rejected, case-insensitive uniqueness per user with `409 PROJECT_NAME_TAKEN`. Description rules: trimmed, at most 2000 characters, blank stored as none.
 - Uniqueness of name and repository covers only non-deleted projects; both can be reused after deletion.
-- Deleting a project releases its links, discards its markers, makes queued jobs a no-op, makes no GitHub call and answers `unsentIssueCount`, the count of issues with unsent changes; deleting a user removes their projects (including soft-deleted ones), issues, links and markers.
+- Deleting a project releases its links, discards its markers, makes queued jobs a no-op, makes no GitHub call and deletes its issues, tombstones the project (description cleared) and answers `unsentIssueCount`, the count of issues with unsent changes counted before the delete; deleting a user removes their projects (including soft-deleted ones), issues, links and markers.
 - Attaching a repository to a project without one works and never syncs; attaching a repository that already has a project is rejected with `409 PROJECT_REPOSITORY_TAKEN`; changing or detaching a repository is allowed at zero links and refused with `409 PROJECT_HAS_LINKS` carrying the link count otherwise, and a concurrent link creation never leaves a link against a changed repository `(db)` (E62).
 - Project and issue access goes through the single access check.
 - GitHub work uses the owner's credentials, whoever triggers it.

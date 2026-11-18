@@ -109,7 +109,7 @@ Part of the [Issues and Projects specs](../issues.md).
 - **Lock order.** Every multi-table write in the module locks projects, then issues, then links, then markers, so cleanups never deadlock with a running job or a project deletion.
 - **`user.deleted`** (an awaited event after the user-row delete commits; nothing emits it yet). The Issues module listens, as Repositories does. One transaction deletes the markers (through links), the links by `user_id`, the issues (through the user's projects) and the user's projects, including soft-deleted ones. A failure is logged at error level with safe fields (`userId`, error class) and never blocks the deletion; a future deletion path must retry the event or run an orphan sweep. Creating a project re-reads the user through Auth's export (`lockExistingUser`) in the same transaction, so no orphan is created for a user deleted a moment earlier. A job after the delete only updates or deletes guarded rows and never inserts.
 - **`integration.deleted`: no hook.** Nothing in the module stores an integration id; the owner's integrations are resolved at job time through the Integrations module. If none is usable the job follows the no-credential rule of [sync.md](sync.md#integration-selection) and the markers stay.
-- **Project deletion (soft)**, one transaction: count the project's issues that have markers (the number the response reports), set `deleted_at` and `deleted_token`, delete the markers and the links of its issues. The `issues` rows stay, unreachable, with no purge in v1.
+- **Project deletion (soft project row, hard issues)**, one transaction in lock order: lock the project row; count the project's issues that have markers (the number the response reports, counted before the delete); delete the markers, the links and the issues; clear `description` to `NULL`; set `deleted_at` and `deleted_token`. The project row stays as a tombstone, so the live-uniqueness indexes, the `404` and the no-op of queued jobs keep working; no restore and no purge in v1 ([security.md](security.md#project-deletion-removes-the-issues-at-once)).
 - **Single issue deletion:** the issue only, refused while a link exists (`409 ISSUE_LINKED`), under the project then issue lock, so a concurrent attach cannot leave a link on a deleted issue. A linked issue is unlinked first ([github-link.md](github-link.md#unlinking)).
 - **Unlinking:** project, issue, link, marker in lock order; it deletes the link and its marker and keeps the issue ([github-link.md](github-link.md#unlinking)).
 - **Repository removal (not built).** It must refuse with `409` while a live project of the user uses the repository. A project requires `added_at`, so its repository row is never pruned; a dangling `repository_id` reads as Unavailable. The spec fixes the rule and a read-only check the Issues module exposes ("does a live project of this user use repository X?"). Because Issues already depends on Repositories, the removal feature must not create an import cycle; the mechanism is chosen when that feature is built (not decided, no owner issue yet).
@@ -125,7 +125,7 @@ Statements to rewrite at fold time:
 | `docs/agents/product.md` | "What the backend persists", "Issue fetching model", "GitHub access", and the two Deferred items. |
 | `AGENTS.md` | The project overview and the "lightweight account" bullet. |
 | `CLAUDE.md` | Boundaries: "Issue fetching itself still reads GitHub unauthenticated…". |
-| `docs/agents/architecture/security.md` | "GitHub credentials stay in the backend". |
+| `docs/agents/architecture/security.md` | "GitHub credentials stay in the backend", including rewriting "Fixed operations: `GET`-only" to the narrowed rule of [security.md](security.md#the-integrations-boundary). |
 | `docs/agents/summary.md`, `docs/agents/flow.md` | Where they say issue data is never persisted or only read by the browser. |
 
 `AGENTS.md` and `CLAUDE.md` hold the user's own rules: #492 proposes the edit and asks before touching them. #492 also copies the repository-removal rule into `modules/repositories.md` (already commented there).
@@ -159,7 +159,7 @@ Each row is also a required test. The cross-file matrix is [edge-cases.md](edge-
 | 4 | Unlink, project delete or user delete during a push | Guarded writes affect no row, so the job stops (no insert, no error); a change GitHub already received stays there. |
 | 5 | Two users link the same GitHub issue | Allowed (the unique index includes `user_id`). |
 | 6 | One user links one GitHub issue twice at once, or attaches two to one issue | Unique (`user_id`, `github_issue_id`) and unique (`issue_id`) decide; the other is refused (`GITHUB_ISSUE_ALREADY_LINKED` or `ISSUE_ALREADY_LINKED`, [api.md](api.md#error-catalogue)). |
-| 7 | A project is deleted and its GitHub issue is linked again from another project | Allowed (the link was deleted); the old project's issue rows stay, unreachable. |
+| 7 | A project is deleted and its GitHub issue is linked again from another project | Allowed (the link was deleted); the old project's issue rows were deleted with the project. |
 | 8 | Two projects race for one repository, including an attach | The unique index decides; the loser gets `409`. |
 | 9 | Soft-deleting an already-deleted project | Answers `404`; the update is also guarded by `deleted_token = 0`, so the token is set once. |
 | 10 | `deleted_token` reuse | A project's id is never `0`, so a deleted token never equals the live value and tokens never collide. |
@@ -173,7 +173,7 @@ Each row is also a required test. The cross-file matrix is [edge-cases.md](edge-
 ## Scope boundaries
 
 - **In scope:** the four tables, constraints and indexes; the logical FKs and ownership; the marker and its compare-and-clear rule; the stored GitHub data and the fold list; the cleanup contracts and lock order; the required tests.
-- **Owned elsewhere:** routes, payloads and the issues listing sort are decided in [api.md](api.md); link states, unlinking and transfers are decided in [github-link.md](github-link.md); encryption at rest of issue content, retention of soft-deleted projects and quotas (#490); UI (#491); code and migrations (spawned by #492).
+- **Owned elsewhere:** routes, payloads and the issues listing sort are decided in [api.md](api.md); link states, unlinking and transfers are decided in [github-link.md](github-link.md); encryption at rest, retention of deleted projects, quotas and logs are decided in [security.md](security.md) (#490); UI (#491); code and migrations (spawned by #492).
 - **Not stored in v1:** labels, assignees, milestones, comments and reactions; a per-project issue number; `created_by`; an audit of edits; any schema for sharing, members or roles.
 
 ## Backward compatibility
@@ -188,12 +188,13 @@ Each row is also a required test. The cross-file matrix is [edge-cases.md](edge-
 - A body is capped at 65536 characters, and a linked issue keeps one extra copy (the base snapshot).
 - No secret sits in these tables, and job params and logs carry ids only.
 - Every access goes through the project's single access check; the link's `user_id` is for uniqueness only.
-- Issue content of private repositories is stored unencrypted, as Repositories stores private metadata; encryption, retention and quotas are #490's.
+- Issue content is stored unencrypted, as Repositories stores private metadata; decided, with its accepted exposure, in [security.md](security.md#no-encryption-of-issue-content). Caps on projects and issues are in [security.md](security.md#quotas-and-abuse-limits).
+- Every unique index's `ER_DUP_ENTRY` is caught at the write and mapped to its `409` (or the shortcut's re-read), never re-thrown, so a duplicated value never reaches a log ([security.md](security.md#exception-messages-never-reach-the-logs)).
 
 ## Open questions
 
-- [ ] Retention of the issue content of soft-deleted projects: their `issues` rows stay forever in v1 and can hold private-repository titles and bodies. (#490)
-- [ ] Encryption at rest of issue content, and per-user quotas on projects and issues. (#490)
+- [x] Retention of the issue content of deleted projects: decided in [security.md](security.md#project-deletion-removes-the-issues-at-once) (#490): the issues, links and markers are hard-deleted with the project.
+- [x] Encryption at rest of issue content, and per-user quotas: decided in [security.md](security.md#data-at-rest) (#490): no encryption; caps in [Quotas](security.md#quotas-and-abuse-limits).
 - [ ] The mechanism by which the future repository-removal feature learns that a live project uses a repository, without an import cycle (the rule and the read-only check are fixed here). Not decided: the removal feature is not built and has no issue yet.
 
 ## Required tests
@@ -207,7 +208,7 @@ All in the DB-backed tier (uniqueness, concurrency and transactions need real My
 - Compare-and-clear: a changed revision deletes no row and the job re-enqueues itself; an unchanged one clears the marker and updates the base snapshot.
 - An edit of a linked issue upserts the marker in the same transaction; an edit of an unlinked issue creates none.
 - Boot re-enqueues every marker once, oldest first, by `link_id` (the restart spec of [testing.md](testing.md#worker-tests)).
-- Cleanup contracts: `user.deleted` removes markers, links, issues and projects (including soft-deleted) in lock order, and a listener failure is logged without blocking; project soft delete removes markers and links and keeps the `issues` rows; single issue deletion removes only the issue and is refused while a link exists.
+- Cleanup contracts: `user.deleted` removes markers, links, issues and projects (including soft-deleted) in lock order, and a listener failure is logged without blocking; project deletion removes markers, links and issues, clears the description and keeps the tombstone; single issue deletion removes only the issue and is refused while a link exists.
 - The `uuid` unique indexes are enforced on projects and issues; `issues.updated_at` round-trips milliseconds (`datetime(3)`).
 - utf8mb4 (a 4-byte character) and `bigint` (an id above 2³¹) round-trip.
 - The migration `up` creates the four tables and `down` drops them in reverse.
