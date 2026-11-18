@@ -3,7 +3,7 @@
 The optional one-to-one link between a Kerghan issue and a GitHub issue.
 Part of the [Issues and Projects specs](../issues.md).
 
-Routes, payloads and refusal codes are decided in [api.md](api.md); synced fields, conflicts, retry values and the `sync_failed` transitions in [sync.md](sync.md); encryption, retention, quotas and rendering of GitHub content with #490; wording and placement with #491. Columns are in [model.md](model.md#issues_github_links).
+Routes, payloads and refusal codes are decided in [api.md](api.md); synced fields, conflicts, retry values and the `sync_failed` transitions in [sync.md](sync.md); encryption, retention, quotas and rendering of GitHub content in [security.md](security.md) (#490); wording and placement with #491. Columns are in [model.md](model.md#issues_github_links).
 
 - One to one, per user: unique on user and GitHub issue. Two users may link the same GitHub issue.
 - The link is optional.
@@ -48,11 +48,11 @@ Routes, payloads and refusal codes are decided in [api.md](api.md); synced field
 | `404`, and the probe fails | Access lost | Not `gone`; follows E19, the marker is kept (E22) |
 | `301`, same repository id and issue number | Repository renamed | Retry once at the `Location`, refresh the stored owner and name, no state change (E65) |
 | `301`, any other target | Issue transferred | Link `gone`, reason `moved` (E2, E65) |
-| `301`, unclassifiable `Location` or a second `301` in one attempt | Unclear | GitHub unavailable, never `moved` or `gone` (E65) |
+| `301`, unclassifiable `Location` (another scheme, host or port included) or a second `301` in one attempt | Unclear | GitHub unavailable, never `moved` or `gone` (E65) |
 | `403` on a push | Read-only credential or archived repository | E5 and E21, unchanged |
 | Repository Unavailable | Repository deleted or lost to the credential | Links and markers untouched, not `gone` (E27) |
 
-- **Addressing.** Reads and pushes use the documented `/repos/{owner}/{name}/issues/{number}` with the repository's stored owner and name, and never follow a redirect automatically; a `301` is classified by its `Location` as in the table (E65). The id form is reached only through GitHub's own redirect: Kerghan never builds an id-path URL, because that path is not in GitHub's REST reference and its removal would make every read answer `404` and look like a mass deletion. A rename refreshes the stored owner and name, an outcome owned by Repositories and reached through an event or service call.
+- **Addressing.** Reads and pushes use the documented `/repos/{owner}/{name}/issues/{number}` with the repository's stored owner and name, and never follow a redirect automatically (a `Location` off `https://api.github.com` is not followed and carries no credential, [security.md](security.md#redirects-never-carry-a-credential-off-github)); a `301` is classified by its `Location` as in the table (E65). The id form is reached only through GitHub's own redirect: Kerghan never builds an id-path URL, because that path is not in GitHub's REST reference and its removal would make every read answer `404` and look like a mass deletion. A rename refreshes the stored owner and name, an outcome owned by Repositories and reached through an event or service call.
 - **Normalized outcomes only.** The link layer and the sync service see only ok, `deleted`, `moved`, not found, unavailable, rate limited and credential results. URLs, status codes and redirect headers stay in the provider adapter, so a future provider is a new adapter. The addressing scheme is never a user setting: all current credential types call the same GitHub API.
 - The Integrations client gains `moved`, `gone` (`410`) and an adapter-internal `renamed` outcome; the operations (`getIssue`, `updateIssue`, `probeIssues`) and their result kinds are in [sync.md](sync.md#github-issue-client-operations); `renamed` stays inside the adapter.
 - **Contract spec.** A recorded contract spec ([testing.md](testing.md#fixtures)) records the `200`, `404`, `410` and `301` answers, including the rename redirect and its `Location` form, and is runnable against live GitHub on demand. The `Location` of a transferred issue has not been observed yet: the spec must record it, and until then "any other target means moved" is an assumption.
@@ -72,7 +72,7 @@ Routes, payloads and refusal codes are decided in [api.md](api.md); synced field
   | `sync_failed` | `retries_exhausted`, `no_credential`, `credential_invalid`, `forbidden` [sync.md](sync.md#retries-and-sync_failed): `retries_exhausted` on the last transient attempt; `no_credential` when no integration resolves; `credential_invalid` on a `401` or when the candidates are not usable; `forbidden` on a `403` or a failed issues probe (E18 to E22) | A successful push that clears the marker; a successful refresh only when no marker exists; the retry sync action (resets to `linked` at once and enqueues); or `gone` |
 
   A refresh never clears a failure that belongs to an unsent write, so a read-only credential (which still reads, E5) cannot flip `forbidden` back to `linked` while the marker is unsent. `forbidden` is reached in one attempt, with no retry loop. The stored vocabulary and `gone` are decided here; the `sync_failed` reasons (final, four) and transitions are in [sync.md](sync.md#retries-and-sync_failed), and there is no "links by status" index in v1.
-- **The GitHub App** is registered with Issues: read and no write permission, so a push with that credential ends in `sync_failed`, reason `forbidden`. Whether it gains write permission is #490's decision, and link creation does not warn about a read-only credential.
+- **The GitHub App** is registered with Issues: write and Metadata: read ([security.md](security.md#the-github-app-gains-issues-write)). An installation whose owner has not yet accepted the updated permissions still reads, and a push with it ends in `sync_failed`, reason `forbidden`; link creation does not warn about a read-only credential.
 - **Derived at read time, never stored:** *pending* (a marker exists), *rate limited until X* (in memory, E17) and *repository unavailable* (the repository's status). An edit never writes a status. There is no *paused* link state: a user who is not `approved` is signed out and cannot read it; only the worker-side pause remains (E24).
 - **Precedence** when several apply: `gone`, `sync_failed`, repository unavailable, rate limited, pending, `linked`. A read exposes the primary state and the list of all that apply ([api.md](api.md#link-object)); #491 decides wording and placement. An unlinked issue has no state.
 - Gone offers unlink and no retry sync; sync failed offers retry sync and, for a credential reason, a pointer to Integrations ([ui.md](ui.md)).
@@ -92,7 +92,7 @@ None owned by #487. What remains is owned elsewhere:
 
 - [x] Routes, payloads, refusal codes and how the states and confirmations are exposed: decided in [api.md](api.md) (#489).
 - [ ] Wording and placement of the states and confirmations. (#491)
-- [ ] Rendering of GitHub content. (#490)
+- [x] Rendering of GitHub content: decided in [security.md](security.md#github-and-user-content) (#490).
 
 The `200`, `404`, `410` and `301` answers, including the rename `Location`, are recorded by the contract spec of [testing.md](testing.md#fixtures); the `Location` of a transferred issue is still to be recorded there.
 
@@ -113,7 +113,7 @@ Tiers follow [testing.md](testing.md#tiers): unit on the sync service with the f
 - Changing or detaching a repository is allowed at zero links and refused with `409 PROJECT_HAS_LINKS` and the link count otherwise; a concurrent link creation is never left against a changed repository `(db)` (E62).
 - Unlinking deletes the link and its marker, keeps the issue, makes no GitHub call and frees the GitHub issue (E47); it is refused without the confirmation while a marker exists, and with it the marker is discarded (E63); it works in every state; another user's or a deleted project answers `404`; an in-flight push is a no-op (E44) `(race)`; unlinking an unlinked issue is a distinct `409 ISSUE_NOT_LINKED` refusal (E64).
 - A deleted issue (`404` with a passing probe, `410`) and a transferred one (a `301` to another repository) make the link `gone` with reason `deleted` or `moved` (E1, E2); a `404` with a failing probe does not (E22); a gone link creates no marker, makes no push or refresh and leaves only by unlinking; an edit racing the job that sets `gone` leaves no marker on the gone link (E1 `(race)`).
-- A rename `301` retries once at the `Location`, refreshes the stored owner and name and changes no state; an unclassifiable `Location` or a second `301` is GitHub unavailable, never `moved` or `gone` (E65).
+- A rename `301` retries once at the `Location`, refreshes the stored owner and name and changes no state; an unclassifiable `Location` (including another host) or a second `301` is GitHub unavailable, never `moved` or `gone`, and no credential is sent off `api.github.com` (E65).
 - `sync_failed` is left only by a push that clears the marker, a refresh with no marker, the retry action (which resets to `linked` at once and enqueues) or `gone`; a refresh never clears a failure of an unsent write; `forbidden` is reached in one attempt.
 - `NULL` and `''` compare equal, a blank body is stored as `NULL` and nothing else is normalized (sync spec: [sync.md](sync.md#required-tests)).
 - The `200`, `404`, `410` and `301` answers and the rename `Location` are covered by the contract spec ([testing.md](testing.md#fixtures)).

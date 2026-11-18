@@ -73,7 +73,9 @@ Both kinds assert invariants, never timing, and never loop to catch a race.
 - **Route access matrix.** One table-driven e2e spec over the routes: `401` without a session, `OriginGuard`, `X-Skip-Cache`, a foreign or deleted project answering a body identical to a missing one, an issue of another project answering the same `404`, a malformed uuid answering `400`, no `GET` answered, no admin access, and a completeness check against the registered routes (a new route without a row fails). The rows are the 18 routes of [api.md](api.md#every-route): `/projects/mine.json`, `create.json`, `from-repository.json`, and under `/projects/:projectId/` `show`, `edit`, `repository`, `delete`, `refresh`, `issues`, `issues/create`, `issues/import`, and under `/issues/:issueId/` `show`, `edit`, `delete`, `attach`, `unlink`, `refresh`, `retry-sync`, all with the `.json` suffix.
 - **Two-user baseline** in every e2e and DB-backed harness (the intruder user above).
 - **Static specs `(static)`.** The Issues sources contain no `fetch`, `secret_iv` or `NOW(`, map no Integrations or Auth table or entity, and their columns match an allowlist (the marker has no payload column). The cache-policy coverage spec gains the new controllers.
-- **Frontend static spec.** A project description is rendered as text, never as markup. How GitHub-sourced content is rendered stays with #490.
+- **Content canary.** Next to the credential canary: a project name, description, issue title and body, and a repository owner/name carrying canary strings run through every route and the reconcile job, refusals and failures included; no log line contains any of them. A `4xx` refusal produces only the access line ([security.md](security.md#required-tests)).
+- **Review checklist.** The `security` and `data-access` checklists of [security.md](security.md#review-checklist) are the review criteria of the implementation; each item maps to a Required test of [security.md](security.md#required-tests) or [api.md](api.md#required-tests).
+- **Frontend static spec.** A project description and every title are rendered as text, never as markup; no `dangerouslySetInnerHTML` and no raw-HTML plugin in the Issues components; the frontend rendering unit specs of [security.md](security.md#required-tests) cover each row of the body rules.
 
 ## Frontend tests
 
@@ -93,7 +95,7 @@ Jasmine, under `frontend/specs/`, in three layers as for Repositories: the **cli
 
 ## Open questions
 
-- [ ] How GitHub-sourced content is rendered, which the frontend static spec extends to. (#490)
+- [x] How GitHub-sourced content is rendered: decided in [security.md](security.md#github-and-user-content) (#490); the frontend static spec extends to it.
 - [ ] Screens and wording the frontend specs follow. (#491)
 
 ## Required tests
@@ -105,6 +107,6 @@ The checks of the testing infrastructure itself:
 - The **access matrix** is complete against the registered routes.
 - The **API cases** of [api.md](api.md#required-tests) run in the e2e tier, including the attach stale confirmation within the same second (`datetime(3)`, with `FakeClock`) and the code-point length case (a 4-byte character counts once).
 - The **static specs** pass: forbidden tokens, no Integrations or Auth mapping, the column allowlist and cache-policy coverage.
-- **Job params** hold only the allowed numeric ids, and the **canary sweep** finds no credential in any response, header, log line or job param.
+- **Job params** hold only the allowed numeric ids, and the **canary sweep** finds no credential, and the **content canary** no title, body, name or owner/name, in any response, header, log line or job param.
 - The **real-engine specs** (registration by name, retry after `_fail`, exhaustion marking `sync_failed` detected through the job's own attempt counter, a rate-limited job finishing without `_fail`) run on the real engine with the issues retry config (`maxRetries` from `KERGHAN_ISSUES_SYNC_MAX_RETRIES`, cooldown 1 ms).
 - The **restart spec** re-enqueues every marker once, oldest first, over a fresh module on the same database.
