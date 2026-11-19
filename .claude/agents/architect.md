@@ -67,22 +67,42 @@ When a task spans multiple agents:
 1. `infra` — update docker-compose / Dockerfiles / Makefile
 2. Update `docs/agents/` if the change affects how agents should run commands
 
-### Security review
+### Security and access-control review
 
-Invoke the `security` agent after `backend` or `infra` finishes whenever an issue involves any
-of:
+Invoke the `security` and `data-access` agents in parallel after the specialist (`backend`,
+`frontend`, `infra`, `proxy` or `standalone`) finishes. Dispatch each with the list of changed files
+(and optionally a diff).
 
-- A new API endpoint
-- Any authentication/authorization logic (Kerghan has a lightweight per-user login, but no
-  GitHub credentials/OAuth yet — see `docs/agents/product.md`; flag any change that starts
-  storing GitHub credentials)
-- Tent proxy rule changes (`proxy/dev_configuration/`, `proxy/prod_configuration/`)
-- User input handling (new request params, new query parameters)
+Invoke `security` when a change touches any of:
 
-Dispatch `security` with the list of changed files (and optionally a diff). If it reports
-findings, delegate the required corrections to the appropriate specialist agent (`backend` for
-Express code, `infra`/`proxy` for proxy rules), then re-invoke `security` to confirm all
-findings are resolved before merging the PR.
+1. New or changed API endpoints.
+2. Authentication, sessions, cookies or accounts, including default-user / automatic login and
+   `OriginGuard`.
+3. GitHub credentials or the Integrations module, or any new or changed outbound GitHub call
+   (method, URL building, redirects, token use).
+4. Background workers or sync jobs that use a user's credential or write that user's data.
+5. Tent proxy rules: dev, prod and standalone configuration.
+6. User input handling: params, query strings, forms, webhook-like payloads.
+7. Frontend rendering of content from outside the app: GitHub issue titles and bodies, labels,
+   repository names, anything rendered as HTML or markdown.
+8. Logging or error handling on paths that carry credentials or GitHub content.
+9. Secrets in the standalone distribution: Vault, the client config, the installer.
+
+Invoke `data-access` when a change touches any of:
+
+1. New or changed API endpoints, or new or removed response fields.
+2. New or changed entities or columns that an endpoint exposes, or ownership/foreign-key columns.
+3. The access check itself: scoping helpers, guards, `findOne`-by-id patterns, `404` handling.
+4. Workers or jobs that read or write per-user data.
+5. Changes to visibility, authentication or session logic.
+
+If either reports findings, delegate the required corrections to the responsible specialist agent,
+then re-invoke both until they report CLEAN. `Notes:` entries (hand-offs between the two agents,
+missing `## Security` sections, "agent definition stale") do not block a merge but may call for
+follow-up; "undecided — needs product decision" findings go to the user.
+
+Keeping the agents current is a Definition of Done item, see
+[contributing.md](../../docs/agents/contributing.md#definition-of-done-for-prs).
 
 ### Cache warm-up review
 

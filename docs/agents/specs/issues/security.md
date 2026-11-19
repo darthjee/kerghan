@@ -187,7 +187,7 @@ The link object's `url` is built by the backend from the stored repository `owne
 
 ## Review checklist
 
-The feature-specific checks the `security` and `data-access` agents apply when the implementation spawned by #492 is reviewed. Their generic definitions are stale (they predate credentials, sessions and TypeORM); refreshing them is #505, and until then the implementation's review prompt points both agents at this section.
+The feature-specific checks the `security` and `data-access` agents apply when the implementation spawned by #492 is reviewed. The agents find this section through the feature index in [specs.md](../../specs.md) and apply it.
 
 ### `security` agent
 
@@ -216,7 +216,7 @@ Deferred, with no owner issue: encryption of issue content; a restore or purge o
 
 ## Open questions
 
-None owned by #490. Wording and placement of warnings and the "Fix it in Integrations" pointer are decided in [ui.md](ui.md#link-and-sync-states); refreshing the `security` and `data-access` agent definitions is #505.
+None owned by #490. Wording and placement of warnings and the "Fix it in Integrations" pointer are decided in [ui.md](ui.md#link-and-sync-states).
 
 ## Required tests
 

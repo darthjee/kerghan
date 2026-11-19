@@ -39,6 +39,13 @@ A PR is considered complete when:
   updates the bash completion in the same PR. The sync tests in
   `standalone/test/completion_sync.bats` fail otherwise; see
   [Client completion](standalone/client-completion.md#sync-rule).
+- Any PR that adds a project-wide security mechanism (a new guard, a change to session or cookie
+  behavior, a new place where credentials are stored, a new outbound service) updates the
+  `security` agent's surface summary in `.claude/agents/security.md`. A PR that adds a new kind of
+  place where security rules live updates the discovery rule in both `security` and `data-access`,
+  and one that adds a new category of change needing review updates the trigger list in
+  `.claude/agents/architect.md`. Features and modules that register their security docs in
+  `docs/agents/specs.md` or a module's security page need no agent change.
 - Code is not overly complex:
   - Classes/modules and methods should have clear, focused responsibilities.
   - If a class or function is taking on too many responsibilities, refactor to simplify.

@@ -155,5 +155,5 @@ entity definitions, ownership chain, role definitions, and editing rules. At tha
   pointing at a stub.
 - Write `docs/agents/access-control.md` (or fold access rules into this file, matching whichever
   shape the real model calls for).
-- Update `.claude/agents/product-owner.md` and `.claude/agents/data-access.md` to reference the
-  real rules instead of "flag by default."
+- Update `.claude/agents/product-owner.md` to reference the real rules instead of "flag by
+  default." (`data-access.md` already finds rules through its discovery rule.)
