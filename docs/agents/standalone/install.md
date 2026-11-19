@@ -55,7 +55,7 @@ download succeeded.
 ### Verifying the release assets
 
 Each release carries a `SHA256SUMS` file (see
-[architecture/infra.md](../architecture/infra.md#release-kerghan-assets--client-assets-on-the-github-release)).
+[architecture/infra.md](../architecture/infra/releases.md#release-kerghan-assets--client-assets-on-the-github-release)).
 To check the installer before running it:
 
 ```bash

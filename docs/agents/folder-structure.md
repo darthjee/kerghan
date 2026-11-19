@@ -102,7 +102,7 @@ Owned by the `standalone` agent. See [standalone.md](standalone.md) for how the 
 
 | Subdirectory / File | Description |
 |---|---|
-| `architecture/` | Per-area architecture pages (`proxy.md`, `frontend.md`, `backend.md`, `modular-pattern.md`, `infra.md`) |
+| `architecture/` | Per-area architecture pages (`proxy.md`, `frontend.md`, `backend.md`, `modular-pattern.md`, `infra.md` (hub; pages under `architecture/infra/`)) |
 | `modules/` | Per-backend-module documentation (routes, entities, events) — `auth.md`, `mail.md`, `integrations.md`, `repositories.md` and `workers.md` |
 | `standalone/` | Sub-docs of `standalone.md` — `install.md`, `client.md`, `config-files.md`, `inner-stack.md` and `release-and-caveats.md` (the split-out reference sections), `client-config.md` (`kerghan configure` / `kerghan wizard` hub, with pages in `client-config/`), `client-update.md` (`kerghan update` / `restart-on-update` reference) and `client-completion.md` (bash completion reference) |
 | `plans/` | Implementation plans, one directory per issue |

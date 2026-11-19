@@ -31,7 +31,7 @@ must also update `VAULT_VERSION` in `standalone/install.sh`.
 
 The CI jobs that build and publish the images and the client assets (`release-kerghan`,
 `release-kerghan-standalone`, `release-kerghan-assets`) are documented in
-[architecture/infra.md](../architecture/infra.md).
+[architecture/infra/releases.md](../architecture/infra/releases.md).
 
 ## Caveats
 
@@ -99,4 +99,4 @@ The CI jobs that build and publish the images and the client assets (`release-ke
 
 The release job smoke-tests the published offline image on amd64 with `SKIP_BUILD=true` and
 `SMOKE_EXPECT_OFFLINE=true`, which also checks that the stack started from the preloaded tarballs
-(see [architecture/infra.md](../architecture/infra.md)). The arm64 image is checked by hand.
+(see [architecture/infra/releases.md](../architecture/infra/releases.md)). The arm64 image is checked by hand.
