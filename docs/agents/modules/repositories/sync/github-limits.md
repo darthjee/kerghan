@@ -17,14 +17,14 @@ Part of the [Repositories sync](../sync.md) doc, in the [Repositories module](..
   Add answers `503 GITHUB_RATE_LIMITED` ([routes](../../../backend/routes/repositories.md#add)), with no call.
   - **Two thresholds:** the sync stops at remaining **≤ 10**; Add only at **≤ 0**. The 10 is a
     real reserve for Add re-checks, which are bounded per user and by Add's 3-call
-    [candidate walk](../../integrations/github-service.md#add-re-check-candidates).
+    [candidate walk](../../integrations/github-service/add-and-deletion.md#add-re-check-candidates).
   - **In-flight reservations:** each granted call decrements the tracked remaining by 1 before it
     is sent, so parallel sources and concurrent Adds never overshoot; GitHub's headers then
     correct it.
   - It is an optimisation: GitHub's headers stay the truth, and with several instances each
     learns the budget on its first call.
   - Its home is internal to the Integrations module's GitHub client
-    ([GitHub service](../../integrations/github-service.md#unauthenticated-budget-tracker)).
+    ([GitHub service](../../integrations/github-service/add-and-deletion.md#unauthenticated-budget-tracker)).
 - The unauthenticated source stops early when the remaining budget reaches the sync threshold,
   is marked **rate limited** with its reset time, and keeps its stored rows.
 - **No per-user share of the unauthenticated budget:** one user with no usable integration can

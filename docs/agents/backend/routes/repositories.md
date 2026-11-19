@@ -194,7 +194,7 @@ the same object as `sync`.
 - A source entry never reveals whether the handle went through an integration or the
   unauthenticated path, and carries no integration field beyond `uuid` and `label`.
 - **A fixed integration reads `pending`:** on read, a stored `invalid_credentials` status for an
-  integration that is now **usable** ([usable integrations](../../modules/integrations/github-service.md#usable-integrations))
+  integration that is now **usable** ([usable integrations](../../modules/integrations/github-service/status-and-errors.md#usable-integrations))
   reports `pending`, with `syncedAt: null`. The listing and this route already load the user's
   integrations to resolve labels, so it costs no query. No event and no write: the next sync of
   that source replaces the stored status. This removes the stale "Fix it in Integrations" banner
@@ -249,13 +249,13 @@ listing as added.
 | 2 | Per-user Add rate limit | `429 REPOSITORY_ADD_RATE_LIMITED` + `Retry-After` |
 | 3 | Ref looked up in the **caller's own rows**, by `user_id` from the session in the query itself | `404 NOT_FOUND`, no GitHub call, no write |
 | 4 | Already added | **`200`** with the current row: idempotent, no GitHub call, no write; the original `addedAt` and access link are kept |
-| 5 | GitHub re-check: one request for that repository, through the chosen access integration ([GitHub service](../../modules/integrations/github-service.md#access-link-on-add)) | **No candidate** before any GitHub call (every source holding the repo is a non-usable integration, and the handle source does not hold it): `409 REPOSITORY_SOURCE_UNUSABLE`, no GitHub call, nothing written. Denied (`404`/`403` from every candidate called): `404 NOT_FOUND`, nothing written. Unauthenticated low budget, or a GitHub rate limit: `503 GITHUB_RATE_LIMITED` + `Retry-After` when known (never `404`, nothing marked `invalid`). Timeout / `5xx`: `502 GITHUB_UNAVAILABLE`. |
+| 5 | GitHub re-check: one request for that repository, through the chosen access integration ([GitHub service](../../modules/integrations/github-service/add-and-deletion.md#access-link-on-add)) | **No candidate** before any GitHub call (every source holding the repo is a non-usable integration, and the handle source does not hold it): `409 REPOSITORY_SOURCE_UNUSABLE`, no GitHub call, nothing written. Denied (`404`/`403` from every candidate called): `404 NOT_FOUND`, nothing written. Unauthenticated low budget, or a GitHub rate limit: `503 GITHUB_RATE_LIMITED` + `Retry-After` when known (never `404`, nothing marked `invalid`). Timeout / `5xx`: `502 GITHUB_UNAVAILABLE`. |
 | 6 | Write, conditional: `UPDATE … SET added_at, integration_id, snapshot WHERE id = :id AND user_id = :userId AND added_at IS NULL` | **`200`** with the updated row (listing row shape, `status: "added"`). Zero rows ⇒ re-read the row (`WHERE id = :id AND user_id = :userId`): **added** ⇒ `200` with the current row (a concurrent Add won: its `addedAt` and link are kept); **missing** ⇒ `404 NOT_FOUND` (pruned meanwhile). |
 
 - `200`, not `201`: the row already existed; Add only marks it.
 - **The stored link is always the caller's own:** an `integration_id` that is not one of the
   caller's integrations at write time is stored as `null` (filled by the next sync's link fill),
-  never another user's id ([GitHub service](../../modules/integrations/github-service.md#access-link-on-add)).
+  never another user's id ([GitHub service](../../modules/integrations/github-service/add-and-deletion.md#access-link-on-add)).
 - **Owner lookup first:** a missing row, including one only another user holds, answers the same
   `404` as a GitHub denial, with no GitHub call and no write. Only repos already in the user's own
   listing can be added.
@@ -285,12 +285,12 @@ listing as added.
   per-user Add rate limit bounds.
 - **`409 REPOSITORY_SOURCE_UNUSABLE`:** decided after the rate limit and the lookup in the
   caller's own rows, only from the caller's own sources, so it reveals nothing about other users
-  or about GitHub ([GitHub service](../../modules/integrations/github-service.md#add-re-check-candidates)). Once at least one
+  or about GitHub ([GitHub service](../../modules/integrations/github-service/add-and-deletion.md#add-re-check-candidates)). Once at least one
   candidate was called and every one denied the repo, or the 3-call cap was reached, the answer
   stays `404 NOT_FOUND`.
 - `502 GITHUB_UNAVAILABLE` and `503 GITHUB_RATE_LIMITED` reuse the existing codes and helpers,
-  moved to `core/github-http-errors.ts` ([GitHub service](../../modules/integrations/github-service.md#shared-502--503-helpers)).
-- **Candidate walk** ([GitHub service](../../modules/integrations/github-service.md#add-re-check-candidates)), at most **3
+  moved to `core/github-http-errors.ts` ([GitHub service](../../modules/integrations/github-service/add-and-deletion.md#shared-502--503-helpers)).
+- **Candidate walk** ([GitHub service](../../modules/integrations/github-service/add-and-deletion.md#add-re-check-candidates)), at most **3
   GitHub calls** per Add: first the usable integrations holding a source row for the repo, oldest
   first; then, when the handle source sees it, the remaining usable integrations, oldest first,
   then unauthenticated. A `401` (which also marks a `pat` / `oauth_app` integration `invalid`),
@@ -345,7 +345,7 @@ Standard error shape (`core/http-exception.filter.ts`,
   Repositories module, like `integrations/integration-http-errors.ts`. The `502`/`503` reuse the
   existing helpers `githubUnavailable()` / `githubRateLimited()`, moved (unchanged) from
   `integrations/integration-http-errors.ts` to `core/github-http-errors.ts`, so Repositories
-  never imports Integrations' HTTP layer ([GitHub service](../../modules/integrations/github-service.md#shared-502--503-helpers)).
+  never imports Integrations' HTTP layer ([GitHub service](../../modules/integrations/github-service/add-and-deletion.md#shared-502--503-helpers)).
 
 ## Access
 
@@ -437,7 +437,7 @@ Tiers, fakes and harnesses: [Testing](../../modules/repositories/testing.md). Ta
   redirect answers `502 GITHUB_UNAVAILABLE`.
 - Add with only non-usable sources (and no handle row) answers `409 REPOSITORY_SOURCE_UNUSABLE`
   with no GitHub call and no write; with one usable candidate that denies it, Add answers `404`.
-- The candidate walk and the access-link choice: [GitHub service](../../modules/integrations/github-service.md#required-tests).
+- The candidate walk and the access-link choice: [GitHub service](../../modules/integrations/github-service/required-tests.md#required-tests).
 - Add on a not-added row pruned concurrently answers `404 NOT_FOUND` and writes nothing `(db)`.
 - A write whose `integration_id` is another user's integration stores `null`, so the row is never
   linked to the other user's integration `(db)`.

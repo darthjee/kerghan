@@ -73,7 +73,7 @@ GitHub repository id or an `owner/name`.
 - The rate limit is **30 Adds per 60 s** per user by default, configurable
   ([routes](../../backend/routes/repositories.md#add-rate-limit)). The unauthenticated re-check honours **Add's own
   threshold** (refused at remaining ≤ 0; the sync stops at ≤ 10), and each Add makes at most 3
-  GitHub calls ([candidate walk](../integrations/github-service.md#add-re-check-candidates)).
+  GitHub calls ([candidate walk](../integrations/github-service/add-and-deletion.md#add-re-check-candidates)).
 
 
 ## Private metadata and retention
@@ -89,7 +89,7 @@ dropped, so a stale handle row never keeps it alive ([sync](sync/write-path.md#w
 - The end-of-sync [link fill](sync/write-path.md#link-fill) ties an added private repo with an empty or
   dangling link back to a usable integration that returns it.
 - Rows of non-usable integrations are kept until the integration is fixed or deleted, visible
-  only to their owner ([GitHub service](../integrations/github-service.md#usable-integrations)).
+  only to their owner ([GitHub service](../integrations/github-service/status-and-errors.md#usable-integrations)).
 - A deleted user's rows are removed by the `user.deleted` listener; orphans left by a failed
   listener are visible to no one under normal operation, since an auto-increment `id` is not
   reused; the deletion path retries the event or sweeps orphans for the cases where one could be
@@ -133,7 +133,7 @@ The backend only ever calls `https://api.github.com`. No user input chooses the 
 outside the endpoints this feature uses, so there is no SSRF surface.
 
 A single client, in the Integrations module, makes every GitHub call of the feature, with or
-without a credential ([unauthenticated calls](../integrations/github-service.md#unauthenticated-calls)); without
+without a credential ([unauthenticated calls](../integrations/github-service/api.md#unauthenticated-calls)); without
 one it sends no `Authorization` header. Server-supplied URLs are never requested:
 
 - pagination builds its own page URLs (`?per_page=100&page=N`) and reads `Link` only to know

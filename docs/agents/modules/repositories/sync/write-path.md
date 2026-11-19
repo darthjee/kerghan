@@ -7,7 +7,7 @@ Part of the [Repositories sync](../sync.md) doc, in the [Repositories module](..
 For each source, the sync reads GitHub page by page, up to the **page cap**:
 
 - **Page-number pagination.** The sync builds every page request itself (`?per_page=100&page=N`,
-  on the [endpoint of the source](../../integrations/github-service.md#endpoints-and-parameters)) and reads the `Link` header **only to know whether `rel="next"`
+  on the [endpoint of the source](../../integrations/github-service/api.md#endpoints-and-parameters)) and reads the `Link` header **only to know whether `rel="next"`
   exists**. It never requests a URL taken from a response
   ([security](../security.md#fixed-github-base-url)).
 - Pages within a source are sequential; up to the parallelism bound of sources run at once
@@ -25,7 +25,7 @@ transaction holds only the database writes. Step 1 locks the user's sync-state r
 transactions of one user's parallel sources run one after another, which keeps the upserts free
 of deadlocks. **Every Repositories transaction that writes several tables locks that row first** (a run's
 guarded writes, the handle reconciliation, and the `integration.deleted` / `user.deleted` listeners,
-[GitHub service](../../integrations/github-service.md#deletion-hook), [data model](../data-model.md#user-deletion)), so a
+[GitHub service](../../integrations/github-service/add-and-deletion.md#deletion-hook), [data model](../data-model.md#user-deletion)), so a
 cleanup during a sync serializes with the run instead of deadlocking with it.
 
 1. `UPDATE repositories_sync_states SET heartbeat_at = :now WHERE user_id = :userId AND run_id = :mine`;
@@ -72,7 +72,7 @@ since `source_key = 'handle'` is the same string for every user):
 (each statement `AND user_id = :userId`) of any `integration:<id>` key whose id is not among
 **all** the user's integrations (loaded `WHERE user_id = :userId`, usable or not, so a non-usable
 integration's rows are kept) (the **safety net** for a
-failed [deletion hook](../../integrations/github-service.md#deletion-hook), or a page a parallel run wrote after the
+failed [deletion hook](../../integrations/github-service/add-and-deletion.md#deletion-hook), or a page a parallel run wrote after the
 hook's cleanup), then the [link fill](#link-fill), then [prune](#pruning), then `state = idle`,
 `run_id = null`, `last_synced_at = :now`, **even when every source failed** (the sync finished;
 per-source statuses carry the failures). A run that lost its lease or crashed never sets
@@ -128,7 +128,7 @@ WHERE user_id = :userId AND id = :repositoryId
   lost. Added repos held only by failed sources' rows read as Unknown, not Unavailable
   ([data model](../data-model.md#row-statuses)), and nothing of it is pruned.
 - A `401` on an integration sets it to `invalid`, through the Integrations module
-  ([GitHub service](../../integrations/github-service.md#invalid-on-401)); the handle source then moves to the next
+  ([GitHub service](../../integrations/github-service/status-and-errors.md#invalid-on-401)); the handle source then moves to the next
   credential ([handle credential](../sync.md#handle-credential)).
 - Hitting the page cap is reported as the source's status (`page_cap_reached`, which counts as
   `ok`); pages already read are applied and rows past the cap are deleted

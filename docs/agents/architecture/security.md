@@ -135,20 +135,20 @@ computed from it, beyond the masked `secretHint` of the Integrations routes.** D
   frontend never calls GitHub for it. (Issue data is still fetched by the browser,
   unauthenticated, public repositories only.)
 - Inside the backend, credentials stay **inside the Integrations module**
-  ([GitHub service](../modules/integrations/github-service.md#exported-service)).
+  ([GitHub service](../modules/integrations/github-service/api.md#exported-service)).
 - A minted GitHub App installation token is a credential too: it is cached **in process memory
   only**, inside the Integrations module (in a `Secret`), never in the database, a log or a
   response, and minted with `metadata: read` only
-  ([installation tokens](../modules/integrations/github-service.md#github-app-installation-tokens)). Any other persistence
+  ([installation tokens](../modules/integrations/github-service/api.md#github-app-installation-tokens)). Any other persistence
   needs its own product decision (`CLAUDE.md`, #295).
 - Repo responses carry no integration field beyond its `uuid` and label
   ([routes](../backend/routes/repositories.md#access)).
 - **The `secret_iv` compare value stays inside the Integrations module.** The status
-  [compare-and-set](../modules/integrations/github-service.md#status-compare-and-set) uses the `secret_iv` of the credential
+  [compare-and-set](../modules/integrations/github-service/status-and-errors.md#status-compare-and-set) uses the `secret_iv` of the credential
   a call used; it never reaches the Repositories module, a response or a log.
 
 Guarantees of the exported `IntegrationsGithubService`
-([GitHub service](../modules/integrations/github-service.md#exported-service)):
+([GitHub service](../modules/integrations/github-service/api.md#exported-service)):
 
 - **Nothing sensitive leaves the module:** no decrypted credential, minted installation token or
   GitHub response body is returned, logged or exposed; callers get typed, normalised results
