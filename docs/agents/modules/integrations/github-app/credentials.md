@@ -200,7 +200,7 @@ per call:
 - The outcome is never `expired`.
 - **When the type is disabled**, test can't sign a JWT. It answers transient `unavailable`
   without any GitHub call, so the status stays unchanged and the generic route answers 502
-  `GITHUB_UNAVAILABLE`. This differs from the [OAuth App](../oauth-app.md#test-connection), whose
+  `GITHUB_UNAVAILABLE`. This differs from the [OAuth App](../oauth-app/credentials.md#test-connection), whose
   test only needs the stored token. The UI avoids the case: it disables *Test* on `github_app`
   rows while the type is disabled ([When disabled](config-and-proxy.md#when-disabled)).
 - Transient outcomes leave the status unchanged ([data model](../data-model.md#transitions)).

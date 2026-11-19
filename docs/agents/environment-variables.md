@@ -154,7 +154,7 @@ For standalone, the client writes and manages these values; see
 
 `KERGHAN_GITHUB_OAUTH_APP_CLIENT_ID` and `KERGHAN_GITHUB_OAUTH_APP_CLIENT_SECRET` enable the
 `oauth_app` integration type (see
-`docs/agents/modules/integrations/oauth-app.md#server-config`). Both are
+`docs/agents/modules/integrations/oauth-app/config-and-proxy.md#server-config`). Both are
 optional and read once at boot:
 
 - **Both unset or blank:** the type is disabled. It is not listed among the integration types, its

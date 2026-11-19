@@ -61,7 +61,7 @@ Part of the [GitHub App type](../github-app.md). Server variables, the disabled 
 ### Landing page rule
 
 A **dedicated Tent rule** for `/integrations/github_app/callback`, identical in behaviour to the
-[OAuth App's landing rule](../oauth-app.md#landing-page-rule), in `rules/frontend.php` of
+[OAuth App's landing rule](../oauth-app/config-and-proxy.md#landing-page-rule), in `rules/frontend.php` of
 both `dev_configuration` and `prod_configuration`:
 
 - **Matcher:** `GET` on the path `/integrations/github_app/callback`, with or without a query
