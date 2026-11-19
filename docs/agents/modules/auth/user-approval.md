@@ -23,7 +23,7 @@ real status explicitly (see [Explicit exceptions](#explicit-exceptions)).
 
 `KERGHAN_USER_APPROVAL_REQUIRED` is an optional boolean flag, **off by default**, parsed like the
 other `KERGHAN_*` boolean flags: exactly `true` turns it on, anything else leaves it off. Its row
-is in [environment-variables.md](../../environment-variables.md#1-backend-application-runtime).
+is in [environment-variables.md](../../environment-variables/backend.md).
 `UserApprovalConfig` (`user-approval.config.ts`) is its only reader, built once at boot by a
 factory provider in `auth.module.ts`.
 

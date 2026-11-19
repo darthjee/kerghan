@@ -26,9 +26,9 @@ endpoint behaves as if the feature did not exist.
 ## Configuration
 
 The variables and their defaults are listed in
-[environment-variables.md](../../environment-variables.md#1-backend-application-runtime) (the
+[environment-variables.md](../../environment-variables/backend.md) (the
 `KERGHAN_DEFAULT_USER_*` rows), with the accepted flag values and the boot validation rules in
-[Default user: values and boot validation](../../environment-variables.md#default-user-values-and-boot-validation).
+[Default user: values and boot validation](../../environment-variables/backend-setup.md#default-user-values-and-boot-validation).
 
 All of them are read by a single class, `DefaultUserConfig` (`default-user.config.ts`):
 

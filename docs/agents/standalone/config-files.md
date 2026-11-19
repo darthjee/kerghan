@@ -7,7 +7,7 @@ Part of [Standalone Distribution](../standalone.md). The `~/.kerghan/` directory
 | File | Content | Mode |
 |---|---|---|
 | `~/.kerghan/config` | Client settings. Optional. | user default |
-| `~/.kerghan/kerghan.env` | Secrets and backend variables passed to the stack (see [environment-variables.md](../environment-variables.md#5-standalone-darthjeekerghan-standalone)). Generated on the first `up`. | 600 |
+| `~/.kerghan/kerghan.env` | Secrets and backend variables passed to the stack (see [environment-variables/standalone.md](../environment-variables/standalone.md)). Generated on the first `up`. | 600 |
 
 Both files can be edited by hand, or through `kerghan configure` / `kerghan wizard` (see
 [`configure` and `wizard`](client.md#configure-and-wizard)).

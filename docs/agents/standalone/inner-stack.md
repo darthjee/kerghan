@@ -15,7 +15,7 @@ The inner compose file is `standalone/vault/docker-compose.yml`, copied to `/vau
 |---|---|---|
 | `mysql` | `mysql:8.4.11` | Internal only, never published. Healthcheck (`mysqladmin ping`). Data in the inner `mysql84-data` volume. |
 | `mysql-legacy` | `mysql:9.3.0` | Profile `migrate-mysql-9`: never started by `compose up`. Only used to migrate pre-#469 data from the old `mysql-data` volume (see [MySQL 9.3 to 8.4.11 migration](#mysql-93-to-8411-migration)). No restart policy. Removed in a later release. |
-| `kerghan` | `darthjee/kerghan:${KERGHAN_VERSION}` | Runs migrations on boot. Waits for `mysql` to be healthy. Receives only the allowlisted environment (see [environment-variables.md](../environment-variables.md#5-standalone-darthjeekerghan-standalone)). |
+| `kerghan` | `darthjee/kerghan:${KERGHAN_VERSION}` | Runs migrations on boot. Waits for `mysql` to be healthy. Receives only the allowlisted environment (see [environment-variables/standalone.md](../environment-variables/standalone.md)). |
 | `tent` | `${TENT_IMAGE}` (stock `darthjee/tent`) | Published on Vault port 80. Serves the frontend and proxies `*.json` to `http://kerghan:3000/`. |
 
 `mysql`, `kerghan` and `tent` use `restart: unless-stopped`. With the healthcheck and `depends_on`, a backend started

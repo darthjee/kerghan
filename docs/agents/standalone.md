@@ -4,7 +4,7 @@ The permanent reference for running Kerghan standalone: the `darthjee/kerghan-st
 the `kerghan` client, its installer and the `~/.kerghan/` configuration. The user-facing summary
 is the "Run Kerghan standalone" section of the [README](../../README.md#run-kerghan-standalone);
 the environment-variable contract is in
-[environment-variables.md](environment-variables.md#5-standalone-darthjeekerghan-standalone).
+[environment-variables/standalone.md](environment-variables/standalone.md).
 The `standalone` agent owns the files described here; the CI release jobs belong to `infra` (see
 [architecture/infra/releases.md](architecture/infra/releases.md)).
 
