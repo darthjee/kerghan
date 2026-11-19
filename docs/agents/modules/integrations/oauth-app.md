@@ -15,7 +15,6 @@ per-type slot the generic module leaves open. Code: `backend/src/integrations/ty
 - GitHub's exact endpoints, parameters, headers and token limits below follow GitHub's OAuth App
   and REST API docs.
 
-
 ## Pages
 
 - [Flow](oauth-app/flow.md) — read this for the routes, start, landing, callback and the `state` record.
