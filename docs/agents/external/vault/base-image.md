@@ -110,7 +110,7 @@ vault up --image my-app -p 8080:80
 ```
 
 Without a `[dir]`, nothing is mounted on `/vault` and the instance is named after the image
-(`vault-my-app`). Details in [cli.md → Baked images](cli.md#baked-images).
+(`vault-my-app`). Details in [cli.md → Baked images](cli/guardrails.md#baked-images).
 
 ## Secrets
 

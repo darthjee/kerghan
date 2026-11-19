@@ -78,7 +78,7 @@ vault up ./app-postgres
 ```
 
 The CLI picks the runtime (Sysbox, else `--privileged`) and passes `.vault.env` as an env file
-by itself; see [cli.md → `.vault.env`](cli.md#vaultenv).
+by itself; see [cli.md → `.vault.env`](cli/config-files.md#vaultenv).
 
 ### Result
 
@@ -198,7 +198,7 @@ vault up -e COMPOSE_FILE=compose.yml:compose.prod.yml ./app-multi
 ```
 
 To avoid repeating it, put `env=COMPOSE_FILE=compose.yml:compose.prod.yml` in the project's
-`.vaultrc`; see [cli.md → `.vaultrc`](cli.md#vaultrc).
+`.vaultrc`; see [cli.md → `.vaultrc`](cli/config-files.md#vaultrc).
 
 ### Result
 
@@ -299,7 +299,7 @@ vault up --image my-app --env-file my-app.env
 ```
 
 Without a `[dir]`, nothing is mounted on `/vault` and the instance is named after the image;
-see [cli.md → Baked images](cli.md#baked-images).
+see [cli.md → Baked images](cli/guardrails.md#baked-images).
 
 ### Result
 
