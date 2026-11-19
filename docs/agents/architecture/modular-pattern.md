@@ -78,7 +78,7 @@ want to block on) any reaction.
   DI), not a query against its table.
 - **One documented exception:** `integrations.user_id` is a physical FK to `auth_users.id` with
   `ON DELETE CASCADE`, so a stored GitHub credential can never outlive its owner. Code still
-  never joins `auth_users`. See [Owner foreign key](../modules/integrations.md#owner-foreign-key).
+  never joins `auth_users`. See [Owner foreign key](../modules/integrations/data-model.md#owner-foreign-key).
   Any other physical cross-module FK needs its own documented decision.
 - Migrations live in `src/database/migrations/`, named `<timestamp>-<module>-<action>.ts`, run
   via `yarn migration:run`/`yarn migration:revert` (TypeORM CLI, `-d src/database/data-source.ts`).

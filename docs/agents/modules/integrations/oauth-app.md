@@ -1,8 +1,8 @@
 # Integration type: GitHub OAuth App (`oauth_app`)
 
 Part of the [Integrations module](../integrations.md). Defines the `oauth_app` type, following the
-[type contract](../integrations.md#what-a-type-doc-must-contain) and its
-[redirect flow invariants](../integrations.md#redirect-flow-invariants). It fills every
+[type contract](type-contract.md#what-a-type-doc-must-contain) and its
+[redirect flow invariants](type-contract.md#redirect-flow-invariants). It fills every
 per-type slot the generic module leaves open. Code: `backend/src/integrations/types/oauth-app/`.
 
 ## Overview
@@ -46,7 +46,7 @@ Request body, validated with the usual DTO rules (unknown fields stripped):
 
 - **Exactly one** of `label` (create) and `integrationId` (replace credential). Both or neither
   answer 400 `VALIDATION_FAILED`.
-- `label`: the generic label rules ([data model](../integrations.md#constraints)).
+- `label`: the generic label rules ([data model](data-model.md#constraints)).
 - `integrationId`: a UUID string.
 
 Checks, in order. Each failure stops there and stores nothing:
@@ -58,7 +58,7 @@ Checks, in order. Each failure stops there and stores nothing:
    missing row answers **404** `NOT_FOUND`. A row whose `type` isn't `oauth_app` answers 400
    `INTEGRATION_FLOW_UNSUPPORTED` (changing type means delete and create).
 5. Failure cool-off active → **423** `INTEGRATION_CREDENTIAL_LOCKED`
-   ([security](../integrations.md#create-and-replace-credential-failure-cool-off)). Checked here
+   ([security](security.md#create-and-replace-credential-failure-cool-off)). Checked here
    so the user isn't sent to GitHub for nothing; it is checked again on callback.
 6. **Create only:** per-user cap (409 `INTEGRATIONS_LIMIT_REACHED`) and label uniqueness (409
    `INTEGRATION_LABEL_TAKEN`). Also checked again on callback.
@@ -91,7 +91,7 @@ GitHub redirects the browser to the callback URL with `code` and `state` (or `er
 1. Reads `code`, `state` and `error` from `window.location.search`.
 2. **Before any other request**, calls `history.replaceState` to
    `/#/account/integrations`, removing the path, query string and hash
-   ([redirect flow invariants](../integrations.md#redirect-flow-invariants)). The values only
+   ([redirect flow invariants](type-contract.md#redirect-flow-invariants)). The values only
    live in memory from then on.
 3. With `error=access_denied`: shows "You cancelled the GitHub authorization." and makes no
    call. Any other `error`, or a missing `code` or `state`: shows "GitHub didn't complete the
@@ -127,7 +127,7 @@ Checks, in order:
 8. `validate`: exchange the code and check the token ([Validate / create](#validate--create)).
 9. Store through the generic storage and encryption code: create inserts an `active` row
    (**201**); replace refreshes the row like a generic replace credential (**200**,
-   [data model](../integrations.md#transitions)).
+   [data model](data-model.md#transitions)).
 10. **Replace only:** best-effort revocation of the **previous** token
     ([Revocation](#revocation)), unless GitHub returned the same token. Its failure doesn't
     change the response.
@@ -202,7 +202,7 @@ Rules:
 ## Validate / create
 
 `validate` runs on callback, through the shared, injectable GitHub client
-([security](../integrations.md#faking-github-in-tests)), with two GitHub calls.
+([security](security.md#faking-github-in-tests)), with two GitHub calls.
 
 1. **Code exchange:** `POST https://github.com/login/oauth/access_token` with
    `Accept: application/json` and `client_id`, `client_secret`, `code`, `redirect_uri` and
@@ -232,7 +232,7 @@ token ([Callback](#callback)).
 ## Secret payload shape
 
 The plaintext JSON encrypted into `secret_ciphertext`
-([data model](../integrations.md#storage-model)):
+([data model](data-model.md#storage-model)):
 
 ```json
 { "token": "gho_…" }
@@ -299,7 +299,7 @@ credentials.
 - The outcome is never `expired`, since `expiresAt` is never known.
 - Test needs neither the client id nor the secret, so it keeps working when the type is
   disabled.
-- Transient outcomes leave the status unchanged ([data model](../integrations.md#transitions)).
+- Transient outcomes leave the status unchanged ([data model](data-model.md#transitions)).
 
 ## `invalid` reason codes
 
@@ -346,7 +346,7 @@ token than the prefix and the last 4 characters.
 
 - `POST /integrations/types.json` doesn't list `oauth_app`
   ([routes](../../backend/routes/integrations.md#enabled-types)), so the type picker hides it
-  ([frontend](../integrations.md#type-picker)).
+  ([frontend](frontend.md#type-picker)).
 - Both type-owned backend routes answer **404** `NOT_FOUND`, before any other check except
   auth and CSRF, as if they didn't exist.
 - Existing `oauth_app` rows (from when it was enabled) stay listed and can be renamed, tested
@@ -412,14 +412,14 @@ Used on delete, on replace (the previous token) and on callback failures (the ne
 ## Access
 
 Both type-owned routes follow the checklist of the
-[type contract](../integrations.md#what-a-type-doc-must-contain):
+[type contract](type-contract.md#what-a-type-doc-must-contain):
 
 - They require `JwtGuard` and are covered by `OriginGuard`.
 - The owner comes from `req.user.sub` only. The GitHub redirect is bound to the initiating user
   through the `state` row's `user_id`, never through any id carried in the callback.
 - Replace credential targets only a row found with `uuid` + `user_id` in the query, both at
   start and again at callback; a foreign or missing row answers 404
-  ([security](../integrations.md#access-rules)). Admins get no access to anyone else's flow.
+  ([security](security.md#access-rules)). Admins get no access to anyone else's flow.
 - They are cache class `never`.
 - They follow the generic logging, `Secret` and canary rules: the code, the token, the client
   secret, the `state` and the verifier never reach a logger call, an error message or a
@@ -446,7 +446,7 @@ Summary of the error codes
 
 ## Frontend
 
-On top of the generic [UI shell](../integrations.md#frontend):
+On top of the generic [UI shell](frontend.md):
 
 - **Type picker** one-line description: "Connect a GitHub account by authorizing Kerghan's
   OAuth App."

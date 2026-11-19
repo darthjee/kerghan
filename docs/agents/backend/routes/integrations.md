@@ -19,7 +19,7 @@ delegates to, plus each type's flow services); the controllers are thin delegati
 - **Navi:** none of these routes is warmed; none belongs in `navi/navi_config.yaml`.
 - **Auth:** every route sits behind the global `JwtGuard` (no `@Public()`, no `@AdminOnly()`) and
   is scoped to the caller (`req.user.sub`). A foreign, missing or malformed `:uuid` answers
-  **404**, never 403 ([access rules](../../modules/integrations.md#access-rules)).
+  **404**, never 403 ([access rules](../../modules/integrations/security.md#access-rules)).
 - **CSRF:** every state-changing route (`POST`, `PATCH`, `DELETE`) is covered by the global
   `OriginGuard` (see [Security](../../architecture/security.md#csrf)); nothing extra is needed.
 - **Errors** use the standard error format (`core/http-exception.filter.ts`, see
@@ -71,7 +71,7 @@ client id and secret, see [OAuth App](../../modules/integrations/oauth-app.md#wh
 `github_app` without its app config, see
 [GitHub App](../../modules/integrations/github-app.md#when-disabled)) is left out. `pat` is
 always listed. The route needs no row and makes no GitHub call; the frontend's type picker reads
-it ([type picker](../../modules/integrations.md#type-picker)).
+it ([type picker](../../modules/integrations/frontend.md#type-picker)).
 
 ### Create envelope
 
@@ -85,13 +85,13 @@ it ([type picker](../../modules/integrations.md#type-picker)).
 ```
 
 - `label`: string, trimmed, 1–100 characters
-  ([constraints](../../modules/integrations.md#constraints)).
+  ([constraints](../../modules/integrations/data-model.md#constraints)).
 - `provider`: must be `github`.
 - `type`: one of `pat`, `oauth_app`, `github_app`.
 - `credential`: an object whose shape the type defines and validates
-  ([type contract](../../modules/integrations.md#type-contract)). It is converted to a `Secret`
+  ([type contract](../../modules/integrations/type-contract.md)). It is converted to a `Secret`
   right after validation
-  ([secrets never logged](../../modules/integrations.md#secrets-never-logged)).
+  ([secrets never logged](../../modules/integrations/security.md#secrets-never-logged)).
 - Unknown top-level fields are stripped by the global `ValidationPipe` (`whitelist: true`, as
   for every route). The type's own validation of `credential` rejects unknown credential fields,
   so nothing unexpected is ever encrypted.
@@ -130,13 +130,13 @@ Built by `integration-response.ts`:
   `secret_auth_tag`, `secret_ciphertext` and `secret_key_id`. The response is built from an
   explicit allowlist of fields, never by serializing the entity.
 - `secretHint` is the stored `secret_hint` column, computed once by the type's mask function at
-  create and replace ([mask the secret](../../modules/integrations.md#mask-the-secret)); it is
+  create and replace ([mask the secret](../../modules/integrations/type-contract.md#mask-the-secret)); it is
   never enough to reconstruct the secret. It is `null` when the status is `undecryptable`.
 - `status` and `expiresAt` reflect the computed-on-read expiry rule
-  ([expiry](../../modules/integrations.md#expiry)).
+  ([expiry](../../modules/integrations/data-model.md#expiry)).
 - `nextTestAt` is when the test-connection cooldown ends: `lastTestedAt` plus
   `KERGHAN_INTEGRATIONS_TEST_COOLDOWN_MS`
-  ([test connection cooldown](../../modules/integrations.md#test-connection-cooldown)), or
+  ([test connection cooldown](../../modules/integrations/security.md#test-connection-cooldown)), or
   `null` when `lastTestedAt` is `null`. It may lie in the past (the cooldown is already over).
   It lets a client disable *Test* without knowing the server's cooldown config; it is non-secret.
 - Dates are ISO-8601 strings, or `null`.
@@ -153,7 +153,7 @@ Built by `integration-response.ts`:
   previous) is reported as `undecryptable` (compared without decrypting).
 - **Show** returns one integration of the caller, with the same no-decryption rules as list.
 - **Create:** checks, in order: payload validation → failure cool-off
-  ([cool-off](../../modules/integrations.md#create-and-replace-credential-failure-cool-off)) →
+  ([cool-off](../../modules/integrations/security.md#create-and-replace-credential-failure-cool-off)) →
   per-user cap → label uniqueness → GitHub validation through the type. Nothing is stored on any
   failure.
 - **Rename** changes only `label`; status and every other field stay unchanged.
@@ -161,18 +161,18 @@ Built by `integration-response.ts`:
   the row's type → failure cool-off → GitHub validation through the type. On failure the
   previous credential, metadata and status stay unchanged.
 - **Test connection:** checks, in order: owner lookup → per-integration cooldown
-  ([test connection cooldown](../../modules/integrations.md#test-connection-cooldown)), then
+  ([test connection cooldown](../../modules/integrations/security.md#test-connection-cooldown)), then
   calls GitHub through the type and records `last_tested_at` / `last_test_result`. A GitHub
   rejection is a **successful** test: it answers `200` with the new status (`invalid` or
   `expired`). A transient failure leaves the status unchanged, records the attempt, and answers
   with the upstream error below. A row that still can't be decrypted (unknown key id or auth-tag
   failure) answers `200` with status `undecryptable`, without calling GitHub; a stored
   `undecryptable` row whose key id matches a configured key is decrypted again and tested
-  normally ([transitions](../../modules/integrations.md#transitions)). A row decrypted under a
+  normally ([transitions](../../modules/integrations/data-model.md#transitions)). A row decrypted under a
   previous key is re-encrypted with the current key during the test
-  ([key set](../../modules/integrations.md#encryption-at-rest)).
+  ([key set](../../modules/integrations/security.md#encryption-at-rest)).
 - **Delete** removes the row after the type's best-effort delete behaviour
-  ([behaviour on delete](../../modules/integrations.md#behaviour-on-delete)), which never blocks
+  ([behaviour on delete](../../modules/integrations/type-contract.md#behaviour-on-delete)), which never blocks
   the deletion.
 
 ## Error codes
@@ -204,5 +204,5 @@ codes on callback and select); see each type's "Error cases" section.
 - `Retry-After` is in whole seconds, rounded up.
 - Messages never echo the submitted credential, never mention other users, and never include
   GitHub's raw response
-  ([secrets never logged](../../modules/integrations.md#secrets-never-logged)).
+  ([secrets never logged](../../modules/integrations/security.md#secrets-never-logged)).
 - Per-type reason codes (e.g. `revoked`) appear in `statusReason`, not in `error.code`.

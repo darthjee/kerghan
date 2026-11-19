@@ -1,7 +1,7 @@
 /**
  * The string enumerations of the `integrations` table. The database stores
  * plain strings; these constants are what the code validates against (see
- * `docs/agents/modules/integrations.md#integrations-columns`).
+ * `docs/agents/modules/integrations/data-model.md#integrations-columns`).
  */
 
 /** Supported providers. */
