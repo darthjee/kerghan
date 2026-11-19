@@ -160,7 +160,7 @@ Integrations module**:
   | `5xx`, timeout, rate limit | unchanged | `unavailable` / `rate_limited` |
 
 - Repository calls do not mint per use (unlike the app JWT): see
-  [GitHub App](github-app.md#installation-token-cache). Test connection keeps minting fresh and
+  [GitHub App](github-app/credentials.md#installation-token-cache). Test connection keeps minting fresh and
   dropping the token, so it checks the real state.
 
 ## Invalid on 401

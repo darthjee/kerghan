@@ -78,7 +78,7 @@ the `SameSite=Strict` `access_token` cookie is not sent, `OriginGuard` doesn't a
 - GitHub redirects to a **frontend-served landing URL**, never to a backend route. GitHub
   appends `code`/`state` as a query string (a fragment isn't allowed in `redirect_uri`); the
   exact landing shapes are fixed in [OAuth App landing](oauth-app.md#landing) and
-  [GitHub App landing](github-app.md#landing).
+  [GitHub App landing](github-app/flow.md#landing).
 - The frontend then `POST`s `{ code, state }` (plus the claimed `installationId` for the GitHub
   App, which the backend verifies) to a backend `.json` route of the type. That request is
   same-origin, carries the cookie, and goes through `OriginGuard` and `JwtGuard`.

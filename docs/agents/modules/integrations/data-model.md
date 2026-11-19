@@ -36,7 +36,7 @@ The module owns these tables:
 - `integrations_oauth_states`: pending OAuth App redirect flows
   ([OAuth App state](oauth-app.md#state)).
 - `integrations_github_app_states`: pending GitHub App redirect flows and installation
-  selections ([GitHub App state](github-app.md#state)).
+  selections ([GitHub App state](github-app/flow.md#state)).
 
 ## `integrations` columns
 
@@ -159,7 +159,7 @@ available.
 - **Same GitHub identity or installation for different Kerghan users**: allowed and fully
   isolated. No response, error code or message may reveal that another user holds the same
   identity. A GitHub App installation is only accepted once the user proves access to it on
-  GitHub ([GitHub App access](github-app.md#access)).
+  GitHub ([GitHub App access](github-app/lifecycle.md#access)).
 - **Replace credential with a different GitHub identity**: allowed. An integration is a labelled
   credential slot; `github_login` and `metadata` are refreshed from the new credential.
 - **Credential stops working** (revoked, expired, uninstalled): nothing polls. The status changes
