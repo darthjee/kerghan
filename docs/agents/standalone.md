@@ -6,7 +6,7 @@ is the "Run Kerghan standalone" section of the [README](../../README.md#run-kerg
 the environment-variable contract is in
 [environment-variables.md](environment-variables.md#5-standalone-darthjeekerghan-standalone).
 The `standalone` agent owns the files described here; the CI release jobs belong to `infra` (see
-[architecture/infra.md](architecture/infra.md)).
+[architecture/infra/releases.md](architecture/infra/releases.md)).
 
 ## Overview
 
@@ -47,7 +47,7 @@ run inside the standalone backend with no extra service or variables; the defaul
 
 Navi (the cache warmer), phpMyAdmin, email (`KERGHAN_EMAILS_ENABLED` stays off), a backup
 command, several instances per host, and production use. Production keeps its own deploy (see
-[architecture/infra.md](architecture/infra.md)); Render never runs the Vault image. Shell
+[architecture/infra/releases.md](architecture/infra/releases.md)); Render never runs the Vault image. Shell
 completion covers bash only; zsh and fish are later Epics (see
 [Client completion](standalone/client-completion.md#overview-and-scope)).
 
