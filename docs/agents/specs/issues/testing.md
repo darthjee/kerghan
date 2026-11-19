@@ -1,13 +1,13 @@
 # Issues and Projects — Testing
 
 Purpose: the test strategy of the feature (tiers, fixtures, how workers and security rules are tested).
-Part of the [Issues and Projects specs](../issues.md). Same shape as the Repositories [testing section](../../modules/repositories.md#testing) (#451).
+Part of the [Issues and Projects specs](../issues.md). Same shape as the Repositories [testing section](../../modules/repositories/testing.md) (#451).
 
 What to test lives in the "Required tests" section of each rule's owning file ([model.md](model.md#required-tests), [projects.md](projects.md#required-tests), [github-link.md](github-link.md#required-tests), [sync.md](sync.md#required-tests), [api.md](api.md#required-tests), [security.md](security.md#required-tests), [ui.md](ui.md#required-tests), [edge-cases.md](edge-cases.md#required-tests)); this page says **how**, and is never a second source of truth for **what**. No test of the feature calls the real GitHub, reads the wall clock or loops to catch a race.
 
 ## Tiers
 
-The tiers are the Repositories ones; the DB-backed tier already exists and is not redefined here (`*.db-spec.ts`, `yarn test:db`, `make db-tests`, the `_test` schema guard: see [Repositories, DB-backed tier](../../modules/repositories.md#db-backed-tier)).
+The tiers are the Repositories ones; the DB-backed tier already exists and is not redefined here (`*.db-spec.ts`, `yarn test:db`, `make db-tests`, the `_test` schema guard: see [Repositories, DB-backed tier](../../modules/repositories/testing.md#db-backed-tier)).
 
 | Tier | Files | What it runs on |
 |---|---|---|
@@ -46,7 +46,7 @@ An item of a "Required tests" list runs on its category's default tier unless it
 - **GitHub fake.** The Issues module reaches GitHub only through `IntegrationsGithubService`. The issue operations `getIssue`, `updateIssue` and `probeIssues` ([sync.md](sync.md#github-issue-client-operations)) are added there by the implementation issues. The typed `FakeIntegrationsGithubService` is **extended** with the same operations: scripted answers per (integration, operation), including `not_modified` and the issue-specific kinds (`not_found`, `gone`, `moved`, `forbidden`), a **call log** (specs assert "no GitHub call", E8, E20, E24) and **deferred answers** (a promise the spec resolves) for race specs.
 - **Builders.** Typed builders, no recorded JSON, beside the existing ones: `githubIssue({ id, number, title, body, state, updatedAt })`, `githubPullRequest(...)` (E3) and `issuePage(...)`. The error builders (`rateLimited`, `unauthorized`, `forbidden`, `notFound`, `timeout`, `serverError`) are reused. A deleted issue is a `notFound` plus a passing issues probe (E1, E22); a transferred one is a `moved` outcome (E2, E65); a failing probe is a `notFound` or `forbidden` on the probe read.
 - **Redirect and `Location` contract spec (required).** A contract spec records GitHub's `200`, `404`, `410` and `301` answers for `/repos/{owner}/{name}/issues/{number}`, including the rename redirect and its `Location` form, and is runnable against live GitHub on demand; it is the fidelity contract for the link states of [github-link.md](github-link.md#gone-transferred-and-repository-unreachable) (E65). The `Location` of a transferred issue has not been observed yet and is still to be recorded; until then "any other target means moved" is an assumption.
-- **Fidelity contract spec (required).** For each new operation, every builder case is run through the real `IntegrationsGithubService` at the `fetch` level (as [Repositories' GitHub mocking](../../modules/repositories.md#github-mocking)) and its result must equal what the fake returns. The fake therefore cannot drift from the real client. The existing no-network guard covers the module: a test that reaches the real `fetch` fails.
+- **Fidelity contract spec (required).** For each new operation, every builder case is run through the real `IntegrationsGithubService` at the `fetch` level (as [Repositories' GitHub mocking](../../modules/repositories/testing.md#github-mocking)) and its result must equal what the fake returns. The fake therefore cannot drift from the real client. The existing no-network guard covers the module: a test that reaches the real `fetch` fails.
 - **`FakeClock`.** It drives both sides of the E7 rule: the marker's `updated_at` (passed from the injected `Clock`, never `NOW()`) and GitHub's `updated_at` set in the builders, plus the rate-limit reset of E17. Kerghan newer, GitHub newer and a tie are three clock settings. `FakeClock` and an injected scheduler also drive the rate-limit timer, the stale threshold and the 60-second fresh skip ([sync.md](sync.md#rate-limits)).
 - **DB seed builders.** `seedProject`, `seedIssue`, `seedLink` and `seedMarker`. Every e2e and DB-backed harness also seeds an **intruder** user with rows of its own (a project, an issue, a link and a marker), as Repositories' two-user baseline.
 

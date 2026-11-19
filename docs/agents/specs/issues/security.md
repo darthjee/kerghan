@@ -64,7 +64,7 @@ The "Fixed operations: `GET`-only" guarantee of [architecture/security.md](../..
 
 - **`IntegrationsGithubService` stays `GET`-only**: the existing listings plus `getIssue` and `probeIssues`.
 - **`updateIssue` lives on a separate exported `IntegrationsGithubIssueWriter`**, the only service in the codebase that sends a non-`GET` request to GitHub with a user's credential. Importing the read service never grants a write.
-- **Only the issues sync service injects the writer**, enforced by a `(static)` spec next to the Repositories module-boundary tooling ([repositories.md](../../modules/repositories.md#module-boundaries)).
+- **Only the issues sync service injects the writer**, enforced by a `(static)` spec next to the Repositories module-boundary tooling ([repositories.md](../../modules/repositories/security.md#module-boundaries)).
 
 ### What the write may send
 

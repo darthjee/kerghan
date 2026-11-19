@@ -35,7 +35,7 @@ getRepository(userId, integrationId | null, githubId): Promise<RepoResult>
   the sources' `uuid` / `label` and to read a dangling link as empty.
 
 - **Integration identity:** callers pass the internal `integrations.id` (the logical FK the
-  Repositories tables already store, [data model](../repositories.md#logical-foreign-keys)). Every call loads
+  Repositories tables already store, [data model](../repositories/data-model.md#logical-foreign-keys)). Every call loads
   it with `WHERE id = ? AND user_id = ?`; a missing or foreign one answers
   `integration_unusable` with reason `missing` and **no GitHub call**. `null` means unauthenticated
   ([unauthenticated calls](#unauthenticated-calls)).
@@ -64,7 +64,7 @@ getRepository(userId, integrationId | null, githubId): Promise<RepoResult>
   as `GET /user/installations` entries are today.
 - **Pagination:** the service builds every page URL from `page` itself
   (`?per_page=100&page=N`); `hasNext` is whether `Link` has a `rel="next"`, whose URL is never
-  used ([security](../repositories.md#fixed-github-base-url)).
+  used ([security](../repositories/security.md#fixed-github-base-url)).
 - **Conditional requests:** a passed `etag` is sent as `If-None-Match`; the response's `ETag`
   and `X-RateLimit-*` come back in the result ([sync](../repositories/sync.md#conditional-requests)).
 - Every request has the existing 10 s timeout ([sync](../repositories/sync.md#values)).
@@ -324,7 +324,7 @@ A direct call would need Integrations to import Repositories, which already impo
 - **Listener:** Repositories' `@OnEvent('integration.deleted')` runs one transaction, every
   statement with `AND user_id = :userId`: delete the source, page and status rows for
   `source_key = 'integration:<id>'`; clear `integration_id` where it points at it; prune
-  not-added repos left with no source row ([data model](../repositories.md#logical-foreign-keys)). Its first
+  not-added repos left with no source row ([data model](../repositories/data-model.md#logical-foreign-keys)). Its first
   statement locks the user's sync-state row (`SELECT … FOR UPDATE`), the lock order of every
   multi-table Repositories write transaction, so a cleanup during a sync serializes with the run's page
   writes instead of deadlocking with them ([sync](../repositories/sync.md#write-path)).
@@ -340,7 +340,7 @@ A direct call would need Integrations to import Repositories, which already impo
   after the cleanup ([sync](../repositories/sync.md#write-path)).
 - Inside Integrations, the delete also evicts the cached installation token.
 - There is no database cascade between the two modules. User deletion goes through a separate
-  awaited `user.deleted` event ([data model](../repositories.md#user-deletion)); the user's integrations
+  awaited `user.deleted` event ([data model](../repositories/data-model.md#user-deletion)); the user's integrations
   cascade without emitting `integration.deleted`, and that listener covers their rows.
 
 ## Unauthenticated budget tracker
@@ -372,13 +372,13 @@ unauthenticated call). Its home, interface, concurrency and thresholds:
 
 ## Required tests
 
-Tiers, fakes and harnesses: [Testing](../repositories.md#testing). Tags: `(db)`, `(e2e)`, `(unit)`,
-`(static)`, `(race)` ([default tiers](../repositories.md#default-tier-by-category)).
+Tiers, fakes and harnesses: [Testing](../repositories/testing.md). Tags: `(db)`, `(e2e)`, `(unit)`,
+`(static)`, `(race)` ([default tiers](../repositories/testing.md#default-tier-by-category)).
 
 **Exported service:**
 
 - No credential, minted token or GitHub body leaves the service: the
-  [canary sweep](../repositories.md#security-tests).
+  [canary sweep](../repositories/required-tests.md#security-tests).
 - A missing or foreign `integrationId` answers `integration_unusable` with reason `missing`,
   without a GitHub call (a call for an integration deleted mid-sync included).
 - `listUsableIntegrations` returns only usable integrations, oldest first, filtered by `user_id`
@@ -388,7 +388,7 @@ Tiers, fakes and harnesses: [Testing](../repositories.md#testing). Tags: `(db)`,
   sync stores for them is [sync](../repositories/sync.md#required-tests)'s.)
 - **Fake fidelity:** for each shared builder case, the real service's typed result at the `fetch`
   level equals what `FakeIntegrationsGithubService` returns for the same builder
-  ([Testing](../repositories.md#fake-fidelity)).
+  ([Testing](../repositories/testing.md#fake-fidelity)).
 
 **Requests:**
 
@@ -463,4 +463,4 @@ Tiers, fakes and harnesses: [Testing](../repositories.md#testing). Tags: `(db)`,
   at boot). Owned by #463, which adds the listener; #461 builds the emitter side only. **Done in
   #463:** `repositories/tests/integration-deleted.at-boot.db-spec.ts` boots the real `AppModule` on
   the DB tier.
-- What the cleanup deletes is [data model](../repositories.md#model-tests)'s.
+- What the cleanup deletes is [data model](../repositories/required-tests.md#model-tests)'s.

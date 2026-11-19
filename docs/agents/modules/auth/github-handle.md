@@ -5,7 +5,7 @@ the [Auth module](../auth.md), whose public repositories are a source of the
 [Repositories](../repositories.md) listing.
 
 A new nullable **`github_handle`** column on `auth_users`, owned by the **Auth** module and
-edited from its own section of the Account page ([frontend](../repositories.md#github-handle-field)).
+edited from its own section of the Account page ([frontend](../repositories/frontend.md#github-handle-field)).
 
 - Its public repositories are a source of the listing ([sync](../repositories/sync.md#sources)).
 - It is **not** an environment-managed field: the default user
@@ -57,7 +57,7 @@ up as the handle source's status after the next sync: `not_found`
 
 **URL-encoding:** whenever the handle is interpolated into a GitHub path, it goes through
 `encodeURIComponent`. The format already excludes every path character; the encoding is defence
-in depth ([security](../repositories.md#github-handle)).
+in depth ([security](../repositories/security.md#github-handle)).
 
 ## Setting it: `PATCH /auth/account.json`
 
@@ -133,7 +133,7 @@ today; the Account form is not prefilled).
   holds. The `409` still carries **no `error.details`**: the managed fields are a fixed,
   documented list, so a client can tell from its own request which field caused the refusal, and
   the Account page sends the handle from its own section, never mixed with managed fields
-  ([frontend](../repositories.md#github-handle-field)). A read-side indicator is not built.
+  ([frontend](../repositories/frontend.md#github-handle-field)). A read-side indicator is not built.
 
 ## Admins
 
@@ -146,7 +146,7 @@ Admins neither see nor edit the handle:
   therefore answers `400` with the admin's unchanged "at least one field" message.
 - The admin pages are unchanged.
 - **Why:** the handle only drives the user's own listing, which admins cannot see
-  ([security](../repositories.md#user-scoping)); there is no admin need for it, and it is one less
+  ([security](../repositories/security.md#user-scoping)); there is no admin need for it, and it is one less
   identity field exposed to admins.
 
 ## Auth export
@@ -170,7 +170,7 @@ AccountHandleService#lockExistingUser(userId: number, manager: EntityManager): P
 It selects the user's `id` with a shared lock (`SELECT … FOR SHARE`, TypeORM
 `pessimistic_read`) through the caller's transactional manager, and returns whether the user
 still exists. A request entry point calls it before creating the sync-state row
-([user deletion](../repositories.md#user-deletion)); it never reads another column.
+([user deletion](../repositories/data-model.md#user-deletion)); it never reads another column.
 
 ## Handle changes
 
@@ -178,7 +178,7 @@ When the handle changes or is cleared, the handle source's stored rows (its
 `repositories_sources`, `repositories_source_pages` and `repositories_source_statuses` rows,
 `source_key = 'handle'`) belong to the old handle and must go. This is done **lazily, by the
 Repositories module**, through the `handle` column of
-[`repositories_sync_states`](../repositories.md#repositories_sync_states): the handle the stored handle rows belong
+[`repositories_sync_states`](../repositories/data-model.md#repositories_sync_states): the handle the stored handle rows belong
 to.
 
 - **Reconciliation.** Every Repositories entry point that reads or writes the handle source (the
@@ -191,11 +191,11 @@ to.
      creates the row:** its start-of-run reconciliation only locks an existing row, and with no
      row the run stops ([sync](../repositories/sync.md#write-path)). Only the request entry points (the
      listing, the sync-state route, Refresh, Add) create it, so a run never recreates the row of
-     a deleted user ([user deletion](../repositories.md#user-deletion));
+     a deleted user ([user deletion](../repositories/data-model.md#user-deletion));
   2. deletes the user's `source_key = 'handle'` source, page and status rows (`AND user_id =
      :userId` on each statement);
   3. sets `handle` to the current value;
-  4. [prunes](../repositories.md#private-metadata-lifecycle).
+  4. [prunes](../repositories/data-model.md#private-metadata-lifecycle).
 - **Effect:** a new handle reads `pending` until a sync runs it ([routes](../../backend/routes/repositories.md#sync-state));
   a cleared handle has no handle source at all. Not-added repos only the old handle returned are
   pruned; added ones read Unavailable (or stay Added through another source).
@@ -216,7 +216,7 @@ to.
 
 ## Required tests
 
-Tiers, fakes and harnesses: the [Repositories testing strategy](../repositories.md#testing).
+Tiers, fakes and harnesses: the [Repositories testing strategy](../repositories/testing.md).
 
 **GitHub handle:**
 
@@ -237,12 +237,12 @@ Tiers, fakes and harnesses: the [Repositories testing strategy](../repositories.
 - The response carries `githubHandle` on both paths; `POST /auth/account/mine.json` returns
   `{ username, email, githubHandle }` for the session's user only, and answers `401` for a
   deleted user. (Its `401` without a session, `OriginGuard` and `X-Skip-Cache` are the
-  [route access matrix](../repositories.md#security-tests)'s.)
+  [route access matrix](../repositories/required-tests.md#security-tests)'s.)
 - Default user (feature enabled): a handle-only edit answers `200` and stores the handle; a mixed
   edit answers `409 DEFAULT_USER_MANAGED` before the lockout and the password check, and stores
   nothing; with the feature off both behave as for any user.
 - `githubHandle` sent to `POST /admin/users/:id/edit.json` is never written. (Admin responses
-  without `githubHandle` are the [route access matrix](../repositories.md#security-tests)'s.)
+  without `githubHandle` are the [route access matrix](../repositories/required-tests.md#security-tests)'s.)
 - `AccountHandleService#getGithubHandle` returns the stored handle, `null` for no handle and for an
   unknown user.
 

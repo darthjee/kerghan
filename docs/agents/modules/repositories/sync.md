@@ -1,6 +1,6 @@
 # Repositories — Sync
 
-How the backend syncs GitHub into the [data model](../repositories.md#data-model). Part of the
+How the backend syncs GitHub into the [data model](../repositories/data-model.md). Part of the
 [Repositories module](../repositories.md).
 
 ## Sources
@@ -33,7 +33,7 @@ A user's sync reads every source they have:
     integration, so private metadata is always tied to the integration that granted it.
 
 Results are merged by GitHub repository id; each repo records which sources returned it
-([data model](../repositories.md#repositories_sources)).
+([data model](../repositories/data-model.md#repositories_sources)).
 
 ### Handle credential
 
@@ -54,7 +54,7 @@ Results are merged by GitHub repository id; each repo records which sources retu
   source **`not_found`**, whatever credential served it ([error mapping](../integrations/github-service.md#error-mapping)).
   - **No fallback:** a `404` is not a `401`, so no other credential is tried.
   - **Not ok for row statuses:** its rows and pages are kept, so nothing is pruned, and added repos
-    it alone holds read Unknown ([data model](../repositories.md#row-statuses)). A renamed handle's repos
+    it alone holds read Unknown ([data model](../repositories/data-model.md#row-statuses)). A renamed handle's repos
     still exist on GitHub under the new name.
   - **Retried on every sync:** it is not skipped like `rate_limited`.
 - The source status never reveals which credential served it ([routes](../../backend/routes/repositories.md#sync-state)).
@@ -87,7 +87,7 @@ The sync is **asynchronous**: the request that triggers it does not wait for Git
 - The listing returns the stored rows immediately, with the sync state (`idle` / `syncing`,
   `lastSyncedAt`, per-source status; [routes](../../backend/routes/repositories.md#sync-state)).
 - The frontend polls `POST /repositories/sync/state.json` until it is `idle`, then reloads the
-  page of rows ([routes](../../backend/routes/repositories.md#polling-contract), [frontend](../repositories.md#sync-ux)). That route never
+  page of rows ([routes](../../backend/routes/repositories.md#polling-contract), [frontend](../repositories/frontend.md#sync-ux)). That route never
   starts a sync.
 
 - **In-process.** The triggering request claims the [per-user lock](#per-user-lock), starts the
@@ -100,7 +100,7 @@ The sync is **asynchronous**: the request that triggers it does not wait for Git
   `SyncLauncher`, whose `launch(task)` detaches the run and catches its errors. It is the only way
   a sync is started (stale listing and Refresh alike), so production behaviour is the detached
   promise above, and tests swap in a launcher that captures the task
-  ([Testing](../repositories.md#detached-sync-and-time)).
+  ([Testing](../repositories/testing.md#detached-sync-and-time)).
 - **No queue.** A job queue (BullMQ/Redis) would add infrastructure to dev, production and the
   standalone image for an on-demand, low-frequency job; rejected.
 - **A sync stuck in `syncing` always returns to `idle`** ([restart recovery](#restart-recovery)),
@@ -108,7 +108,7 @@ The sync is **asynchronous**: the request that triggers it does not wait for Git
 
 ### Per-user lock
 
-A **conditional `UPDATE`** on the user's sync-state row ([data model](../repositories.md#repositories_sync_states)),
+A **conditional `UPDATE`** on the user's sync-state row ([data model](../repositories/data-model.md#repositories_sync_states)),
 the same pattern as `IntegrationTestCooldownService`:
 
 ```sql
@@ -146,7 +146,7 @@ WHERE user_id = :userId
   expiry, TTL, cooldown, heartbeat) compares against an app-supplied timestamp parameter from the
   `Clock` (the `:now` of the claim above), so the application and the database never disagree
   about time, and tests drive both with one fake clock
-  ([Testing](../repositories.md#detached-sync-and-time)).
+  ([Testing](../repositories/testing.md#detached-sync-and-time)).
 
 ### Restart recovery
 
@@ -172,13 +172,13 @@ For each source, the sync reads GitHub page by page, up to the **page cap**:
 - **Page-number pagination.** The sync builds every page request itself (`?per_page=100&page=N`,
   on the [endpoint of the source](../integrations/github-service.md#endpoints-and-parameters)) and reads the `Link` header **only to know whether `rel="next"`
   exists**. It never requests a URL taken from a response
-  ([security](../repositories.md#fixed-github-base-url)).
+  ([security](../repositories/security.md#fixed-github-base-url)).
 - Pages within a source are sequential; up to the parallelism bound of sources run at once
   ([values](#values)).
 - The handle source drops private repos before writing anything.
 - At the end, the source's status is stored: `ok`, `error`, `invalid_credentials`,
   `rate_limited` (with the reset time), `page_cap_reached` or `not_found` (handle only)
-  ([data model](../repositories.md#repositories_source_statuses)). A source added since the last sync reads
+  ([data model](../repositories/data-model.md#repositories_source_statuses)). A source added since the last sync reads
   as `pending` until it runs ([routes](../../backend/routes/repositories.md#sync-state)).
 
 ### Write path
@@ -188,7 +188,7 @@ transaction holds only the database writes. Step 1 locks the user's sync-state r
 transactions of one user's parallel sources run one after another, which keeps the upserts free
 of deadlocks. **Every Repositories transaction that writes several tables locks that row first** (a run's
 guarded writes, the handle reconciliation, and the `integration.deleted` / `user.deleted` listeners,
-[GitHub service](../integrations/github-service.md#deletion-hook), [data model](../repositories.md#user-deletion)), so a
+[GitHub service](../integrations/github-service.md#deletion-hook), [data model](../repositories/data-model.md#user-deletion)), so a
 cleanup during a sync serializes with the run instead of deadlocking with it.
 
 1. `UPDATE repositories_sync_states SET heartbeat_at = :now WHERE user_id = :userId AND run_id = :mine`;
@@ -222,7 +222,7 @@ since `source_key = 'handle'` is the same string for every user):
   [partial failures](#partial-failures));
 - **page cap:** delete its source rows and page rows **past the cap**, as for a success whose
   last page is the cap; store `page_cap_reached` (it counts as `ok` for row statuses,
-  [data model](../repositories.md#row-statuses)). Pruning then applies.
+  [data model](../repositories/data-model.md#row-statuses)). Pruning then applies.
   - **Accepted outcome:** after the cap is lowered, added repos past the new cap read Unavailable
     although GitHub still returns them, because Kerghan stopped reading that far; the
     `page_cap_reached` banner ("some may be missing") explains it, and the added rows are kept.
@@ -243,13 +243,13 @@ per-source statuses carry the failures). A run that lost its lease or crashed ne
 
 - **`last_seen_at`** is "when a source page last returned the repo" (`200` or `304`), even if
   that source fails on a later page. It is informational: no status derives from it
-  ([data model](../repositories.md#repositories)).
+  ([data model](../repositories/data-model.md#repositories)).
 - Rejected: all-or-nothing per source (buffer every page, write once): long transactions and
   lost work on failure.
 - **A run never creates the sync-state row.** Only the request entry points (the listing, the
   sync-state route, Refresh, Add) create it, with `INSERT … ON DUPLICATE KEY UPDATE`. The run's
   start-of-run [handle reconciliation](../auth/github-handle.md#handle-changes) only locks and updates an existing
-  row; with no row, the run stops. A deleted user's row ([user deletion](../repositories.md#user-deletion))
+  row; with no row, the run stops. A deleted user's row ([user deletion](../repositories/data-model.md#user-deletion))
   makes every guarded write of a running sync affect no row, so the run rolls back, stops, and
   recreates nothing.
 
@@ -289,7 +289,7 @@ WHERE user_id = :userId AND id = :repositoryId
   other sources are still applied.
 - **Pages already applied stay applied**; the rest keep their old rows: partly refreshed, never
   lost. Added repos held only by failed sources' rows read as Unknown, not Unavailable
-  ([data model](../repositories.md#row-statuses)), and nothing of it is pruned.
+  ([data model](../repositories/data-model.md#row-statuses)), and nothing of it is pruned.
 - A `401` on an integration sets it to `invalid`, through the Integrations module
   ([GitHub service](../integrations/github-service.md#invalid-on-401)); the handle source then moves to the next
   credential ([handle credential](#handle-credential)).
@@ -300,7 +300,7 @@ WHERE user_id = :userId AND id = :repositoryId
 ## Pruning
 
 - **Rule:** a not-added repo (`added_at IS NULL`) is deleted when **no source row** points at it
-  ([data model](../repositories.md#private-metadata-lifecycle)). Nothing else is checked: a successful source
+  ([data model](../repositories/data-model.md#private-metadata-lifecycle)). Nothing else is checked: a successful source
   has already dropped the rows it no longer returns (a capped source drops those past the cap),
   and a failed or interrupted source keeps its rows, so **a failure blocks pruning by
   construction**.
@@ -338,11 +338,11 @@ WHERE user_id = :userId AND id = :repositoryId
 - **No per-user share of the unauthenticated budget:** one user with no usable integration can
   spend it down to the sync threshold, leaving other users' unauthenticated sources
   `rate_limited` until the reset (their Adds keep the reserve). Accepted for now, bounded by the
-  cooldown and the thresholds ([security](../repositories.md#user-scoping)).
+  cooldown and the thresholds ([security](../repositories/security.md#user-scoping)).
 
 ## Conditional requests
 
-- **Page table** ([data model](../repositories.md#repositories_source_pages)): one row per (user, source,
+- **Page table** ([data model](../repositories/data-model.md#repositories_source_pages)): one row per (user, source,
   page) with `etag`, `has_next`, `fetched_at`. Never shared between users.
 - Each page's stored `etag` is sent back as `If-None-Match`, **except on the last stored page**
   (the one whose stored `has_next` is `false`), which is always requested **without
@@ -369,13 +369,13 @@ WHERE user_id = :userId AND id = :repositoryId
 
 ## Network
 
-- The base URL is fixed: `https://api.github.com` ([security](../repositories.md#fixed-github-base-url)).
+- The base URL is fixed: `https://api.github.com` ([security](../repositories/security.md#fixed-github-base-url)).
 - Every GitHub call has a timeout, and one sync bounds how many sources run in parallel
   ([values](#values)).
 - Pagination builds its own page URLs and **never requests a URL taken from a response**;
   **no redirect is followed**, same-origin or not: any `3xx` makes the source `error` (Add:
   `502`), and `Authorization` never leaves `https://api.github.com`
-  ([security](../repositories.md#fixed-github-base-url)).
+  ([security](../repositories/security.md#fixed-github-base-url)).
 
 ## Values
 
@@ -389,7 +389,7 @@ WHERE user_id = :userId AND id = :repositoryId
 | Parallelism | up to 3 sources at once; pages within a source are sequential | constant |
 | Lease (no heartbeat ⇒ dead) | 2 min | constant |
 | Hard deadline per sync | 5 min | constant |
-| Sync-state polling interval | 2 s | frontend constant ([frontend](../repositories.md#sync-ux)) |
+| Sync-state polling interval | 2 s | frontend constant ([frontend](../repositories/frontend.md#sync-ux)) |
 
 - The env vars are read with `getNumberConfig` and these defaults; a value that is not a
   positive integer falls back to the default; they are listed in
@@ -407,8 +407,8 @@ concurrency) is listed, with its outcome and its rule, in the
 
 ## Required tests
 
-Tiers, fakes and harnesses: [Testing](../repositories.md#testing). Tags: `(db)`, `(e2e)`, `(unit)`,
-`(static)`, `(race)` ([default tiers](../repositories.md#default-tier-by-category)).
+Tiers, fakes and harnesses: [Testing](../repositories/testing.md). Tags: `(db)`, `(e2e)`, `(unit)`,
+`(static)`, `(race)` ([default tiers](../repositories/testing.md#default-tier-by-category)).
 
 **Trigger, execution and lock:**
 
@@ -454,7 +454,7 @@ Tiers, fakes and harnesses: [Testing](../repositories.md#testing). Tags: `(db)`,
 - A handle source answered `not_found` stores `not_found`, keeps the handle's rows and pages,
   prunes nothing, tries no other credential, and is retried on the next sync. (The `404 →
   not_found` mapping is [GitHub service](../integrations/github-service.md#required-tests)'s; the row status is
-  [data model](../repositories.md#model-tests)'s.)
+  [data model](../repositories/required-tests.md#model-tests)'s.)
 - A sync run reconciles the handle when it starts and fetches the current, normalised handle;
   with no handle there is no handle source. (Its URL-encoding is
   [GitHub service](../integrations/github-service.md#required-tests)'s.)
@@ -498,13 +498,13 @@ Tiers, fakes and harnesses: [Testing](../repositories.md#testing). Tags: `(db)`,
 - With a full last page and a new repo created since, the next sync fetches the new page.
 - Pagination asks for page `N + 1` only while `hasNext` is true, and up to the page cap.
 - Page, status and source rows dropped by an integration deletion or a handle change: the
-  cleanup tests of [data model](../repositories.md#model-tests).
+  cleanup tests of [data model](../repositories/required-tests.md#model-tests).
 
 **Pruning:**
 
 - Pruning runs in the end-of-sync transaction; a failed or interrupted source blocks pruning of
   its repos by keeping its rows. (The pruning query itself is
-  [data model](../repositories.md#model-tests)'s.)
+  [data model](../repositories/required-tests.md#model-tests)'s.)
 
 **Rate limits:**
 
