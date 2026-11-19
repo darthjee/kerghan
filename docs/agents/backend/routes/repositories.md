@@ -14,7 +14,7 @@ The HTTP surface of the Repositories module, in the style of
 - **Auth:** every route sits behind the global `JwtGuard` (no `@Public()`, no `@AdminOnly()`) and
   is scoped to the caller (`req.user.sub`).
 - **CSRF:** every route is `POST`, so the global `OriginGuard` covers all four
-  ([security](../../modules/repositories.md#csrf)).
+  ([security](../../modules/repositories/security.md#csrf)).
 - **Caching:** cache class **`user-scoped`** (`@CachePolicy(CacheClass.UserScoped)`,
   [caching.md](../../architecture/caching.md#cache-classes)). As for any non-`GET`, every response
   that passes the global guards (success and handler errors alike) sends `X-Skip-Cache: true`
@@ -90,10 +90,10 @@ Every field is optional. Any invalid value answers `400 VALIDATION_FAILED`.
 | `githubId` | GitHub's repository id, the canonical key ([Repository identity](#repository-identity)). |
 | `owner`, `name`, `fullName` | From the latest snapshot; `fullName` is `owner/name`. |
 | `private` | Visibility. |
-| `status` | `added`, `not_added`, `unavailable` or `unknown`, derived on read ([data model](../../modules/repositories.md#row-statuses)). |
+| `status` | `added`, `not_added`, `unavailable` or `unknown`, derived on read ([data model](../../modules/repositories/data-model.md#row-statuses)). |
 | `addedAt` | `null` for not-added rows. |
 | `lastSeenAt` | When a source last returned the repo. |
-| `sources[]` | Every **current** source holding a row for the repo, as of that source's last applied page, failed and `pending` sources included ([data model](../../modules/repositories.md#repositories_sources)): `{ kind: "integration", integration: { uuid, label } }` or `{ kind: "handle", handle }` (`handle` is the current, normalised, lowercase handle, [data model](../../modules/auth/github-handle.md#normalisation)). The UI matches each entry by key with the sync state's `sources[].status` and mutes a source that is not `ok` ([frontend](../../modules/repositories.md#table)). |
+| `sources[]` | Every **current** source holding a row for the repo, as of that source's last applied page, failed and `pending` sources included ([data model](../../modules/repositories/data-model.md#repositories_sources)): `{ kind: "integration", integration: { uuid, label } }` or `{ kind: "handle", handle }` (`handle` is the current, normalised, lowercase handle, [data model](../../modules/auth/github-handle.md#normalisation)). The UI matches each entry by key with the sync state's `sources[].status` and mutes a source that is not `ok` ([frontend](../../modules/repositories/frontend.md#table)). |
 | `accessIntegration` | The access link set on Add, as `{ uuid, label }`. `null` for not-added rows, for added rows only the public source sees, and for a dangling link (its integration was deleted). |
 
 - **Sort:** fixed, case-insensitive `owner`, then `name`, then `githubId`, so pages are stable.
@@ -200,7 +200,7 @@ the same object as `sync`.
   that source replaces the stored status. This removes the stale "Fix it in Integrations" banner
   after a Test or a Replace.
 - The UI shows a banner for every status other than `ok` and `pending`
-  ([frontend](../../modules/repositories.md#source-errors)).
+  ([frontend](../../modules/repositories/frontend.md#source-errors)).
 - **The route never starts a sync**, so polling cannot re-trigger one. Its only possible write is
   the [handle reconciliation](../../modules/auth/github-handle.md#handle-changes) shared by every route.
 
@@ -264,12 +264,12 @@ listing as added.
   caller's own rows.
 - **The re-check is built only from the stored row** (its `github_id`, or its stored
   `owner`/`name` URL-encoded), never from the request's `fullName`, so no user input reaches the
-  GitHub API path ([security](../../modules/repositories.md#fixed-github-base-url)).
+  GitHub API path ([security](../../modules/repositories/security.md#fixed-github-base-url)).
 - When only the public source sees the repo, the re-check goes through a usable integration if the
   user has one (without linking it), and unauthenticated otherwise. If that re-check shows the
   repo has become **private**, the integration that granted it is linked as `integration_id`, so
   the stored private metadata stays tied to the integration that granted it
-  ([data model](../../modules/repositories.md#private-metadata-lifecycle)) and the row reads as Added, not
+  ([data model](../../modules/repositories/data-model.md#private-metadata-lifecycle)) and the row reads as Added, not
   Unavailable.
 - The unauthenticated re-check goes through the shared process-wide budget tracker with **Add's
   own threshold**: it is refused only when the remaining budget is **≤ 0** (the sync stops at
@@ -278,7 +278,7 @@ listing as added.
 - **Race with pruning:** the write is `UPDATE … WHERE id = :id AND user_id = :userId AND
   added_at IS NULL`. If a sync's pruning deleted the not-added row first, the update affects no
   row, the re-read finds nothing, and Add answers `404 NOT_FOUND` (the repo left the listing); if
-  Add commits first, pruning skips the row ([data model](../../modules/repositories.md#private-metadata-lifecycle)).
+  Add commits first, pruning skips the row ([data model](../../modules/repositories/data-model.md#private-metadata-lifecycle)).
 - **Double Add:** two concurrent Adds of the same repo both pass step 4. Only one write matches
   `added_at IS NULL`; the other affects no row, re-reads the row as added and answers `200` with
   the first Add's `addedAt` and access link. The losing request's GitHub call is wasted, which the
@@ -367,13 +367,13 @@ Standard error shape (`core/http-exception.filter.ts`,
 
 ## Required tests
 
-Tiers, fakes and harnesses: [Testing](../../modules/repositories.md#testing). Tags: `(db)`, `(e2e)`, `(unit)`,
-`(static)`, `(race)` ([default tiers](../../modules/repositories.md#default-tier-by-category)).
+Tiers, fakes and harnesses: [Testing](../../modules/repositories/testing.md). Tags: `(db)`, `(e2e)`, `(unit)`,
+`(static)`, `(race)` ([default tiers](../../modules/repositories/testing.md#default-tier-by-category)).
 
 **Routes:**
 
 - Per-route `401`, `OriginGuard`, `X-Skip-Cache`, the cache class, another user's repository
-  answering like a missing one, and admins: the [route access matrix](../../modules/repositories.md#security-tests).
+  answering like a missing one, and admins: the [route access matrix](../../modules/repositories/required-tests.md#security-tests).
 - No repositories route answers `GET`.
 - Unknown body properties are stripped and ignored.
 - Handler errors (`400`, `404`, `429`) send `X-Skip-Cache` + `Cache-Control: no-store` too; the
@@ -381,7 +381,7 @@ Tiers, fakes and harnesses: [Testing](../../modules/repositories.md#testing). Ta
 - No response body contains the internal repository `id`, `user_id`, an internal
   `integrations.id`, `secretHint`, `github_login`, `status_reason`, or any other integration
   field beyond `uuid` and `label`. (Credential material is the
-  [canary sweep](../../modules/repositories.md#security-tests)'s.)
+  [canary sweep](../../modules/repositories/required-tests.md#security-tests)'s.)
 - A row's `sources[]` and `accessIntegration` never resolve an integration of another user.
 - After the GitHub handle changed or was cleared, each of the four routes, called first, answers
   without the old handle's source rows (and without not-added repos only it returned); a new

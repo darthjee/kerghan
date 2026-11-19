@@ -465,7 +465,7 @@ per the modular pattern's event-driven communication rule.
 
 `UserDeletedEvent { userId }` (`events/user-deleted.event.ts`, name `USER_DELETED` =
 `user.deleted`) is the contract for deleting a user's data in other modules. The
-[Repositories module](repositories.md#user-deletion) listens and deletes the user's rows in its
+[Repositories module](repositories/data-model.md#user-deletion) listens and deletes the user's rows in its
 five tables.
 
 **Not built yet:** no user-deletion path exists today, so nothing emits the event. Whoever adds a

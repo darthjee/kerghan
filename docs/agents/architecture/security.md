@@ -159,4 +159,4 @@ Guarantees of the exported `IntegrationsGithubService`
   `request(path)`, so no caller chooses a path.
 
 The boundary is enforced by tooling in the Repositories module, the first consumer of
-`IntegrationsGithubService` ([module boundaries](../modules/repositories.md#module-boundaries)).
+`IntegrationsGithubService` ([module boundaries](../modules/repositories/security.md#module-boundaries)).
