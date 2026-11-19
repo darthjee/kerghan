@@ -73,7 +73,7 @@ GitHub's API rather than the backend at all.
 - `createAuthorizationRequest(username)`, `pollAuthorizationRequest(uuid, pollToken)`,
   `listAuthorizationRequests()`, `authorizeAuthorizationRequest(uuid, password)`,
   `denyAuthorizationRequest(uuid)` — the device-authorization flow's five endpoints (see
-  `docs/agents/modules/auth.md`'s "Device-authorization flow" section)
+  `docs/agents/modules/auth/device-authorization.md`'s "Device-authorization flow" section)
 
 The frontend never reads, stores or sends the refresh token. The backend sets it as an
 `httpOnly` `refresh_token` cookie (`Path=/auth`), alongside the `httpOnly` access-token cookie,

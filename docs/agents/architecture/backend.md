@@ -78,7 +78,7 @@ backend/src/
 
 Each module owns its tables under a distinct prefix (see [Modular Pattern](./modular-pattern.md)
 for the rule) — only Auth owns tables today (Mail has no HTTP surface and no entities, see
-`docs/agents/modules/mail.md`). Column-level detail lives in `docs/agents/modules/auth.md`'s
+`docs/agents/modules/mail.md`). Column-level detail lives in `docs/agents/modules/auth/sessions.md`'s
 "Entities" section, not repeated here.
 
 | Table | Module | Notes |
@@ -153,7 +153,7 @@ a valid access token by default. Routes that must stay reachable without one (`/
 `@Public()`. Beyond the signature check, it is also the per-request session gate: the token's
 `sid` must name an active session of its `sub`, whose user is `approved`, looked up through
 Core's `SESSION_LOOKUP` token (implemented by the Auth module), and `request.user` is built
-from that user row — see `docs/agents/modules/auth.md`'s "JWT/refresh-token flow".
+from that user row — see `docs/agents/modules/auth/sessions.md`'s "JWT/refresh-token flow".
 `JwtModule` itself is registered with `{ global: true }` in `AppModule` — without
 that, only modules that import `JwtModule` directly (not just `AuthModule`) can inject
 `JwtService`, which broke `AuthService`'s constructor resolution the first time this was wired up.
@@ -165,7 +165,7 @@ that, only modules that import `JwtModule` directly (not just `AuthModule`) can 
 already being populated by `JwtGuard`). It is a no-op unless the route (or controller) is
 annotated `@AdminOnly()` (`core/admin-only.decorator.ts`), in which case it requires
 `request.user.isAdmin === true`, throwing `403 Forbidden` otherwise — it never re-verifies the
-JWT itself. See `docs/agents/modules/auth.md`'s "Admin authorization" section for the
+JWT itself. See `docs/agents/modules/auth/admin-and-events.md`'s "Admin authorization" section for the
 `isAdmin` provisioning details (`request.user.isAdmin` comes from the database, not the JWT
 claim).
 
