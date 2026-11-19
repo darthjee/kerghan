@@ -90,7 +90,7 @@ reason `replay_detected`, forcing re-login everywhere); a token revoked for any 
 (logout, session revoke, password change) or already expired gets a plain `401` with no side
 effects — so a revoked device's routine refresh (or an attacker replaying its stolen token)
 can't log the user out of their other sessions. See `revoked_reason` in
-[the Auth module](../../modules/auth.md#entities-auth_-table-prefix).
+[the Auth module](../../modules/auth/sessions.md#entities-auth_-table-prefix).
 
 User status ([User approval](../../modules/auth/user-approval.md#explicit-exceptions)):
 
@@ -196,7 +196,7 @@ session** from an **allowed client IP** is logged in as the default user:
 | HTTP status | `200` (default) |
 
 Creates a device-authorization request. Responds identically whether or not `username` matches a
-real account (enumeration safety) — see `docs/agents/modules/auth.md`'s "Device-authorization
+real account (enumeration safety) — see `docs/agents/modules/auth/device-authorization.md`'s "Device-authorization
 flow" for the full enumeration-safety and rate-limit contract. `pollToken` is returned once here
 and never stored (only its SHA-256 hash is persisted). `keepSignedIn` follows the same strict
 optional-boolean rule as on `POST /auth/login.json`; it is stored on the request and applied to the
@@ -221,7 +221,7 @@ login/register/refresh. Every other poll of an already-claimed request gets `{ s
 Right before minting, the winning poll re-checks the status on the freshly loaded user row. A
 user who is no longer `approved` gets `{ status: 'denied' }`, no `user` and no cookies, and the
 request moves `logged → denied` (see the
-[status machine](../../modules/auth.md#status-machine)).
+[status machine](../../modules/auth/device-authorization.md#status-machine)).
 
 ### `POST /auth/authorization-requests/mine.json`
 
@@ -312,7 +312,7 @@ refresh attempts get a plain `401` without triggering replay detection.
 **Revocation applies on the next request.** The session gate in `JwtGuard` checks that the
 access token's `sid` names an active session on every request, so a revoked session's
 access token is refused on its next request, even before it expires (see
-[Session lookup](../../modules/auth.md#jwtrefresh-token-flow)). This applies to both
+[Session lookup](../../modules/auth/sessions.md#jwtrefresh-token-flow)). This applies to both
 session-revoke routes.
 
 ### `POST /auth/sessions/revoke-others.json`
@@ -387,7 +387,7 @@ While the default-user feature is enabled (`KERGHAN_DEFAULT_USER_ENABLED` or
 | `PATCH /auth/account.json` | `409` when the body contains any managed field, even with the stored value. A handle-only edit passes the block and is applied (`200`); a mixed edit is refused whole, the handle is not stored either. Runs right after the `400` "no field present" check, before the lockout (`423`) and the `currentPassword` check; never counts as a failed attempt and leaves an existing lockout untouched. |
 | `POST /auth/recover.json` | Unchanged `200 { sent: true }`, as for an unknown email. No token is created and no email is sent. |
 | `POST /auth/reset-password.json` | Token errors first, unchanged. A valid token for the default user → `409`; the password is unchanged and the token is not consumed. |
-| `POST /admin/users/:id/edit.json`, `recovery-link.json`, `send-recovery-email.json` | `409` after the `404` for an unknown id; nothing is written, no token created, no email sent. See [the Auth module](../../modules/auth.md#admin-tool-routes-admincontroller-admin-prefix). |
+| `POST /admin/users/:id/edit.json`, `recovery-link.json`, `send-recovery-email.json` | `409` after the `404` for an unknown id; nothing is written, no token created, no email sent. See [the Auth module](../../modules/auth/routes.md#admin-tool-routes-admincontroller-admin-prefix). |
 
 Response body (the standard shape from `http-exception.filter.ts`, no `error.details`):
 
@@ -422,8 +422,8 @@ New error codes (`backend/src/core/error-codes.ts`), attached at the throw site:
 | Code | Status | Where |
 | --- | --- | --- |
 | `USER_DENIED` | `403` | `POST /auth/login.json`, correct password on a denied user (above) |
-| `USER_NOT_PENDING` | `422` | `POST /admin/users/:id/approve.json` on a non-pending user ([Admin tool routes](../../modules/auth.md#admin-tool-routes-admincontroller-admin-prefix)) |
-| `CANNOT_DENY_SELF` | `422` | `POST /admin/users/:id/deny.json` on the caller's own id ([Admin tool routes](../../modules/auth.md#admin-tool-routes-admincontroller-admin-prefix)) |
+| `USER_NOT_PENDING` | `422` | `POST /admin/users/:id/approve.json` on a non-pending user ([Admin tool routes](../../modules/auth/routes.md#admin-tool-routes-admincontroller-admin-prefix)) |
+| `CANNOT_DENY_SELF` | `422` | `POST /admin/users/:id/deny.json` on the caller's own id ([Admin tool routes](../../modules/auth/routes.md#admin-tool-routes-admincontroller-admin-prefix)) |
 
 ## Shared behavior
 

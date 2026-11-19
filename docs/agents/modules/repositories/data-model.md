@@ -178,7 +178,7 @@ No user-deletion path exists today. This is the Repositories contract for when o
   page writes instead of deadlocking with them.
 - **Best-effort:** a listener failure is logged **at error level** with safe fields (`userId`,
   error class), so the rows can be purged, and never blocks the deletion. A future deletion
-  path must retry the event or run an orphan sweep (see [Auth](../auth.md#userdeleted-event)).
+  path must retry the event or run an orphan sweep (see [Auth](../auth/admin-and-events.md#userdeleted-event)).
 - **No row created for a deleted user:** a request entry point creates the sync-state row only
   if the user still exists, re-read through Auth's export
   ([Auth export](../auth/github-handle.md#auth-export), `lockExistingUser`) in the same transaction, so a request that

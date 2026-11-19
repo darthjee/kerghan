@@ -15,7 +15,7 @@ and lets admins deny (reject or ban) any account.
 
 Every user has a `status`: `pending`, `approved` or `denied`. **Only `approved` users are
 authenticated.** The session lookup in `JwtGuard` enforces this on every authenticated request,
-always (see [Session lookup](../auth.md#jwtrefresh-token-flow)), so `pending` and `denied` users
+always (see [Session lookup](sessions.md#jwtrefresh-token-flow)), so `pending` and `denied` users
 are treated as anonymous by every business endpoint. A small set of auth endpoints reads the
 real status explicitly (see [Explicit exceptions](#explicit-exceptions)).
 
@@ -105,7 +105,7 @@ real status. Their exact contracts are in [Auth routes](../../backend/routes/aut
 | `POST /auth/login.json` | `denied` → `403 USER_DENIED`, only after the password is verified |
 | `POST /auth/status.json` | Reports `pending`, so the frontend can show the awaiting-approval view |
 | `POST /auth/recover.json`, `POST /auth/reset-password.json` | Must never reveal the status; a denied user cannot reset |
-| `POST /auth/authorization-requests/:uuid/poll.json` | Never mints a session for a non-approved user (the [`logged → denied`](../auth.md#status-machine) transition) |
+| `POST /auth/authorization-requests/:uuid/poll.json` | Never mints a session for a non-approved user (the [`logged → denied`](device-authorization.md#status-machine) transition) |
 | `POST /auth/refresh.json` | Rejects a denied user's token; keeps rotating a pending user's session |
 
 `refresh.json` is `@Public()`, so the gate does not cover it. It keeps rotating a pending user's
@@ -126,14 +126,14 @@ session from rotating on.
   visible to the caller) for every status.
 - On business endpoints, a pending or denied user's request gets the same `401` body as an
   invalid or expired access token (see
-  [Session lookup](../auth.md#jwtrefresh-token-flow)).
+  [Session lookup](sessions.md#jwtrefresh-token-flow)).
 
 ## Admin review
 
 All admin review routes live on `AdminController` (default `JwtGuard` plus `@AdminOnly()`,
 `@CachePolicy(CacheClass.Never)`, thin controller delegating to `AdminService`). They are
 **always available**, whatever `KERGHAN_USER_APPROVAL_REQUIRED` says. Route table:
-[Admin tool routes](../auth.md#admin-tool-routes-admincontroller-admin-prefix).
+[Admin tool routes](routes.md#admin-tool-routes-admincontroller-admin-prefix).
 
 - **User item:** `{ id, username, email, isAdmin, createdAt, status }`, never the password
   digest, tokens or sessions. `search.json` also returns `currentUserId`, the calling admin's
