@@ -41,7 +41,7 @@ export interface SecretKeyIdCount {
  * Owner-scoped persistence for the `integrations` table. Every query
  * carries the owner (`user_id`) in the query itself, never by loading a
  * row and comparing afterwards (see
- * `docs/agents/modules/integrations.md#access-rules`).
+ * `docs/agents/modules/integrations/security.md#access-rules`).
  */
 @Injectable()
 export class IntegrationStoreService {

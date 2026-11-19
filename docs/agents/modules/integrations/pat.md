@@ -1,7 +1,7 @@
 # Integration type: Personal Access Token (`pat`)
 
 Part of the [Integrations module](../integrations.md). Defines the `pat` type, following the
-[type contract](../integrations.md#what-a-type-doc-must-contain). It fills every per-type slot
+[type contract](type-contract.md#what-a-type-doc-must-contain). It fills every per-type slot
 the generic module leaves open. Code: `backend/src/integrations/types/pat/`.
 
 ## Overview
@@ -36,7 +36,7 @@ The `credential` object of the
 ```
 
 Validation, in this order. Every message names the field, never the value
-([security](../integrations.md#secrets-never-logged)):
+([security](security.md#secrets-never-logged)):
 
 - `credential` is an object with exactly one key, `token`. **Unknown credential fields are
   rejected** (400 `VALIDATION_FAILED`), so nothing unexpected is ever encrypted.
@@ -51,7 +51,7 @@ at the GitHub client call site and at the encryption boundary.
 ## Secret payload shape
 
 The plaintext JSON that gets encrypted into `secret_ciphertext`
-([data model](../integrations.md#storage-model)):
+([data model](data-model.md#storage-model)):
 
 ```json
 { "token": "<trimmed token>" }
@@ -99,7 +99,7 @@ The plaintext JSON that gets encrypted into `secret_ciphertext`
 - Without `repo`:
   - create and replace credential fail with **422** `INTEGRATION_INSUFFICIENT_PERMISSIONS`,
     which counts toward the
-    [failure cool-off](../integrations.md#create-and-replace-credential-failure-cool-off);
+    [failure cool-off](security.md#create-and-replace-credential-failure-cool-off);
   - test connection sets `invalid` + `insufficient_permissions`.
 - **Warning** (also shown in the UI): `repo` also grants **write** access to every
   repository the user can reach. Kerghan only reads, but the token can do more. The UI points
@@ -120,7 +120,7 @@ The plaintext JSON that gets encrypted into `secret_ciphertext`
 ## Validate / create
 
 `validate(secret)` makes **one** GitHub call, `GET /user`, through the shared, injectable GitHub
-client ([security](../integrations.md#faking-github-in-tests)), sending the token as
+client ([security](security.md#faking-github-in-tests)), sending the token as
 `Authorization: Bearer <token>`.
 
 On **200**, it captures:
@@ -157,7 +157,7 @@ counted either.
   only.
 - It is refreshed on every successful validate (create, replace) and every `active` test.
 - The generic computed-on-read rule then reports an `active` row past `expiresAt` as `expired`
-  ([data model](../integrations.md#expiry)).
+  ([data model](data-model.md#expiry)).
 
 ## Test connection
 
@@ -176,7 +176,7 @@ GitHub answers 401 to both an expired and a revoked token. The stored `expiresAt
 them apart; a token revoked after its expiry date still reads as `expired`, which is accurate
 enough, since the fix (replace the credential) is the same.
 
-Transient outcomes leave the status unchanged ([data model](../integrations.md#transitions)).
+Transient outcomes leave the status unchanged ([data model](data-model.md#transitions)).
 
 ## `invalid` reason codes
 
@@ -203,7 +203,7 @@ the token than the prefix and the last 4 characters.
   ([routes](../../backend/routes/integrations.md#routes)).
 - **No type-owned routes, no callbacks.** The checklist item on type-owned route access
   therefore doesn't apply: every route the type uses is a generic one, already covered by
-  [security.md's access rules](../integrations.md#access-rules) and cache class `never`.
+  [security.md's access rules](security.md#access-rules) and cache class `never`.
 - **No env vars and no app credentials.**
 
 ## Behaviour on delete
@@ -233,7 +233,7 @@ Summary of the generic error codes
 ## Frontend
 
 The create and replace-credential forms (on top of the generic
-[credential input rules](../integrations.md#credential-input-rules)):
+[credential input rules](frontend.md#credential-input-rules)):
 
 - **Fields:** *Label* (plain text) and *Token* (`type="password"`, `autocomplete="off"`).
 - **Link** to GitHub's token settings (`https://github.com/settings/personal-access-tokens`

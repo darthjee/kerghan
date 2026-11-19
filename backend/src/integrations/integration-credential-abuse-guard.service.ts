@@ -38,7 +38,7 @@ export const RELEASE_ATTEMPT_SQL =
 /**
  * Per-user failure cool-off for creating an integration and replacing its
  * credential (see
- * `docs/agents/modules/integrations.md#create-and-replace-credential-failure-cool-off`).
+ * `docs/agents/modules/integrations/security.md#create-and-replace-credential-failure-cool-off`).
  * Modelled on `AccountEditAbuseGuardService` and `computeLockoutState`, but
  * every counter write is **atomic**: the counter is never read-then-written.
  *
