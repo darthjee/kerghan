@@ -35,7 +35,7 @@ Part of the [Issues and Projects specs](../issues.md).
 
 - The app is registered with **Issues: write** and **Metadata: read**, nothing else. Installations are still accepted with `issues` set to `read` or `write` (unchanged rule), so an installation whose owner has not accepted the updated permissions on GitHub keeps working for reads; its pushes get a `403` and end `sync_failed` with reason `forbidden`.
 - **Installation tokens are minted per operation with the least permission it needs:** `getIssue` and `probeIssues` with `{ issues: read, metadata: read }`, `updateIssue` with `{ issues: write }`. The existing listing tokens keep `{ metadata: read }`. The in-memory token cache is keyed by installation **and** permission set, so a write token is never reused for a read path or the other way round. Tokens stay in process memory inside the Integrations module ([architecture/security.md](../../architecture/security.md#github-credentials-stay-in-the-backend)).
-- `modules/integrations/github-app.md` ("Required permissions") and `github-service.md` (token minting) describe today's code, so the implementation updates them in the change that builds it; this spec records the decision.
+- `modules/integrations/github-app/credentials.md` ("Required permissions") and `github-service.md` (token minting) describe today's code, so the implementation updates them in the change that builds it; this spec records the decision.
 
 ### Candidate order
 

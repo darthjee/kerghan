@@ -183,7 +183,7 @@ passes both variables to the backend when they are set.
 
 `KERGHAN_GITHUB_APP_ID`, `KERGHAN_GITHUB_APP_SLUG`, `KERGHAN_GITHUB_APP_PRIVATE_KEY`,
 `KERGHAN_GITHUB_APP_CLIENT_ID` and `KERGHAN_GITHUB_APP_CLIENT_SECRET` enable the `github_app`
-integration type (see `docs/agents/modules/integrations/github-app.md#server-config`).
+integration type (see `docs/agents/modules/integrations/github-app/config-and-proxy.md#server-config`).
 All five are optional, all-or-nothing, read once at boot and trimmed:
 
 - **All five unset or blank:** the type is disabled. It is not listed among the integration types,

@@ -57,9 +57,9 @@ follow every convention above; their full behaviour is in the type pages.
 
 - OAuth App: [routes](../../modules/integrations/oauth-app.md#routes),
   [flow](../../modules/integrations/oauth-app.md#flow).
-- GitHub App: [routes](../../modules/integrations/github-app.md#routes),
-  [flow](../../modules/integrations/github-app.md#flow),
-  [selection](../../modules/integrations/github-app.md#selection).
+- GitHub App: [routes](../../modules/integrations/github-app/flow.md#routes),
+  [flow](../../modules/integrations/github-app/flow.md#flow),
+  [selection](../../modules/integrations/github-app/flow.md#selection).
 - A disabled type's routes answer **404** `NOT_FOUND` (`OauthAppEnabledGuard`,
   `GithubAppEnabledGuard`).
 
@@ -69,7 +69,7 @@ follow every convention above; their full behaviour is in the type pages.
 with its strategy's `flows`. A type whose server config is missing (`oauth_app` without its
 client id and secret, see [OAuth App](../../modules/integrations/oauth-app.md#when-disabled), or
 `github_app` without its app config, see
-[GitHub App](../../modules/integrations/github-app.md#when-disabled)) is left out. `pat` is
+[GitHub App](../../modules/integrations/github-app/config-and-proxy.md#when-disabled)) is left out. `pat` is
 always listed. The route needs no row and makes no GitHub call; the frontend's type picker reads
 it ([type picker](../../modules/integrations/frontend.md#type-picker)).
 
@@ -184,12 +184,12 @@ Built by `integration-response.ts`:
 | Unknown, foreign or malformed `:uuid` | 404 | `NOT_FOUND` | all with `:uuid` |
 | Payload validation failed (shape, label length, unknown `provider`/`type`, credential shape) | 400 | `VALIDATION_FAILED` | create, rename, replace |
 | Type is not credential-paste | 400 | `INTEGRATION_FLOW_UNSUPPORTED` | create, replace |
-| Redirect `state` unknown, expired, already used or not the caller's | 400 | `INTEGRATION_REDIRECT_STATE_INVALID` | type-owned redirect callbacks ([OAuth App](../../modules/integrations/oauth-app.md#state), [GitHub App](../../modules/integrations/github-app.md#state)) |
+| Redirect `state` unknown, expired, already used or not the caller's | 400 | `INTEGRATION_REDIRECT_STATE_INVALID` | type-owned redirect callbacks ([OAuth App](../../modules/integrations/oauth-app.md#state), [GitHub App](../../modules/integrations/github-app/flow.md#state)) |
 | Duplicate label (case-insensitive) | 409 | `INTEGRATION_LABEL_TAKEN` | create, rename |
 | Per-user cap reached | 409 | `INTEGRATIONS_LIMIT_REACHED` | create |
 | GitHub rejected the credential | 422 | `INTEGRATION_CREDENTIAL_INVALID` | create, replace |
 | Missing required scopes/permissions | 422 | `INTEGRATION_INSUFFICIENT_PERMISSIONS` | create, replace |
-| GitHub App installation not accessible to the caller's GitHub account (or nonexistent, or another app's) | 422 | `INTEGRATION_INSTALLATION_NOT_ACCESSIBLE` | GitHub App callback and select ([GitHub App](../../modules/integrations/github-app.md#validate--create)) |
+| GitHub App installation not accessible to the caller's GitHub account (or nonexistent, or another app's) | 422 | `INTEGRATION_INSTALLATION_NOT_ACCESSIBLE` | GitHub App callback and select ([GitHub App](../../modules/integrations/github-app/credentials.md#validate--create)) |
 | GitHub App installation suspended | 422 | `INTEGRATION_INSTALLATION_SUSPENDED` | GitHub App callback and select |
 | Failure cool-off active | 423 | `INTEGRATION_CREDENTIAL_LOCKED` | create, replace |
 | Test cooldown active | 429 | `INTEGRATION_TEST_COOLDOWN` (+ `Retry-After`) | test |
