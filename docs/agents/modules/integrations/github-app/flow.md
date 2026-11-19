@@ -52,7 +52,7 @@ Request body, validated with the usual DTO rules (unknown fields stripped):
   `VALIDATION_FAILED`.
 
 Checks, in order. Each failure stops there and stores nothing (same order as the
-[OAuth App's start](../oauth-app.md#start)):
+[OAuth App's start](../oauth-app/flow.md#start)):
 
 1. Auth and CSRF (global guards).
 2. Type disabled → **404** `NOT_FOUND` (see [Server config](config-and-proxy.md#server-config)).
@@ -239,7 +239,7 @@ migration (so it works across instances and restarts).
 Indexes: unique `uuid`; non-unique `user_id`; non-unique `expires_at`. The migration has a
 working `down` that drops the table.
 
-Rules: the same as the [OAuth App's state](../oauth-app.md#state), namely:
+Rules: the same as the [OAuth App's state](../oauth-app/flow.md#state), namely:
 
 - **Format:** `state` = `<uuid>.<secret>`, `<secret>` being 32 random bytes from Node's
   `crypto.randomBytes`, base64url without padding (43 characters). Validation pattern:

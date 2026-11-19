@@ -34,7 +34,7 @@ The module owns these tables:
 - `integrations_credential_lockouts`: the per-user failure cool-off state
   ([Lockout table](#lockout-table)).
 - `integrations_oauth_states`: pending OAuth App redirect flows
-  ([OAuth App state](oauth-app.md#state)).
+  ([OAuth App state](oauth-app/flow.md#state)).
 - `integrations_github_app_states`: pending GitHub App redirect flows and installation
   selections ([GitHub App state](github-app/flow.md#state)).
 
