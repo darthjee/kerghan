@@ -55,7 +55,7 @@ The status is **not** part of the `user` payload of the auth endpoints, which st
 `{ id, username, email, isAdmin }`. It is exposed only to admins, as the `status` field of the
 admin user items (see [Admin review](#admin-review)), and to the caller as
 `status: "pending"` on `status.json` (see
-[Auth routes](../../backend/routes/auth.md#post-authstatusjson)).
+[Auth routes](../../backend/routes/auth/login.md#post-authstatusjson)).
 
 ### Transitions
 

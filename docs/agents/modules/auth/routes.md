@@ -25,7 +25,7 @@ except `refresh.json`'s migration fallback: only when the cookie is absent, it r
 body `refreshToken` so a client can move a legacy `localStorage` token into the cookie once. The
 cookie always wins. Remove the fallback (`RefreshFallbackDto` and the marked branch in
 `resolveRefreshToken`) once the migration window closes. See
-[Auth routes](../../backend/routes/auth.md#session-cookies).
+[Auth routes](../../backend/routes/auth/shared.md#session-cookies).
 
 `user` is always `{ id, username, email, isAdmin }` — `passwordDigest` is never serialized. `isAdmin`
 is the only way the frontend can learn whether the logged-in user is an admin, since the

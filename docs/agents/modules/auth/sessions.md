@@ -185,7 +185,7 @@ rather than an edit to the seed migration's `INSERT`, since the seed migration r
   rotation isn't revoked). `:uuid` is validated with `ParseUUIDPipe` (any version; `400` when
   malformed). Revoked tokens get reason `user_revoked`, so their later refresh is a plain `401`
   without replay detection. A revoked session's access token is refused on its next request
-  by the session lookup (see above), not after `KERGHAN_ACCESS_TOKEN_TTL_MS`. Every query is scoped to the caller's `userId`. See [Auth routes](../../backend/routes/auth.md#sessions).
+  by the session lookup (see above), not after `KERGHAN_ACCESS_TOKEN_TTL_MS`. Every query is scoped to the caller's `userId`. See [Auth routes](../../backend/routes/auth/sessions-and-account.md#sessions).
 - **Registration also logs in**: `POST /auth/register.json` issues a token pair immediately on
   success, same as login/refresh (per the issue's "issued on login/register/refresh" flow) —
   there's no separate "register, then log in" round trip. This holds for a `pending`
