@@ -60,7 +60,7 @@ Inline Add errors, shown on the row ([routes](../../backend/routes/repositories.
 - Only the very first sync (`lastSyncedAt` is `null`) shows a full spinner.
 - **Polling** ([routes](../../backend/routes/repositories.md#polling-contract)): while `state` is `syncing`, the page polls
   `POST /repositories/sync/state.json` every **2 s** (a frontend constant,
-  [sync](sync.md#values)). It stops on `idle` (then reloads the
+  [sync](sync/github-limits.md#values)). It stops on `idle` (then reloads the
   current listing page), on unmount, or on `401`; a transient error (network, `5xx`) keeps
   polling.
 - **Refresh button:**

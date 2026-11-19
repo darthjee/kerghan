@@ -189,7 +189,7 @@ to.
   1. creates the sync-state row if missing and locks it (`SELECT … FOR UPDATE`), re-comparing
      under the lock (a concurrent request may already have reconciled). **A sync run never
      creates the row:** its start-of-run reconciliation only locks an existing row, and with no
-     row the run stops ([sync](../repositories/sync.md#write-path)). Only the request entry points (the
+     row the run stops ([sync](../repositories/sync/write-path.md#write-path)). Only the request entry points (the
      listing, the sync-state route, Refresh, Add) create it, so a run never recreates the row of
      a deleted user ([user deletion](../repositories/data-model.md#user-deletion));
   2. deletes the user's `source_key = 'handle'` source, page and status rows (`AND user_id =
@@ -202,7 +202,7 @@ to.
 - **No sync is triggered** by a handle change, and the Refresh cooldown is unchanged: the new
   handle is fetched on the next stale listing or Refresh.
 - **Mid-sync change:** the run guards its handle-source writes with the handle it started with
-  ([sync](../repositories/sync.md#write-path)), so a run that started before the change never writes rows for
+  ([sync](../repositories/sync/write-path.md#write-path)), so a run that started before the change never writes rows for
   the old handle after the reconciliation. Every other mid-sync case is in the
   [edge-case matrix](../repositories/edge-cases.md#handle).
 - **Why lazy, not an event:** Auth emitting an event that Repositories handles would make Auth

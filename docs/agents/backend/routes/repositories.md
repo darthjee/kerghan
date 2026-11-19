@@ -104,8 +104,8 @@ Every field is optional. Any invalid value answers `400 VALIDATION_FAILED`.
 
 ### Stale-sync trigger
 
-The listing starts a sync when the user's last one is stale ([sync](../../modules/repositories/sync.md#trigger); TTL
-1 h, [sync](../../modules/repositories/sync.md#values)). The server owns the staleness rule; the frontend makes one call. The listing returns
+The listing starts a sync when the user's last one is stale ([sync](../../modules/repositories/sync/execution.md#trigger); TTL
+1 h, [sync](../../modules/repositories/sync/github-limits.md#values)). The server owns the staleness rule; the frontend makes one call. The listing returns
 the stored rows at once, with `sync.state` already `syncing` when it started one. A fresh listing,
 or one during a running sync, starts nothing.
 
@@ -182,7 +182,7 @@ the same object as `sync`.
 
 | Field | Meaning |
 |---|---|
-| `state` | `idle` or `syncing`. A sync whose heartbeat is older than its lease is dead and reads `idle` ([sync](../../modules/repositories/sync.md#restart-recovery)). |
+| `state` | `idle` or `syncing`. A sync whose heartbeat is older than its lease is dead and reads `idle` ([sync](../../modules/repositories/sync/execution.md#restart-recovery)). |
 | `startedAt` | Start of the running sync (`last_started_at`); `null` when idle. |
 | `lastSyncedAt` | End of the last finished sync; `null` = never synced (the UI shows its first-sync spinner). |
 | `refreshAvailableAt` | End of the Refresh cooldown (`last_started_at` + cooldown); `null` = Refresh available now. The UI disables Refresh with a countdown; the server still answers `429` + `Retry-After` for races and other clients. |
@@ -207,13 +207,13 @@ the same object as `sync`.
 ### Polling contract
 
 - While `state` is `syncing`, the frontend polls `POST /repositories/sync/state.json` at a fixed
-  **frontend constant** interval of 2 s ([sync](../../modules/repositories/sync.md#values)).
+  **frontend constant** interval of 2 s ([sync](../../modules/repositories/sync/github-limits.md#values)).
 - It stops on `idle` (then reloads the current listing page; the data is fresh, so that reload
   never starts another sync), on unmount, or on `401`. A transient error (network, `5xx`) keeps
   polling at the same interval.
 - There is no scheduled job (#444); each sync is background work started by a request, run
   in-process. A sync stuck in `syncing`, e.g. after a backend restart, reads `idle` once its
-  lease expires, so polling always ends ([sync](../../modules/repositories/sync.md#restart-recovery)).
+  lease expires, so polling always ends ([sync](../../modules/repositories/sync/execution.md#restart-recovery)).
 
 ## Refresh
 
@@ -231,12 +231,12 @@ the same object as `sync`.
 - **The cooldown runs from the start of the last sync, whatever triggered it** (stale listing or
   Refresh). It protects the GitHub budget, notably the shared unauthenticated 60/h.
   `refreshAvailableAt` follows the same rule; the duration is 5 min
-  ([sync](../../modules/repositories/sync.md#values)).
-- "Already syncing" and "cooldown" are one atomic claim ([sync](../../modules/repositories/sync.md#per-user-lock)), so
+  ([sync](../../modules/repositories/sync/github-limits.md#values)).
+- "Already syncing" and "cooldown" are one atomic claim ([sync](../../modules/repositories/sync/execution.md#per-user-lock)), so
   concurrent Refreshes start one sync.
 - Refresh runs every source; there is no per-source refresh. A `rate_limited` source is skipped
   while its `resetAt` is in the future: no GitHub call, its status, `resetAt` and rows are kept
-  ([sync](../../modules/repositories/sync.md#rate-limits)).
+  ([sync](../../modules/repositories/sync/github-limits.md#rate-limits)).
 
 ## Add
 
@@ -274,7 +274,7 @@ listing as added.
 - The unauthenticated re-check goes through the shared process-wide budget tracker with **Add's
   own threshold**: it is refused only when the remaining budget is **≤ 0** (the sync stops at
   ≤ 10, keeping a reserve for Add), answering `503` with no GitHub call
-  ([sync](../../modules/repositories/sync.md#rate-limits)).
+  ([sync](../../modules/repositories/sync/github-limits.md#rate-limits)).
 - **Race with pruning:** the write is `UPDATE … WHERE id = :id AND user_id = :userId AND
   added_at IS NULL`. If a sync's pruning deleted the not-added row first, the update affects no
   row, the re-read finds nothing, and Add answers `404 NOT_FOUND` (the repo left the listing); if
@@ -402,7 +402,7 @@ Tiers, fakes and harnesses: [Testing](../../modules/repositories/testing.md). Ta
 - Exact row shape; `accessIntegration` is `null` in the three documented cases.
 - A row's `sources[]` includes the entry of a failed source that still holds a row for it.
 - A listing that starts a sync answers `sync.state: "syncing"`; when the sync starts is
-  [sync](../../modules/repositories/sync.md#required-tests)'s.
+  [sync](../../modules/repositories/sync/required-tests.md#required-tests)'s.
 
 **Sync state:**
 
@@ -418,7 +418,7 @@ Tiers, fakes and harnesses: [Testing](../../modules/repositories/testing.md). Ta
 - `202` starts a sync; `202` while syncing starts no new sync and does not reset the cooldown.
 - `429 REPOSITORY_REFRESH_COOLDOWN` + `Retry-After` + `error.retryAfterSeconds` inside the
   cooldown, including right after a stale-triggered sync.
-- Concurrent Refreshes, and skipping a `rate_limited` source: [sync](../../modules/repositories/sync.md#required-tests).
+- Concurrent Refreshes, and skipping a `rate_limited` source: [sync](../../modules/repositories/sync/required-tests.md#required-tests).
 
 **Add:**
 

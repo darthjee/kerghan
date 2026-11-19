@@ -15,7 +15,7 @@ once it is decided and implemented.
   so there is nothing to lose. The answer depends on the real jobs (GitHub status sync, data
   import, syncing with other Kerghan instances), so it is decided when the first of them lands.
 - **Related:** the repositories sync already survives restarts through its own lease and
-  heartbeat (`modules/repositories/sync.md#restart-recovery`) and is not affected.
+  heartbeat (`modules/repositories/sync/execution.md#restart-recovery`) and is not affected.
 - **Source:** issue #479.
 
 ## Scheduling of periodic background jobs

@@ -47,7 +47,7 @@ added it.
 | `private` | Last known visibility. |
 | `added_at` | Nullable. Set when the user adds the repo; `null` means not added. |
 | `integration_id` | Nullable. The access link, set on Add ([GitHub service](../integrations/github-service.md#access-link-on-add)). Logical FK to `integrations.id`. Empty for a repo added through the public source only. |
-| `last_seen_at` | When a source page last returned the repo (`200` or `304`), even if that source failed on a later page. Informational: no status derives from it ([sync](sync.md#write-path)). |
+| `last_seen_at` | When a source page last returned the repo (`200` or `304`), even if that source failed on a later page. Informational: no status derives from it ([sync](sync/write-path.md#write-path)). |
 | `created_at`, `updated_at` | Timestamps. |
 
 - **Unique** on (`user_id`, `github_id`): a user has at most one row per GitHub repo.
@@ -61,41 +61,41 @@ added it.
 
 Which sources returned each repo, as of each source's **last applied page**, and on which page:
 one row per (repository, `source_key`). A failed or interrupted source keeps its earlier rows
-([sync](sync.md#partial-failures)).
+([sync](sync/write-path.md#partial-failures)).
 
 - `user_id` is denormalised, for per-user/per-source cleanup without a join.
 - `page` records what each page contained, so a `304` keeps that page's rows and a successful
-  source deletes the rows past its last page ([sync](sync.md#write-path)).
+  source deletes the rows past its last page ([sync](sync/write-path.md#write-path)).
 - It drives the per-row source badges ([frontend](frontend.md#table)), the access-link choice on Add, the
   row statuses and [pruning](#private-metadata-lifecycle).
 
 ### `repositories_source_pages`
 
 One row per (user, source, page): the page's `etag`, whether it had a next page (`has_next`) and
-`fetched_at`. Used for conditional requests ([sync](sync.md#conditional-requests)); never
+`fetched_at`. Used for conditional requests ([sync](sync/github-limits.md#conditional-requests)); never
 shared between users.
 
 ### `repositories_sync_states`
 
 One row per user, keyed by `user_id`, created on first use with
-`INSERT … ON DUPLICATE KEY UPDATE user_id = user_id` ([sync](sync.md#per-user-lock)):
+`INSERT … ON DUPLICATE KEY UPDATE user_id = user_id` ([sync](sync/execution.md#per-user-lock)):
 
 - `state`: `idle` or `syncing`;
 - `run_id`: the running sync's UUID, `null` when idle; every write of a run is guarded by it;
 - `last_started_at`: set by every claim, **never cleared**: the cooldown anchor; the API's
   `startedAt` while syncing and `refreshAvailableAt` derive from it ([routes](../../backend/routes/repositories.md#sync-state));
 - `heartbeat_at`: bumped after every GitHub page; a `syncing` row whose heartbeat is older than
-  the lease reads as `idle` ([sync](sync.md#restart-recovery));
+  the lease reads as `idle` ([sync](sync/execution.md#restart-recovery));
 - `last_synced_at`: end of the last finished sync;
 - `handle`: the GitHub handle the stored `handle` source rows belong to (normalised, `null` when
   none); written only by the [handle reconciliation](../auth/github-handle.md#handle-changes), never by a sync run.
 
 It survives across requests, so staleness and partial failures are known on every listing. The
-lock and its claim are defined in [sync](sync.md#per-user-lock).
+lock and its claim are defined in [sync](sync/execution.md#per-user-lock).
 
 Every timestamp of these tables (`last_started_at`, `heartbeat_at`, `last_synced_at`,
 `last_seen_at`, `synced_at`, `added_at`, the lease) is set and compared from the injected
-`Clock`, never `NOW()` in SQL ([sync](sync.md#time-source)).
+`Clock`, never `NOW()` in SQL ([sync](sync/execution.md#time-source)).
 
 ### `repositories_source_statuses`
 
@@ -124,16 +124,16 @@ Derived from stored data on read, never stored as a column:
 Statuses are read from `repositories_sources` together with `repositories_source_statuses`,
 over the user's **current** sources only (every integration, usable or not, and the stored
 handle): a leftover row of a deleted integration, before the
-[safety net](sync.md#write-path) drops it, never makes a repo Added or holds it available. A
+[safety net](sync/write-path.md#write-path) drops it, never makes a repo Added or holds it available. A
 failed source never makes a repo unavailable: its rows are kept as they were
-([sync](sync.md#partial-failures)).
+([sync](sync/write-path.md#partial-failures)).
 
 - **`page_cap_reached` counts as `ok`:** every row it holds within the cap was just returned, and
-  its rows past the cap are trimmed ([sync](sync.md#write-path)).
+  its rows past the cap are trimmed ([sync](sync/write-path.md#write-path)).
 - **`pending` counts as not ok:** a source with rows but no status row (its first run was
   interrupted) cannot vouch for them.
 - **An empty link is refilled:** an added private repo with an empty or dangling
-  `integration_id` reads Unavailable only until the next sync's [link fill](sync.md#link-fill)
+  `integration_id` reads Unavailable only until the next sync's [link fill](sync/write-path.md#link-fill)
   gives it a usable integration that returns it; it then reads Added again.
 
 ## Logical foreign keys
@@ -157,7 +157,7 @@ Consequences:
   integrationId }`), emitted by the Integrations service with `emitAsync` **after the delete
   commits**; Repositories' listener runs the cleanup above in one transaction. A listener failure
   is logged and never blocks the delete (`204` stands); the end-of-sync
-  [safety net](sync.md#write-path) drops the rows of any integration no longer among the user's
+  [safety net](sync/write-path.md#write-path) drops the rows of any integration no longer among the user's
   ([GitHub service](../integrations/github-service.md#deletion-hook)). A direct call would make the two modules
   import each other.
 
@@ -174,7 +174,7 @@ No user-deletion path exists today. This is the Repositories contract for when o
   `repositories_sources`, `repositories_source_pages`, `repositories_source_statuses` and
   `repositories_sync_states`. Every statement has `WHERE user_id = :userId`. Its first statement
   locks the user's sync-state row (`SELECT … FOR UPDATE`), the lock order every multi-table Repositories
-  write transaction follows ([sync](sync.md#write-path)), so it serializes with a running sync's
+  write transaction follows ([sync](sync/write-path.md#write-path)), so it serializes with a running sync's
   page writes instead of deadlocking with them.
 - **Best-effort:** a listener failure is logged **at error level** with safe fields (`userId`,
   error class), so the rows can be purged, and never blocks the deletion. A future deletion
@@ -188,7 +188,7 @@ No user-deletion path exists today. This is the Repositories contract for when o
   no user and nothing is created.
 - **A running sync:** the deleted sync-state row makes the run's next `run_id`-guarded write
   affect no row, so the run rolls back and stops; a run never recreates the row
-  ([handle changes](../auth/github-handle.md#handle-changes), [sync](sync.md#write-path)).
+  ([handle changes](../auth/github-handle.md#handle-changes), [sync](sync/write-path.md#write-path)).
 - **Why not a physical cascade:** it keeps logical FKs only, so `integrations.user_id` stays the
   project's only physical cross-module FK. Orphans left by a failed listener are visible to no
   one: under normal operation MySQL 8 never reuses an auto-increment `id`, so no future user can
@@ -225,7 +225,7 @@ The single-table form is what TypeORM's `.delete()` query builder can produce; t
 (`repository_id`, `source_key`) index covers the subquery.
 
 - **When:** at the end of each sync, in its final `run_id`-guarded transaction
-  ([sync](sync.md#pruning)); and after changes that orphan rows outside a sync: an
+  ([sync](sync/write-path.md#pruning)); and after changes that orphan rows outside a sync: an
   integration's source rows dropped by the [deletion hook](#logical-foreign-keys) (the `integration.deleted` event), and the handle changed or cleared (its source, page and status rows dropped by the
   [handle reconciliation](../auth/github-handle.md#handle-changes) on the next Repositories request, so a new handle reads
   `pending`).

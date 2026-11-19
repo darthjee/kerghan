@@ -32,7 +32,7 @@ are not built yet.
 - Scheduled or background sync, polling GitHub. Syncs run only on demand.
 - Changing an added repo's existing access link after Add. A private repo whose linked
   integration was deleted reads Unavailable only until the next sync fills its empty or dangling
-  link with a usable integration that returned the repo ([link fill](repositories/sync.md#link-fill));
+  link with a usable integration that returned the repo ([link fill](repositories/sync/write-path.md#link-fill));
   an existing link is never changed.
 - An environment variable to set the GitHub handle.
 

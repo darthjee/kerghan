@@ -66,8 +66,8 @@ getRepository(userId, integrationId | null, githubId): Promise<RepoResult>
   (`?per_page=100&page=N`); `hasNext` is whether `Link` has a `rel="next"`, whose URL is never
   used ([security](../repositories/security.md#fixed-github-base-url)).
 - **Conditional requests:** a passed `etag` is sent as `If-None-Match`; the response's `ETag`
-  and `X-RateLimit-*` come back in the result ([sync](../repositories/sync.md#conditional-requests)).
-- Every request has the existing 10 s timeout ([sync](../repositories/sync.md#values)).
+  and `X-RateLimit-*` come back in the result ([sync](../repositories/sync/github-limits.md#conditional-requests)).
+- Every request has the existing 10 s timeout ([sync](../repositories/sync/github-limits.md#values)).
 - **Credentials, minted installation tokens and GitHub response bodies never leave the module**:
   the Repositories module never sees, stores or logs them
   ([security](../../architecture/security.md#github-credentials-stay-in-the-backend)).
@@ -106,7 +106,7 @@ with the already-pinned `Accept` and `X-GitHub-Api-Version` headers.
 - **`sort=created&direction=asc`** rather than the default `full_name`: with page-number
   pagination a new repo lands on the last page, so earlier pages keep their ETag (`304`); a name
   sort would shift every page boundary on any creation or rename. Deletions still shift pages,
-  which the sync's page rewrite already handles ([sync](../repositories/sync.md#write-path)).
+  which the sync's page rewrite already handles ([sync](../repositories/sync/write-path.md#write-path)).
 - **Explicit `affiliation` / `visibility`** (GitHub's defaults) pin the meaning: private and
   organization repos included. A fine-grained PAT returns only the repos it was granted; an OAuth
   App sees an organization's private repos only once that organization approved it
@@ -131,7 +131,7 @@ Integrations module**:
   process memory only — never in the database, a log or a response. Expired entries are dropped
   on read; at most one entry per `github_app` integration, so no LRU.
 - **Time:** the "`expires_at` − 5 min" check reads the injected `Clock` (`core/clock.ts`, shared
-  with Repositories, [sync](../repositories/sync.md#time-source)), never `Date.now()` directly.
+  with Repositories, [sync](../repositories/sync/execution.md#time-source)), never `Date.now()` directly.
 - **Single-flight:** concurrent calls for one integration share one in-flight mint (the sync runs
   3 sources in parallel, and the handle may use the same integration).
 - **Least privilege:** minted with `{"permissions": {"metadata": "read"}}`, enough to list repos
@@ -214,7 +214,7 @@ server** (a `github_app` integration is unusable when the app's server config is
   set `undecryptable` (existing transition) and answers `integration_unusable`.
 - **Type disabled:** the server's configuration, not the user's credential, so `error`.
 - A non-usable source is a *failed* source: its earlier rows and pages are kept
-  ([partial failures](../repositories/sync.md#partial-failures)), so its repos stay listed until the integration
+  ([partial failures](../repositories/sync/write-path.md#partial-failures)), so its repos stay listed until the integration
   is fixed or deleted. **Accepted:** they hold only the user's own data, visible only to that
   user; the banner says to fix the integration, and deleting it purges its rows at once.
   Rejected: expiring them (for example after 30 days), since added repos would flip to
@@ -273,11 +273,11 @@ When the user adds a repository ([routes](../../backend/routes/repositories.md#a
   (`listIntegrations(userId)`, usable or not) right before the write; an id that is not the
   user's (another user's, or deleted meanwhile) is stored as **`null`**, never rejected, and
   the Add still succeeds. The empty link is then filled at the end of the next sync like any
-  other ([link fill](../repositories/sync.md#link-fill)).
+  other ([link fill](../repositories/sync/write-path.md#link-fill)).
 - Changing an existing link later is out of scope. An **empty or dangling** link of an added
   private repo (its integration deleted, or a public repo turned private) is filled at the end of
   the next sync with the oldest usable integration that returns it
-  ([link fill](../repositories/sync.md#link-fill)). This amends the product decision (#444), which left such a repo Unavailable for
+  ([link fill](../repositories/sync/write-path.md#link-fill)). This amends the product decision (#444), which left such a repo Unavailable for
   good.
 
 ### Add re-check candidates
@@ -327,7 +327,7 @@ A direct call would need Integrations to import Repositories, which already impo
   not-added repos left with no source row ([data model](../repositories/data-model.md#logical-foreign-keys)). Its first
   statement locks the user's sync-state row (`SELECT … FOR UPDATE`), the lock order of every
   multi-table Repositories write transaction, so a cleanup during a sync serializes with the run's page
-  writes instead of deadlocking with them ([sync](../repositories/sync.md#write-path)).
+  writes instead of deadlocking with them ([sync](../repositories/sync/write-path.md#write-path)).
 - **Failure never blocks the delete:** the listener catches its own error and logs it with safe
   fields (`@OnEvent`'s default `suppressErrors: true` keeps `emitAsync` resolving either way); the
   integration delete is already committed and the `204` stands (same best-effort rule as
@@ -337,7 +337,7 @@ A direct call would need Integrations to import Repositories, which already impo
   reaches it.
 - **Safety net:** the end-of-sync transaction drops, user-scoped, the rows of any
   `integration:<id>` key not among all the user's integrations (usable or not), covering a failed listener and a parallel sync writing
-  after the cleanup ([sync](../repositories/sync.md#write-path)).
+  after the cleanup ([sync](../repositories/sync/write-path.md#write-path)).
 - Inside Integrations, the delete also evicts the cached installation token.
 - There is no database cascade between the two modules. User deletion goes through a separate
   awaited `user.deleted` event ([data model](../repositories/data-model.md#user-deletion)); the user's integrations
@@ -345,7 +345,7 @@ A direct call would need Integrations to import Repositories, which already impo
 
 ## Unauthenticated budget tracker
 
-The behaviour is [sync](../repositories/sync.md#rate-limits)'s (process-wide, in memory, min `Remaining`
+The behaviour is [sync](../repositories/sync/github-limits.md#rate-limits)'s (process-wide, in memory, min `Remaining`
 within a reset window, window replaced only on a later `Reset`, consulted before every
 unauthenticated call). Its home, interface, concurrency and thresholds:
 
@@ -365,7 +365,7 @@ unauthenticated call). Its home, interface, concurrency and thresholds:
   the min-within-window rule from GitHub's headers. With no data, or once the reset has passed,
   calls are allowed until the first response.
 - **Time:** "reset passed" reads the injected `Clock` (`core/clock.ts`,
-  [sync](../repositories/sync.md#time-source)), never `Date.now()` directly.
+  [sync](../repositories/sync/execution.md#time-source)), never `Date.now()` directly.
 - **Two thresholds** (code constants): the **sync** stops at remaining **≤ 10**; **Add** only at
   **≤ 0**. The 10 is then really a reserve for Add re-checks, which are already bounded per user
   (30 per 60 s) and by the 3-call candidate walk.
@@ -385,7 +385,7 @@ Tiers, fakes and harnesses: [Testing](../repositories/testing.md). Tags: `(db)`,
   in the query.
 - Non-usable integrations (`expired`, `invalid`, `undecryptable`, type disabled) are never
   called: they answer `integration_unusable` with reason `status` or `type_disabled`. (What the
-  sync stores for them is [sync](../repositories/sync.md#required-tests)'s.)
+  sync stores for them is [sync](../repositories/sync/required-tests.md#required-tests)'s.)
 - **Fake fidelity:** for each shared builder case, the real service's typed result at the `fetch`
   level equals what `FakeIntegrationsGithubService` returns for the same builder
   ([Testing](../repositories/testing.md#fake-fidelity)).

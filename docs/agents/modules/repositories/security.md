@@ -50,7 +50,7 @@ The boundary is enforced by tooling, not left to review alone
   reserve below it, but repeated Adds can still drain it and make other users' unauthenticated
   Adds answer `503`. Bounded by the Refresh cooldown, the page cap, the per-user Add rate limit
   and the thresholds; accepted for now
-  ([sync](sync.md#rate-limits)). A per-user cap would need its own decision.
+  ([sync](sync/github-limits.md#rate-limits)). A per-user cap would need its own decision.
 
 ## Add verification
 
@@ -82,11 +82,11 @@ Private metadata is kept only while a source can still see it, except for added 
 unavailable ([data model](data-model.md#private-metadata-lifecycle)). The handle source keeps only
 public repos, so private metadata is always tied to the integration that granted it
 ([sync](sync.md#sources)); when a sync turns a repo private, its `handle` source row is
-dropped, so a stale handle row never keeps it alive ([sync](sync.md#write-path)).
+dropped, so a stale handle row never keeps it alive ([sync](sync/write-path.md#write-path)).
 
 - A capped source deletes its rows past the cap, so a lowered cap never keeps private metadata
-  past any check ([sync](sync.md#write-path)).
-- The end-of-sync [link fill](sync.md#link-fill) ties an added private repo with an empty or
+  past any check ([sync](sync/write-path.md#write-path)).
+- The end-of-sync [link fill](sync/write-path.md#link-fill) ties an added private repo with an empty or
   dangling link back to a usable integration that returns it.
 - Rows of non-usable integrations are kept until the integration is fixed or deleted, visible
   only to their owner ([GitHub service](../integrations/github-service.md#usable-integrations)).
@@ -138,7 +138,7 @@ one it sends no `Authorization` header. Server-supplied URLs are never requested
 
 - pagination builds its own page URLs (`?per_page=100&page=N`) and reads `Link` only to know
   whether `rel="next"` exists; it never requests a URL taken from a response
-  ([sync](sync.md#per-source));
+  ([sync](sync/write-path.md#per-source));
 - **no redirect is followed**, same-origin or not (the repo operations use `redirect: 'manual'`, and
   classifies any `3xx` other than `304` as `unavailable` (`redirect`)): a `Location` is a
   response-supplied URL. Any such `3xx` makes a sync source `error` and
@@ -167,11 +167,11 @@ trigger is therefore not a state change over `GET`, and needs no exception
 
 - One sync per user at a time (an atomic claim with a lease), a Refresh cooldown, a per-source
   page cap, a hard deadline per sync, and an early stop of the unauthenticated source on a low
-  rate-limit budget, tracked process-wide and shared with Add ([sync](sync.md#values)). The
+  rate-limit budget, tracked process-wide and shared with Add ([sync](sync/github-limits.md#values)). The
   tracker reserves each granted call before it is sent, so parallel sources and concurrent Adds
-  never overshoot the budget ([sync](sync.md#rate-limits)).
+  never overshoot the budget ([sync](sync/github-limits.md#rate-limits)).
 - Timeouts and a parallelism bound on GitHub calls.
 - A sync that lost its lease cannot write: every write is guarded by its `run_id`
-  ([sync](sync.md#restart-recovery)).
+  ([sync](sync/execution.md#restart-recovery)).
 
 
