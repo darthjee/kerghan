@@ -46,7 +46,7 @@ added it.
 | `name` | Last known repository name (`varchar(100)`, GitHub's limit). |
 | `private` | Last known visibility. |
 | `added_at` | Nullable. Set when the user adds the repo; `null` means not added. |
-| `integration_id` | Nullable. The access link, set on Add ([GitHub service](../integrations/github-service.md#access-link-on-add)). Logical FK to `integrations.id`. Empty for a repo added through the public source only. |
+| `integration_id` | Nullable. The access link, set on Add ([GitHub service](../integrations/github-service/add-and-deletion.md#access-link-on-add)). Logical FK to `integrations.id`. Empty for a repo added through the public source only. |
 | `last_seen_at` | When a source page last returned the repo (`200` or `304`), even if that source failed on a later page. Informational: no status derives from it ([sync](sync/write-path.md#write-path)). |
 | `created_at`, `updated_at` | Timestamps. |
 
@@ -146,7 +146,7 @@ Consequences:
 
 - **Integration deleted:** the Repositories module is told, then drops that integration's source,
   page and status rows, clears `integration_id` wherever it points at it, and
-  [prunes](#private-metadata-lifecycle) ([GitHub service](../integrations/github-service.md#deletion-hook)).
+  [prunes](#private-metadata-lifecycle) ([GitHub service](../integrations/github-service/add-and-deletion.md#deletion-hook)).
   The hook receives the owning `user_id` with the integration id, and every statement in it
   (the `integration_id` clear, the deletes by `source_key = 'integration:<id>'`, the pruning)
   includes `AND user_id = :userId`. Reads treat a dangling `integration_id` as empty.
@@ -158,7 +158,7 @@ Consequences:
   commits**; Repositories' listener runs the cleanup above in one transaction. A listener failure
   is logged and never blocks the delete (`204` stands); the end-of-sync
   [safety net](sync/write-path.md#write-path) drops the rows of any integration no longer among the user's
-  ([GitHub service](../integrations/github-service.md#deletion-hook)). A direct call would make the two modules
+  ([GitHub service](../integrations/github-service/add-and-deletion.md#deletion-hook)). A direct call would make the two modules
   import each other.
 
 ### User deletion

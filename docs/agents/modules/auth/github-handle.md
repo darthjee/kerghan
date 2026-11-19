@@ -210,7 +210,7 @@ to.
   one-way and has no failure window between the Auth write and the cleanup. The handle source
   holds only public metadata ([sync](../repositories/sync.md#sources)), so leaving its rows until the next
   Repositories request has no privacy cost. Rejected: an awaited event like the integration
-  deletion hook ([GitHub service](../integrations/github-service.md#deletion-hook)), needed there because private
+  deletion hook ([GitHub service](../integrations/github-service/add-and-deletion.md#deletion-hook)), needed there because private
   metadata must go at once.
 
 

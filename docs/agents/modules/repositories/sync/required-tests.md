@@ -41,20 +41,20 @@ Tiers, fakes and harnesses: [Testing](../testing.md). Tags: `(db)`, `(e2e)`, `(u
 - The handle's repos go through the oldest usable integration; unauthenticated only when none is
   usable. After an `invalid_credentials` result it restarts from page 1 with the next usable
   integration, then unauthenticated; a rate limit, timeout or `5xx` does not fall back. (The
-  `401 → invalid` write itself is [GitHub service](../../integrations/github-service.md#required-tests)'s.)
+  `401 → invalid` write itself is [GitHub service](../../integrations/github-service/required-tests.md#required-tests)'s.)
 - The handle source never stores a private repo, even when fetched through an integration.
 - A non-usable integration's source stores `invalid_credentials` (status) or `error` (type
   disabled) and keeps its rows and pages. (That it is never called is
-  [GitHub service](../../integrations/github-service.md#required-tests)'s.)
+  [GitHub service](../../integrations/github-service/required-tests.md#required-tests)'s.)
 - A source whose integration is deleted mid-sync (`integration_unusable` with reason `missing`)
   stops and writes no status `(race)`.
 - A handle source answered `not_found` stores `not_found`, keeps the handle's rows and pages,
   prunes nothing, tries no other credential, and is retried on the next sync. (The `404 →
-  not_found` mapping is [GitHub service](../../integrations/github-service.md#required-tests)'s; the row status is
+  not_found` mapping is [GitHub service](../../integrations/github-service/required-tests.md#required-tests)'s; the row status is
   [data model](../required-tests.md#model-tests)'s.)
 - A sync run reconciles the handle when it starts and fetches the current, normalised handle;
   with no handle there is no handle source. (Its URL-encoding is
-  [GitHub service](../../integrations/github-service.md#required-tests)'s.)
+  [GitHub service](../../integrations/github-service/required-tests.md#required-tests)'s.)
 - A handle changed while a run is fetching it: the
   [edge-case scenario](../edge-cases.md#required-tests).
 
@@ -76,7 +76,7 @@ Tiers, fakes and harnesses: [Testing](../testing.md). Tags: `(db)`, `(e2e)`, `(u
 - A run whose sync-state row was deleted stops at its next write and never recreates the row,
   including through its start-of-run handle reconciliation `(race)`.
 - A redirect answer (`unavailable` with reason `redirect`) makes the source `error`. (That no
-  redirect is followed is [GitHub service](../../integrations/github-service.md#required-tests)'s.)
+  redirect is followed is [GitHub service](../../integrations/github-service/required-tests.md#required-tests)'s.)
 
 **Link fill:**
 
@@ -109,7 +109,7 @@ Tiers, fakes and harnesses: [Testing](../testing.md). Tags: `(db)`, `(e2e)`, `(u
   call, status, `resetAt` and rows kept.
 - A refused budget acquire (a `rate_limited` result with no GitHub call) marks the
   unauthenticated source `rate_limited` with that reset and keeps its rows. (The tracker itself is
-  [GitHub service](../../integrations/github-service.md#required-tests)'s.)
+  [GitHub service](../../integrations/github-service/required-tests.md#required-tests)'s.)
 
 **Integration deletion:**
 

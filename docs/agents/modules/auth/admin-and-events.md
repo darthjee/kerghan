@@ -43,7 +43,7 @@ five tables.
 **Not built yet:** no user-deletion path exists today, so nothing emits the event. Whoever adds a
 deletion path must emit it with `EventEmitter2#emitAsync` **after the user row's delete commits**,
 and must retry it or run an orphan sweep, because a failed listener only logs and never blocks the
-deletion (the same pattern as [`integration.deleted`](../integrations/github-service.md#deletion-hook)).
+deletion (the same pattern as [`integration.deleted`](../integrations/github-service/add-and-deletion.md#deletion-hook)).
 
 ## `password-recovery.requested` event
 

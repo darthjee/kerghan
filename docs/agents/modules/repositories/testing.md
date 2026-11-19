@@ -83,7 +83,7 @@ prove the request and its handling:
 - `redirect: 'manual'`;
 - rate-limit header parsing and the budget tracker;
 - installation-token minting and caching;
-- the [error mapping](../integrations/github-service.md#error-mapping) table.
+- the [error mapping](../integrations/github-service/status-and-errors.md#error-mapping) table.
 
 ### Repositories: typed fake
 

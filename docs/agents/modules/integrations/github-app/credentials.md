@@ -176,7 +176,7 @@ per call:
 - It is minted with `metadata: read` only.
 - The mint failure rules (`404`/`403` set the integration `invalid`, a `401` of the app JWT is a
   server misconfiguration) are in
-  [GitHub App installation tokens](../github-service.md#github-app-installation-tokens).
+  [GitHub App installation tokens](../github-service/api.md#github-app-installation-tokens).
 - **Test connection** still mints a fresh token and drops it, so it checks the real state.
 
 ## Test connection

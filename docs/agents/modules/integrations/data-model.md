@@ -166,9 +166,9 @@ available.
   on an explicit test connection, on a replace, and when a repository call made through the
   integration is answered `401` (or, for a GitHub App, when minting an installation token answers
   `404`/`403`): that call sets the integration `invalid`
-  ([`401` → `invalid`](github-service.md#invalid-on-401)), as a compare-and-set on
+  ([`401` → `invalid`](github-service/status-and-errors.md#invalid-on-401)), as a compare-and-set on
   `secret_iv` so a concurrent replace is never overwritten
-  ([status compare-and-set](github-service.md#status-compare-and-set)). The UI shows
+  ([status compare-and-set](github-service/status-and-errors.md#status-compare-and-set)). The UI shows
   when it was last tested.
 - **Secret can't be decrypted** (key lost or misconfigured, ciphertext tampered): the row is
   still listed with status `undecryptable`; the user can replace the credential or delete it.

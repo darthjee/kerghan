@@ -94,7 +94,7 @@ Tiers, fakes and harnesses: [Testing](testing.md). Tags: `(db)`, `(e2e)`, `(unit
 
 - Installation tokens (cache kept in the module, `metadata: read`, a mint across a Replace never
   cached), fixed host, own page URLs and no redirect followed, no `Authorization` on
-  unauthenticated calls: [GitHub service](../integrations/github-service.md#required-tests).
+  unauthenticated calls: [GitHub service](../integrations/github-service/required-tests.md#required-tests).
 - Zombie runs and the `run_id` lock release, the atomic claim and the cooldown, the handle
   source storing no private repo: [sync](sync/required-tests.md#required-tests).
 - Integration-deletion cleanup; handle normalisation, validation, edit path, default user and
