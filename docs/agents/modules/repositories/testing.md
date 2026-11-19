@@ -129,8 +129,8 @@ test, with a function that throws unless the spec mocks it
 
 ## Detached sync and time
 
-The rules are in [sync](sync.md#execution) (`SyncLauncher`) and
-[sync](sync.md#time-source) (`Clock`, no `NOW()` in SQL).
+The rules are in [sync](sync/execution.md#execution) (`SyncLauncher`) and
+[sync](sync/execution.md#time-source) (`Clock`, no `NOW()` in SQL).
 
 **`CapturingLauncher`.** Tests replace the injected `SyncLauncher` with one that records tasks
 without running them. A spec can then prove both halves of a trigger:

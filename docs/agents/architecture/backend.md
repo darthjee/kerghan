@@ -304,6 +304,6 @@ Time rules read the injected `Clock` (`core/clock.ts`: `Clock#now()`, with `Syst
 production and a `FakeClock` under `core/tests/support/` in specs), never `Date.now()` or
 `new Date()` directly, so tests move time with `set` / `advance` and never wait. The Integrations
 module (installation-token cache, unauthenticated budget tracker) and the
-[Repositories module](../modules/repositories/sync.md#time-source) both use it. Time **conditions
+[Repositories module](../modules/repositories/sync/execution.md#time-source) both use it. Time **conditions
 in SQL** (a lease, a cooldown, a staleness check) compare against a value computed from the
 `Clock` and passed as a parameter: never `NOW()` or `CURRENT_TIMESTAMP` in the statement.

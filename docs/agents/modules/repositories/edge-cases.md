@@ -13,41 +13,41 @@ Renames and transfers, several sources, failure vs disappearance, page cap, rate
 
 | Case | Stored state | Row status | Source status | UI | Rule |
 |---|---|---|---|---|---|
-| Repo renamed, or transferred to an owner a source still sees | Same `github_id` upserted: `owner` / `name` / `private` refreshed; `added_at` and `integration_id` untouched. The page's ETag changes, so GitHub answers `200`. | Unchanged | `ok` | New `owner/name` after the reload | [data model](../repositories/data-model.md#repositories), [sync](sync.md#write-path) |
+| Repo renamed, or transferred to an owner a source still sees | Same `github_id` upserted: `owner` / `name` / `private` refreshed; `added_at` and `integration_id` untouched. The page's ETag changes, so GitHub answers `200`. | Unchanged | `ok` | New `owner/name` after the reload | [data model](../repositories/data-model.md#repositories), [sync](sync/write-path.md#write-path) |
 | Transferred to an owner no source sees | Every source succeeds without it, so its source rows are deleted. | Not added: pruned. Added: Unavailable. | `ok` | — | [data model](../repositories/data-model.md#private-metadata-lifecycle) |
 | Transferred away from the handle's owner | Drops out of the handle listing (`type=owner`); its `handle` row is deleted. | As above, unless another source still returns it | `ok` | The handle badge goes | [sync](sync.md#sources) |
 | Transferred back later | Same `github_id` returned again. | An added Unavailable row returns to Added (`added_at` kept); a pruned row is re-inserted as Not added. | `ok` | — | [data model](../repositories/data-model.md#repositories) |
-| Renamed while its only source is failing | Old `owner` / `name` kept until a successful sync. | Unknown (if added) | failure | Muted badge | [sync](sync.md#partial-failures) |
+| Renamed while its only source is failing | Old `owner` / `name` kept until a successful sync. | Unknown (if added) | failure | Muted badge | [sync](sync/write-path.md#partial-failures) |
 | Add `{ fullName }` with the old name before a sync | No row matches. | — | — | — | [routes](../../backend/routes/repositories.md#repo-ref) |
 | Add `{ fullName }` matching two rows (a stale row and a newer repo using the name) | — | Resolves to the latest `last_seen_at`, then the highest `id` | — | The UI always sends `githubId` | [routes](../../backend/routes/repositories.md#repo-ref) |
 | Add `{ githubId }` after a rename | The re-check uses `GET /repositories/{id}`, unaffected by the name. | Normal Add | — | — | [GitHub service](../integrations/github-service.md#endpoints-and-parameters) |
 | Returned by one `ok` source; another source with a row for it failed | Both source rows kept. | Added | one `ok`, one failure | The failed source's badge is muted | [data model](../repositories/data-model.md#row-statuses) |
-| Every source holding a row for it failed or is `pending` | Rows kept, nothing pruned. | Unknown | failures / `pending` | Muted badges | [data model](../repositories/data-model.md#row-statuses), [sync](sync.md#partial-failures) |
+| Every source holding a row for it failed or is `pending` | Rows kept, nothing pruned. | Unknown | failures / `pending` | Muted badges | [data model](../repositories/data-model.md#row-statuses), [sync](sync/write-path.md#partial-failures) |
 | A source's first run interrupted after it applied pages | Its rows kept, no status row. | Not ok for that source: Unknown if it alone holds an added repo | `pending` | "<source> has not been synced yet" | [data model](../repositories/data-model.md#row-statuses) |
 | Every source succeeded without returning it | Its source rows deleted. | Added: Unavailable. Not added: pruned. | `ok` | — | [data model](../repositories/data-model.md#private-metadata-lifecycle) |
 | Private, added; its linked integration fails while another integration still sees it | Link kept. | Added (the link is not dangling) | one failure, one `ok` | Muted badge for the failed one | [data model](../repositories/data-model.md#row-statuses) |
 | Private, added; its linked integration is `ok` but no longer returns it, while another does | Link kept (changing an existing link is out of scope). | Added | `ok` | — | [GitHub service](../integrations/github-service.md#access-link-on-add) |
-| Two sources return different metadata | Last write wins; a `304` never touches `owner` / `name` / `private`. | Unchanged | — | — | [sync](sync.md#write-path), [sync](sync.md#conditional-requests) |
+| Two sources return different metadata | Last write wins; a `304` never touches `owner` / `name` / `private`. | Unchanged | — | — | [sync](sync/write-path.md#write-path), [sync](sync/github-limits.md#conditional-requests) |
 | A row's `sources[]` while one of its sources failed | The failed source's rows come from an earlier sync. | — | — | `sources[]` lists every current source holding a row, failed and `pending` ones included | [routes](../../backend/routes/repositories.md#listing) |
-| Source has more pages than the cap | Pages up to the cap applied; source and page rows past the cap deleted, then pruned. | `page_cap_reached` counts as `ok` | `page_cap_reached` | "Some may be missing" banner | [sync](sync.md#write-path), [data model](../repositories/data-model.md#row-statuses) |
-| Cap lowered by config | The next sync of a large source trims rows past the new cap. | Not added: pruned. Added: Unavailable unless another source returns it. | `page_cap_reached` | As above | [sync](sync.md#write-path) |
-| Rate limit mid-source (authenticated `403` / `429`, or the unauthenticated threshold) | Pages already applied kept; the rest keep their old rows. Skipped with no call until `resetAt`. The handle source does not fall back. | Added repos held only there: Unknown | `rate_limited` with `resetAt` | Rate-limit banner | [sync](sync.md#rate-limits), [sync](sync.md#partial-failures) |
-| `304` on a page before the last | Rows kept, `last_seen_at` set, metadata untouched; the stored `has_next` (`true`) continues. | Unchanged | `ok` | — | [sync](sync.md#conditional-requests) |
-| New repo created after a full last page | The last stored page is requested without `If-None-Match`; its `Link` shows `rel="next"`; the new page is fetched. | New row: Not added | `ok` | New row after the reload | [sync](sync.md#conditional-requests) |
+| Source has more pages than the cap | Pages up to the cap applied; source and page rows past the cap deleted, then pruned. | `page_cap_reached` counts as `ok` | `page_cap_reached` | "Some may be missing" banner | [sync](sync/write-path.md#write-path), [data model](../repositories/data-model.md#row-statuses) |
+| Cap lowered by config | The next sync of a large source trims rows past the new cap. | Not added: pruned. Added: Unavailable unless another source returns it. | `page_cap_reached` | As above | [sync](sync/write-path.md#write-path) |
+| Rate limit mid-source (authenticated `403` / `429`, or the unauthenticated threshold) | Pages already applied kept; the rest keep their old rows. Skipped with no call until `resetAt`. The handle source does not fall back. | Added repos held only there: Unknown | `rate_limited` with `resetAt` | Rate-limit banner | [sync](sync/github-limits.md#rate-limits), [sync](sync/write-path.md#partial-failures) |
+| `304` on a page before the last | Rows kept, `last_seen_at` set, metadata untouched; the stored `has_next` (`true`) continues. | Unchanged | `ok` | — | [sync](sync/github-limits.md#conditional-requests) |
+| New repo created after a full last page | The last stored page is requested without `If-None-Match`; its `Link` shows `rel="next"`; the new page is fetched. | New row: Not added | `ok` | New row after the reload | [sync](sync/github-limits.md#conditional-requests) |
 
 ## Integrations
 
 | Case | Stored state | Row status | Source status | UI | Rule |
 |---|---|---|---|---|---|
 | Deleted between syncs | The hook drops its source, page and status rows, clears `integration_id` and prunes. | Added private repos it linked: Unavailable until a sync fills the link. Added public repos stay Added. | Entry gone | Its badges and banner go at the next reload | [GitHub service](../integrations/github-service.md#deletion-hook), [data model](../repositories/data-model.md#row-statuses) |
-| Deleted during a sync | Its source answers `integration_unusable` (`missing`) and stops with no status. A page written after the hook's cleanup is dropped by the end-of-sync safety net, before pruning. | As above | No status written; entry gone | As above | [sync](sync.md#sources), [sync](sync.md#write-path) |
+| Deleted during a sync | Its source answers `integration_unusable` (`missing`) and stops with no status. A page written after the hook's cleanup is dropped by the end-of-sync safety net, before pruning. | As above | No status written; entry gone | As above | [sync](sync.md#sources), [sync](sync/write-path.md#write-path) |
 | Turned `invalid` mid-sync (a `401` on the handle source through it, or on its own source) | Its rows kept. The handle source moves to the next usable integration. | Added repos it alone holds: Unknown | `invalid_credentials` | "Fix it in Integrations" banner | [sync](sync.md#handle-credential), [GitHub service](../integrations/github-service.md#invalid-on-401) |
 | Non-usable between syncs (`expired`, `invalid`, `undecryptable`) | Not called; rows kept until the integration is fixed or deleted. | Added repos it alone holds: Unknown | `invalid_credentials` | "Fix it in Integrations" banner | [GitHub service](../integrations/github-service.md#usable-integrations) |
 | Type disabled on this server | Not called; rows kept. | As above | `error` | Error banner | [GitHub service](../integrations/github-service.md#usable-integrations) |
 | Fixed by Test or Replace before the next sync | Stored `invalid_credentials` kept until the next sync. | Unchanged until the next sync | Reads `pending` | Banner gone | [routes](../../backend/routes/repositories.md#sync-state) |
-| Credential replaced, same `github_login` | The cached token is evicted; old ETags miss, so the next sync gets `200`. | Unchanged in effect | `ok` after the next sync | — | [sync](sync.md#conditional-requests) |
-| Credential replaced, different `github_login` | The old login's rows stay until that source's next sync, which rewrites each page and deletes rows past its last page. | Not-added repos only the old login saw: pruned. Added ones: Unavailable unless another source returns them. | `ok` after the next sync | — | [sync](sync.md#write-path) |
-| Deleted and re-created with the same credential | New `integration:<id>` source; its sync fills the empty links of the added private repos it returns. | Added private repos: Unavailable, then Added after the sync | `pending`, then `ok` | — | [sync](sync.md#link-fill) |
+| Credential replaced, same `github_login` | The cached token is evicted; old ETags miss, so the next sync gets `200`. | Unchanged in effect | `ok` after the next sync | — | [sync](sync/github-limits.md#conditional-requests) |
+| Credential replaced, different `github_login` | The old login's rows stay until that source's next sync, which rewrites each page and deletes rows past its last page. | Not-added repos only the old login saw: pruned. Added ones: Unavailable unless another source returns them. | `ok` after the next sync | — | [sync](sync/write-path.md#write-path) |
+| Deleted and re-created with the same credential | New `integration:<id>` source; its sync fills the empty links of the added private repos it returns. | Added private repos: Unavailable, then Added after the sync | `pending`, then `ok` | — | [sync](sync/write-path.md#link-fill) |
 
 ## Handle
 
@@ -58,37 +58,37 @@ Renames and transfers, several sources, failure vs disappearance, page cap, rate
 | Handle with no public repos | No rows. | Not added: pruned. Added: Unavailable unless another source returns them. | `ok` | "No repositories found" if no other source has any | [data model](../repositories/data-model.md#private-metadata-lifecycle), [frontend](../repositories/frontend.md#empty-state) |
 | Handle equals the login of one of the user's integrations | The same repos come through both sources, merged by `github_id`. | Normal | `ok` | Two source badges | [sync](sync.md#sources) |
 | Handle changed or cleared | The reconciliation on the next Repositories request drops the handle's rows and prunes. | Not added only it returned: pruned. Added: Unavailable unless another source returns them. | A new handle reads `pending` | — | [data model](../auth/github-handle.md#handle-changes) |
-| Handle changed during a sync | The run's handle-source writes are refused by the `handle <=> :runHandle` guard. The other sources finish. | As above | No status written; the new handle reads `pending` | — | [sync](sync.md#write-path) |
+| Handle changed during a sync | The run's handle-source writes are refused by the `handle <=> :runHandle` guard. The other sources finish. | As above | No status written; the new handle reads `pending` | — | [sync](sync/write-path.md#write-path) |
 | Handle source and `invalid_credentials` | Cannot happen: after a `401` the handle falls back, ending with the unauthenticated call. | — | — | Only integration sources show that banner | [sync](sync.md#handle-credential), [frontend](../repositories/frontend.md#source-errors) |
 
 ## Visibility
 
 | Case | Stored state | Row status | Source status | UI | Rule |
 |---|---|---|---|---|---|
-| Public → private, not added, an integration sees it | The integration's upsert sets `private` and deletes the `handle` row in the same transaction. | Not added, held by the integration | `ok` | The handle badge goes | [sync](sync.md#write-path) |
+| Public → private, not added, an integration sees it | The integration's upsert sets `private` and deletes the `handle` row in the same transaction. | Not added, held by the integration | `ok` | The handle badge goes | [sync](sync/write-path.md#write-path) |
 | Public → private, not added, only the handle saw it | The handle source (public only) succeeds without it, so its row goes. | Pruned | `ok` | — | [sync](sync.md#sources) |
 | Public → private, added, link set | Link kept. | Added while the linked integration sees it | `ok` | — | [data model](../repositories/data-model.md#row-statuses) |
-| Public → private, added, no link (added via the handle) | Filled at the end of the same sync with the oldest usable integration that holds a row for it from an `ok` or `page_cap_reached` source. | Added; if no integration sees it, Unavailable | `ok` | — | [sync](sync.md#link-fill) |
+| Public → private, added, no link (added via the handle) | Filled at the end of the same sync with the oldest usable integration that holds a row for it from an `ok` or `page_cap_reached` source. | Added; if no integration sees it, Unavailable | `ok` | — | [sync](sync/write-path.md#link-fill) |
 | Private → public, not added | The integration still holds it and the handle now returns it. | Not added | `ok` | Two badges | [sync](sync.md#sources) |
 | Private → public, added (link set, empty or dangling) | A set link is kept, never cleared. | Added: a public repo needs no link | `ok` | — | [data model](../repositories/data-model.md#row-statuses) |
-| Turned private while the only source holding it (the handle) fails | Stays `private = false` (stale); only pre-flip public metadata is kept. The handle's next success drops it. | Unknown if added | failure | Muted badge | [sync](sync.md#partial-failures) |
+| Turned private while the only source holding it (the handle) fails | Stays `private = false` (stale); only pre-flip public metadata is kept. The handle's next success drops it. | Unknown if added | failure | Muted badge | [sync](sync/write-path.md#partial-failures) |
 | Add of a repo whose visibility flipped since the last sync | The re-check refreshes `private`; a repo now private is linked to the integration that granted it. | Added | — | — | [routes](../../backend/routes/repositories.md#add) |
 
 ## Concurrency
 
 | Case | Stored state | Row status | Source status | UI | Rule |
 |---|---|---|---|---|---|
-| Two tabs open a stale listing | One sync (atomic claim). | — | — | Both get stored rows and the same sync state | [sync](sync.md#per-user-lock) |
+| Two tabs open a stale listing | One sync (atomic claim). | — | — | Both get stored rows and the same sync state | [sync](sync/execution.md#per-user-lock) |
 | Refresh during a sync | Cooldown not reset. | — | — | `202` with the running sync | [routes](../../backend/routes/repositories.md#refresh) |
 | Refresh in another tab inside the cooldown | Nothing written. | — | — | `429` + `Retry-After` notice | [routes](../../backend/routes/repositories.md#refresh) |
 | Double Add of the same repo | One conditional write (`added_at IS NULL`) wins. | Added | — | Both answer `200` with the first Add's `addedAt` and link | [routes](../../backend/routes/repositories.md#add) |
-| Add during a sync's upsert | Independent columns (the upsert never touches `added_at` / `integration_id`); metadata last-write-wins, both from GitHub. | Added | — | — | [sync](sync.md#write-path) |
-| Add vs the end-of-sync link fill | The fill matches only an empty or dangling `integration_id`, so it never overwrites Add's link. | Added | — | — | [sync](sync.md#link-fill) |
+| Add during a sync's upsert | Independent columns (the upsert never touches `added_at` / `integration_id`); metadata last-write-wins, both from GitHub. | Added | — | — | [sync](sync/write-path.md#write-path) |
+| Add vs the end-of-sync link fill | The fill matches only an empty or dangling `integration_id`, so it never overwrites Add's link. | Added | — | — | [sync](sync/write-path.md#link-fill) |
 | Add vs pruning | Add first ⇒ kept; pruning first ⇒ Add's write and re-read find nothing. | Added, or gone | — | `404` inline error | [data model](../repositories/data-model.md#private-metadata-lifecycle), [routes](../../backend/routes/repositories.md#add) |
-| Integration deleted during Add (after its re-check) | The link is written dangling, read as empty, and refilled by the next sync. | Private: Unavailable until then | — | — | [data model](../repositories/data-model.md#logical-foreign-keys), [sync](sync.md#link-fill) |
+| Integration deleted during Add (after its re-check) | The link is written dangling, read as empty, and refilled by the next sync. | Private: Unavailable until then | — | — | [data model](../repositories/data-model.md#logical-foreign-keys), [sync](sync/write-path.md#link-fill) |
 | Credential replaced during a sync | The in-flight old-credential `401` is a no-op on the integration status (compare-and-set on `secret_iv`). | Unchanged | `invalid_credentials` for this run; reads `pending` until the next sync | No stale banner | [GitHub service](../integrations/github-service.md#status-compare-and-set), [routes](../../backend/routes/repositories.md#sync-state) |
-| Handle changed during a sync | The handle guard stops the handle source without a status. | — | The new handle reads `pending` | — | [sync](sync.md#write-path) |
-| Two backend instances | The claim lives in the database; the budget tracker is per instance and corrected by GitHub's headers. | — | — | — | [sync](sync.md#rate-limits) |
+| Handle changed during a sync | The handle guard stops the handle source without a status. | — | The new handle reads `pending` | — | [sync](sync/write-path.md#write-path) |
+| Two backend instances | The claim lives in the database; the budget tracker is per instance and corrected by GitHub's headers. | — | — | — | [sync](sync/github-limits.md#rate-limits) |
 
 ## Add
 
@@ -108,7 +108,7 @@ Renames and transfers, several sources, failure vs disappearance, page cap, rate
 | Case | Stored state | Row status | Source status | UI | Rule |
 |---|---|---|---|---|---|
 | User deleted while idle | The `user.deleted` listener deletes the user's rows in all five tables. | — | — | — | [data model](../repositories/data-model.md#user-deletion) |
-| User deleted during a sync | The listener deletes the sync-state row; the run's next guarded write affects no row, so it rolls back and stops; the catch-all release affects no row. Nothing is recreated. | — | — | — | [data model](../repositories/data-model.md#user-deletion), [sync](sync.md#write-path), [sync](sync.md#restart-recovery) |
+| User deleted during a sync | The listener deletes the sync-state row; the run's next guarded write affects no row, so it rolls back and stops; the catch-all release affects no row. Nothing is recreated. | — | — | — | [data model](../repositories/data-model.md#user-deletion), [sync](sync/write-path.md#write-path), [sync](sync/execution.md#restart-recovery) |
 | Listener fails | Logged; the deletion stands; the orphan rows are visible to no one (retention, not exposure). | — | — | — | [data model](../repositories/data-model.md#user-deletion) |
 
 ## UI

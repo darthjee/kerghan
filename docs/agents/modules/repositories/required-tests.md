@@ -29,7 +29,7 @@ Tiers, fakes and harnesses: [Testing](testing.md). Tags: `(db)`, `(e2e)`, `(unit
 - A current source with no status row reads `pending`.
 - An added private repo whose linked integration was deleted ⇒ Unavailable after the deletion
   and before the next sync, even if another integration still sees it (that sync then
-  [fills the link](sync.md#link-fill)); an added public repo in the same case stays Added.
+  [fills the link](sync/write-path.md#link-fill)); an added public repo in the same case stays Added.
 
 **Pruning and deletion:**
 
@@ -88,7 +88,7 @@ Tiers, fakes and harnesses: [Testing](testing.md). Tags: `(db)`, `(e2e)`, `(unit
   in the Repositories sources, no Repositories entity mapping those tables, and no key outside
   the allowlist in the exported `IntegrationsGithubService` result types; so the Repositories
   module never handles a decrypted credential `(static)`. (Its `NOW()` check is
-  [sync](sync.md#required-tests)'s.)
+  [sync](sync/required-tests.md#required-tests)'s.)
 
 **Owned elsewhere** (linked, not repeated):
 
@@ -96,7 +96,7 @@ Tiers, fakes and harnesses: [Testing](testing.md). Tags: `(db)`, `(e2e)`, `(unit
   cached), fixed host, own page URLs and no redirect followed, no `Authorization` on
   unauthenticated calls: [GitHub service](../integrations/github-service.md#required-tests).
 - Zombie runs and the `run_id` lock release, the atomic claim and the cooldown, the handle
-  source storing no private repo: [sync](sync.md#required-tests).
+  source storing no private repo: [sync](sync/required-tests.md#required-tests).
 - Integration-deletion cleanup; handle normalisation, validation, edit path, default user and
   admins: [data model](#model-tests).
 
