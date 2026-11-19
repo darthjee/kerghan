@@ -11,7 +11,7 @@ The `kerghan` client (`standalone/bin/kerghan`) provides bash completion for its
 
 ### Scope
 
-In scope: bash, including bash 3.2 on macOS; command names and accepted flags; `configure` keys and fixed values; command shape, streams and error cases; installer behavior; performance/security rules, stable contracts and tests. The completion data and exact candidate behavior are documented in [What is completed](completion-behavior.md).
+In scope: bash, including bash 3.2 on macOS; command names and accepted flags; `configure` keys and fixed values; command shape, streams and error cases; installer behavior; performance/security rules, stable contracts and tests. The completion data and exact candidate behavior are documented in [What is completed](behavior.md).
 
 Out of scope (from epic #424): zsh and fish (future epics); network-backed `update [VERSION]` completion; docker compose passthrough completion; vault CLI completion; dynamic Docker, Vault, GitHub, config or env-file lookups; Windows/PowerShell; and uninstalling the completion file. The shell remains a required argument so future shells can be added without changing `completion bash`.
 
@@ -62,6 +62,6 @@ There is no “Options for completion” section.
 
 All command tests live in `standalone/test/completion_command.bats`, using the stubs from `helpers/setup.bash`. They cover success and clean streams, function registration, missing/unsupported/quoted shell names, option-like arguments, extra arguments, check ordering, the usage line, and no side effects (including no external calls or changes under `$HOME`). The fixed-output and secret-leak checks are in [Performance and security](security-contracts.md#required-tests).
 
-Existing tests that compare the full usage text must include the new completion line. The alias contract test for `kg` is described in [Stable contracts](security-contracts.md#required-tests).
+Existing tests that compare the full usage text must include the new completion line. The alias contract test for `kg` is described in [Stable contracts](security-contracts.md#required-contract-tests).
 
-See also: [completion behavior](completion-behavior.md), [installer setup](installer.md), and [testing](testing.md).
+See also: [completion behavior](behavior.md), [installer setup](installer.md), and [testing](testing.md).
