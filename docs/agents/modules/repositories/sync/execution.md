@@ -5,12 +5,12 @@ Part of the [Repositories sync](../sync.md) doc, in the [Repositories module](..
 ## Trigger
 
 - **Stale:** the listing (`POST /repositories/mine.json`) starts a sync when the user's last
-  sync is older than a TTL ([routes](../../../backend/routes/repositories.md#stale-sync-trigger)).
+  sync is older than a TTL ([routes](../../../backend/routes/repositories/listing.md#stale-sync-trigger)).
 - **Refresh:** the Refresh action forces a sync, subject to a **cooldown**; a Refresh inside it
-  is refused (`429` with `Retry-After`, see [routes](../../../backend/routes/repositories.md#refresh)).
+  is refused (`429` with `Retry-After`, see [routes](../../../backend/routes/repositories/refresh-and-add.md#refresh)).
 - **The cooldown runs from the start of the last sync, whatever triggered it** (stale listing or
   Refresh), and binds both: a stale listing inside the cooldown starts no sync
-  ([routes](../../../backend/routes/repositories.md#stale-sync-trigger)), whatever the TTL.
+  ([routes](../../../backend/routes/repositories/listing.md#stale-sync-trigger)), whatever the TTL.
 - **One sync per user at a time:** a trigger while a sync runs does not start a second one; a
   Refresh while syncing answers `202` with the running sync and does not reset the cooldown.
 - Both triggers go through the same [atomic claim](#per-user-lock); the cooldown is anchored on
@@ -23,9 +23,9 @@ Part of the [Repositories sync](../sync.md) doc, in the [Repositories module](..
 The sync is **asynchronous**: the request that triggers it does not wait for GitHub.
 
 - The listing returns the stored rows immediately, with the sync state (`idle` / `syncing`,
-  `lastSyncedAt`, per-source status; [routes](../../../backend/routes/repositories.md#sync-state)).
+  `lastSyncedAt`, per-source status; [routes](../../../backend/routes/repositories/identity-and-sync.md#sync-state)).
 - The frontend polls `POST /repositories/sync/state.json` until it is `idle`, then reloads the
-  page of rows ([routes](../../../backend/routes/repositories.md#polling-contract), [frontend](../frontend.md#sync-ux)). That route never
+  page of rows ([routes](../../../backend/routes/repositories/identity-and-sync.md#polling-contract), [frontend](../frontend.md#sync-ux)). That route never
   starts a sync.
 
 - **In-process.** The triggering request claims the [per-user lock](#per-user-lock), starts the
@@ -42,7 +42,7 @@ The sync is **asynchronous**: the request that triggers it does not wait for Git
 - **No queue.** A job queue (BullMQ/Redis) would add infrastructure to dev, production and the
   standalone image for an on-demand, low-frequency job; rejected.
 - **A sync stuck in `syncing` always returns to `idle`** ([restart recovery](#restart-recovery)),
-  so polling always ends ([routes](../../../backend/routes/repositories.md#polling-contract)).
+  so polling always ends ([routes](../../../backend/routes/repositories/identity-and-sync.md#polling-contract)).
 
 ### Per-user lock
 
@@ -62,7 +62,7 @@ WHERE user_id = :userId
   `IntegrationTestCooldownService#remainingSeconds`): `syncing` with a live heartbeat ⇒ a sync is
   running (Refresh answers `202` with that state); otherwise (`idle`, or a dead lease still inside
   the cooldown) ⇒ the cooldown is active (Refresh answers `429` with `Retry-After` from
-  `last_started_at`; a stale listing starts no sync) ([routes](../../../backend/routes/repositories.md#refresh)). If the re-read
+  `last_started_at`; a stale listing starts no sync) ([routes](../../../backend/routes/repositories/refresh-and-add.md#refresh)). If the re-read
   finds the row idle and out of the cooldown (the run ended in between), the claim is retried
   once.
 - A **stale listing** adds `AND (last_synced_at IS NULL OR last_synced_at < :now - ttl)` to the
@@ -77,7 +77,7 @@ WHERE user_id = :userId
   shared with the Integrations module, which added it in #461): the only time source of the
   Repositories module, never `Date.now()` / `new Date()` directly. Every time rule reads it: the TTL, the Refresh cooldown,
   the lease and its heartbeat, the hard deadline, `resetAt` checks of `rate_limited` sources, and
-  the Add rate-limit window ([routes](../../../backend/routes/repositories.md#add-rate-limit)). Every timestamp the module writes
+  the Add rate-limit window ([routes](../../../backend/routes/repositories/refresh-and-add.md#add-rate-limit)). Every timestamp the module writes
   (`last_started_at`, `heartbeat_at`, `last_synced_at`, `last_seen_at`, `synced_at`, `added_at`)
   comes from it.
 - **No `NOW()` / `CURRENT_TIMESTAMP` in SQL time conditions.** Every time condition (lease

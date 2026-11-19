@@ -77,7 +77,7 @@ Tiers, fakes and harnesses: [Testing](testing.md). Tags: `(db)`, `(e2e)`, `(unit
 - Every query is filtered by the session's user: with the [two-user baseline](testing-coverage.md#two-user-baseline),
   the intruder's rows are never returned or changed by any route or sync.
 - No response reveals that another user holds or added the same GitHub repository.
-- Add's own-rows lookup and identical `404`s: [routes](../../backend/routes/repositories.md#required-tests).
+- Add's own-rows lookup and identical `404`s: [routes](../../backend/routes/repositories/required-tests.md#required-tests).
 
 **Module boundaries** ([module boundaries](security.md#module-boundaries)):
 

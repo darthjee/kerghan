@@ -142,7 +142,7 @@ computed from it, beyond the masked `secretHint` of the Integrations routes.** D
   ([installation tokens](../modules/integrations/github-service/api.md#github-app-installation-tokens)). Any other persistence
   needs its own product decision (`CLAUDE.md`, #295).
 - Repo responses carry no integration field beyond its `uuid` and label
-  ([routes](../backend/routes/repositories.md#access)).
+  ([routes](../backend/routes/repositories/errors-and-access.md#access)).
 - **The `secret_iv` compare value stays inside the Integrations module.** The status
   [compare-and-set](../modules/integrations/github-service/status-and-errors.md#status-compare-and-set) uses the `secret_iv` of the credential
   a call used; it never reaches the Repositories module, a response or a log.

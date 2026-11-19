@@ -33,8 +33,8 @@ The boundary is enforced by tooling, not left to review alone
   message.
 - No response, error code or message reveals that another user holds or added the same GitHub
   repository.
-- Add looks up the caller's own row before any GitHub call ([routes](../../backend/routes/repositories.md#add)).
-- No response exposes `user_id` or an internal `integrations.id` ([routes](../../backend/routes/repositories.md#access)).
+- Add looks up the caller's own row before any GitHub call ([routes](../../backend/routes/repositories/refresh-and-add.md#add)).
+- No response exposes `user_id` or an internal `integrations.id` ([routes](../../backend/routes/repositories/errors-and-access.md#access)).
 - Admins have no access to anyone's repositories (same rule as integrations), and the existing
   admin endpoints (`/admin/users/*`) carry no repository-derived field (counts, flags, names,
   sync state).
@@ -55,10 +55,10 @@ The boundary is enforced by tooling, not left to review alone
 ## Add verification
 
 Add only accepts a repository already in the caller's own listing, and is verified with GitHub
-([routes](../../backend/routes/repositories.md#add)), so a user cannot add a repository, or learn its metadata, by guessing a
+([routes](../../backend/routes/repositories/refresh-and-add.md#add)), so a user cannot add a repository, or learn its metadata, by guessing a
 GitHub repository id or an `owner/name`.
 
-- The [repo ref](../../backend/routes/repositories.md#repo-ref) is `{ githubId }` or `{ fullName }`; a `fullName` resolves
+- The [repo ref](../../backend/routes/repositories/identity-and-sync.md#repo-ref) is `{ githubId }` or `{ fullName }`; a `fullName` resolves
   only among the caller's own rows, so it cannot reach a repo outside the listing.
 - Check order: per-user rate limit → own-rows lookup → GitHub re-check. The rate limit comes
   first, so every attempt counts and probing is bounded.
@@ -69,9 +69,9 @@ GitHub repository id or an `owner/name`.
   nothing about other users or about GitHub and adds no probing surface.
 - The GitHub re-check is built from the stored row, never from the request's `fullName`; an
   unlinked re-check that finds the repo private links the granting integration, so private
-  metadata stays tied to it ([routes](../../backend/routes/repositories.md#add)).
+  metadata stays tied to it ([routes](../../backend/routes/repositories/refresh-and-add.md#add)).
 - The rate limit is **30 Adds per 60 s** per user by default, configurable
-  ([routes](../../backend/routes/repositories.md#add-rate-limit)). The unauthenticated re-check honours **Add's own
+  ([routes](../../backend/routes/repositories/refresh-and-add.md#add-rate-limit)). The unauthenticated re-check honours **Add's own
   threshold** (refused at remaining ≤ 0; the sync stops at ≤ 10), and each Add makes at most 3
   GitHub calls ([candidate walk](../integrations/github-service/add-and-deletion.md#add-re-check-candidates)).
 
@@ -152,13 +152,13 @@ Repository links in the UI are built by the frontend from `owner` and `name`
 Every route is `POST`, reads included, so `OriginGuard` covers all four
 ([architecture/security.md](../../architecture/security.md#csrf)). The listing's stale-sync
 trigger is therefore not a state change over `GET`, and needs no exception
-([routes](../../backend/routes/repositories.md#stale-sync-trigger)).
+([routes](../../backend/routes/repositories/listing.md#stale-sync-trigger)).
 
 ## Errors and logging
 
-- Exact codes and messages: the [error table](../../backend/routes/repositories.md#errors) in `api.md`.
+- Exact codes and messages: the [error table](../../backend/routes/repositories/errors-and-access.md#errors) in `api.md`.
 - Sync failures never become HTTP errors: they surface only as the per-source `status` of the
-  [sync state](../../backend/routes/repositories.md#sync-state), which the UI maps to fixed banner texts.
+  [sync state](../../backend/routes/repositories/identity-and-sync.md#sync-state), which the UI maps to fixed banner texts.
 - GitHub error bodies and messages are never echoed to the client, nor any credential detail;
   anything unexpected is `500 INTERNAL_ERROR`.
 - Credentials never appear in logs or error responses.

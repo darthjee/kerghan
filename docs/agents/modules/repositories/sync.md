@@ -57,7 +57,7 @@ Results are merged by GitHub repository id; each repo records which sources retu
     it alone holds read Unknown ([data model](../repositories/data-model.md#row-statuses)). A renamed handle's repos
     still exist on GitHub under the new name.
   - **Retried on every sync:** it is not skipped like `rate_limited`.
-- The source status never reveals which credential served it ([routes](../../backend/routes/repositories.md#sync-state)).
+- The source status never reveals which credential served it ([routes](../../backend/routes/repositories/identity-and-sync.md#sync-state)).
 - **Endpoints** ([GitHub service](../integrations/github-service/api.md#endpoints-and-parameters)): `pat` and
   `oauth_app` sources read `GET /user/repos` (`affiliation=owner,collaborator,organization_member`,
   `visibility=all`, `sort=created&direction=asc`); `github_app` sources read

@@ -14,7 +14,7 @@ Part of the [Repositories sync](../sync.md) doc, in the [Repositories module](..
   `Reset`, so out-of-order responses (parallel sources, Add) never raise the budget. Every
   unauthenticated call (sync or Add re-check) consults it first: remaining ≤ the caller's
   threshold and reset not passed ⇒ the sync marks the source `rate_limited` with that reset, and
-  Add answers `503 GITHUB_RATE_LIMITED` ([routes](../../../backend/routes/repositories.md#add)), with no call.
+  Add answers `503 GITHUB_RATE_LIMITED` ([routes](../../../backend/routes/repositories/refresh-and-add.md#add)), with no call.
   - **Two thresholds:** the sync stops at remaining **≤ 10**; Add only at **≤ 0**. The 10 is a
     real reserve for Add re-checks, which are bounded per user and by Add's 3-call
     [candidate walk](../../integrations/github-service/add-and-deletion.md#add-re-check-candidates).

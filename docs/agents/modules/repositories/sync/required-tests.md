@@ -11,7 +11,7 @@ Tiers, fakes and harnesses: [Testing](../testing.md). Tags: `(db)`, `(e2e)`, `(u
 
 - Opening the listing with a stale sync starts one; with a fresh sync, during a running sync, or
   inside the Refresh cooldown (including right after a stale-triggered sync), it does not. The
-  HTTP answers are [routes](../../../backend/routes/repositories.md#required-tests)'s.
+  HTTP answers are [routes](../../../backend/routes/repositories/required-tests.md#required-tests)'s.
 - The atomic claim: two concurrent triggers start exactly one sync and never duplicate rows; the
   claim fails inside the cooldown, and while another run holds an unexpired lease; a stale
   listing also needs the TTL condition, a Refresh does not.
@@ -24,7 +24,7 @@ Tiers, fakes and harnesses: [Testing](../testing.md). Tags: `(db)`, `(e2e)`, `(u
 - Every sync is started through the injected `SyncLauncher`; an unexpected exception in the task
   still releases the lock, but a zombie's exception never releases a newer run's lock.
 - A sync stuck in `syncing` past its lease can be taken over by the next trigger; the sync-state
-  answer is [routes](../../../backend/routes/repositories.md#required-tests)'s.
+  answer is [routes](../../../backend/routes/repositories/required-tests.md#required-tests)'s.
 - A zombie run's writes (page, end of source, end of sync) are rejected by `run_id`: run A paused
   at a GitHub call, the clock advanced past the lease, run B started `(race)`.
 - The hard deadline stops the sync between pages; applied pages are kept; each source it cut

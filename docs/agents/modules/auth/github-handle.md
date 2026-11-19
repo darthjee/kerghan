@@ -49,7 +49,7 @@ After normalisation, the handle must match GitHub's username format:
 Letters and digits, single hyphens only (no `--`), no leading or trailing hyphen, 1 to 39
 characters. Anything else answers `400 VALIDATION_FAILED` in the standard error shape, with the
 field message `githubHandle must be a valid GitHub username` and nothing stored. The same rule
-(case-insensitively) is the owner rule of a `fullName` repo ref ([routes](../../backend/routes/repositories.md#repo-ref)).
+(case-insensitively) is the owner rule of a `fullName` repo ref ([routes](../../backend/routes/repositories/identity-and-sync.md#repo-ref)).
 
 Kerghan does not check that the handle exists on GitHub when it is saved: an unknown handle shows
 up as the handle source's status after the next sync: `not_found`
@@ -196,7 +196,7 @@ to.
      :userId` on each statement);
   3. sets `handle` to the current value;
   4. [prunes](../repositories/data-model.md#private-metadata-lifecycle).
-- **Effect:** a new handle reads `pending` until a sync runs it ([routes](../../backend/routes/repositories.md#sync-state));
+- **Effect:** a new handle reads `pending` until a sync runs it ([routes](../../backend/routes/repositories/identity-and-sync.md#sync-state));
   a cleared handle has no handle source at all. Not-added repos only the old handle returned are
   pruned; added ones read Unavailable (or stay Added through another source).
 - **No sync is triggered** by a handle change, and the Refresh cooldown is unchanged: the new

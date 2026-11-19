@@ -28,7 +28,7 @@ One row per repository:
 - a visibility badge (public / private);
 - source badges from the row's `sources[]`: the integration label, or the GitHub handle. Each
   badge is matched by key with the sync state's `sources[].status`
-  ([routes](../../backend/routes/repositories.md#listing)). The badge of a source that is not `ok` (or `page_cap_reached`) is
+  ([routes](../../backend/routes/repositories/listing.md#listing)). The badge of a source that is not `ok` (or `page_cap_reached`) is
   shown **muted**, with the tooltip and accessible label **"<source> could not be refreshed"**;
   a `pending` source's badge reads **"<source> has not been synced yet"**;
 - the status: **Added**, **Not added**, **Unavailable** or **Unknown**
@@ -36,7 +36,7 @@ One row per repository:
 - on not-added rows, an **Add** button (sending the row's `githubId`): a spinner while the
   request runs, the row turns **Added** on success, an inline error on failure.
 
-Inline Add errors, shown on the row ([routes](../../backend/routes/repositories.md#add)):
+Inline Add errors, shown on the row ([routes](../../backend/routes/repositories/refresh-and-add.md#add)):
 
 | Answer | Message |
 |---|---|
@@ -58,7 +58,7 @@ Inline Add errors, shown on the row ([routes](../../backend/routes/repositories.
 
 - Stored rows show immediately, with a "Syncing with GitHub…" indicator while a sync runs.
 - Only the very first sync (`lastSyncedAt` is `null`) shows a full spinner.
-- **Polling** ([routes](../../backend/routes/repositories.md#polling-contract)): while `state` is `syncing`, the page polls
+- **Polling** ([routes](../../backend/routes/repositories/identity-and-sync.md#polling-contract)): while `state` is `syncing`, the page polls
   `POST /repositories/sync/state.json` every **2 s** (a frontend constant,
   [sync](sync/github-limits.md#values)). It stops on `idle` (then reloads the
   current listing page), on unmount, or on `401`; a transient error (network, `5xx`) keeps
@@ -74,7 +74,7 @@ Inline Add errors, shown on the row ([routes](../../backend/routes/repositories.
 ## Source errors
 
 A dismissible banner per source whose `status` is not `ok` or `pending`
-([routes](../../backend/routes/repositories.md#sync-state)). `<source>` is *integration "work-pat"* or *GitHub handle
+([routes](../../backend/routes/repositories/identity-and-sync.md#sync-state)). `<source>` is *integration "work-pat"* or *GitHub handle
 "darthjee"*.
 
 | Status | Banner |
@@ -90,7 +90,7 @@ A dismissible banner per source whose `status` is not `ok` or `pending`
   read `invalid_credentials`: after a `401` it falls back to the next usable integration, then to
   the unauthenticated call, which cannot get a `401` ([sync](sync.md#handle-credential)).
 - **`not_found`** is a handle-source status only.
-- A fixed integration reads `pending` ([routes](../../backend/routes/repositories.md#sync-state)), so its banner disappears
+- A fixed integration reads `pending` ([routes](../../backend/routes/repositories/identity-and-sync.md#sync-state)), so its banner disappears
   at the next poll or reload after a Test or a Replace.
 
 ## Empty state

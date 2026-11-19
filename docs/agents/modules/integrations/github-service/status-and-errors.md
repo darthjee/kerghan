@@ -59,7 +59,7 @@ server** (a `github_app` integration is unusable when the app's server config is
   Rejected: expiring them (for example after 30 days), since added repos would flip to
   Unavailable and a fixed token would re-import everything.
 - A fixed integration (Test or Replace returns it to `active`) reads `pending` until its next
-  sync ([routes](../../../backend/routes/repositories.md#sync-state)).
+  sync ([routes](../../../backend/routes/repositories/identity-and-sync.md#sync-state)).
 - `listUsableIntegrations` returns only usable ones, oldest first, filtered by `user_id` in the
   query. The sync builds its sources from **all** the user's integrations; the handle and Add use
   the usable list.
