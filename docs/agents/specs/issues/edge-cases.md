@@ -132,7 +132,7 @@ The data rows of [model.md](model.md#edge-cases) keep their own tests; they are 
 
 ## Open questions
 
-- [x] The "retry sync" route and how failed and rate-limited states are exposed: decided in [api.md](api.md) (#489). Wording and placement stay with #491.
+- [x] The "retry sync" route and how failed and rate-limited states are exposed: decided in [api.md](api.md) (#489). Wording and placement are decided in [ui.md](ui.md#link-and-sync-states) (#491); UI-only cases are the U rows of [ui.md](ui.md#ui-edge-cases).
 - [ ] Per-field timestamps for conflicts: not v1, no owner issue yet.
 
 ## Required tests

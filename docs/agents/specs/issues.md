@@ -62,7 +62,7 @@ background workers (in-process, from #479). A project may be about code or anyth
 | [issues/sync.md](issues/sync.md) | Two-way sync and workers | [decided](issues/sync.md#open-questions) |
 | [issues/api.md](issues/api.md) | API | [decided](issues/api.md#open-questions) |
 | [issues/security.md](issues/security.md) | Security | [decided](issues/security.md#open-questions) |
-| [issues/ui.md](issues/ui.md) | UI | [open](issues/ui.md#open-questions) |
+| [issues/ui.md](issues/ui.md) | UI | [decided](issues/ui.md#open-questions) |
 | [issues/edge-cases.md](issues/edge-cases.md) | Edge-cases matrix | [open](issues/edge-cases.md#open-questions) |
 | [issues/testing.md](issues/testing.md) | Test strategy | [decided](issues/testing.md#open-questions) |
 

@@ -79,7 +79,7 @@ Both kinds assert invariants, never timing, and never loop to catch a race.
 
 ## Frontend tests
 
-Jasmine, under `frontend/specs/`, in three layers as for Repositories: the **client** (requests and error mapping against a fake transport), the **controllers** (state, retry and unlink actions, the deletion confirmation) and the **render** layer. Fixtures are typed builders for projects, issues and link states, with no recorded JSON. Required: the project list and issue list; the link and sync state views ("GitHub issue gone", "rate limited until X", sync failed with a distinct credential reason: E1, E2, E17, E19 to E21); the retry sync and unlink actions (E18); the deletion confirmation, with its count of issues with unsent changes. Screens and wording are #491's; the specs follow them once decided.
+Jasmine, under `frontend/specs/`, in three layers as for Repositories: the **client** (requests and error mapping against a fake transport), the **controllers** (state, retry and unlink actions, the deletion confirmation) and the **render** layer. Fixtures are typed builders for projects, issues and link states, with no recorded JSON. Required: the project list and issue list; the link and sync state views ("GitHub issue gone", "rate limited until X", sync failed with a distinct credential reason: E1, E2, E17, E19 to E21); the retry sync and unlink actions (E18); the deletion confirmation (a general warning with the typed project name; the count of issues with unsent changes is shown after the delete); plus the routes, linking modals, bounded re-reads, `ConfirmModal` and the U rows. The full list is the Required tests of [ui.md](ui.md#required-tests).
 
 ## Coverage per area
 
@@ -96,7 +96,7 @@ Jasmine, under `frontend/specs/`, in three layers as for Repositories: the **cli
 ## Open questions
 
 - [x] How GitHub-sourced content is rendered: decided in [security.md](security.md#github-and-user-content) (#490); the frontend static spec extends to it.
-- [ ] Screens and wording the frontend specs follow. (#491)
+- [x] Screens and wording the frontend specs follow: decided in [ui.md](ui.md) (#491).
 
 ## Required tests
 

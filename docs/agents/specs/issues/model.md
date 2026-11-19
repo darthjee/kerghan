@@ -173,7 +173,7 @@ Each row is also a required test. The cross-file matrix is [edge-cases.md](edge-
 ## Scope boundaries
 
 - **In scope:** the four tables, constraints and indexes; the logical FKs and ownership; the marker and its compare-and-clear rule; the stored GitHub data and the fold list; the cleanup contracts and lock order; the required tests.
-- **Owned elsewhere:** routes, payloads and the issues listing sort are decided in [api.md](api.md); link states, unlinking and transfers are decided in [github-link.md](github-link.md); encryption at rest, retention of deleted projects, quotas and logs are decided in [security.md](security.md) (#490); UI (#491); code and migrations (spawned by #492).
+- **Owned elsewhere:** routes, payloads and the issues listing sort are decided in [api.md](api.md); link states, unlinking and transfers are decided in [github-link.md](github-link.md); encryption at rest, retention of deleted projects, quotas and logs are decided in [security.md](security.md) (#490); UI in [ui.md](ui.md) (#491); code and migrations (spawned by #492).
 - **Not stored in v1:** labels, assignees, milestones, comments and reactions; a per-project issue number; `created_by`; an audit of edits; any schema for sharing, members or roles.
 
 ## Backward compatibility

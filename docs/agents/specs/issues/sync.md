@@ -68,7 +68,7 @@ Every trigger enqueues the same reconcile job with a link id. No trigger fires f
 - <a id="queued-jobs-are-deduplicated-per-link"></a>**Mandatory per-link dedupe.** While a reconcile for a link is queued and not yet started, enqueuing the same link again is a no-op. The link leaves the queued set when its job starts, so an edit during a running job still enqueues the next one (T6 is unaffected). Every trigger (T1 to T6) and the rate-limit timer go through it, so the in-memory queue holds at most one waiting job per link. Per process, lost on restart; correctness never depends on it (E13). Decided in [security.md](security.md#queued-jobs-are-deduplicated-per-link).
 - **No approval trigger (E24).** `denied` is final in [user-approval](../../modules/auth/user-approval.md) (approve only moves `pending` to `approved`; there is no un-deny), and `authorization-request.approved` is login authorization, not account approval. So no listener re-enqueues a user's markers: they stay until the user is deleted, and boot or retry jobs stop at the approval guard with no call. A future un-deny feature must re-enqueue the user's markers itself.
 - **No trigger** for link creation or attach (the request already reads GitHub, E61), unlinking, `gone`, a repository change, or fixing or adding an integration (E19: fixing the integration does not push by itself; the user retries).
-- Routes and payloads for T2 to T4 are decided in [api.md](api.md#trigger-routes); wording and placement are #491's.
+- Routes and payloads for T2 to T4 are decided in [api.md](api.md#trigger-routes); wording and placement are in [ui.md](ui.md#link-and-sync-states).
 
 ## Job
 
@@ -126,7 +126,7 @@ Every trigger enqueues the same reconcile job with a link id. No trigger fires f
 ## Staleness
 
 - **`last_synced_at`** is set by every successful reconcile and by link creation or attach (which read GitHub in the request, E61), so a link is never "never synced".
-- **Stale** means `last_synced_at` is older than `KERGHAN_ISSUES_SYNC_STALE_AFTER_SECONDS` (default 3600). The backend derives a `stale` flag next to `lastSyncedAt` ([api.md](api.md#link-object) exposes both, #491 words them). It is never stored and never a link state. A `gone` link is never reported stale.
+- **Stale** means `last_synced_at` is older than `KERGHAN_ISSUES_SYNC_STALE_AFTER_SECONDS` (default 3600). The backend derives a `stale` flag next to `lastSyncedAt` ([api.md](api.md#link-object) exposes both, [ui.md](ui.md#link-and-sync-states) words them). It is never stored and never a link state. A `gone` link is never reported stale.
 - **Display only.** A stale link is shown as such ("last synced X ago" plus a stale hint) and the user refreshes it (T2 or T3). A read never enqueues a job, so every GET stays side-effect free; no auto-refresh on open or on the issue list.
 - **Manual refresh skips fresh links.** T2 and T3 skip any link **without a marker** whose `last_synced_at` is under 60 seconds old; a single-issue refresh of such a link answers "already fresh" (`200` with `alreadyFresh: true`, [api.md](api.md#trigger-routes)). A link with a marker is never skipped, since it has a write to push. No cooldown state or `429` is needed.
 
@@ -211,7 +211,7 @@ The last six are the caps and request rate limits decided in [security.md](secur
 Owned elsewhere; none is owned by #488.
 
 - [x] Routes and payloads of refresh, retry sync and the exposed `lastSyncedAt`/`stale` fields: decided in [api.md](api.md) (#489).
-- [ ] Wording and placement of the stale hint and states. (#491)
+- [x] Wording and placement of the stale hint and states: decided in [ui.md](ui.md#link-and-sync-states) (#491).
 - [x] Whether the GitHub App gets issue write permission: decided in [security.md](security.md#the-github-app-gains-issues-write) (#490): Issues: write, with per-operation tokens.
 - [ ] Per-field timestamps (E7 uses one per-issue timestamp): accepted limitation, no owner issue.
 
