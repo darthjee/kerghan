@@ -103,8 +103,8 @@ The `vault` CLI passes variables to the Vault container without interpreting the
 vault up -e COMPOSE_UP_ARGS="--abort-on-container-exit"   # host 3000 -> Vault 80
 ```
 
-Which source wins is described in [cli.md → Precedence](cli.md#precedence); `.vault.env` in
-[cli.md → `.vault.env`](cli.md#vaultenv).
+Which source wins is described in [cli.md → Precedence](cli/config-files.md#precedence); `.vault.env` in
+[cli.md → `.vault.env`](cli/config-files.md#vaultenv).
 
 ## Secrets handling
 
