@@ -1,5 +1,5 @@
 #!/usr/bin/env bats
-# kerghan configure: secret handling (docs/agents/standalone/client-config.md,
+# kerghan configure: secret handling (docs/agents/standalone/client-config/security.md,
 # "Security"): masking, inline secrets, --force, cross-key warnings, the
 # password note, file safety and the Docker footprint.
 
