@@ -127,7 +127,7 @@ A blocked write answers `409 DEFAULT_USER_MANAGED` with the message
 `This user is managed by environment configuration and cannot be edited`
 (`DEFAULT_USER_MANAGED_MESSAGE`), the same on every endpoint. The message never names the
 variables or their values. The body is the standard error shape, with no `error.details`; see
-[Auth routes](../../backend/routes/auth.md#default-user-409-default_user_managed).
+[Auth routes](../../backend/routes/auth/shared.md#default-user-409-default_user_managed).
 
 **Why no `error.details`:** the managed fields are a fixed, documented list, so a client can tell
 from its own request which field caused the refusal, and the Account page sends the
@@ -285,7 +285,7 @@ The session is minted through `TokenService#issueTokens`, the same path `login.j
 `setSessionCookies`. From then on, it is a normal session: refresh, the session list, revocation,
 `AdminGuard` and the frontend all work unchanged. Each browser or client without cookies gets its
 own session. The wire contract is in
-[Auth routes](../../backend/routes/auth.md#post-authstatusjson).
+[Auth routes](../../backend/routes/auth/login.md#post-authstatusjson).
 
 What stays unchanged:
 
@@ -295,7 +295,7 @@ What stays unchanged:
   again.
 - **`status.json` stays passive** on every automatic-login path: it never revokes anything
   there. Its only write is revoking a denied user's still-active token (`admin_denied`), see
-  [Auth routes](../../backend/routes/auth.md#post-authstatusjson).
+  [Auth routes](../../backend/routes/auth/login.md#post-authstatusjson).
 
 ### Boot warning
 
