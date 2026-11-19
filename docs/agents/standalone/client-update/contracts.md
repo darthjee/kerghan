@@ -52,7 +52,7 @@ Every release publishes `install.sh` and the matching `kerghan` client as assets
 
 ## First upgrade
 
-Versions older than `FIRST_UPDATE_VERSION` (`0.8.3`; 0.8.2 and earlier) do not have `update`. Moving to the first update-capable version requires running the installer manually once, then `kerghan up`, as documented in the root README and [Standalone Distribution](../standalone.md#upgrading).
+Versions older than `FIRST_UPDATE_VERSION` (`0.8.3`; 0.8.2 and earlier) do not have `update`. Moving to the first update-capable version requires running the installer manually once, then `kerghan up`, as documented in the root README and [Standalone Distribution](../install.md#upgrading).
 
 ## Required contract tests
 

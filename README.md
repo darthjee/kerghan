@@ -100,7 +100,7 @@ curl -fsSL https://github.com/darthjee/kerghan/releases/latest/download/install.
 This installs the `kerghan` client into `~/.local/bin` (set `KERGHAN_INSTALL_DIR` to change it,
 `KERGHAN_VERSION` to pick a release), and the `vault` CLI it relies on when it is missing. It
 never uses `sudo`. To verify the downloads against the release's `SHA256SUMS`, see
-[docs/agents/standalone.md](docs/agents/standalone.md#verifying-the-release-assets).
+[docs/agents/standalone.md](docs/agents/standalone/install.md#verifying-the-release-assets).
 
 #### Bash completion
 
@@ -182,7 +182,7 @@ bash completion).
 
 ### Caveats
 
-See [Caveats](docs/agents/standalone.md#caveats) for the details of each one.
+See [Caveats](docs/agents/standalone/release-and-caveats.md#caveats) for the details of each one.
 
 - **HTTPS:** plain HTTP works only on `localhost`. Anywhere else, put a TLS reverse proxy in
   front, otherwise login fails.

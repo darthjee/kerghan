@@ -37,8 +37,9 @@ standalone image you are building).
 - Vault — see the Vault entry in [`docs/agents/external.md`](../../docs/agents/external.md) for
   the Vault guide.
 - Standalone distribution — [`docs/agents/standalone.md`](../../docs/agents/standalone.md) is
-  your primary reference: the client, `~/.kerghan/config`, the installer, the inner stack, the
-  images and the caveats. Keep it up to date when you change any of them.
+  your primary reference (a hub; its "Pages" index lists the pages under
+  `docs/agents/standalone/`: the client, `~/.kerghan/config`, the installer, the inner stack, the
+  images and the caveats). Keep them up to date when you change any of them.
 - Environment-variable contract — the "Standalone" section of
   [`docs/agents/environment-variables.md`](../../docs/agents/environment-variables.md). Update it
   together with the allowlist in `standalone/vault/docker-compose.yml`.

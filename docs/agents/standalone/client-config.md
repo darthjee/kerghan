@@ -16,7 +16,7 @@ section, `configure` and the wizard). Tests: `standalone/test/configure_files.ba
 ## Overview and scope
 
 The standalone settings live in two files under `~/.kerghan/` (see
-[Configuration](../standalone.md#configuration-kerghan)). Both can be edited by hand, or with:
+[Configuration](config-files.md#configuration-kerghan)). Both can be edited by hand, or with:
 
 - **`kerghan configure`**: direct and scriptable. Lists every value, reads one, sets one or more
   (`key=value`), or unsets one.
