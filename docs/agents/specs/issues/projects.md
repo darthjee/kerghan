@@ -3,7 +3,7 @@
 The project as the home of issues.
 Part of the [Issues and Projects specs](../issues.md).
 
-Routes, payloads and error codes are decided in [api.md](api.md); columns and types in [model.md](model.md#issues_projects), sync mechanics in [sync.md](sync.md) and UI with #491.
+Routes, payloads and error codes are decided in [api.md](api.md); columns and types in [model.md](model.md#issues_projects), sync mechanics in [sync.md](sync.md) and UI in [ui.md](ui.md).
 
 ## Naming
 

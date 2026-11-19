@@ -2,7 +2,7 @@
 
 Decided. Part of the [Issues and Projects specs](../issues.md).
 
-The Issues and Projects API: routes, payloads, error codes, pagination, validation and how sync state is exposed. It is built by the implementation issue (#492) with no decisions of its own; wording, screens and polling cadence are #491's.
+The Issues and Projects API: routes, payloads, error codes, pagination, validation and how sync state is exposed. It is built by the implementation issue (#492) with no decisions of its own; wording, screens and polling cadence are in [ui.md](ui.md).
 
 ## Every route
 
@@ -255,8 +255,8 @@ The `link` field of an issue (`null` when unlinked):
 | `stale` | `lastSyncedAt` older than `KERGHAN_ISSUES_SYNC_STALE_AFTER_SECONDS`; always `false` for `gone`. |
 
 - Derived states are computed on read and never stored; a read never enqueues a job ([sync.md](sync.md#staleness)).
-- There is no "refresh queued" or "syncing" state in v1: queue membership is not exposed. After a trigger the UI re-reads the issue (show or listing); when and how often is #491's.
-- Wording and placement of every state are #491's.
+- There is no "refresh queued" or "syncing" state in v1: queue membership is not exposed. After a trigger the UI re-reads the issue (show or listing); the bounded re-reads are specified in [ui.md](ui.md#re-reading-after-a-trigger).
+- Wording and placement of every state are in [ui.md](ui.md#link-and-sync-states).
 
 ### Trigger routes
 
@@ -312,7 +312,7 @@ Standard error shape ([backend.md](../../architecture/backend.md#error-responses
 - 21 new codes; none is used outside this module.
 - **Not-found messages:** project first, then issue, so a foreign project never reveals its issues. The issue lookup is always inside the resolved project.
 - `meta` values are public ids (uuids), counts, field names, timestamps or the sync reason vocabulary; never internal ids, GitHub content or credential material.
-- Messages are final English strings; the UI may map codes to its own wording (#491).
+- Messages are final English strings; the UI may map codes to its own wording ([ui.md](ui.md#empty-loading-and-error-states)).
 - Sync failures in jobs never become HTTP errors: they show only in the [link object](#link-object).
 
 ## Input validation
@@ -345,7 +345,7 @@ Every failure answers `400 VALIDATION_FAILED` (with `error.details`) before any 
 
 None left in this file. What remains belongs to its owner:
 
-- Wording, screens, placement of every state and the polling cadence after a trigger. (#491)
+- [x] Wording, screens, placement of every state and the polling cadence after a trigger: decided in [ui.md](ui.md) (#491).
 - [x] Rendering of GitHub content, encryption, retention, quotas and request rate limits: decided in [security.md](security.md) (#490); the codes are in the catalogue above.
 
 ## Required tests
