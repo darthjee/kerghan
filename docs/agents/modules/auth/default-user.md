@@ -365,14 +365,14 @@ is intended for standalone. An online deployment can avoid it with
 - The default user's password is never logged: not in boot validation errors, not in the boot
   warning, not in the collision error.
 - The standalone client generates it with `openssl rand -hex 24` (48 random hex characters); see
-  [standalone.md](../../standalone.md#secrets).
+  [standalone.md](../../standalone/client.md#secrets).
 
 ### Standalone exposure
 
 While automatic login is on, the standalone client publishes its port on `127.0.0.1` by default
 instead of every interface; `bind` is the real exposure guard there, not the allowlist. See
-[standalone.md](../../standalone.md#config-format) and its
-[Effective client IP](../../standalone.md#effective-client-ip) section.
+[standalone.md](../../standalone/config-files.md#config-format) and its
+[Effective client IP](../../standalone/inner-stack.md#effective-client-ip) section.
 
 ### Sessions after turning it off
 
