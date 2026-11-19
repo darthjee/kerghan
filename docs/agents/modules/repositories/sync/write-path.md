@@ -16,7 +16,7 @@ For each source, the sync reads GitHub page by page, up to the **page cap**:
 - At the end, the source's status is stored: `ok`, `error`, `invalid_credentials`,
   `rate_limited` (with the reset time), `page_cap_reached` or `not_found` (handle only)
   ([data model](../data-model.md#repositories_source_statuses)). A source added since the last sync reads
-  as `pending` until it runs ([routes](../../../backend/routes/repositories.md#sync-state)).
+  as `pending` until it runs ([routes](../../../backend/routes/repositories/identity-and-sync.md#sync-state)).
 
 ### Write path
 

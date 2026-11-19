@@ -70,7 +70,7 @@ Tiers, fakes and harnesses: [Testing](../../repositories/testing.md). Tags: `(db
 - The candidate walk: `401` / `403` / `404` move to the next candidate; a rate limit, timeout,
   `5xx` or redirect stops it; it never makes more than 3 GitHub calls; denials everywhere end
   the walk as denied; no candidate at all ends it before any GitHub call. (The HTTP answers are
-  [routes](../../../backend/routes/repositories.md#required-tests)'s.)
+  [routes](../../../backend/routes/repositories/required-tests.md#required-tests)'s.)
 - Add links the oldest usable integration that sees and grants the repo. When only the public
   source does, it links none while the repo is public, and links the integration whose re-check
   found it private.

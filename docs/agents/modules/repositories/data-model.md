@@ -13,7 +13,7 @@ The Repositories module owns five tables, under its own prefix
 **Conventions** follow `integrations`: `int` auto-increment `id`, plain `int` `user_id` (no
 relation, logical FK), explicit `varchar` lengths, `datetime`, index names
 `idx_<table>_<cols>`, unique or not (`isUnique: true`), as in `integrations`. MySQL's default
-`utf8mb4_0900_ai_ci` collation gives the case-insensitive `fullName` lookup ([routes](../../backend/routes/repositories.md#repo-ref)).
+`utf8mb4_0900_ai_ci` collation gives the case-insensitive `fullName` lookup ([routes](../../backend/routes/repositories/identity-and-sync.md#repo-ref)).
 
 **Source key:** every per-source row identifies its source with `source_key varchar(32)`:
 `integration:<id>` or `handle`. Not a nullable `integration_id` (MySQL unique indexes allow
@@ -83,7 +83,7 @@ One row per user, keyed by `user_id`, created on first use with
 - `state`: `idle` or `syncing`;
 - `run_id`: the running sync's UUID, `null` when idle; every write of a run is guarded by it;
 - `last_started_at`: set by every claim, **never cleared**: the cooldown anchor; the API's
-  `startedAt` while syncing and `refreshAvailableAt` derive from it ([routes](../../backend/routes/repositories.md#sync-state));
+  `startedAt` while syncing and `refreshAvailableAt` derive from it ([routes](../../backend/routes/repositories/identity-and-sync.md#sync-state));
 - `heartbeat_at`: bumped after every GitHub page; a `syncing` row whose heartbeat is older than
   the lease reads as `idle` ([sync](sync/execution.md#restart-recovery));
 - `last_synced_at`: end of the last finished sync;
@@ -105,7 +105,7 @@ reached**, **not found** (`not_found`, handle source only: the handle listing an
 [sync](sync.md#handle-credential)), and `synced_at`.
 
 - A current source with no row (added since the last sync) reads `pending`
-  ([routes](../../backend/routes/repositories.md#sync-state)).
+  ([routes](../../backend/routes/repositories/identity-and-sync.md#sync-state)).
 - A table, not JSON on the sync state: each source writes its status in its own transaction, and
   the deletion hook drops one row.
 
@@ -230,10 +230,10 @@ The single-table form is what TypeORM's `.delete()` query builder can produce; t
   [handle reconciliation](../auth/github-handle.md#handle-changes) on the next Repositories request, so a new handle reads
   `pending`).
 - **Race with Add:** pruning deletes only `added_at IS NULL` rows, and Add's write is
-  `UPDATE … WHERE id = :id AND user_id = :userId AND added_at IS NULL` ([routes](../../backend/routes/repositories.md#add)).
+  `UPDATE … WHERE id = :id AND user_id = :userId AND added_at IS NULL` ([routes](../../backend/routes/repositories/refresh-and-add.md#add)).
   Add commits first ⇒ the row is skipped;
   pruning first ⇒ Add's update affects no row and Add answers `404 NOT_FOUND` (the repo left the
-  listing, [routes](../../backend/routes/repositories.md#add)). Every other case is in the [edge-case matrix](edge-cases.md).
+  listing, [routes](../../backend/routes/repositories/refresh-and-add.md#add)). Every other case is in the [edge-case matrix](edge-cases.md).
 - Rejected: a grace period before pruning. Private metadata would outlive access, against #444's
   lifecycle rule; failed sources are already protected by keeping their rows.
 

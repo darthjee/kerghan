@@ -4,7 +4,7 @@ Part of the [GitHub service](../github-service.md) of the [Integrations module](
 
 ## Access link on Add
 
-When the user adds a repository ([routes](../../../backend/routes/repositories.md#add)):
+When the user adds a repository ([routes](../../../backend/routes/repositories/refresh-and-add.md#add)):
 
 - Among the **usable** integrations that hold a source row for the repo, the **oldest** one whose
   re-check grants the repo is stored as `integration_id`.
@@ -39,7 +39,7 @@ Add walks candidates in order, with **at most 3 GitHub calls** per Add:
 - No candidate left, or the cap reached, after denials → `404 NOT_FOUND`.
 - **No candidate at all**, before any GitHub call (every source holding the repo is a non-usable
   integration: `expired`, `invalid`, `undecryptable` or type disabled; and the handle source does
-  not hold it) → `409 REPOSITORY_SOURCE_UNUSABLE`, nothing written ([routes](../../../backend/routes/repositories.md#add)).
+  not hold it) → `409 REPOSITORY_SOURCE_UNUSABLE`, nothing written ([routes](../../../backend/routes/repositories/refresh-and-add.md#add)).
 
 ## Shared 502 / 503 helpers
 
