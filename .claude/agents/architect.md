@@ -67,6 +67,30 @@ When a task spans multiple agents:
 1. `infra` — update docker-compose / Dockerfiles / Makefile
 2. Update `docs/agents/` if the change affects how agents should run commands
 
+### Product check
+
+Invoke the `product-owner` agent **before planning**, when an issue introduces a new entity,
+endpoint, access rule or user-facing feature, or touches an area its map lists as deferred or
+still open. Skip issues that only touch docs, infra, tooling or refactoring. Dispatch it with the
+issue file. Unlike `security` and `data-access`, which run after implementation, this check runs
+before planning and is a single read-only call, with no review loop.
+
+Route its verdicts:
+
+- "decided" and "decided in active spec": proceed, citing the doc in the plan.
+- "deferred" and "undecided — needs product decision": go to the user before planning.
+- "no documented rule": a missing decision goes to the user, a missing doc to the architect.
+- "doc conflict": the architect fixes the docs.
+- A "decided" verdict carrying a contradiction note (the issue changes a decided rule) goes to
+  the user.
+- `Notes:` entries ("agent definition stale") do not block anything and may call for follow-up,
+  as for `security` and `data-access`.
+
+When no user is available (autonomous runs such as `auto-plan-issue`), write the verdicts into
+the plan under a `## Product check` heading. Plan only the parts with a "decided" or "decided in
+active spec" verdict, and list every other part as an open blocker. Never decide an open product
+question silently.
+
 ### Security and access-control review
 
 Invoke the `security` and `data-access` agents in parallel after the specialist (`backend`,

@@ -21,7 +21,9 @@ plans point at.
 2. The implementation sub-issues build against the specs. A sub-issue that changes a decision
    updates the spec in the same PR.
 3. The feature's **last** sub-issue folds the lasting content into the permanent docs
-   (`product.md`, `modules/`, `backend/routes/`, `environment-variables.md`, …).
+   (`product.md`, `modules/`, `backend/routes/`, `environment-variables.md`, …). It also updates
+   the area's row in `.claude/agents/product-owner.md`'s map of decided areas, so it points at the
+   permanent docs instead of the spec folder.
 4. That last sub-issue then deletes `docs/agents/specs/<feature>/` (and, for a feature that uses
    an index file beside its folder, `docs/agents/specs/<feature>.md` too) and moves its entry from
    [Active specs](#active-specs) to [Completed specs](#completed-specs), pointing at the permanent
