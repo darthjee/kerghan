@@ -43,7 +43,7 @@ Routes, payloads and error codes are decided in [api.md](api.md); columns and ty
 - Local work (reading and editing issues) continues whatever the status.
 - GitHub sync is refused while the repository is Unavailable and allowed while it is Unknown; pending writes stay in their markers under the retry and sync-failed rules of [sync.md](sync.md#retries-and-sync_failed).
 - A dangling repository reference reads like an Unavailable repository with no summary fields.
-- The future "remove an added repository" feature (not built) must refuse with `409` while a non-deleted project of the user uses the repository. #492 is told to copy that rule into `modules/repositories.md`.
+- The future "remove an added repository" feature (not built) must refuse with `409` while a non-deleted project of the user uses the repository. #564 (the fold issue) copies that rule into `modules/repositories.md`.
 - If the integration is deleted, the project is unaffected directly.
 - If the user is deleted, their projects (including soft-deleted ones), issues, links and markers are removed for real (the `user.deleted` contract is in [model.md](model.md#cleanup); remaining cases stay with #493).
 

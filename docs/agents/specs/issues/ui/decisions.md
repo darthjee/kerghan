@@ -25,7 +25,7 @@ One line each:
 
 ## Backward compatibility
 
-Every change to the existing UI is additive. The touch points for the implementation (#492):
+Every change to the existing UI is additive. The touch points for the implementation (#560 to #562, and #563):
 
 | Area | Change | Compatibility |
 |---|---|---|
