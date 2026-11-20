@@ -157,7 +157,7 @@ refreshes and retries on a `403`. The admin users page uses `client/AdminClient.
 
 Any non-`401` failure from `client/ApiClient.js` rejects with a `client/ApiError.js`, built from
 the backend's standard error body (`{ error: { code, message, details? }, statusCode, timestamp }`
-— see `architecture/backend.md`'s `## Error responses` section for the format and the
+— see `architecture/backend/error-responses.md`'s `## Error responses` section for the format and the
 status-to-code mapping):
 
 - `status` — the HTTP status of the response.

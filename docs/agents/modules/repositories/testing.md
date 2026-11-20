@@ -36,7 +36,7 @@ conditional writes or `bigint` round trips, so a **narrow** tier runs them on re
 - **CI:** its own job, `backend_db_tests`, with a `mysql:8.4.11` service container; the release
   and deploy jobs require it, like `backend_tests`.
 - **Who added it:** #462 added the job, the script, the helpers and the docs (see
-  [architecture/backend.md](../../architecture/backend.md#testing)).
+  [architecture/backend.md](../../architecture/backend/testing.md#testing)).
 - **Existing specs are unchanged:** the other modules keep their fakes, and the Integrations
   migration specs keep the fake query runner.
 

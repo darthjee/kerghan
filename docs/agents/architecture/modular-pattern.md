@@ -45,7 +45,7 @@ Every feature module (`src/<name>/`) follows the same shape:
 
 - `<name>.module.ts` — module definition (imports, providers, exports)
 - `<name>.controller.ts` — thin routes, delegating to the service; every route path ends in
-  `.json` (see `architecture/backend.md`'s "Routing convention")
+  `.json` (see `architecture/backend/request-pipeline.md`'s "Routing convention")
 - `<name>.service.ts` — business logic; constructor-injected repositories/services only
 - `dto/` — request/response DTOs, annotated with `class-validator` decorators
 - `entities/` — TypeORM entities, table names prefixed with the module name (e.g. `auth_users`)
@@ -86,5 +86,5 @@ want to block on) any reaction.
 ## Dependency injection only
 
 Classes never read env vars or import global state directly — see
-`docs/agents/contributing.md`'s DI rule and `architecture/backend.md`'s one documented
+`docs/agents/contributing.md`'s DI rule and `architecture/backend/error-responses.md`'s one documented
 exception (`src/database/data-source.ts`, consumed standalone by the TypeORM CLI).

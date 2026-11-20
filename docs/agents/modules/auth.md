@@ -24,7 +24,7 @@ Kerghan's lightweight per-user login (username/password, independent of any GitH
 - `auth/tests/auth.service.spec.ts` — unit specs, mocked repositories, port of the old
   `Authenticator_spec.js`/`Registrar_spec.js` coverage plus the JWT/refresh/logout behavior.
 - `auth/tests/auth.controller.e2e-spec.ts` — e2e specs via `supertest` against a real
-  `INestApplication` with in-memory fake repositories (see `architecture/backend.md`'s Testing
+  `INestApplication` with in-memory fake repositories (see `architecture/backend/testing.md`'s Testing
   section): login flow, refresh-token rotation (including replay/expiry rejection), logout, and
   the global `JwtGuard` (public routes, missing/invalid/valid access token) against two
   throwaway controllers defined in the spec itself.

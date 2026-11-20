@@ -6,7 +6,7 @@ See [Auth routes](../../backend/routes/auth.md) for the full per-endpoint refere
 detail, HTTP status, source files).
 
 All routes are `@Public()` (exempt from the global `JwtGuard`) and end in `.json`, per Tent's
-routing convention (`docs/agents/architecture/backend.md`):
+routing convention (`docs/agents/architecture/backend/request-pipeline.md`):
 
 | Route | Body | Response |
 |---|---|---|

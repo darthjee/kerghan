@@ -5,7 +5,7 @@ Error responses and access rules. Back to the [Routes — Repositories](../repos
 ## Errors
 
 Standard error shape (`core/http-exception.filter.ts`,
-[Error responses](../../../architecture/backend.md#error-responses)).
+[Error responses](../../../architecture/backend/error-responses.md#error-responses)).
 
 | Status | Code | Message | Where |
 |---|---|---|---|
@@ -24,7 +24,7 @@ Standard error shape (`core/http-exception.filter.ts`,
   The filter (`core/http-exception.filter.ts`) emits both for every throw site that sets
   `retryAfterSeconds` (so `INTEGRATION_TEST_COOLDOWN` and the Integrations `503` carry the body
   field too). It is a new, optional field of the standard error shape; it is documented in
-  [Backend architecture](../../../architecture/backend.md#error-responses).
+  [Backend architecture](../../../architecture/backend/error-responses.md#error-responses).
 - Sync failures never become HTTP errors: they appear only as the per-source `status` in the
   [sync state](identity-and-sync.md#sync-state); the UI maps each to its banner text.
 - GitHub error bodies and messages are never echoed, nor any credential detail. Anything

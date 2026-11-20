@@ -23,7 +23,7 @@ delegates to, plus each type's flow services); the controllers are thin delegati
 - **CSRF:** every state-changing route (`POST`, `PATCH`, `DELETE`) is covered by the global
   `OriginGuard` (see [Security](../../architecture/security.md#csrf)); nothing extra is needed.
 - **Errors** use the standard error format (`core/http-exception.filter.ts`, see
-  [Error responses](../../architecture/backend.md#error-responses)). Specific codes are
+  [Error responses](../../architecture/backend/error-responses.md#error-responses)). Specific codes are
   constants in `ErrorCodes` (`core/error-codes.ts`).
 - Integrations are exposed by **UUID** only: non-enumerable, and it doesn't leak counts.
 - Controllers stay thin: validation in DTOs (`integrations/dto/`), everything else in the
