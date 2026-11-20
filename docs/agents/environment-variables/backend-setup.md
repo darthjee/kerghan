@@ -26,7 +26,7 @@ they drive is in [Default user and automatic login](../modules/auth/default-user
     `ENABLED` alone boots in production without it.
 - **When disabled,** no check runs at all (including `ALLOWED_IPS` and the production guard).
 - Boot also fails when the configured email belongs to another user (see
-  [Boot sync](../modules/auth/default-user.md#boot-sync)).
+  [Boot sync](../modules/auth/default-user/configuration.md#boot-sync)).
 
 Example (placeholder values only):
 

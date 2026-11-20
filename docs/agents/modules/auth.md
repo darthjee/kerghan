@@ -15,7 +15,7 @@ Kerghan's lightweight per-user login (username/password, independent of any GitH
 | [Entities and JWT/refresh-token flow](auth/sessions.md) | Working on the `auth_` tables, sessions, token rotation or the session lookup. |
 | [Device-authorization flow](auth/device-authorization.md) | Working on the device-authorization requests, status machine, poll token or abuse limits. |
 | [Admin authorization and events](auth/admin-and-events.md) | Working on admin access rules or the `user.registered`, `user.deleted` and `password-recovery.requested` events. |
-| [Default user](auth/default-user.md) | Working on the environment-configured default user and automatic login. |
+| [Default user](auth/default-user.md) | Working on the environment-configured default user and automatic login (pages: [configuration](auth/default-user/configuration.md), [edit blocking](auth/default-user/edit-blocking.md), [automatic login](auth/default-user/automatic-login.md), [security](auth/default-user/security.md)). |
 | [GitHub handle](auth/github-handle.md) | Working on the optional GitHub handle and its account endpoints. |
 | [User approval](auth/user-approval.md) | Working on pending/approved/denied statuses and admin review. |
 

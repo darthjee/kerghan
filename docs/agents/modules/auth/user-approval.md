@@ -172,7 +172,7 @@ While the default-user feature is enabled, `status` is a **managed field** of th
 is created or updated. So a default user denied directly in the DB is approved again on the next
 boot. The admin deny route refuses it with `409 DEFAULT_USER_MANAGED`, identifying it by id
 (`DefaultUserService#assertNotDefaultUser`), as in
-[Edit blocking](default-user.md#identifying-the-default-user). With the feature off, boot sync
+[Edit blocking](default-user/edit-blocking.md#identifying-the-default-user). With the feature off, boot sync
 does not run and that row is a regular user, which can be denied.
 
 The default user is therefore always `approved`, so automatic login on `status.json` never logs

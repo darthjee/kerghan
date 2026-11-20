@@ -143,7 +143,7 @@ By the session user's [status](../../../modules/auth/user-approval.md#status-mod
 - Revoking a denied user's token is the only write `status.json` makes.
 
 **Automatic login.** When `KERGHAN_DEFAULT_USER_ALWAYS_AUTHENTICATED` is on (see
-[Default user](../../../modules/auth/default-user.md#automatic-login)), a caller with **no valid
+[Default user](../../../modules/auth/default-user/automatic-login.md)), a caller with **no valid
 session** from an **allowed client IP** is logged in as the default user:
 
 - **No valid session** means the `refresh_token` cookie is missing, unknown, expired or revoked
