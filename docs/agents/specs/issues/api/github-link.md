@@ -78,8 +78,8 @@ The `link` field of an issue (`null` when unlinked):
 | `stale` | `lastSyncedAt` older than `KERGHAN_ISSUES_SYNC_STALE_AFTER_SECONDS`; always `false` for `gone`. |
 
 - Derived states are computed on read and never stored; a read never enqueues a job ([sync.md](../sync.md#staleness)).
-- There is no "refresh queued" or "syncing" state in v1: queue membership is not exposed. After a trigger the UI re-reads the issue (show or listing); the bounded re-reads are specified in [ui.md](../ui.md#re-reading-after-a-trigger).
-- Wording and placement of every state are in [ui.md](../ui.md#link-and-sync-states).
+- There is no "refresh queued" or "syncing" state in v1: queue membership is not exposed. After a trigger the UI re-reads the issue (show or listing); the bounded re-reads are specified in [ui.md](../ui/linking-and-sync.md#re-reading-after-a-trigger).
+- Wording and placement of every state are in [ui.md](../ui/linking-and-sync.md#link-and-sync-states).
 
 ### Trigger routes
 
