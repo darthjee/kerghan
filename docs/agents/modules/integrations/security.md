@@ -88,7 +88,7 @@ format validation).
   - Neither command prints a key, a ciphertext or a secret. Both are operator-only: they read
     every user's rows, and are never reachable from a request.
   - Re-encryption is never an automatic boot step. The operator procedure is in
-    [Rotating `KERGHAN_INTEGRATIONS_KEY`](../../environment-variables.md#rotating-kerghan_integrations_key).
+    [Rotating `KERGHAN_INTEGRATIONS_KEY`](../../environment-variables/key-rotation.md#rotating-kerghan_integrations_key).
 
 ### Key id
 
