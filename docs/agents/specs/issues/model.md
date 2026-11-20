@@ -42,11 +42,11 @@ Part of the [Issues and Projects specs](../issues.md).
 | `body` | `mediumtext NULL` | Application cap of 65536 characters (GitHub's body limit); `text` is too small for that many utf8mb4 characters. Blank stored as `NULL`. |
 | `state` | `varchar(16)` | `open` or `closed`, default `open`. |
 | `created_at` | `datetime` | |
-| `updated_at` | `datetime(3)` | Milliseconds from the injected `Clock`, so the attach confirmation can compare it exactly and an edit in the same second as the warning still changes it (E61, [api.md](api.md#attach-confirmation-e61)). Other `datetime` columns are unchanged. |
+| `updated_at` | `datetime(3)` | Milliseconds from the injected `Clock`, so the attach confirmation can compare it exactly and an edit in the same second as the warning still changes it (E61, [api.md](api/github-link.md#attach-confirmation-e61)). Other `datetime` columns are unchanged. |
 
 - **No `user_id` on issues.** Access and cleanup go through the project (issues derive access from their project and carry no authorization owner).
 - No per-project issue number in v1 (the `uuid` is the reference), and no `created_by` (the actor is the owner in v1).
-- Deleting a single issue is a hard delete, offered only for an unlinked issue (`409 ISSUE_LINKED` while a link exists, [api.md](api.md#issue-delete)); GitHub is never touched.
+- Deleting a single issue is a hard delete, offered only for an unlinked issue (`409 ISSUE_LINKED` while a link exists, [api.md](api/issues.md#issue-delete)); GitHub is never touched.
 - **Labels are not in v1.** Only title, body and state are stored, so the sync ([sync.md](sync.md#fields-and-ownership)) only handles those three fields. Adding another field (labels, assignees, milestone, comments, reactions) means adding its column or table to this file in the same PR. Labels are a follow-up with their own table and sync rules.
 
 ## `issues_github_links`
@@ -101,7 +101,7 @@ Part of the [Issues and Projects specs](../issues.md).
 | `issues_pending_writes` | unique (`link_id`) | One marker per link; marker lookup from a job. |
 
 - The "live project" predicate is `deleted_token = 0` (not `deleted_at IS NULL`), so reads use the unique indexes.
-- Not added on purpose: a separate index on `issues_projects.user_id` (the unique indexes cover it), any index on the marker table (it holds only unsent changes), and one for "links by status" (the status is read per link, so none is needed). The issues listing sort is decided in [api.md](api.md#issues-listing).
+- Not added on purpose: a separate index on `issues_projects.user_id` (the unique indexes cover it), any index on the marker table (it holds only unsent changes), and one for "links by status" (the status is read per link, so none is needed). The issues listing sort is decided in [api.md](api/issues.md#issues-listing).
 - The longest index name is 55 characters (the new `uuid` and listing indexes are shorter), under MySQL's 64.
 
 ## Cleanup
@@ -158,7 +158,7 @@ Each row is also a required test. The cross-file matrix is [edge-cases.md](edge-
 | 3 | An edit reverts to the base values | The job diffs, finds nothing to push, clears the marker and makes no GitHub call. |
 | 4 | Unlink, project delete or user delete during a push | Guarded writes affect no row, so the job stops (no insert, no error); a change GitHub already received stays there. |
 | 5 | Two users link the same GitHub issue | Allowed (the unique index includes `user_id`). |
-| 6 | One user links one GitHub issue twice at once, or attaches two to one issue | Unique (`user_id`, `github_issue_id`) and unique (`issue_id`) decide; the other is refused (`GITHUB_ISSUE_ALREADY_LINKED` or `ISSUE_ALREADY_LINKED`, [api.md](api.md#error-catalogue)). |
+| 6 | One user links one GitHub issue twice at once, or attaches two to one issue | Unique (`user_id`, `github_issue_id`) and unique (`issue_id`) decide; the other is refused (`GITHUB_ISSUE_ALREADY_LINKED` or `ISSUE_ALREADY_LINKED`, [api.md](api/errors-and-validation.md#error-catalogue)). |
 | 7 | A project is deleted and its GitHub issue is linked again from another project | Allowed (the link was deleted); the old project's issue rows were deleted with the project. |
 | 8 | Two projects race for one repository, including an attach | The unique index decides; the loser gets `409`. |
 | 9 | Soft-deleting an already-deleted project | Answers `404`; the update is also guarded by `deleted_token = 0`, so the token is set once. |

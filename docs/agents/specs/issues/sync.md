@@ -68,7 +68,7 @@ Every trigger enqueues the same reconcile job with a link id. No trigger fires f
 - <a id="queued-jobs-are-deduplicated-per-link"></a>**Mandatory per-link dedupe.** While a reconcile for a link is queued and not yet started, enqueuing the same link again is a no-op. The link leaves the queued set when its job starts, so an edit during a running job still enqueues the next one (T6 is unaffected). Every trigger (T1 to T6) and the rate-limit timer go through it, so the in-memory queue holds at most one waiting job per link. Per process, lost on restart; correctness never depends on it (E13). Decided in [security.md](security.md#queued-jobs-are-deduplicated-per-link).
 - **No approval trigger (E24).** `denied` is final in [user-approval](../../modules/auth/user-approval.md) (approve only moves `pending` to `approved`; there is no un-deny), and `authorization-request.approved` is login authorization, not account approval. So no listener re-enqueues a user's markers: they stay until the user is deleted, and boot or retry jobs stop at the approval guard with no call. A future un-deny feature must re-enqueue the user's markers itself.
 - **No trigger** for link creation or attach (the request already reads GitHub, E61), unlinking, `gone`, a repository change, or fixing or adding an integration (E19: fixing the integration does not push by itself; the user retries).
-- Routes and payloads for T2 to T4 are decided in [api.md](api.md#trigger-routes); wording and placement are in [ui.md](ui.md#link-and-sync-states).
+- Routes and payloads for T2 to T4 are decided in [api.md](api/github-link.md#trigger-routes); wording and placement are in [ui.md](ui.md#link-and-sync-states).
 
 ## Job
 
@@ -118,7 +118,7 @@ Every trigger enqueues the same reconcile job with a link id. No trigger fires f
 - **Left** (back to `linked`, reason `NULL`) by:
   - a push whose compare-and-clear deletes the marker;
   - a successful reconcile when no marker exists (a refresh never clears a failure that belongs to an unsent write);
-  - the **retry sync** action, which resets the status to `linked` at once and enqueues T4; the UI then shows the derived *pending* state, and the job sets the failure again if it still fails. Exception: while the repository is Unavailable (or dangling) the retry is refused with `409 PROJECT_REPOSITORY_UNAVAILABLE` before the reset, because the reset would clear the failure reason and the job would stop at the repository guard without setting a new one ([api.md](api.md#trigger-routes));
+  - the **retry sync** action, which resets the status to `linked` at once and enqueues T4; the UI then shows the derived *pending* state, and the job sets the failure again if it still fails. Exception: while the repository is Unavailable (or dangling) the retry is refused with `409 PROJECT_REPOSITORY_UNAVAILABLE` before the reset, because the reset would clear the failure reason and the job would stop at the repository guard without setting a new one ([api.md](api/github-link.md#trigger-routes));
   - `gone`, which replaces it.
 - An edit never writes a status; it only creates the marker and enqueues T1. `sync_failed` never blocks a job: every trigger still runs, and credential reasons stop at the guards with no call where they can.
 - The reason set stays at the four values of [model.md](model.md#issues_github_links); no `access_lost` reason is added.
@@ -126,9 +126,9 @@ Every trigger enqueues the same reconcile job with a link id. No trigger fires f
 ## Staleness
 
 - **`last_synced_at`** is set by every successful reconcile and by link creation or attach (which read GitHub in the request, E61), so a link is never "never synced".
-- **Stale** means `last_synced_at` is older than `KERGHAN_ISSUES_SYNC_STALE_AFTER_SECONDS` (default 3600). The backend derives a `stale` flag next to `lastSyncedAt` ([api.md](api.md#link-object) exposes both, [ui.md](ui.md#link-and-sync-states) words them). It is never stored and never a link state. A `gone` link is never reported stale.
+- **Stale** means `last_synced_at` is older than `KERGHAN_ISSUES_SYNC_STALE_AFTER_SECONDS` (default 3600). The backend derives a `stale` flag next to `lastSyncedAt` ([api.md](api/github-link.md#link-object) exposes both, [ui.md](ui.md#link-and-sync-states) words them). It is never stored and never a link state. A `gone` link is never reported stale.
 - **Display only.** A stale link is shown as such ("last synced X ago" plus a stale hint) and the user refreshes it (T2 or T3). A read never enqueues a job, so every GET stays side-effect free; no auto-refresh on open or on the issue list.
-- **Manual refresh skips fresh links.** T2 and T3 skip any link **without a marker** whose `last_synced_at` is under 60 seconds old; a single-issue refresh of such a link answers "already fresh" (`200` with `alreadyFresh: true`, [api.md](api.md#trigger-routes)). A link with a marker is never skipped, since it has a write to push. No cooldown state or `429` is needed.
+- **Manual refresh skips fresh links.** T2 and T3 skip any link **without a marker** whose `last_synced_at` is under 60 seconds old; a single-issue refresh of such a link answers "already fresh" (`200` with `alreadyFresh: true`, [api.md](api/github-link.md#trigger-routes)). A link with a marker is never skipped, since it has a write to push. No cooldown state or `429` is needed.
 
 ## Integration selection
 
