@@ -127,6 +127,7 @@ Statements to rewrite at fold time:
 | `CLAUDE.md` | Boundaries: "Issue fetching itself still reads GitHub unauthenticated…". |
 | `docs/agents/architecture/security.md` | "GitHub credentials stay in the backend", including rewriting "Fixed operations: `GET`-only" to the narrowed rule of [security.md](security.md#the-integrations-boundary). |
 | `docs/agents/summary.md`, `docs/agents/flow.md` | Where they say issue data is never persisted or only read by the browser. |
+| `.claude/agents/product-owner.md` | The Issues and Projects row of the map of decided areas (switch it from `specs/issues.md` to the permanent docs). |
 
 `AGENTS.md` and `CLAUDE.md` hold the user's own rules: #492 proposes the edit and asks before touching them. #492 also copies the repository-removal rule into `modules/repositories.md` (already commented there).
 
