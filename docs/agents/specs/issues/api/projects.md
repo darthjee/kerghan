@@ -77,4 +77,4 @@ No GitHub call and no job, on either route.
 
 ### Refusal data: `error.meta`
 
-Refusals that carry data (`meta.projectId`, `meta.linkCount`, the attach differences, the credential reason) use a new optional `error.meta` object of the standard error shape, set at the throw site. It is decided here; [`architecture/backend.md`](../../../architecture/backend.md#error-responses) describes the code as it is, so the implementation adds it there in the change that builds it. It never carries internal ids, GitHub content or credential material.
+Refusals that carry data (`meta.projectId`, `meta.linkCount`, the attach differences, the credential reason) use a new optional `error.meta` object of the standard error shape, set at the throw site. It is decided here; [`architecture/backend.md`](../../../architecture/backend/error-responses.md#error-responses) describes the code as it is, so the implementation adds it there in the change that builds it. It never carries internal ids, GitHub content or credential material.

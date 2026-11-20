@@ -11,7 +11,7 @@ This page is the hub. See the area pages for details:
 - [Proxy](./architecture/proxy.md)
 - [Frontend](./architecture/frontend.md)
 - [Backend](./architecture/backend.md) — NestJS + TypeORM + MySQL stack, layout, build, and
-  testing conventions. The tracked-repo/label-rule data model (see `docs/agents/product.md`) is
+  per-topic pages (request pipeline, error responses, testing). The tracked-repo/label-rule data model (see `docs/agents/product.md`) is
   still open — only the Auth module exists so far.
 - [Modular Pattern](./architecture/modular-pattern.md) — the cross-cutting rules (module
   classification, lazy loading, inter-module communication, database strategy) every backend

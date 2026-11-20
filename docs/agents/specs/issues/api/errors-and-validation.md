@@ -4,7 +4,7 @@ The error catalogue and the input validation rules. Back to the [Issues and Proj
 
 ## Error catalogue
 
-Standard error shape ([backend.md](../../../architecture/backend.md#error-responses)) plus the new optional `error.meta` ([Refusal data](projects.md#refusal-data-errormeta)). New codes join `ErrorCodes` (`core/error-codes.ts`); their helpers live in `issues/issues-http-errors.ts`, like `repositories/repositories-http-errors.ts`. The `502`/`503` reuse `githubUnavailable()`/`githubRateLimited()` from `core/github-http-errors.ts`.
+Standard error shape ([backend.md](../../../architecture/backend/error-responses.md#error-responses)) plus the new optional `error.meta` ([Refusal data](projects.md#refusal-data-errormeta)). New codes join `ErrorCodes` (`core/error-codes.ts`); their helpers live in `issues/issues-http-errors.ts`, like `repositories/repositories-http-errors.ts`. The `502`/`503` reuse `githubUnavailable()`/`githubRateLimited()` from `core/github-http-errors.ts`.
 
 | Status | Code | Message | `meta` | Where |
 |---|---|---|---|---|
