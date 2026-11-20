@@ -5,7 +5,7 @@ Part of [Client config](../client-config.md).
 `kerghan.env` holds the instance's secrets and is the **source of truth for the default user**:
 on every boot the backend creates or synchronizes that user from it, and a password change
 revokes the user's sessions (see
-[Default user: boot sync](../../modules/auth/default-user.md#boot-sync)). So writing
+[Default user: boot sync](../../modules/auth/default-user/configuration.md#boot-sync)). So writing
 `KERGHAN_DEFAULT_USER_PASSWORD` rotates the admin password on the next boot, and writing the two
 secrets changes keys the stored data depends on.
 

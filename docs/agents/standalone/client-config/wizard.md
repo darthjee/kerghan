@@ -39,7 +39,7 @@ Asked in this order; `+` marks the questions only asked with `--advanced`:
   `KERGHAN_DEFAULT_USER_ENABLED` is `false` (its answer with `--advanced`, its current value
   otherwise), nothing uses the default user: questions 10–13 are skipped. There is no conflict
   check between the two: automatic login implies an enabled default user (see
-  [Default user: configuration](../../modules/auth/default-user.md#configuration)).
+  [Default user: configuration](../../modules/auth/default-user/configuration.md#configuration)).
 - **Restart after update.** Asked as `Restart after update (ask/always/never) [ask]` (or the
   current value); not a boolean key, so `y` / `n` are not translated. See
   [Client update: wizard](../client-update.md#kerghan-wizard).

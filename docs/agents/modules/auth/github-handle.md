@@ -96,7 +96,7 @@ The existing self-edit route gains one optional body field:
     default user usually cannot know its password (the standalone client generates it), so a
     password-gated handle would be unreachable for it.
 - **Mixed edit** (a managed field and `githubHandle`): the existing path, unchanged
-  ([default user](default-user.md#order-of-checks)): default-user block,
+  ([default user](default-user/edit-blocking.md#order-of-checks)): default-user block,
   lockout, `currentPassword`, availability. The handle is written in the same update as the other
   fields, all or nothing: any refusal stores no handle either.
 - **Response:** `{ username, email, githubHandle }` (today `{ username, email }`), on both
@@ -128,7 +128,7 @@ today; the Account form is not prefilled).
 - Boot sync never reads or writes `github_handle`; turning the feature off or on leaves it as
   it is.
 - **Rationale, replacing "every editable field is managed today"** in
-  [default user](default-user.md#what-is-blocked): an unmanaged field is
+  [default user](default-user/edit-blocking.md#what-is-blocked): an unmanaged field is
   now editable, so "in practice every edit reaching the default user is rejected" no longer
   holds. The `409` still carries **no `error.details`**: the managed fields are a fixed,
   documented list, so a client can tell from its own request which field caused the refusal, and

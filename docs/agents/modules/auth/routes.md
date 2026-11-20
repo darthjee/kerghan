@@ -79,7 +79,7 @@ While the [default user](default-user.md) feature is enabled, `POST /admin/users
 (`AdminService#editUser`), `recovery-link.json` and `send-recovery-email.json` answer
 `409 DEFAULT_USER_MANAGED` when `:id` is the default user (after the usual `404` for an unknown
 id), and change nothing. See
-[Edit blocking](default-user.md#edit-blocking).
+[Edit blocking](default-user/edit-blocking.md).
 
 All six admin routes are `@CachePolicy(CacheClass.Never)` (controller level), so they send
 `X-Skip-Cache: true` and `Cache-Control: no-store` on the response. Tent's `default_proxy` rule

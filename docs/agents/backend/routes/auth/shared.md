@@ -7,7 +7,7 @@ Part of the [Auth routes](../auth.md) reference. Covers the default-user `409`, 
 While the default-user feature is enabled (`KERGHAN_DEFAULT_USER_ENABLED` or
 `KERGHAN_DEFAULT_USER_ALWAYS_AUTHENTICATED`), a write of a managed field (`username`, `email`,
 `newPassword`) of the default user is refused. Rules, order of checks and rationale:
-[Edit blocking](../../../modules/auth/default-user.md#edit-blocking).
+[Edit blocking](../../../modules/auth/default-user/edit-blocking.md).
 
 | Route | Default-user behavior |
 | --- | --- |
