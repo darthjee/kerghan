@@ -29,7 +29,7 @@ background workers (in-process, from #479). A project may be about code or anyth
 
 - **In scope (this spec set):** the definition of the feature (model, projects, link, sync, API,
   security, UI, edge cases, testing).
-- **Out of scope now:** implementation (spawned by #492); sharing, members and roles for projects
+- **Out of scope now:** implementation (the sub-issues of #483 spawned by #492, listed under [Implementation issues](#implementation-issues)); sharing, members and roles for projects
   (the specs must not make them impossible later).
 
 ## Product decisions
@@ -71,3 +71,23 @@ background workers (in-process, from #479). A project may be about code or anyth
 Lifecycle and conventions: [specs.md](../specs.md). Order of the epic's work: #484, #485 to #491,
 #493, #494, then #492 (which spawns the implementation and the issue that folds these specs into
 the permanent docs). Each open question names the issue that owns it.
+
+## Implementation issues
+
+Spawned by #492 as native sub-issues of #483; each builds against the spec files named in its body.
+They are also set as GitHub "blocked by" relationships.
+
+| Issue | Area (agent) | Builds against | Waits for |
+|---|---|---|---|
+| #553 | Foundation (`backend`) | `model.md`, `security.md`, `testing.md` | none |
+| #554 | GitHub issue client (`backend`) | `sync.md`, `security.md`, `testing.md` | none |
+| #555 | Projects API (`backend`) | `projects.md`, `api.md`, `api/projects.md`, `api/errors-and-validation.md` | #553 |
+| #556 | Issues API (`backend`) | `api/issues.md`, `model.md`, `security.md` | #555 |
+| #557 | GitHub link (`backend`) | `github-link.md`, `api/github-link.md`, `edge-cases.md` | #554, #556 |
+| #558 | Sync workers (`backend`) | `sync.md`, `model.md` | #554, #557, #479 (closed) |
+| #559 | Security verification (`backend`) | `security.md`, `testing.md`, `api.md`, `edge-cases.md` | #558 |
+| #560 | Frontend 1 (`frontend`) | `ui/screens-and-flows.md`, `ui/decisions.md` | #555 |
+| #561 | Frontend 2 (`frontend`) | `ui/screens-and-flows.md`, `ui/decisions.md`, `security.md` | #556, #560 |
+| #562 | Frontend 3 (`frontend`) | `ui/linking-and-sync.md`, `ui/states.md` | #557, #558, #561 |
+| #563 | Open-issue counts and bulk close/reopen (`backend`, `frontend`) | `api.md` as amended by #507, `ui/states.md` | #507, #556, #561 |
+| #564 | Fold the specs into the permanent docs (`architect`), last | `model.md`, `specs.md` | all of the above and #507 |

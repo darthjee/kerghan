@@ -116,7 +116,7 @@ Part of the [Issues and Projects specs](../issues.md).
 
 ## Persistence statement and fold list
 
-The persistence statement is a narrow carve-out. At fold time (#492): keep "fetched GitHub issue data is not persisted by default" for the existing live listing; add that Kerghan persists its own projects, issues, links and markers and, only for a linked issue, a snapshot of its GitHub data, with the backend reading and writing GitHub for linked issues with the owner's credentials inside the Integrations module as an explicit, narrow exception to "read by the browser". "Opt-in issue persistence" (fetched issues for history and trends) stays deferred and distinct.
+The persistence statement is a narrow carve-out. At fold time (#564): keep "fetched GitHub issue data is not persisted by default" for the existing live listing; add that Kerghan persists its own projects, issues, links and markers and, only for a linked issue, a snapshot of its GitHub data, with the backend reading and writing GitHub for linked issues with the owner's credentials inside the Integrations module as an explicit, narrow exception to "read by the browser". "Opt-in issue persistence" (fetched issues for history and trends) stays deferred and distinct.
 
 Statements to rewrite at fold time:
 
@@ -129,7 +129,7 @@ Statements to rewrite at fold time:
 | `docs/agents/summary.md`, `docs/agents/flow.md` | Where they say issue data is never persisted or only read by the browser. |
 | `.claude/agents/product-owner.md` | The Issues and Projects row of the map of decided areas (switch it from `specs/issues.md` to the permanent docs). |
 
-`AGENTS.md` and `CLAUDE.md` hold the user's own rules: #492 proposes the edit and asks before touching them. #492 also copies the repository-removal rule into `modules/repositories.md` (already commented there).
+`AGENTS.md` and `CLAUDE.md` hold the user's own rules: #564 proposes the edit and asks before touching them. #564 also copies the repository-removal rule into `modules/repositories.md` (already commented there).
 
 ## Alternatives considered
 
@@ -174,7 +174,7 @@ Each row is also a required test. The cross-file matrix is [edge-cases.md](edge-
 ## Scope boundaries
 
 - **In scope:** the four tables, constraints and indexes; the logical FKs and ownership; the marker and its compare-and-clear rule; the stored GitHub data and the fold list; the cleanup contracts and lock order; the required tests.
-- **Owned elsewhere:** routes, payloads and the issues listing sort are decided in [api.md](api.md); link states, unlinking and transfers are decided in [github-link.md](github-link.md); encryption at rest, retention of deleted projects, quotas and logs are decided in [security.md](security.md) (#490); UI in [ui.md](ui.md) (#491); code and migrations (spawned by #492).
+- **Owned elsewhere:** routes, payloads and the issues listing sort are decided in [api.md](api.md); link states, unlinking and transfers are decided in [github-link.md](github-link.md); encryption at rest, retention of deleted projects, quotas and logs are decided in [security.md](security.md) (#490); UI in [ui.md](ui.md) (#491); code and migrations (#553, spawned by #492).
 - **Not stored in v1:** labels, assignees, milestones, comments and reactions; a per-project issue number; `created_by`; an audit of edits; any schema for sharing, members or roles.
 
 ## Backward compatibility

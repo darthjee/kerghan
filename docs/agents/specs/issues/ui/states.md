@@ -45,7 +45,7 @@ Empty, loading and error states, confirmations, the scope of v1 and the UI edge 
 
 ## Scope
 
-**In scope:** the screens, flows and states of this file (documentation only; the implementation is #492).
+**In scope:** the screens, flows and states of this file (documentation only; the implementation is #560 to #562, and #563 for the #507 parts).
 
 **Brought into v1, with the API part in #507** (a new sub-issue of #483: open-issue counts and bulk close/reopen in the API). `ui.md` specifies the screens assuming #507's API and names it:
 

@@ -2,7 +2,7 @@
 
 Decided. Part of the [Issues and Projects specs](../issues.md).
 
-This file defines the screens, flows and states of the Issues and Projects interface. The implementation issue (#492) builds against it without making its own product decisions. The API contract is [api.md](api.md); the link states are [github-link.md](github-link.md#link-states); the sync behaviour is [sync.md](sync.md). The open-issue count and bulk close/reopen are specified here and marked "API in #507". The detail is split into the focused pages listed under [Pages](#pages).
+This file defines the screens, flows and states of the Issues and Projects interface. The implementation issues #560, #561 and #562 (and #563 for the #507 parts) build against it without making its own product decisions. The API contract is [api.md](api.md); the link states are [github-link.md](github-link.md#link-states); the sync behaviour is [sync.md](sync.md). The open-issue count and bulk close/reopen are specified here and marked "API in #507". The detail is split into the focused pages listed under [Pages](#pages).
 
 ## Open questions
 

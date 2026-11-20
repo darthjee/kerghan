@@ -187,7 +187,7 @@ The link object's `url` is built by the backend from the stored repository `owne
 
 ## Review checklist
 
-The feature-specific checks the `security` and `data-access` agents apply when the implementation spawned by #492 is reviewed. The agents find this section through the feature index in [specs.md](../../specs.md) and apply it.
+The feature-specific checks the `security` and `data-access` agents apply when the implementation issues spawned by #492 (#553 to #563; the final check is #559) are reviewed. The agents find this section through the feature index in [specs.md](../../specs.md) and apply it.
 
 ### `security` agent
 

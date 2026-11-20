@@ -2,7 +2,7 @@
 
 Decided. Part of the [Issues and Projects specs](../issues.md).
 
-The Issues and Projects API: routes, payloads, error codes, pagination, validation and how sync state is exposed. It is built by the implementation issue (#492) with no decisions of its own; wording, screens and polling cadence are in [ui.md](ui.md).
+The Issues and Projects API: routes, payloads, error codes, pagination, validation and how sync state is exposed. It is built by #555 (projects), #556 (issues), #557 (GitHub link), #558 (refresh and retry-sync) and #563 (counts and bulk, with #507's additions) with no decisions of its own; wording, screens and polling cadence are in [ui.md](ui.md).
 
 ## Every route
 
