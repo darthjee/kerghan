@@ -3,7 +3,7 @@
 The optional one-to-one link between a Kerghan issue and a GitHub issue.
 Part of the [Issues and Projects specs](../issues.md).
 
-Routes, payloads and refusal codes are decided in [api.md](api.md); synced fields, conflicts, retry values and the `sync_failed` transitions in [sync.md](sync.md); encryption, retention, quotas and rendering of GitHub content in [security.md](security.md) (#490); wording and placement in [ui.md](ui.md#link-and-sync-states) (#491). Columns are in [model.md](model.md#issues_github_links).
+Routes, payloads and refusal codes are decided in [api.md](api.md); synced fields, conflicts, retry values and the `sync_failed` transitions in [sync.md](sync.md); encryption, retention, quotas and rendering of GitHub content in [security.md](security.md) (#490); wording and placement in [ui.md](ui/linking-and-sync.md#link-and-sync-states) (#491). Columns are in [model.md](model.md#issues_github_links).
 
 - One to one, per user: unique on user and GitHub issue. Two users may link the same GitHub issue.
 - The link is optional.
@@ -74,7 +74,7 @@ Routes, payloads and refusal codes are decided in [api.md](api.md); synced field
   A refresh never clears a failure that belongs to an unsent write, so a read-only credential (which still reads, E5) cannot flip `forbidden` back to `linked` while the marker is unsent. `forbidden` is reached in one attempt, with no retry loop. The stored vocabulary and `gone` are decided here; the `sync_failed` reasons (final, four) and transitions are in [sync.md](sync.md#retries-and-sync_failed), and there is no "links by status" index in v1.
 - **The GitHub App** is registered with Issues: write and Metadata: read ([security.md](security.md#the-github-app-gains-issues-write)). An installation whose owner has not yet accepted the updated permissions still reads, and a push with it ends in `sync_failed`, reason `forbidden`; link creation does not warn about a read-only credential.
 - **Derived at read time, never stored:** *pending* (a marker exists), *rate limited until X* (in memory, E17) and *repository unavailable* (the repository's status). An edit never writes a status. There is no *paused* link state: a user who is not `approved` is signed out and cannot read it; only the worker-side pause remains (E24).
-- **Precedence** when several apply: `gone`, `sync_failed`, repository unavailable, rate limited, pending, `linked`. A read exposes the primary state and the list of all that apply ([api.md](api/github-link.md#link-object)); [ui.md](ui.md#link-and-sync-states) decides wording and placement. An unlinked issue has no state.
+- **Precedence** when several apply: `gone`, `sync_failed`, repository unavailable, rate limited, pending, `linked`. A read exposes the primary state and the list of all that apply ([api.md](api/github-link.md#link-object)); [ui.md](ui/linking-and-sync.md#link-and-sync-states) decides wording and placement. An unlinked issue has no state.
 - Gone offers unlink and no retry sync; sync failed offers retry sync and, for a credential reason, a pointer to Integrations ([ui.md](ui.md)).
 
 ## Edge cases
@@ -91,7 +91,7 @@ The rows live in [edge-cases.md](edge-cases.md), the single index: E1 to E5 and 
 None owned by #487. What remains is owned elsewhere:
 
 - [x] Routes, payloads, refusal codes and how the states and confirmations are exposed: decided in [api.md](api.md) (#489).
-- [x] Wording and placement of the states and confirmations: decided in [ui.md](ui.md#link-and-sync-states) (#491).
+- [x] Wording and placement of the states and confirmations: decided in [ui.md](ui/linking-and-sync.md#link-and-sync-states) (#491).
 - [x] Rendering of GitHub content: decided in [security.md](security.md#github-and-user-content) (#490).
 
 The `200`, `404`, `410` and `301` answers, including the rename `Location`, are recorded by the contract spec of [testing.md](testing.md#fixtures); the `Location` of a transferred issue is still to be recorded there.

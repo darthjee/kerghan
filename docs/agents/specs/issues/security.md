@@ -44,7 +44,7 @@ Candidates for a reconcile are ordered by known write capability, oldest first w
 ### Reactive only, no up-front warning
 
 - Link creation does not warn about a read-only credential and no `writeAccess` field is exposed: capability is unknowable for fine-grained PATs and can be stale for the App.
-- The failure is shown when it happens: a push that gets a `403` sets `sync_failed` with reason `forbidden` (E5, E21), the UI points to Integrations ([ui.md](ui.md#link-and-sync-states)), and the marker is kept until a push succeeds or the user unlinks with confirmation.
+- The failure is shown when it happens: a push that gets a `403` sets `sync_failed` with reason `forbidden` (E5, E21), the UI points to Integrations ([ui.md](ui/linking-and-sync.md#link-and-sync-states)), and the marker is kept until a push succeeds or the user unlinks with confirmation.
 
 ### What works without a write-capable credential
 
@@ -216,7 +216,7 @@ Deferred, with no owner issue: encryption of issue content; a restore or purge o
 
 ## Open questions
 
-None owned by #490. Wording and placement of warnings and the "Fix it in Integrations" pointer are decided in [ui.md](ui.md#link-and-sync-states).
+None owned by #490. Wording and placement of warnings and the "Fix it in Integrations" pointer are decided in [ui.md](ui/linking-and-sync.md#link-and-sync-states).
 
 ## Required tests
 

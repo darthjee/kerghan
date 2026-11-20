@@ -41,7 +41,7 @@ Standard error shape ([backend.md](../../../architecture/backend.md#error-respon
 - 21 new codes; none is used outside this module.
 - **Not-found messages:** project first, then issue, so a foreign project never reveals its issues. The issue lookup is always inside the resolved project.
 - `meta` values are public ids (uuids), counts, field names, timestamps or the sync reason vocabulary; never internal ids, GitHub content or credential material.
-- Messages are final English strings; the UI may map codes to its own wording ([ui.md](../ui.md#empty-loading-and-error-states)).
+- Messages are final English strings; the UI may map codes to its own wording ([ui.md](../ui/states.md#empty-loading-and-error-states)).
 - Sync failures in jobs never become HTTP errors: they show only in the [link object](github-link.md#link-object).
 
 ## Input validation
