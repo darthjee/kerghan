@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { EntityManager, Repository } from 'typeorm';
+import { escapeLike } from '../core/escape-like.js';
 import { IssuesProject } from './entities/issues-project.entity.js';
 
 /** The values of a new project row (the store adds nothing but the live `deleted_token = 0`). */
@@ -12,6 +13,21 @@ export interface NewProject {
   repositoryId: number | null;
   createdAt: Date;
   updatedAt: Date;
+}
+
+/** One page of the listing: its filter and bounds. */
+export interface ProjectPageQuery {
+  /** 1-based page. */
+  page: number;
+  perPage: number;
+  /** Trimmed literal substring of the name; empty means no search. */
+  search: string;
+}
+
+/** The fields an edit may write. */
+export interface ProjectChanges {
+  name?: string;
+  description?: string | null;
 }
 
 /**
@@ -57,6 +73,45 @@ export class ProjectStore {
    */
   countLive(userId: number, manager?: EntityManager): Promise<number> {
     return this.#repository(manager).countBy({ userId, deletedToken: 0 });
+  }
+
+  /**
+   * One page of the user's live projects, sorted by name (the column's case-insensitive collation;
+   * stable, since names are unique among live projects), and the total matching the search. The
+   * search is a literal substring: `%`, `_` and `\` are escaped. A page past the end is empty.
+   * @param {number} userId - The owner (the listing's own scope).
+   * @param {ProjectPageQuery} query - Page, page size and search.
+   * @returns {Promise<{ projects: IssuesProject[], total: number }>} The page and the total.
+   */
+  async page(userId: number, query: ProjectPageQuery): Promise<{ projects: IssuesProject[]; total: number }> {
+    const builder = this.projects.createQueryBuilder('project')
+      .where('project.user_id = :userId AND project.deleted_token = 0', { userId });
+
+    if (query.search !== '') {
+      builder.andWhere("project.name LIKE :search ESCAPE '\\\\'", { search: `%${escapeLike(query.search)}%` });
+    }
+
+    const [projects, total] = await builder
+      .orderBy('project.name', 'ASC')
+      .skip((query.page - 1) * query.perPage)
+      .take(query.perPage)
+      .getManyAndCount();
+
+    return { projects, total };
+  }
+
+  /**
+   * Writes an edit to a live project. The `deleted_token = 0` guard keeps a project deleted in
+   * the meantime untouched.
+   * @param {number} projectId - The project's internal id.
+   * @param {ProjectChanges} changes - The fields to write.
+   * @param {Date} updatedAt - The new `updated_at`.
+   * @returns {Promise<boolean>} `false` when no live row matched (the project was deleted meanwhile).
+   */
+  async update(projectId: number, changes: ProjectChanges, updatedAt: Date): Promise<boolean> {
+    const result = await this.projects.update({ id: projectId, deletedToken: 0 }, { ...changes, updatedAt });
+
+    return (result.affected ?? 0) > 0;
   }
 
   /**

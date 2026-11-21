@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { DataSource } from 'typeorm';
+import { escapeLike } from '../core/escape-like.js';
 import type { IntegrationRef } from '../integrations/integrations-github.public.js';
 import { OK_SOURCE_STATUSES } from './entities/repository-source-status.entity.js';
 import { effectiveIntegrationId } from './row-status.js';
@@ -210,15 +211,6 @@ export class RepositoriesListingQuery {
 
     return byId;
   }
-}
-
-/**
- * Escapes the `LIKE` metacharacters (`%`, `_`, `\`) so they match literally (`ESCAPE '\'`).
- * @param {string} value - The search text.
- * @returns {string} The escaped text.
- */
-export function escapeLike(value: string): string {
-  return value.replace(/[\\%_]/g, (char) => `\\${char}`);
 }
 
 /**
