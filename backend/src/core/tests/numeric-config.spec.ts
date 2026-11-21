@@ -1,4 +1,4 @@
-import { getNumberConfig } from '../numeric-config.js';
+import { getNumberConfig, getPositiveIntConfig } from '../numeric-config.js';
 
 /**
  * Builds a minimal fake `ConfigService`, only populating the `get` method `getNumberConfig` reads.
@@ -32,5 +32,22 @@ describe('getNumberConfig', () => {
     const configService = fakeConfigService('not-a-number');
 
     expect(getNumberConfig(configService as never, 'SOME_KEY', 7)).toBe(7);
+  });
+});
+
+describe('getPositiveIntConfig', () => {
+  it.each([
+    ['unset', undefined],
+    ['null', null],
+    ['non-numeric', 'abc'],
+    ['zero', '0'],
+    ['negative', '-5'],
+    ['fractional', '1.5'],
+  ])('returns the fallback when the value is %s', (_label, value) => {
+    expect(getPositiveIntConfig(fakeConfigService(value) as never, 'SOME_KEY', 9)).toBe(9);
+  });
+
+  it('returns the parsed value when it is a positive integer', () => {
+    expect(getPositiveIntConfig(fakeConfigService('7') as never, 'SOME_KEY', 9)).toBe(7);
   });
 });

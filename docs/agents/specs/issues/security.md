@@ -140,7 +140,7 @@ The link object's `url` is built by the backend from the stored repository `owne
 | Live projects per user | `KERGHAN_ISSUES_MAX_PROJECTS_PER_USER` | 100 | `409 PROJECTS_LIMIT_REACHED` |
 | Issues per project | `KERGHAN_ISSUES_MAX_ISSUES_PER_PROJECT` | 5000 | `409 ISSUES_LIMIT_REACHED` |
 
-- Same shape as `KERGHAN_INTEGRATIONS_MAX_PER_USER` (`409 INTEGRATIONS_LIMIT_REACHED`). Read once with `getNumberConfig`; a non-positive or non-integer value falls back to the default.
+- Same shape as `KERGHAN_INTEGRATIONS_MAX_PER_USER` (`409 INTEGRATIONS_LIMIT_REACHED`). Read once with `getPositiveIntConfig` (`core/numeric-config.ts`); a non-positive or non-integer value falls back to the default.
 - **Checked inside the creating transaction, under the lock that serializes creations:** projects under the user row lock already taken by `lockExistingUser` (both creation routes; the shortcut's "existing project, `200`" path is not a creation and is never refused); issues under the project row lock (create and import). Simultaneous creations therefore cannot overshoot.
 - **Import checks the issue cap before the GitHub call** (a cheap pre-check outside the transaction) and again under the lock, so a full project costs no GitHub request.
 - Tombstones do not count. Lowering a cap below a user's current count keeps existing rows and refuses new ones.
