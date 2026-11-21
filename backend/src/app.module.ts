@@ -18,6 +18,7 @@ import { buildSecretKeys } from './core/secret-keys.js';
 import { HealthController } from './health/health.controller.js';
 import { HealthService } from './health/health.service.js';
 import { IntegrationsModule } from './integrations/integrations.module.js';
+import { IssuesModule } from './issues/issues.module.js';
 import { MailModule } from './mail/mail.module.js';
 import { RepositoriesModule } from './repositories/repositories.module.js';
 import { WorkersModule } from './workers/workers.module.js';
@@ -63,6 +64,8 @@ export function buildJwtSignOptions(configService: ConfigService): { expiresIn: 
  * `RepositoriesModule` is always-on too, so its `integration.deleted` and
  * `user.deleted` listeners are registered at boot.
  *
+ * `IssuesModule` is always-on too, so its `user.deleted` listener is registered at boot.
+ *
  * `WorkersModule` is always-on too: it builds the in-process worker pool and
  * starts its engine at boot.
  *
@@ -89,6 +92,7 @@ export function buildJwtSignOptions(configService: ConfigService): { expiresIn: 
     EventEmitterModule.forRoot(),
     AuthModule,
     IntegrationsModule,
+    IssuesModule,
     LoggingModule,
     MailModule,
     RepositoriesModule,

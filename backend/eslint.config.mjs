@@ -194,6 +194,42 @@ export default [
       }],
     },
   },
+  // Issues module boundary (`docs/agents/specs/issues/security.md#the-integrations-boundary`):
+  // deny by default every Auth / Integrations / Repositories path, except the allowlisted
+  // entry points, and never call `fetch` directly. Tests are exempt.
+  {
+    files: ['src/issues/**/*.ts'],
+    ignores: ['src/issues/tests/**'],
+    rules: {
+      'no-restricted-imports': ['error', {
+        patterns: [
+          {
+            group: ['**/integrations/**', '!**/integrations/integrations-github.public*'],
+            message: 'Issues reaches Integrations only through integrations-github.public (security.md#the-integrations-boundary).',
+          },
+          {
+            group: [
+              '**/auth/**',
+              '!**/auth/account-handle.service*',
+              '!**/auth/auth.module*',
+              '!**/auth/events/',
+              '**/auth/events/*',
+              '!**/auth/events/user-deleted.event*',
+            ],
+            message: 'Issues reaches Auth only through AccountHandleService and the user.deleted event (security.md#the-integrations-boundary).',
+          },
+          {
+            group: ['**/repositories/**', '!**/repositories/repositories.service*', '!**/repositories/repositories.module*'],
+            message: 'Issues reaches Repositories only through the exported RepositoriesService.',
+          },
+        ],
+      }],
+      'no-restricted-globals': ['error', {
+        name: 'fetch',
+        message: 'Issues never calls GitHub directly; use the Integrations public entry.',
+      }],
+    },
+  },
   {
     files: ['**/*.spec.ts', '**/*.e2e-spec.ts', '**/*.db-spec.ts'],
     languageOptions: {
