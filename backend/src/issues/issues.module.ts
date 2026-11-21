@@ -1,9 +1,16 @@
 import { Module, type Provider } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ISSUES_ENTITIES } from './entities/index.js';
+import { IssueEditRateLimiter } from './issue-edit-rate-limiter.js';
+import { IssueLinkPresenter } from './issue-link-presenter.js';
+import { IssueMarkers } from './issue-markers.js';
+import { IssueStore } from './issue-store.js';
+import { IssueSyncTrigger, NoopIssueSyncTrigger } from './issue-sync-trigger.js';
 import { IssuesAccess } from './issues-access.js';
 import { IssuesConfig } from './issues-config.js';
 import { IssuesEventsListener } from './issues-events.listener.js';
+import { IssuesController } from './issues.controller.js';
+import { IssuesService } from './issues.service.js';
 import { ProjectOpenIssueCounts } from './open-issue-count.query.js';
 import { ProjectCreator } from './project-creator.js';
 import { ProjectLinks } from './project-links.js';
@@ -23,6 +30,12 @@ export const ISSUES_PROVIDERS: Provider[] = [
   IssuesConfig,
   IssuesAccess,
   IssuesEventsListener,
+  IssueEditRateLimiter,
+  IssueLinkPresenter,
+  IssueMarkers,
+  IssueStore,
+  IssuesService,
+  { provide: IssueSyncTrigger, useClass: NoopIssueSyncTrigger },
   ProjectOpenIssueCounts,
   ProjectCreator,
   ProjectLinks,
@@ -36,7 +49,7 @@ export const ISSUES_PROVIDERS: Provider[] = [
  * listener exists at boot): projects and the Kerghan issues that belong to them, each issue
  * optionally linked to one GitHub issue (see `docs/agents/specs/issues.md`). Owns tables
  * `issues_projects`, `issues`, `issues_github_links` and `issues_pending_writes`; every
- * `*_id` is a logical FK only. Its only controller so far is `ProjectsController` (the Projects API). It reads Auth through
+ * `*_id` is a logical FK only. Its controllers are `ProjectsController` (the Projects API) and `IssuesController` (the Issues API). It reads Auth through
  * `AccountHandleService` and Repositories through the exported `RepositoriesService`.
  */
 @Module({
@@ -45,7 +58,7 @@ export const ISSUES_PROVIDERS: Provider[] = [
     ...ISSUES_PROVIDERS,
     { provide: Clock, useClass: SystemClock },
   ],
-  controllers: [ProjectsController],
+  controllers: [ProjectsController, IssuesController],
   exports: [IssuesAccess],
 })
 // NestJS module classes are intentionally empty; all behavior lives in @Module().

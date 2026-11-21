@@ -1,7 +1,10 @@
 import { ErrorCodes } from '../../core/error-codes.js';
 import { repositoryNotFound as addRepositoryNotFound } from '../../repositories/repositories-http-errors.js';
 import {
+  issueEditRateLimited,
+  issueLinked,
   issueNotFound,
+  issuesLimitReached,
   projectHasLinks,
   projectNameTaken,
   projectNotFound,
@@ -53,6 +56,25 @@ describe('issues-http-errors', () => {
       code: ErrorCodes.PROJECT_HAS_LINKS,
       message: "Unlink the project's issues before changing its repository",
       meta: { linkCount: 3 },
+    });
+  });
+
+  it.each([
+    ['issuesLimitReached', issuesLimitReached(), ErrorCodes.ISSUES_LIMIT_REACHED, 'This project reached the maximum number of issues'],
+    ['issueLinked', issueLinked(), ErrorCodes.ISSUE_LINKED, 'Unlink this issue before deleting it'],
+  ])('%s is a 409 with its code and message and no meta', (_name, error, code, message) => {
+    expect(error.getStatus()).toBe(409);
+    expect(error.getResponse()).toEqual({ code, message });
+  });
+
+  it('issueEditRateLimited is a 429 carrying retryAfterSeconds', () => {
+    const error = issueEditRateLimited(42);
+
+    expect(error.getStatus()).toBe(429);
+    expect(error.getResponse()).toEqual({
+      code: ErrorCodes.ISSUE_EDIT_RATE_LIMITED,
+      message: 'Too many edits; try again later',
+      retryAfterSeconds: 42,
     });
   });
 });

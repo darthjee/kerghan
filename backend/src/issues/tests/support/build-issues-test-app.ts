@@ -7,6 +7,7 @@ import { Test } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import cookieParser from 'cookie-parser';
 import request from 'supertest';
+import { FakeIssuesService } from './fake-issues.service.js';
 import { FakeProjectsService } from './fake-projects.service.js';
 import { AuthModule } from '../../../auth/auth.module.js';
 import { AccountEditLockout } from '../../../auth/entities/account-edit-lockout.entity.js';
@@ -25,6 +26,8 @@ import { LoggingModule } from '../../../core/logging.module.js';
 import { OriginGuard } from '../../../core/origin.guard.js';
 import { SESSION_LOOKUP } from '../../../core/session-lookup.js';
 import { createConsoleSpies, type ConsoleSpies } from '../../../core/tests/console-spies.test-support.js';
+import { IssuesController } from '../../issues.controller.js';
+import { IssuesService } from '../../issues.service.js';
 import { ProjectsController } from '../../projects.controller.js';
 import { ProjectsService } from '../../projects.service.js';
 
@@ -32,6 +35,7 @@ import { ProjectsService } from '../../projects.service.js';
 export interface IssuesTestContext {
   app: INestApplication;
   projects: FakeProjectsService;
+  issues: FakeIssuesService;
   ids: { owner: number; intruder: number };
   /** Cookie of `darthjee` (the main user). */
   owner: string;
@@ -40,7 +44,7 @@ export interface IssuesTestContext {
 }
 
 /**
- * Builds the HTTP-layer app: Auth plus the Projects controller over a `FakeProjectsService`, with
+ * Builds the HTTP-layer app: Auth plus the Projects and Issues controllers over fake services, with
  * the global guards, interceptor, filter and `ValidationPipe` as in `AppModule` / `main.ts`
  * (copied from the Repositories test app, so #559 can extend the matrix to every Issues route).
  * Logs in two users through Auth's real `TokenService`.
@@ -50,6 +54,7 @@ export interface IssuesTestContext {
 export async function buildIssuesTestApp(env: Record<string, unknown> = {}): Promise<IssuesTestContext> {
   const config: Record<string, unknown> = { KERGHAN_LOG_LEVEL: 'debug', ...env };
   const projects = new FakeProjectsService();
+  const issues = new FakeIssuesService();
   const userRepo = createInMemoryRepo<User>();
   const refreshTokenRepo = createInMemoryRepo<RefreshToken>();
 
@@ -61,9 +66,10 @@ export async function buildIssuesTestApp(env: Record<string, unknown> = {}): Pro
       LoggingModule,
       AuthModule,
     ],
-    controllers: [ProjectsController],
+    controllers: [ProjectsController, IssuesController],
     providers: [
       { provide: ProjectsService, useValue: projects },
+      { provide: IssuesService, useValue: issues },
       { provide: APP_GUARD, useClass: OriginGuard },
       { provide: APP_GUARD, useClass: JwtGuard },
       { provide: APP_GUARD, useClass: AdminGuard },
@@ -104,6 +110,7 @@ export async function buildIssuesTestApp(env: Record<string, unknown> = {}): Pro
   return {
     app,
     projects,
+    issues,
     ids: { owner: owner.id, intruder: intruder.id },
     owner: owner.cookie,
     intruder: intruder.cookie,
@@ -159,10 +166,10 @@ export function expectNeverCached(response: request.Response): void {
   expect(response.headers['cache-control']).toBe('no-store');
 }
 
-/** Keys that must never appear anywhere in a Projects response body. */
+/** Keys that must never appear anywhere in a Projects or Issues response body. */
 export const FORBIDDEN_BODY_KEYS = [
   'userId', 'user_id', 'repositoryId', 'repository_id', 'integrationId', 'integration_id', 'secretHint', 'deletedAt', 'deleted_at',
-  'deletedToken', 'deleted_token', 'githubLogin', 'github_login',
+  'deletedToken', 'deleted_token', 'githubLogin', 'github_login', 'projectId', 'project_id',
 ];
 
 /**

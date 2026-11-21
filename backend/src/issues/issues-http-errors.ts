@@ -1,4 +1,4 @@
-import { ConflictException, NotFoundException } from '@nestjs/common';
+import { ConflictException, HttpException, HttpStatus, NotFoundException } from '@nestjs/common';
 import { ErrorCodes } from '../core/error-codes.js';
 
 // One message for a missing, foreign or deleted project, so existence never leaks.
@@ -90,5 +90,43 @@ export function projectHasLinks(linkCount: number): ConflictException {
     code: ErrorCodes.PROJECT_HAS_LINKS,
     message: "Unlink the project's issues before changing its repository",
     meta: { linkCount },
+  });
+}
+
+/**
+ * 409 `ISSUES_LIMIT_REACHED`: the project already holds the maximum number of issues.
+ * @returns {ConflictException} The exception.
+ */
+export function issuesLimitReached(): ConflictException {
+  return new ConflictException({
+    code: ErrorCodes.ISSUES_LIMIT_REACHED,
+    message: 'This project reached the maximum number of issues',
+  });
+}
+
+/**
+ * 429 `ISSUE_EDIT_RATE_LIMITED`, with `Retry-After` and `error.retryAfterSeconds`.
+ * @param {number} retryAfterSeconds - Seconds until the user's edit window resets.
+ * @returns {HttpException} The exception.
+ */
+export function issueEditRateLimited(retryAfterSeconds: number): HttpException {
+  return new HttpException(
+    {
+      code: ErrorCodes.ISSUE_EDIT_RATE_LIMITED,
+      message: 'Too many edits; try again later',
+      retryAfterSeconds,
+    },
+    HttpStatus.TOO_MANY_REQUESTS,
+  );
+}
+
+/**
+ * 409 `ISSUE_LINKED`: a delete of an issue that still has a GitHub link.
+ * @returns {ConflictException} The exception.
+ */
+export function issueLinked(): ConflictException {
+  return new ConflictException({
+    code: ErrorCodes.ISSUE_LINKED,
+    message: 'Unlink this issue before deleting it',
   });
 }

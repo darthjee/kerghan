@@ -17,6 +17,7 @@ const KNOWN_CONTROLLERS = [
   'GithubAppController',
   'HealthController',
   'IntegrationsController',
+  'IssuesController',
   'OauthAppController',
   'ProjectsController',
   'RepositoriesController',
@@ -109,6 +110,13 @@ describe('cache-class coverage', () => {
       'create', 'delete', 'edit', 'fromRepository', 'mine', 'repository', 'show',
     ]);
     projectRoutes.forEach((route) => expect(route.cacheClass).toBe(CacheClass.UserScoped));
+  });
+
+  it('declares user-scoped on every Issues route (never warmed by Navi)', () => {
+    const issueRoutes = routes.filter((route) => route.controller === 'IssuesController');
+
+    expect(issueRoutes.map((route) => route.method).sort()).toEqual(['create', 'delete', 'edit', 'list', 'show']);
+    issueRoutes.forEach((route) => expect(route.cacheClass).toBe(CacheClass.UserScoped));
   });
 
   it('declares user-scoped on every Repositories route (never warmed by Navi)', () => {
