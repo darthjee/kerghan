@@ -33,7 +33,7 @@ export class IssueMarkers {
 
     await manager.query(
       'INSERT INTO issues_pending_writes (link_id, revision, marked_at, updated_at) VALUES (?, 1, ?, ?) '
-      + 'AS new ON DUPLICATE KEY UPDATE revision = revision + 1, updated_at = new.updated_at',
+      + 'AS new ON DUPLICATE KEY UPDATE revision = issues_pending_writes.revision + 1, updated_at = new.updated_at',
       [rows[0].id, now, now],
     );
 
