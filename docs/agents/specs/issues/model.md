@@ -95,7 +95,7 @@ Part of the [Issues and Projects specs](../issues.md).
 | `issues_projects` | unique (`user_id`, `repository_id`, `deleted_token`) | Repository uniqueness among live projects; the shortcut's existing-project lookup; the future repository-removal refusal. |
 | `issues_projects` | unique (`uuid`) (`idx_issues_projects_uuid`) | Path lookup by public id. |
 | `issues` | unique (`uuid`) (`idx_issues_uuid`) | Path lookup by public id. |
-| `issues` | (`project_id`, `state`, `created_at`) (`idx_issues_project_id_state_created_at`) | Listing a project's issues by state, newest created first (`created_at` desc, `id` desc; `all` uses the `project_id` prefix and sorts in memory). |
+| `issues` | (`project_id`, `state`, `created_at`) (`idx_issues_project_id_state_created_at`) | Listing a project's issues by state, newest created first (`created_at` desc, `id` desc; `all` uses the `project_id` prefix and sorts in memory). Its (`project_id`, `state`) prefix also serves the open-issue count, one grouped query per listing page ([api/projects.md](api/projects.md#open-issue-count)). |
 | `issues_github_links` | unique (`user_id`, `github_issue_id`) | The link rule; its leftmost column also covers user cleanup. |
 | `issues_github_links` | unique (`issue_id`) | At most one link per issue; issue-to-link lookup; project cleanup. |
 | `issues_pending_writes` | unique (`link_id`) | One marker per link; marker lookup from a job. |
@@ -111,6 +111,7 @@ Part of the [Issues and Projects specs](../issues.md).
 - **`integration.deleted`: no hook.** Nothing in the module stores an integration id; the owner's integrations are resolved at job time through the Integrations module. If none is usable the job follows the no-credential rule of [sync.md](sync.md#integration-selection) and the markers stay.
 - **Project deletion (soft project row, hard issues)**, one transaction in lock order: lock the project row; count the project's issues that have markers (the number the response reports, counted before the delete); delete the markers, the links and the issues; clear `description` to `NULL`; set `deleted_at` and `deleted_token`. The project row stays as a tombstone, so the live-uniqueness indexes, the `404` and the no-op of queued jobs keep working; no restore and no purge in v1 ([security.md](security.md#project-deletion-removes-the-issues-at-once)).
 - **Single issue deletion:** the issue only, refused while a link exists (`409 ISSUE_LINKED`), under the project then issue lock, so a concurrent attach cannot leave a link on a deleted issue. A linked issue is unlinked first ([github-link.md](github-link.md#unlinking)).
+- **Bulk state change:** one transaction in lock order: lock the project row, lock the requested issues by uuid in internal-id order, flip their `state`, lock their links in id order, upsert the markers of `linked`/`sync_failed` links; T1 jobs only after the commit ([api/issues.md](api/issues.md#bulk-close-and-reopen)). No new column, table or migration.
 - **Unlinking:** project, issue, link, marker in lock order; it deletes the link and its marker and keeps the issue ([github-link.md](github-link.md#unlinking)).
 - **Repository removal (not built).** It must refuse with `409` while a live project of the user uses the repository. A project requires `added_at`, so its repository row is never pruned; a dangling `repository_id` reads as Unavailable. The spec fixes the rule and a read-only check the Issues module exposes ("does a live project of this user use repository X?"). Because Issues already depends on Repositories, the removal feature must not create an import cycle; the mechanism is chosen when that feature is built (not decided, no owner issue yet).
 
@@ -146,6 +147,7 @@ Statements to rewrite at fold time:
 | Marker derived from the snapshot diff | An unindexed scan, and no revision for compare-and-clear. |
 | A marker row per change with a payload | An unbounded queue. |
 | Physical foreign keys | Break the module pattern (Repositories uses logical FKs). |
+| A stored open-issue counter on `issues_projects` | Every write path (create, edit, bulk, import, sync pull, delete, project deletion) would maintain it, and it could drift; the grouped indexed count is cheap at the issue cap. |
 | Kerghan issues as a pure cache of GitHub issues | A project with no repository, or an issue with no link, could not exist. |
 
 ## Edge cases
@@ -210,6 +212,7 @@ All in the DB-backed tier (uniqueness, concurrency and transactions need real My
 - An edit of a linked issue upserts the marker in the same transaction; an edit of an unlinked issue creates none.
 - Boot re-enqueues every marker once, oldest first, by `link_id` (the restart spec of [testing.md](testing.md#worker-tests)).
 - Cleanup contracts: `user.deleted` removes markers, links, issues and projects (including soft-deleted) in lock order, and a listener failure is logged without blocking; project deletion removes markers, links and issues, clears the description and keeps the tombstone; single issue deletion removes only the issue and is refused while a link exists.
+- The open-issue count of a listing page is one grouped query on the (`project_id`, `state`) index prefix, whatever the page size; a bulk state change locks the project, then the issues in id order, then links and markers, and two overlapping calls do not deadlock `(db)`.
 - The `uuid` unique indexes are enforced on projects and issues; `issues.updated_at` round-trips milliseconds (`datetime(3)`).
 - utf8mb4 (a 4-byte character) and `bigint` (an id above 2³¹) round-trip.
 - The migration `up` creates the four tables and `down` drops them in reverse.

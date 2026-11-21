@@ -2,11 +2,11 @@
 
 Decided. Part of the [Issues and Projects specs](../issues.md).
 
-This file defines the screens, flows and states of the Issues and Projects interface. The implementation issues #560, #561 and #562 (and #563 for the #507 parts) build against it without making its own product decisions. The API contract is [api.md](api.md); the link states are [github-link.md](github-link.md#link-states); the sync behaviour is [sync.md](sync.md). The open-issue count and bulk close/reopen are specified here and marked "API in #507". The detail is split into the focused pages listed under [Pages](#pages).
+This file defines the screens, flows and states of the Issues and Projects interface. The implementation issues #560, #561 and #562 (and #563 for the open-issue count and bulk close/reopen) build against it without making its own product decisions. The API contract is [api.md](api.md); the link states are [github-link.md](github-link.md#link-states); the sync behaviour is [sync.md](sync.md). The open-issue count and bulk close/reopen are specified here against the decided API of [api/projects.md](api/projects.md#open-issue-count) and [api/issues.md](api/issues.md#bulk-close-and-reopen). The detail is split into the focused pages listed under [Pages](#pages).
 
 ## Open questions
 
-None left in this file. One dependency: the open-issue count on project rows and bulk close/reopen need the API of #507 (a sub-issue of #483); they are specified in [Scope](ui/states.md#scope) and implemented once #507 lands.
+None left in this file.
 
 ## Required tests
 
@@ -24,7 +24,7 @@ Frontend tier ([testing.md](testing.md#frontend-tests)), in the three layers (cl
 - **`ConfirmModal`.** Initial focus on Cancel, the confirm button on the right and named for the action, the typed confirmation, the in-flight state, and the error inside the modal.
 - **UI edge cases.** U1 to U11 each have a spec; for U10 the focus re-read and banner, and for U11 the dirty-form prompt (`ConfirmModal`, restored hash, `beforeunload`).
 - **Security.** S1 as a static spec (no `dangerouslySetInnerHTML` in the Issues components; titles, names and descriptions rendered as text) with the unit specs of [security.md](security.md#required-tests); S2 (the `https://github.com/` check, `rel` and `target`); S3 as a unit check (non-uuid ids show "not found" with no call, path segments encoded, a crafted hash such as `#/projects/..%2Fadmin` cannot change the path); S4 (no `localStorage` or `sessionStorage` writes of drafts); S5 (no integration or credential data on screen). P5: `IssueBody` is lazy-loaded with the `<pre>` fallback.
-- **API in #507.** The open-issue count on project rows, the bulk selection (page-limited, cleared on page, filter or search change), "Close selected" and "Reopen selected", and the summary notice are specified here and tested when #507 lands.
+- **Counts and bulk.** The open-issue count on project rows (`openIssueCount`, rows only), the bulk selection (page-limited, cleared on page, filter or search change), "Close selected" and "Reopen selected" sending `{ issueIds, state }`, the summary notice built from `changed`, `unchanged` and `notFound`, the single re-read after the call, and the "Try again in N s" countdown on the bulk bar for `ISSUE_EDIT_RATE_LIMITED` with the selection kept; tested in #563.
 
 ## Pages
 

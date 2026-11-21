@@ -27,14 +27,26 @@ The project routes: object, listing, creation, edit, repository, delete and refu
     "githubId": 123456, "owner": "darthjee", "name": "kerghan",
     "fullName": "darthjee/kerghan", "private": false, "status": "added"
   },
+  "openIssueCount": 4,
   "createdAt": "2026-11-17T12:00:00Z",
   "updatedAt": "2026-11-17T12:00:00Z"
 }
 ```
 
 - `repository` is `null` for a non-code project. `status` is `added`, `unavailable` or `unknown`; a dangling reference reads `unavailable` with the snapshot fields `null`.
-- No issue counts or sync info in v1 ([projects.md](../projects.md#fields)).
-- The same object is returned by every route above except delete, and is the listing row.
+- `openIssueCount` is the number of the project's open issues ([below](#open-issue-count)). No other issue counts and no sync info in v1 ([projects.md](../projects.md#fields)).
+- The same object, with `openIssueCount`, is returned by every route above except delete, and is the listing row.
+
+### Open-issue count
+
+- **Definition.** `openIssueCount` counts the project's issues whose stored local `state` is `open`, whatever their link state. A linked issue counts by its local state (sync pulls GitHub's state into it); a pending local close counts as closed at once.
+- **Contract: the value may lag.** Clients must not assume it equals the issue listing's `pagination.total` for `state=open` or reflects a write made a moment earlier. This leaves room for a later cache without an API change.
+- **v1 computation: at read time**, no stored column and no cache (so in practice it is exact today).
+  - **Listing:** one extra grouped query per page, `SELECT project_id, COUNT(*) FROM issues WHERE project_id IN (:pageIds) AND state = 'open' GROUP BY project_id`, served by the (`project_id`, `state`) prefix of `idx_issues_project_id_state_created_at` ([model.md](../model.md#indexes)). Projects absent from the result read `0`. Never one query per project.
+  - **Show, edit, repository change, the shortcut's existing-project `200`:** one indexed `COUNT` for the single project. Create and the shortcut's new-project `201` return `0` without querying.
+- **Cost bound:** every count is bounded by the per-project issue cap (`ISSUES_LIMIT_REACHED`).
+- **Not added:** sorting or filtering projects by count, and the count on the issue listing (its `pagination.total` already serves that).
+- **Rejected:** a stored counter column on `issues_projects`, which every write path (create, edit, bulk, import, sync pull, delete, project deletion) would have to maintain and which could drift.
 
 ### Project listing
 

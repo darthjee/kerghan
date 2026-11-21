@@ -2,7 +2,7 @@
 
 Decided. Part of the [Issues and Projects specs](../issues.md).
 
-The Issues and Projects API: routes, payloads, error codes, pagination, validation and how sync state is exposed. It is built by #555 (projects), #556 (issues), #557 (GitHub link), #558 (refresh and retry-sync) and #563 (counts and bulk, with #507's additions) with no decisions of its own; wording, screens and polling cadence are in [ui.md](ui.md).
+The Issues and Projects API: routes, payloads, error codes, pagination, validation and how sync state is exposed. It is built by #555 (projects), #556 (issues), #557 (GitHub link), #558 (refresh and retry-sync) and #563 (counts and bulk) with no decisions of its own; wording, screens and polling cadence are in [ui.md](ui.md).
 
 ## Every route
 
@@ -31,6 +31,7 @@ POST /projects/:projectId/refresh.json
 POST /projects/:projectId/issues.json
 POST /projects/:projectId/issues/create.json
 POST /projects/:projectId/issues/import.json
+POST /projects/:projectId/issues/bulk-state.json
 POST /projects/:projectId/issues/:issueId/show.json
 POST /projects/:projectId/issues/:issueId/edit.json
 POST /projects/:projectId/issues/:issueId/delete.json
@@ -40,7 +41,7 @@ POST /projects/:projectId/issues/:issueId/refresh.json
 POST /projects/:projectId/issues/:issueId/retry-sync.json
 ```
 
-That is the complete list: 18 routes.
+That is the complete list: 19 routes.
 
 ## Exposed identifiers
 
@@ -63,10 +64,12 @@ None left in this file. What remains belongs to its owner:
 
 Default tier: e2e with fakes ([testing.md](testing.md#default-tier-by-category)); races are `(db)`.
 
-- **Route access matrix** ([testing.md](testing.md#security-verification)), complete against the 18 registered routes: every route answers `401` without a session, runs `OriginGuard`, sends `X-Skip-Cache: true` and `Cache-Control: no-store` on success and on handler errors, declares `user-scoped`, and answers no `GET`. Another user's or a deleted project, and an issue of another project, answer `404`; malformed uuids answer `400`.
+- **Route access matrix** ([testing.md](testing.md#security-verification)), complete against the 19 registered routes: every route answers `401` without a session, runs `OriginGuard`, sends `X-Skip-Cache: true` and `Cache-Control: no-store` on success and on handler errors, declares `user-scoped`, and answers no `GET`. Another user's or a deleted project, and an issue of another project, answer `404`; malformed uuids answer `400`.
 - No response contains an internal id, `user_id`, an integration field or credential material; `error.meta` carries only uuids, counts, field names, timestamps or reasons.
 - Every project, issue, link and trigger outcome and every code of the catalogue, including the project creation paths (`200`/`201`/`409`), the creation and repository-change races `(db)`, repository change or detach answering `409 PROJECT_HAS_LINKS` with the link count only while links exist and succeeding at zero, the attach stale confirmation within the same second (`datetime(3)`), a repeat unlink answering `ISSUE_NOT_LINKED`, delete refused while linked and the attach/delete race `(db)` (E61 to E64 of [edge-cases.md](edge-cases.md)).
 - Listing defaults, bounds, sort, filters, literal search and totals; issue rows without `body`.
+- The open-issue count ([api/projects.md](api/projects.md#open-issue-count)): `openIssueCount` on every project object, `0` when there is no open issue, linked issues counted by local state, and exactly one grouped count query per listing page whatever the page size `(db)`.
+- Bulk close and reopen ([api/issues.md](api/issues.md#bulk-close-and-reopen)): `changed`/`unchanged`/`notFound` in request order, ids only, `state` echoed, always `200` once the project resolves; the lock order (project, issues in id order, links, markers) `(db)`; markers for `linked`/`sync_failed` links and none for `gone`; one T1 per changed link, only after the commit; full rollback and no enqueue on a database error; the rate-limit weight (the id count) and its boundary (`used + weight = max` passes, `+1` answers `429`), a refused call consuming nothing; E66 to E74 of [edge-cases.md](edge-cases.md).
 - The link object: `states` precedence, `linked` alone, `reason`, `rateLimitedUntil`, `stale` never for `gone`; reads never enqueue.
 - T2 `202`/`200 alreadyFresh`, T3 counts, T4 reset and no-op, the refusals, and retry refused while Unavailable keeping the reason.
 - The four codes of #490 (`PROJECTS_LIMIT_REACHED`, `ISSUES_LIMIT_REACHED`, `ISSUE_LINK_RATE_LIMITED`, `ISSUE_EDIT_RATE_LIMITED`) at their place in the order of checks, with the cases of [security.md](security.md#required-tests).
@@ -75,6 +78,6 @@ Default tier: e2e with fakes ([testing.md](testing.md#default-tier-by-category))
 ## Pages
 
 - [Projects](api/projects.md): read when changing the project routes (object, listing, creation, edit, repository, delete) or the `error.meta` refusal data.
-- [Issues](api/issues.md): read when changing the issue routes (object, listing, create and edit, delete).
+- [Issues](api/issues.md): read when changing the issue routes (object, listing, create and edit, bulk close and reopen, delete).
 - [GitHub link](api/github-link.md): read when changing import, attach, unlink or the trigger routes, or how link and sync state is exposed (link object).
 - [Errors and validation](api/errors-and-validation.md): read for the error catalogue (codes, messages, `meta`) and the input validation rules.
