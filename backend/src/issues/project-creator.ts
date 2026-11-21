@@ -173,7 +173,7 @@ export class ProjectCreator {
 
   /**
    * Maps a unique-index violation of the insert to its refusal, in the order of the checks: when
-   * the repository has a live project now (the winner of the race; MySQL names either index when
+   * the repository has a live project by then (the winner of the race; MySQL names either index when
    * both collide) the repository check decides, answering `PROJECT_REPOSITORY_TAKEN` with the
    * winner on the explicit path and the winner's `200` on the shortcut; otherwise a name
    * violation is `PROJECT_NAME_TAKEN`. Anything else is rethrown.
