@@ -138,7 +138,9 @@ export async function seedLink(ds: DataSource, seed: LinkSeed): Promise<{ id: nu
  * Inserts the pending marker of a link.
  * @param ds - The data source.
  * @param linkId - The internal id of the link.
- * @param seed - The revision (default 1) and `marked_at` (default `SEED_TIME`).
+ * @param seed - Optional fields.
+ * @param seed.revision - The revision (default 1).
+ * @param seed.markedAt - The `marked_at` time (default `SEED_TIME`).
  * @returns The marker's internal id.
  */
 export async function seedMarker(
