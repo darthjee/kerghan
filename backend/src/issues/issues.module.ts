@@ -4,6 +4,7 @@ import { ISSUES_ENTITIES } from './entities/index.js';
 import { IssuesAccess } from './issues-access.js';
 import { IssuesConfig } from './issues-config.js';
 import { IssuesEventsListener } from './issues-events.listener.js';
+import { ProjectOpenIssueCounts } from './open-issue-count.query.js';
 import { AuthModule } from '../auth/auth.module.js';
 import { Clock, SystemClock } from '../core/clock.js';
 import { RepositoriesModule } from '../repositories/repositories.module.js';
@@ -16,6 +17,7 @@ export const ISSUES_PROVIDERS: Provider[] = [
   IssuesConfig,
   IssuesAccess,
   IssuesEventsListener,
+  ProjectOpenIssueCounts,
 ];
 
 /**
