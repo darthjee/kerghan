@@ -21,3 +21,17 @@ export function getNumberConfig(configService: ConfigService, key: string, fallb
 
   return Number.isNaN(parsed) ? fallback : parsed;
 }
+
+/**
+ * Reads a positive-integer configuration value by `key`, falling back to `fallback` for an
+ * unset, non-numeric, non-integer (fractional) or non-positive (`0`, negative) value.
+ * @param {ConfigService} configService - Supplies the raw, unparsed config value.
+ * @param {string} key - The config key to read.
+ * @param {number} fallback - The value to return when `key` is not a positive integer.
+ * @returns {number} The parsed positive integer, or `fallback`.
+ */
+export function getPositiveIntConfig(configService: ConfigService, key: string, fallback: number): number {
+  const value = getNumberConfig(configService, key, fallback);
+
+  return Number.isInteger(value) && value > 0 ? value : fallback;
+}
