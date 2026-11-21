@@ -23,6 +23,11 @@ export interface ListingRow {
 /** A filter on the row itself (by internal id or `github_id`). */
 export type RowSelector = { id: number } | { githubId: number };
 
+/** A filter on several rows at once, by internal id. */
+export interface RowsSelector {
+  ids: number[];
+}
+
 interface RawRow {
   id: number;
   github_id: string | number;
@@ -103,10 +108,35 @@ export class RepositoriesListingQuery {
     const where: Sql = 'id' in selector
       ? { sql: ' AND r.id = ?', params: [selector.id] }
       : { sql: ' AND r.github_id = ?', params: [selector.githubId] };
+
+    return (await this.#read(userId, where, scope))[0] ?? null;
+  }
+
+  /**
+   * Several of the user's rows by internal id, in the listing shape, in one set of queries (not
+   * one per id). An id the user does not hold (another user's, or pruned) is simply absent.
+   * @param {number} userId - The user.
+   * @param {RowsSelector} selector - The internal ids.
+   * @param {ListingScope} scope - The current sources.
+   * @returns {Promise<ListingRow[]>} The rows the user holds, in no particular order.
+   */
+  async many(userId: number, selector: RowsSelector, scope: ListingScope): Promise<ListingRow[]> {
+    if (selector.ids.length === 0) return [];
+
+    return this.#read(userId, { sql: ' AND r.id IN (?)', params: [selector.ids] }, scope);
+  }
+
+  /**
+   * @param {number} userId - The user.
+   * @param {Sql} where - The row conditions.
+   * @param {ListingScope} scope - The current sources.
+   * @returns {Promise<ListingRow[]>} The matching rows, in the listing shape.
+   */
+  async #read(userId: number, where: Sql, scope: ListingScope): Promise<ListingRow[]> {
     const inner = this.#inner(userId, scope, where);
     const raw: RawRow[] = await this.dataSource.query(`SELECT t.* FROM (${inner.sql}) t`, inner.params);
 
-    return (await this.#withSources(userId, raw, scope))[0] ?? null;
+    return this.#withSources(userId, raw, scope);
   }
 
   /**

@@ -13,8 +13,10 @@ import type {
   ListInput,
   ListResult,
   MarkAddedOutcome,
+  ProjectRepositoryLookup,
   RepoRef,
   RepositorySnapshot,
+  RepositorySummary,
   SyncStateResult,
   TriggerOutcome,
 } from './types/repositories-api.types.js';
@@ -122,6 +124,35 @@ export class RepositoriesService {
   }
 
   /**
+   * Resolves a repo ref among the user's own rows for a project (the same case-insensitive
+   * `fullName` match and tie-break as Add), with the row's derived status. Nothing is written.
+   * @param {number} userId - The session's user.
+   * @param {RepoRef} ref - The validated ref.
+   * @returns {Promise<ProjectRepositoryLookup | null>} The internal id, whether the row is added
+   *   and its summary, or `null` when the ref is not among the caller's rows.
+   */
+  async resolveForProject(userId: number, ref: RepoRef): Promise<ProjectRepositoryLookup | null> {
+    const resolved = await this.addStore.resolve(userId, ref);
+    const row = resolved === null ? null : await this.listing.one(userId, resolved, await this.#scope(userId));
+
+    return row === null ? null : { repositoryId: row.id, added: row.repository.addedAt !== null, summary: summarize(row) };
+  }
+
+  /**
+   * The summaries of the user's rows by internal id, read in one set of queries for a whole page
+   * of projects. An id the user does not hold (a dangling reference) is absent from the map.
+   * @param {number} userId - The session's user.
+   * @param {number[]} repositoryIds - The internal ids stored by projects.
+   * @returns {Promise<Map<number, RepositorySummary>>} The summary of each id found.
+   */
+  async projectSummaries(userId: number, repositoryIds: number[]): Promise<Map<number, RepositorySummary>> {
+    const ids = [...new Set(repositoryIds)];
+    const rows = ids.length === 0 ? [] : await this.listing.many(userId, { ids }, await this.#scope(userId));
+
+    return new Map(rows.map((row) => [row.id, summarize(row)]));
+  }
+
+  /**
    * Add's conditional write (`docs/agents/backend/routes/repositories.md#add`): marks a not-added row of the
    * user as added with its access link. A link that is not one of the user's
    * own integrations is stored as `null` (the end-of-sync link fill fills it,
@@ -190,6 +221,16 @@ export class RepositoriesService {
 
     return { integrations, handle: view.handle };
   }
+}
+
+/**
+ * @param {ListingRow} row - A listed row.
+ * @returns {RepositorySummary} The project's view of the repository (no internal id).
+ */
+function summarize(row: ListingRow): RepositorySummary {
+  const { githubId, owner, name, fullName, private: isPrivate, status } = row.repository;
+
+  return { githubId, owner, name, fullName, private: isPrivate, status };
 }
 
 /**

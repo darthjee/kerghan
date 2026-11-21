@@ -125,3 +125,26 @@ export type MarkAddedOutcome =
   | { kind: 'added'; repository: ListedRepository }
   | { kind: 'already_added'; repository: ListedRepository }
   | { kind: 'gone' };
+
+/** The repository as a project exposes it (`docs/agents/specs/issues/api/projects.md`). */
+export interface RepositorySummary {
+  githubId: number;
+  owner: string;
+  name: string;
+  /** `owner/name`. */
+  fullName: string;
+  private: boolean;
+  status: RowStatus;
+}
+
+/**
+ * What the Issues module needs about one of the caller's rows when it resolves a ref
+ * (`RepositoriesService#resolveForProject`). `repositoryId` is the internal id a project stores
+ * (a logical FK); it never leaves the backend.
+ */
+export interface ProjectRepositoryLookup {
+  repositoryId: number;
+  /** Whether the row is added (`addedAt` set); any derived status may be used by a project. */
+  added: boolean;
+  summary: RepositorySummary;
+}
