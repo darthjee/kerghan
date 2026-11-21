@@ -35,7 +35,7 @@ Standard error shape ([backend.md](../../../architecture/backend/error-responses
 | `422` | `GITHUB_ISSUE_IS_PULL_REQUEST` | `This is a pull request, not an issue` | | Import, attach (E3) |
 | `502` | `GITHUB_UNAVAILABLE` (existing) | existing | | Import/attach: timeout, network, `5xx`, unclassifiable `301` (E60) |
 | `429` | `ISSUE_LINK_RATE_LIMITED` | `Too many link requests; try again later` | | Import, attach; with `Retry-After` and `retryAfterSeconds` |
-| `429` | `ISSUE_EDIT_RATE_LIMITED` | `Too many edits; try again later` | | Issue edit; with `Retry-After` and `retryAfterSeconds` |
+| `429` | `ISSUE_EDIT_RATE_LIMITED` | `Too many edits; try again later` | | Issue edit and [bulk state](issues.md#bulk-close-and-reopen) (weight = id count; a refused call consumes nothing); with `Retry-After` and `retryAfterSeconds` |
 | `503` | `GITHUB_RATE_LIMITED` (existing) | existing | | Import/attach rate limited (E58), with `retryAfterSeconds` |
 
 - 21 new codes; none is used outside this module.
@@ -63,9 +63,13 @@ Every failure answers `400 VALIDATION_FAILED` (with `error.details`) before any 
 | `confirmUpdatedAt` | attach | Optional ISO 8601 UTC timestamp with milliseconds, as returned in `updatedAt`; compared as an instant. |
 | `discardUnsentChanges` | unlink | Optional boolean; only `true` discards. |
 | `page`, `perPage` | both listings | Integers; `page` ≥ 1 (default 1), `perPage` 1 to 100 (default 50). |
+| `issueIds` | bulk-state | **Required** array of 1 to 100 uuid strings. Wrong type, `null`, empty, more than 100, a non-string item or a malformed uuid → `400`. |
+| `issueIds` (duplicates) | bulk-state | **Rejected with `400`**, compared case-insensitively and never deduplicated, so each requested id maps to exactly one outcome. |
+| `state` (bulk) | bulk-state | **Required**, `open` or `closed`; no default. |
 | `state` (filter) | issue listing | `open` (default), `closed` or `all`. |
 | `search` | both listings | String, trimmed, at most 100 code points; empty means no search; `LIKE` metacharacters escaped. |
 
+- **Uuid case in bulk:** ids are matched lowercased (stored uuids are lowercase, from `randomUUID()`) and echoed lowercased. 100 uuids are about 4 KB, well under the global body limit; no new limit. Per-issue problems are never errors: they are the `notFound` and `unchanged` outcomes. No new codes and no new `error.meta`.
 - **Output timestamps** are ISO 8601 UTC strings. An issue's `updatedAt` carries milliseconds (`datetime(3)`); other timestamps carry the second precision of their columns.
 - No content rules beyond these (no markup stripping or control-character filtering): titles and bodies may hold Markdown, and how they are rendered is decided in [security.md](../security.md#bodies-restricted-markdown).
 - Validation runs on input only. Values pulled from GitHub are stored as GitHub returns them, and an edit sends only the fields it changes, so an inbound value outside these rules (an untrimmed title, for instance) never blocks an unrelated edit.

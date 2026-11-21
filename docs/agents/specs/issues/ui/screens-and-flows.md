@@ -16,7 +16,7 @@ Hash routes, registered in `HashRouteResolver` like the existing pages (the rout
 | `#/projects/:projectId/issues/:issueId` | Issue page: view, link state and its actions |
 | `#/projects/:projectId/issues/:issueId/edit` | Edit title, body and state |
 
-- The project page **is** the issue list; there is no separate overview (projects carry no counts in v1).
+- The project page **is** the issue list; there is no separate overview (the project list shows only the open-issue count of each project).
 - Editing uses separate `…/edit` routes (as `/admin/users/:id/edit`), with Save and Cancel, never inline edit.
 - List state (issue `state` filter, `search`, `page`; the project list's `search` and `page`) lives in the hash query (e.g. `#/projects/:id?state=closed&search=foo&page=2`), so Back from an issue page and a reload restore the list. The router already strips `?…` before matching.
 - Deleting a project lives only in the danger zone of the project edit page.

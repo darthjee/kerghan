@@ -151,11 +151,13 @@ The link object's `url` is built by the backend from the stored repository `owne
 | Limit | Env vars (defaults) | Refusal |
 |---|---|---|
 | Link creation (import and attach share one window) | `KERGHAN_ISSUES_LINK_MAX_PER_WINDOW` (30), `KERGHAN_ISSUES_LINK_WINDOW_MS` (60000) | `429 ISSUE_LINK_RATE_LIMITED` |
-| Issue edits | `KERGHAN_ISSUES_EDIT_MAX_PER_WINDOW` (120), `KERGHAN_ISSUES_EDIT_WINDOW_MS` (60000) | `429 ISSUE_EDIT_RATE_LIMITED` |
+| Issue edits, single and [bulk state](api/issues.md#bulk-close-and-reopen) | `KERGHAN_ISSUES_EDIT_MAX_PER_WINDOW` (120), `KERGHAN_ISSUES_EDIT_WINDOW_MS` (60000) | `429 ISSUE_EDIT_RATE_LIMITED` |
 
 - In-memory, per-process fixed windows per user through the shared `Clock`, like `RepositoryAddRateLimiter`: no table, reset on restart, counted per backend instance, expired windows swept.
 - **Checked after DTO validation and before the access check**, as Repositories Add does, so every attempt counts and the limit also bounds probing. Both `429`s carry `Retry-After` and `error.retryAfterSeconds`.
-- Link creation is limited because each attempt makes one GitHub request with the owner's credential. Edits are limited because each one on a linked issue writes the marker and enqueues a job.
+- Link creation is limited because each attempt makes one GitHub request with the owner's credential. Edits, bulk included, are limited because each one on a linked issue writes the marker and enqueues a job.
+- **A bulk call weighs its id count** (`issueIds.length`, 1 to 100), against the same window and checked at the same place, so `notFound` and `unchanged` ids count too. It is all-or-nothing: if `used + weight > max` the call answers `429` and nothing is applied. No separate bulk limit and no new env var.
+- **A refused (`429`) call consumes nothing**, for the single edit and bulk alike, so retrying a refused call cannot keep the window full.
 - Refresh (T2, T3) and retry sync (T4) stay unlimited, as decided in [api.md](api.md): the 60-second fresh skip, the per-link dedupe below and the per-integration pause bound their GitHub calls.
 
 ### Queued jobs are deduplicated per link
@@ -254,6 +256,7 @@ Quotas and limits:
 
 - The 101st live project and the 5001st issue of a project are refused with `409`; tombstones do not count; the shortcut's existing-project `200` is never refused; simultaneous creations at the cap never overshoot `(db)`; a full project's import makes no GitHub call.
 - The 31st link creation and the 121st edit in a window answer `429` with `Retry-After` and `retryAfterSeconds`; the window follows the `FakeClock`; the env overrides apply; a rate-limited request makes no lookup and no GitHub call.
+- Bulk weight: a call weighs its id count; `used + weight = max` passes and `+1` answers `429` with nothing applied; a refused call, bulk or single, consumes nothing and a retry after `Retry-After` succeeds (E74).
 - Enqueuing a queued link is a no-op; an edit during a running job enqueues once more; a burst of edits leaves one waiting job.
 
 Logs:

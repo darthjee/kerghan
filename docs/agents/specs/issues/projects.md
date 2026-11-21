@@ -28,7 +28,7 @@ Routes, payloads and error codes are decided in [api.md](api.md); columns and ty
 | Deletion marker | See [Deletion](#deletion). |
 
 - There is no status or archive state in v1.
-- The read model adds a repository summary (owner, name, private and the row status Added, Unavailable or Unknown), derived on read and never stored on the project. There are no issue counts or sync info in v1.
+- The read model adds a repository summary (owner, name, private and the row status Added, Unavailable or Unknown), derived on read and never stored on the project. The read model also adds `openIssueCount`, the project's open issues (it may lag, is computed on read and never stored; [API](api/projects.md#open-issue-count)). There are no other counts and no sync info in v1.
 - Columns, types and lengths (name 100, description 2000) are in [model.md](model.md#issues_projects).
 
 ## Creation paths
@@ -118,6 +118,7 @@ Default tier: e2e with fakes; the cleanup queries and concurrency are DB-backed 
 - Uniqueness of name and repository covers only non-deleted projects; both can be reused after deletion.
 - Deleting a project releases its links, discards its markers, makes queued jobs a no-op, makes no GitHub call and deletes its issues, tombstones the project (description cleared) and answers `unsentIssueCount`, the count of issues with unsent changes counted before the delete; deleting a user removes their projects (including soft-deleted ones), issues, links and markers.
 - Attaching a repository to a project without one works and never syncs; attaching a repository that already has a project is rejected with `409 PROJECT_REPOSITORY_TAKEN`; changing or detaching a repository is allowed at zero links and refused with `409 PROJECT_HAS_LINKS` carrying the link count otherwise, and a concurrent link creation never leaves a link against a changed repository `(db)` (E62).
+- `openIssueCount` is on every project object and reads `0` without open issues ([api/projects.md](api/projects.md#open-issue-count)).
 - Project and issue access goes through the single access check.
 - GitHub work uses the owner's credentials, whoever triggers it.
 - The simultaneous cases of the edge-case table resolve as stated `(db)`.

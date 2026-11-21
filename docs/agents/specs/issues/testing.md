@@ -63,14 +63,14 @@ Built on the #479 infrastructure ([sync.md](sync.md)).
 
 Both kinds assert invariants, never timing, and never loop to catch a race.
 
-- **(a) True parallelism, DB tier `(db)`.** `Promise.all` on separate connections, asserting the invariant only. Cases: E34, E35, E42, E46, E48 and E49.
+- **(a) True parallelism, DB tier `(db)`.** `Promise.all` on separate connections, asserting the invariant only. Cases: E34, E35, E42, E46, E48 and E49, and the bulk races E66 to E69 (a deletion, a project deletion, an attach and an overlapping call against a bulk call).
 - **(b) Scripted interleaving `(race)`.** A deferred GitHub answer plus `FakeWorkersService`: pause the push, perform the competing action, release, assert. Cases: an edit during a push (E41, the marker revision changed so the job re-enqueues, and E10 for the refresh), unlink, project delete or user delete during a push (E44, E32), duplicate jobs (E13) and a crash before the clear (E15).
 
 ## Security verification
 
 - **Canary sweep.** Seed canaries (a PAT, an OAuth token, a GitHub App key, an installation token, a GitHub error body); run every sync outcome (success, rate limit, E19 to E22, E24, exhausted retries) and every project, issue and link route, errors included; assert that no response body or header, no captured log line and no recorded job param contains one.
 - **Job params.** An exact key allowlist of numeric ids, checked in the `FakeWorkersService` call log.
-- **Route access matrix.** One table-driven e2e spec over the routes: `401` without a session, `OriginGuard`, `X-Skip-Cache`, a foreign or deleted project answering a body identical to a missing one, an issue of another project answering the same `404`, a malformed uuid answering `400`, no `GET` answered, no admin access, and a completeness check against the registered routes (a new route without a row fails). The rows are the 18 routes of [api.md](api.md#every-route): `/projects/mine.json`, `create.json`, `from-repository.json`, and under `/projects/:projectId/` `show`, `edit`, `repository`, `delete`, `refresh`, `issues`, `issues/create`, `issues/import`, and under `/issues/:issueId/` `show`, `edit`, `delete`, `attach`, `unlink`, `refresh`, `retry-sync`, all with the `.json` suffix.
+- **Route access matrix.** One table-driven e2e spec over the routes: `401` without a session, `OriginGuard`, `X-Skip-Cache`, a foreign or deleted project answering a body identical to a missing one, an issue of another project answering the same `404`, a malformed uuid answering `400`, no `GET` answered, no admin access, and a completeness check against the registered routes (a new route without a row fails). The rows are the 19 routes of [api.md](api.md#every-route): `/projects/mine.json`, `create.json`, `from-repository.json`, and under `/projects/:projectId/` `show`, `edit`, `repository`, `delete`, `refresh`, `issues`, `issues/create`, `issues/import`, `issues/bulk-state`, and under `/issues/:issueId/` `show`, `edit`, `delete`, `attach`, `unlink`, `refresh`, `retry-sync`, all with the `.json` suffix.
 - **Two-user baseline** in every e2e and DB-backed harness (the intruder user above).
 - **Static specs `(static)`.** The Issues sources contain no `fetch`, `secret_iv` or `NOW(`, map no Integrations or Auth table or entity, and their columns match an allowlist (the marker has no payload column). The cache-policy coverage spec gains the new controllers.
 - **Content canary.** Next to the credential canary: a project name, description, issue title and body, and a repository owner/name carrying canary strings run through every route and the reconcile job, refusals and failures included; no log line contains any of them. A `4xx` refusal produces only the access line ([security.md](security.md#required-tests)).
@@ -79,17 +79,17 @@ Both kinds assert invariants, never timing, and never loop to catch a race.
 
 ## Frontend tests
 
-Jasmine, under `frontend/specs/`, in three layers as for Repositories: the **client** (requests and error mapping against a fake transport), the **controllers** (state, retry and unlink actions, the deletion confirmation) and the **render** layer. Fixtures are typed builders for projects, issues and link states, with no recorded JSON. Required: the project list and issue list; the link and sync state views ("GitHub issue gone", "rate limited until X", sync failed with a distinct credential reason: E1, E2, E17, E19 to E21); the retry sync and unlink actions (E18); the deletion confirmation (a general warning with the typed project name; the count of issues with unsent changes is shown after the delete); plus the routes, linking modals, bounded re-reads, `ConfirmModal` and the U rows. The full list is the Required tests of [ui.md](ui.md#required-tests).
+Jasmine, under `frontend/specs/`, in three layers as for Repositories: the **client** (requests and error mapping against a fake transport), the **controllers** (state, retry and unlink actions, the deletion confirmation) and the **render** layer. Fixtures are typed builders for projects, issues and link states, with no recorded JSON. Required: the project list and issue list; the link and sync state views ("GitHub issue gone", "rate limited until X", sync failed with a distinct credential reason: E1, E2, E17, E19 to E21); the retry sync and unlink actions (E18); the deletion confirmation (a general warning with the typed project name; the count of issues with unsent changes is shown after the delete); the open-issue count on project rows and the bulk bar, selection and summary notice of [ui/states.md](ui/states.md) (built and tested in #563, against the response shape of [api/issues.md](api/issues.md#bulk-close-and-reopen)); plus the routes, linking modals, bounded re-reads, `ConfirmModal` and the U rows. The full list is the Required tests of [ui.md](ui.md#required-tests).
 
 ## Coverage per area
 
 | Area | Main tiers | Fixtures | Owning "Required tests" | Edge cases |
 |---|---|---|---|---|
 | Model | DB-backed | seed builders, intruder user, restart harness | [model.md](model.md#required-tests) | E4, E12, E14, E16, E41 to E56 |
-| Projects | E2E with fakes; `(db)` concurrency | seed builders, in-memory fakes, fake GitHub (call log) | [projects.md](projects.md#required-tests) | E25 to E29, E33 to E40 |
+| Projects | E2E with fakes; `(db)` concurrency | seed builders, in-memory fakes, fake GitHub (call log) | [projects.md](projects.md#required-tests) | E25 to E29, E33 to E40, E73 |
 | Link | Unit (E57 to E61, E65); E2E with fakes (E62 to E64); `(db)` (E62 race); `(race)` (E1 edit against `gone`) | `FakeIntegrationsGithubService`, `githubIssue`, `githubPullRequest`, error builders | [github-link.md](github-link.md#required-tests) | E1 to E5, E22, E57 to E65 |
 | Sync (reconcile table, rate-limit waiting set and timer, integration fallback, staleness) | Unit; `(engine)`; `(race)`; `(db)` restart | fake GitHub, `FakeClock`, `FakeWorkersService`, deferreds | [sync.md](sync.md#required-tests) | E6 to E11, E13 to E21, E23, E24 |
-| API | E2E with fakes | in-memory fakes, intruder user | [api.md](api.md#required-tests) | E34 to E40 (status mapping) |
+| API | E2E with fakes | in-memory fakes, intruder user | [api.md](api.md#required-tests) | E34 to E40 (status mapping), E66 to E74 (count and bulk) |
 | Security | E2E; Static; Unit | canaries, route matrix, call log, log capture | [security.md](security.md#required-tests) | E19 to E22, E24, E31, E53 |
 | UI | Frontend | typed builders | [ui.md](ui.md#required-tests) | E1, E2, E17 to E21, E33 |
 

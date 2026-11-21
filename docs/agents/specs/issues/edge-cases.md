@@ -8,8 +8,8 @@ Part of the [Issues and Projects specs](../issues.md).
 - The matrix is an **index, not a second source of truth** (same shape as the [Repositories matrix](../../modules/repositories/edge-cases.md)): one line of outcome per row, linking to the rule in its owning file. A change of outcome is made in the owning file first, then reflected here.
 - Columns: `#` | Case | Expected behavior (data, GitHub calls, what the user sees) | Rule (owning file) | Check (the required test) | Status.
 - Status: `Decided` (the rule is already written in `projects.md` or `model.md`) or `Contract` (the outcome is fixed here; the owner issue refines the mechanics and updates the row in its own PR if the outcome changes).
-- Row ids are stable (`E1…E65`), so tests, [testing.md](testing.md) and other files can cite them. Ids are not renumbered when a group is reordered.
-- Groups, in order: projects; GitHub issue and link; link creation, unlinking and repository change; edits and conflicts; jobs, restart and rate limits; credentials and integrations; repository; users and cleanup.
+- Row ids are stable (`E1…E74`), so tests, [testing.md](testing.md) and other files can cite them. Ids are not renumbered when a group is reordered.
+- Groups, in order: projects; GitHub issue and link; link creation, unlinking and repository change; edits and conflicts; jobs, restart and rate limits; credentials and integrations; repository; users and cleanup; counts and bulk.
 - Each row is one required test; rows already tested in `projects.md` or `model.md` point there instead of repeating.
 
 ## Projects
@@ -107,6 +107,22 @@ Owned by [github-link.md](github-link.md); ids continue after E56 (E65 was added
 | E32 | Project or user deleted, or issue unlinked, while a job runs | The job is a no-op (guarded writes affect no row). | [model.md](model.md#edge-cases) row 4 | The `model.md` row 4 test. | Decided |
 | E33 | Project deleted with unsent changes | Markers are discarded; the response reports the count. | [projects.md](projects.md#deletion) | Delete with markers reports the count. | Decided |
 
+## Counts and bulk
+
+Rules in [api/issues.md](api/issues.md#bulk-close-and-reopen) (bulk) and [api/projects.md](api/projects.md#open-issue-count) (count).
+
+| # | Case | Expected behavior | Rule | Check | Status |
+|---|---|---|---|---|---|
+| E66 | An id in a bulk call is deleted before the issue lock | It goes to `notFound`; the other ids apply. | [api/issues.md](api/issues.md#bulk-close-and-reopen) | Delete one id mid-call `(db)`. | Contract |
+| E67 | Bulk races a project deletion | Deletion first: the re-check under the project lock answers `404`, nothing applied. Bulk first: its changes apply, the deletion removes the issues and the queued T1 jobs no-op. | [api/issues.md](api/issues.md#bulk-close-and-reopen) | Both orders `(db)`. | Contract |
+| E68 | Bulk races an attach on one of its issues | Serialized by the project lock. Attach first: the issue is linked, so bulk writes its marker and a T1. Bulk first: `updatedAt` moved, so the attach confirmation answers the stale `409` (E61). | [api/issues.md](api/issues.md#bulk-close-and-reopen) | Both orders `(db)`. | Contract |
+| E69 | Two overlapping bulk calls set opposite states on the same issues | Serialized (id-order locks, no deadlock); the last commit wins; each reports its own outcome. | [api/issues.md](api/issues.md#bulk-close-and-reopen) | Two concurrent calls `(db)`. | Contract |
+| E70 | Every id is `unchanged` or `notFound` | `200`, no writes, markers or enqueues; the rate-limit weight is still consumed. | [api/issues.md](api/issues.md#bulk-close-and-reopen) | All-unchanged and all-unknown calls. | Contract |
+| E71 | Linked issues whose GitHub side differs, or whose integration is paused, lacks a credential, or whose repository is Unavailable | As a single Edit: marker written, T1 enqueued, then the rules of E17 to E22. No new rule. | [api/issues.md](api/issues.md#bulk-close-and-reopen) | Bulk over such links. | Contract |
+| E72 | `gone` links among the ids | Local state change only, no marker, no T1; counted in `changed`. | [api/issues.md](api/issues.md#bulk-close-and-reopen) | Bulk over a `gone` link. | Contract |
+| E73 | A listed project with no open issues, or deleted between the page query and the count query | `openIssueCount: 0` (acceptable under "may lag"). | [api/projects.md](api/projects.md#open-issue-count) | Listing with an empty project. | Contract |
+| E74 | A rate-limited bulk call (`429`) | Nothing applied, nothing consumed; a retry after `Retry-After` succeeds. | [security.md](security.md#request-rate-limits) | Weight boundary and retry with the `FakeClock`. | Contract |
+
 ## Indexed rows of other files
 
 The data rows of [model.md](model.md#edge-cases) keep their own tests; they are indexed here with ids continuing after E40.
@@ -141,12 +157,12 @@ One test per row, citing its id. Rows touching rows in the database (uniqueness,
 
 **Tier of each row** (default tiers and tags in [testing.md](testing.md#tiers)):
 
-- DB-backed: E4, E12, E62 `(db)` (the race), E14, E16, E31, E34 `(db)`, E35 `(db)`, E42 `(db)`, E43, E45, E46 `(db)`, E47, E48 `(db)`, E49 `(db)`, E50 to E56. E14 and E16 are the restart spec of [testing.md](testing.md#worker-tests).
+- DB-backed: E4, E12, E62 `(db)` (the race), E14, E16, E31, E34 `(db)`, E35 `(db)`, E42 `(db)`, E43, E45, E46 `(db)`, E47, E48 `(db)`, E49 `(db)`, E50 to E56, E66 to E69 `(db)`. E14 and E16 are the restart spec of [testing.md](testing.md#worker-tests).
 - Scripted interleaving `(race)`: E1 (an edit against the job that sets `gone`), E10, E15, E32, E41, E44; E13 as a duplicate-jobs spec.
 - Unit: E1 to E3, E5 to E9, E57 to E61, E65 (classification on the Integrations client, plus the contract spec), E11, E17 to E24, E27, E28; E17 and E18 exhaustion marking also run once on the real engine `(engine)`.
-- E2E with fakes: E25 (when built), E26, E29, E30, E33, E36 to E40 (status mapping, access and gating); E18 recovery paths (the `retry-sync.json` route); E62 to E64 answers (E62's race is the `(db)` item above).
+- E2E with fakes: E25 (when built), E26, E29, E30, E33, E36 to E40 (status mapping, access and gating); E18 recovery paths (the `retry-sync.json` route); E62 to E64 answers (E62's race is the `(db)` item above); E70 to E74 (the bulk and count outcomes).
 
-- E1 to E3, E5 to E13, E15 to E22, E24, E27, E28 and E57 to E65: new tests defined by the Check column above.
+- E1 to E3, E5 to E13, E15 to E22, E24, E27, E28 and E57 to E74: new tests defined by the Check column above.
 - E4, E14, E23, E25, E26, E29 to E33: tested where the owning file lists them ([model.md](model.md#required-tests), [projects.md](projects.md#required-tests)); E25 waits for the removal feature.
 - E34 to E40 are tested in [projects.md](projects.md#required-tests); E41 to E56 in [model.md](model.md#required-tests).
 - A rate limit alone never produces `sync_failed` (E17), and a `404` never discards a marker without a passing issues probe (E22).
