@@ -24,6 +24,7 @@ import { FakeClock } from '../../../core/tests/support/fake-clock.js';
 import { buildDbTierOptions } from '../../../database/tests/db-tier/db-tier-options.js';
 import { RepositoriesService } from '../../../repositories/repositories.service.js';
 import { ISSUES_ENTITIES } from '../../entities/index.js';
+import { IssuesController } from '../../issues.controller.js';
 import { ISSUES_PROVIDERS } from '../../issues.module.js';
 import { ProjectsController } from '../../projects.controller.js';
 
@@ -80,7 +81,7 @@ export async function buildIssuesHttpDbHarness(env: Record<string, string> = {})
       } as never),
       TypeOrmModule.forFeature([...ISSUES_ENTITIES, User]),
     ],
-    controllers: [ProjectsController],
+    controllers: [ProjectsController, IssuesController],
     providers: [
       ...ISSUES_PROVIDERS,
       AccountHandleService,
