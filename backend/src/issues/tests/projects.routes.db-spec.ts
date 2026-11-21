@@ -22,6 +22,7 @@ describe('Projects routes (real MySQL)', () => {
   beforeEach(async () => {
     userId = await seedUser(harness.ds, 'owner');
     cookie = harness.sessionFor(userId);
+    harness.repositories.reset();
     harness.repositories.seed(userId, { repositoryId: 601, githubId: 61, owner: 'darthjee', name: 'kerghan' });
     harness.repositories.seed(userId, { repositoryId: 602, githubId: 62, owner: 'darthjee', name: 'unavailable', status: 'unavailable' });
     harness.repositories.seed(userId, { repositoryId: 603, githubId: 63, owner: 'darthjee', name: 'unknown', status: 'unknown' });

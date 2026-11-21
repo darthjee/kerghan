@@ -44,7 +44,17 @@ export class FakeProjectRepositories implements ProjectRepositoriesSurface {
       status: seed.status ?? (added ? 'added' : 'not_added'),
     };
 
-    this.#rows.set(userId, [...(this.#rows.get(userId) ?? []), { repositoryId: seed.repositoryId, added, summary }]);
+    const others = (this.#rows.get(userId) ?? []).filter((row) => row.repositoryId !== seed.repositoryId);
+
+    this.#rows.set(userId, [...others, { repositoryId: seed.repositoryId, added, summary }]);
+
+    return this;
+  }
+
+  /** Forgets every seeded row and logged call (user ids restart between DB specs). */
+  reset(): this {
+    this.#rows.clear();
+    this.calls.length = 0;
 
     return this;
   }
