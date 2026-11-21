@@ -1,6 +1,13 @@
 import { Issue } from '../entities/issue.entity.js';
 import { issueDeleteResponse, issueListingResponse, issueListRow, issueResponse } from '../issue-response.js';
 
+function recordRow(): Omit<Issue, 'body'> {
+  const { body, ...record } = issueRow();
+
+  expect(body).toBe('Details');
+  return record;
+}
+
 function issueRow(): Issue {
   return Object.assign(new Issue(), {
     id: 7,
@@ -36,8 +43,7 @@ describe('issue-response', () => {
   });
 
   it('leaves the body out of a listing row', () => {
-    const { body: _body, ...record } = issueRow();
-    const row = issueListRow(record, undefined);
+    const row = issueListRow(recordRow(), undefined);
 
     expect(Object.keys(row)).toEqual(['id', 'title', 'state', 'createdAt', 'updatedAt', 'link']);
     expect(row.id).toBe('3f0c1f8e-0000-4000-8000-000000000001');
@@ -52,7 +58,7 @@ describe('issue-response', () => {
   });
 
   it('builds the listing body reading each row link from the map', () => {
-    const { body: _body, ...record } = issueRow();
+    const record = recordRow();
     const link = { status: 'synced' };
     const listing = issueListingResponse(
       [record],
