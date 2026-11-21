@@ -1,16 +1,9 @@
-import { currentKeys, escapeLike, sourceRef } from '../repositories-listing.query.js';
+import { currentKeys, sourceRef } from '../repositories-listing.query.js';
 
 const integrations = [
   { id: 3, uuid: 'u3', label: 'l3', type: 'pat' as const },
   { id: 1, uuid: 'u1', label: 'l1', type: 'github_app' as const },
 ];
-
-describe('escapeLike', () => {
-  it('escapes %, _ and \\ so they match literally', () => {
-    expect(escapeLike('a%b_c\\d')).toBe('a\\%b\\_c\\\\d');
-    expect(escapeLike('plain')).toBe('plain');
-  });
-});
 
 describe('currentKeys', () => {
   it('lists the integrations in order, then the handle when set', () => {

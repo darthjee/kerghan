@@ -12,6 +12,7 @@ export interface ErrorPayload {
   message: string;
   details?: string[];
   retryAfterSeconds?: number;
+  meta?: Record<string, string | number>;
 }
 
 /**
@@ -33,6 +34,7 @@ interface HttpExceptionResponse {
   code?: unknown;
   message?: unknown;
   retryAfterSeconds?: unknown;
+  meta?: unknown;
 }
 
 /**
@@ -92,7 +94,7 @@ export function retryAfterSecondsOf(exception: unknown): number | undefined {
 /**
  * Global catch-all exception filter (registered via `APP_FILTER`) that
  * reshapes every error into the standard body
- * `{ error: { code, message, details?, retryAfterSeconds? }, statusCode, timestamp }`.
+ * `{ error: { code, message, details?, retryAfterSeconds?, meta? }, statusCode, timestamp }`.
  *
  * - `HttpException`s keep their status; `error.code` is the throw site's
  *   specific `code` when given, otherwise the status's category code
@@ -108,6 +110,9 @@ export function retryAfterSecondsOf(exception: unknown): number | undefined {
  * - An `HttpException` whose response object carries a numeric
  *   `retryAfterSeconds` also gets a `Retry-After` header (integer seconds,
  *   rounded up) and the same value as `error.retryAfterSeconds` in the body.
+ * - An `HttpException` whose response object carries a plain-object `meta`
+ *   exposes it as `error.meta` (public ids, counts, field names, timestamps or
+ *   reasons only, set at the throw site); never on the `ValidationPipe` path.
  */
 @Catch()
 export class HttpExceptionFilter implements ExceptionFilter {
@@ -197,10 +202,17 @@ export class HttpExceptionFilter implements ExceptionFilter {
       return { code: specificCode ?? ErrorCodes.VALIDATION_FAILED, message: details.join('; '), details };
     }
 
-    return {
+    const payload: ErrorPayload = {
       code: specificCode ?? categoryCodeFor(status),
       message: typeof message === 'string' ? message : exception.message,
     };
+    const { meta } = raw as HttpExceptionResponse;
+
+    if (typeof meta === 'object' && meta !== null && !Array.isArray(meta)) {
+      payload.meta = meta as Record<string, string | number>;
+    }
+
+    return payload;
   }
 
   /**

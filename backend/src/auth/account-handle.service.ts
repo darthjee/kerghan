@@ -56,4 +56,26 @@ export class AccountHandleService {
 
     return user !== null;
   }
+
+  /**
+   * Like {@link lockExistingUser}, but takes an exclusive lock (`SELECT … FOR UPDATE`) on the
+   * user row until the caller's transaction ends. Two shared locks do not serialize each other,
+   * so a per-user cap checked under `FOR SHARE` could be overshot by two concurrent creations;
+   * an exclusive lock makes the second creation wait for the first one's commit before it
+   * counts. It also keeps a concurrent user delete waiting for the caller's commit. Auth still
+   * owns the query.
+   * @param {number} userId - The id of the user.
+   * @param {EntityManager} manager - The caller's transactional entity manager.
+   * @returns {Promise<boolean>} Whether the user row exists.
+   */
+  async lockExistingUserForUpdate(userId: number, manager: EntityManager): Promise<boolean> {
+    const user = await manager.getRepository(User)
+      .createQueryBuilder('user')
+      .select('user.id')
+      .where('user.id = :userId', { userId })
+      .setLock('pessimistic_write')
+      .getOne();
+
+    return user !== null;
+  }
 }

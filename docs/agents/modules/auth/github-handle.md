@@ -172,6 +172,16 @@ It selects the user's `id` with a shared lock (`SELECT … FOR SHARE`, TypeORM
 still exists. A request entry point calls it before creating the sync-state row
 ([user deletion](../repositories/data-model.md#user-deletion)); it never reads another column.
 
+A second method does the same with an exclusive lock, for a per-user cap that must be checked
+under a lock that serializes concurrent creations (two shared locks do not serialize each other):
+
+```ts
+AccountHandleService#lockExistingUserForUpdate(userId: number, manager: EntityManager): Promise<boolean>
+```
+
+It selects the user's `id` with `SELECT … FOR UPDATE` (TypeORM `pessimistic_write`). The Issues
+module calls it when creating a project (cap check and insert in the same transaction).
+
 ## Handle changes
 
 When the handle changes or is cleared, the handle source's stored rows (its

@@ -1,5 +1,6 @@
 import { Transform } from 'class-transformer';
 import { IsIn, IsInt, IsString, Max, MaxLength, Min } from 'class-validator';
+import { trimString } from '../../core/code-points.validator.js';
 import type { ListFilter, ListInput } from '../types/repositories-api.types.js';
 
 /** The accepted `filter` values (`unknown` is rejected on purpose). */
@@ -8,15 +9,6 @@ export const LIST_FILTERS: readonly ListFilter[] = ['all', 'added', 'not_added',
 export const MAX_PER_PAGE = 100;
 /** The longest `search`, after trimming. */
 export const MAX_SEARCH_LENGTH = 100;
-
-/**
- * Trims a string value before validation; leaves anything else for `@IsString()` to reject.
- * @param {{ value: unknown }} params - class-transformer's transform params.
- * @returns {unknown} The trimmed string, or the value unchanged.
- */
-function trimString({ value }: { value: unknown }): unknown {
-  return typeof value === 'string' ? value.trim() : value;
-}
 
 /**
  * Request body for `POST /repositories/mine.json` (`docs/agents/backend/routes/repositories.md#request`). Every

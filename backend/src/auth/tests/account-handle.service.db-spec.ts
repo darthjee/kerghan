@@ -65,4 +65,28 @@ describe('AccountHandleService (real MySQL)', () => {
     const rows: unknown[] = await ds.query('SELECT id FROM auth_users WHERE id = ?', [id]);
     expect(rows).toHaveLength(0);
   });
+
+  it('lockExistingUserForUpdate answers existence and makes a second exclusive lock wait for the commit', async () => {
+    const id = await insertUser(ds, 'exclusive');
+    const order: string[] = [];
+    let second: Promise<void> | undefined;
+    let acquired = false;
+
+    await ds.transaction(async (manager) => {
+      await expect(service.lockExistingUserForUpdate(id, manager)).resolves.toBe(true);
+      await expect(service.lockExistingUserForUpdate(id + 1000, manager)).resolves.toBe(false);
+      second = ds.transaction(async (other) => {
+        await service.lockExistingUserForUpdate(id, other);
+        acquired = true;
+        order.push('second');
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      expect(acquired).toBe(false);
+      order.push('commit');
+    });
+    await second;
+
+    expect(order).toEqual(['commit', 'second']);
+  });
 });

@@ -105,7 +105,9 @@ Besides `AuthService` and Core's `SESSION_LOOKUP` implementation, the Auth modul
 `AccountHandleService`, so other modules read the GitHub handle without touching `auth_users`:
 `getGithubHandle(userId)` (the stored, normalised handle or `null`) and
 `lockExistingUser(userId, manager)` (a `SELECT … FOR SHARE` existence check inside the caller's
-transaction). Both, and the handle's normalisation, validation and edit routes, are defined in
+transaction) and `lockExistingUserForUpdate(userId, manager)` (the same check under
+`SELECT … FOR UPDATE`, to serialize per-user creations). All, and the handle's normalisation, validation and edit
+routes, are defined in
 [GitHub handle](github-handle.md).
 
 

@@ -31,6 +31,7 @@ const ALLOWED = [
   "import { UserDeletedEvent } from '../auth/events/user-deleted.event.js';",
   "import { RepositoriesService } from '../repositories/repositories.service.js';",
   "import { RepositoriesModule } from '../repositories/repositories.module.js';",
+  "import { RepoRefDto } from '../repositories/repositories.public.js';",
   "import { Clock } from '../core/clock.js';",
 ];
 
