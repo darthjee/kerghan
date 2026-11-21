@@ -9,6 +9,7 @@ import { ProjectCreator } from './project-creator.js';
 import { ProjectLinks } from './project-links.js';
 import { ProjectRepositoryChanger } from './project-repository-changer.js';
 import { ProjectStore } from './project-store.js';
+import { ProjectsController } from './projects.controller.js';
 import { ProjectsService } from './projects.service.js';
 import { AuthModule } from '../auth/auth.module.js';
 import { Clock, SystemClock } from '../core/clock.js';
@@ -35,7 +36,7 @@ export const ISSUES_PROVIDERS: Provider[] = [
  * listener exists at boot): projects and the Kerghan issues that belong to them, each issue
  * optionally linked to one GitHub issue (see `docs/agents/specs/issues.md`). Owns tables
  * `issues_projects`, `issues`, `issues_github_links` and `issues_pending_writes`; every
- * `*_id` is a logical FK only. It has no controller yet. It reads Auth through
+ * `*_id` is a logical FK only. Its only controller so far is `ProjectsController` (the Projects API). It reads Auth through
  * `AccountHandleService` and Repositories through the exported `RepositoriesService`.
  */
 @Module({
@@ -44,6 +45,7 @@ export const ISSUES_PROVIDERS: Provider[] = [
     ...ISSUES_PROVIDERS,
     { provide: Clock, useClass: SystemClock },
   ],
+  controllers: [ProjectsController],
   exports: [IssuesAccess],
 })
 // NestJS module classes are intentionally empty; all behavior lives in @Module().
