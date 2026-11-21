@@ -49,6 +49,15 @@ export class FakeProjectRepositories implements ProjectRepositoriesSurface {
     return this;
   }
 
+  /** Renames a seeded row (the repository moved or was renamed on GitHub): its summary follows. */
+  rename(userId: number, repositoryId: number, owner: string, name: string): this {
+    const row = (this.#rows.get(userId) ?? []).find((candidate) => candidate.repositoryId === repositoryId);
+
+    if (row) Object.assign(row.summary, { owner, name, fullName: `${owner}/${name}` });
+
+    return this;
+  }
+
   async resolveForProject(userId: number, ref: RepoRef): Promise<ProjectRepositoryLookup | null> {
     this.calls.push({ method: 'resolveForProject', userId, args: [ref] });
     const rows = this.#rows.get(userId) ?? [];

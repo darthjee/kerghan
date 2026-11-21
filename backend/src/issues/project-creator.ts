@@ -172,10 +172,11 @@ export class ProjectCreator {
   }
 
   /**
-   * Maps a unique-index violation of the insert to its refusal: the name index is
-   * `PROJECT_NAME_TAKEN`; the repository index re-reads the winner, answering
-   * `PROJECT_REPOSITORY_TAKEN` on the explicit path and the winner's `200` on the shortcut.
-   * Anything else is rethrown.
+   * Maps a unique-index violation of the insert to its refusal, in the order of the checks: when
+   * the repository has a live project now (the winner of the race; MySQL names either index when
+   * both collide) the repository check decides, answering `PROJECT_REPOSITORY_TAKEN` with the
+   * winner on the explicit path and the winner's `200` on the shortcut; otherwise a name
+   * violation is `PROJECT_NAME_TAKEN`. Anything else is rethrown.
    * @param {number} userId - The session's user.
    * @param {unknown} error - What the insert threw.
    * @param {ProjectRepositoryLookup | null} lookup - The resolved repository, if any.
@@ -190,13 +191,13 @@ export class ProjectCreator {
   ): Promise<CreationResult> {
     const index = duplicateEntryIndex(error);
 
+    if (index !== NAME_INDEX && index !== REPOSITORY_INDEX) throw error;
+
+    const winner = lookup === null ? null : await this.store.findLiveByRepository(userId, lookup.repositoryId);
+
+    if (winner !== null && lookup !== null) return this.#existing(userId, winner, lookup, mode);
     if (index === NAME_INDEX) throw projectNameTaken();
-    if (index !== REPOSITORY_INDEX || lookup === null) throw error;
 
-    const winner = await this.store.findLiveByRepository(userId, lookup.repositoryId);
-
-    if (winner === null) throw error;
-
-    return this.#existing(userId, winner, lookup, mode);
+    throw error;
   }
 }
