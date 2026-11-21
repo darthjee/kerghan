@@ -284,4 +284,36 @@ describe('HttpExceptionFilter', () => {
       expect(retryAfterSecondsOf(new HttpException({ message: 'x', retryAfterSeconds: 0 }, 429))).toBe(0);
     });
   });
+
+  describe('with an error.meta', () => {
+    it('copies a plain-object meta from the throw site', () => {
+      const body = catchAndGetBody(
+        new ConflictException({ code: ErrorCodes.PROJECT_HAS_LINKS, message: 'x', meta: { linkCount: 2 } }),
+      );
+
+      expect(body.error).toEqual({ code: ErrorCodes.PROJECT_HAS_LINKS, message: 'x', meta: { linkCount: 2 } });
+    });
+
+    it('omits meta when the throw site sets none', () => {
+      const body = catchAndGetBody(new ConflictException({ code: ErrorCodes.PROJECT_NAME_TAKEN, message: 'x' }));
+
+      expect(body.error).not.toHaveProperty('meta');
+    });
+
+    it.each([
+      ['a string', 'oops'],
+      ['null', null],
+      ['an array', [1]],
+    ])('ignores %s as meta', (_label, meta) => {
+      const body = catchAndGetBody(new ConflictException({ message: 'x', meta }));
+
+      expect(body.error).not.toHaveProperty('meta');
+    });
+
+    it('never copies meta on the ValidationPipe array path', () => {
+      const body = catchAndGetBody(new BadRequestException({ message: ['a must be a string'], meta: { x: 1 } }));
+
+      expect(body.error).not.toHaveProperty('meta');
+    });
+  });
 });

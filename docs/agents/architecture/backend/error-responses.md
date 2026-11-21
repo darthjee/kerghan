@@ -29,6 +29,7 @@ through DI and e2e test apps register it the same way (`build-auth-test-app.ts`)
 | `error.message` | Always present, human-readable. For validation failures: the messages joined with `"; "`. |
 | `error.details` | Only for `ValidationPipe` failures — the full list of validation messages. |
 | `error.retryAfterSeconds` | Optional. Present when the throw site sets `retryAfterSeconds` (e.g. `429` cooldowns and rate limits, some `503`s); the response then also carries a `Retry-After` header with the same whole number of seconds. |
+| `error.meta` | Optional object, set at the throw site (`{ code, message, meta: { ... } }`). Only public ids (uuids), counts, field names, timestamps or reasons — never internal ids, GitHub content or credential material. Copied only when the throw site passes a plain object; never present on `ValidationPipe` failures. Values are strings or numbers. |
 | `statusCode` | Same as the HTTP status. |
 | `timestamp` | ISO-8601 (`new Date().toISOString()`). |
 
