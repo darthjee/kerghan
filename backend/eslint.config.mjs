@@ -219,8 +219,8 @@ export default [
             message: 'Issues reaches Auth only through AccountHandleService and the user.deleted event (security.md#the-integrations-boundary).',
           },
           {
-            group: ['**/repositories/**', '!**/repositories/repositories.service*', '!**/repositories/repositories.module*'],
-            message: 'Issues reaches Repositories only through the exported RepositoriesService.',
+            group: ['**/repositories/**', '!**/repositories/repositories.service*', '!**/repositories/repositories.module*', '!**/repositories/repositories.public*'],
+            message: 'Issues reaches Repositories only through the exported RepositoriesService and repositories.public.',
           },
         ],
       }],

@@ -1,4 +1,5 @@
 import { ErrorCodes } from '../../core/error-codes.js';
+import { repositoryNotFound as addRepositoryNotFound } from '../../repositories/repositories-http-errors.js';
 import {
   issueNotFound,
   projectHasLinks,
@@ -9,7 +10,6 @@ import {
   projectsLimitReached,
   repositoryNotFound,
 } from '../issues-http-errors.js';
-import { repositoryNotFound as addRepositoryNotFound } from '../../repositories/repositories-http-errors.js';
 
 describe('issues-http-errors', () => {
   it.each([
