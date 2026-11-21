@@ -1,4 +1,5 @@
 import type { RepoRef } from '../../repositories/repositories.public.js';
+import type { ProjectResponse } from '../project-response.js';
 
 /**
  * The typed inputs of the Projects services (`docs/agents/specs/issues/api/projects.md`): plain
@@ -12,6 +13,19 @@ export interface ListProjectsInput {
   perPage: number;
   /** Trimmed literal substring of the name; empty means no search. */
   search: string;
+}
+
+/** The two creation routes: the explicit form or the shortcut from an added repository. */
+export type CreationMode = 'explicit' | 'shortcut';
+
+/**
+ * What both creation routes hand the one service method: the explicit form always has a `name`,
+ * the shortcut always has a `repository` and defaults the name to `owner/name`.
+ */
+export interface ProjectCreationInput {
+  name?: string;
+  description: string | null;
+  repository: RepoRef | null;
 }
 
 /** Explicit creation's input; `description` is already normalized (blank becomes `null`). */
@@ -38,4 +52,10 @@ export interface EditProjectInput {
 /** The repository route's input: `null` detaches. */
 export interface ProjectRepositoryInput {
   repository: RepoRef | null;
+}
+
+/** The creation result: `201` for a new project, `200` for the shortcut's existing one. */
+export interface CreationResult {
+  status: 200 | 201;
+  project: ProjectResponse;
 }
