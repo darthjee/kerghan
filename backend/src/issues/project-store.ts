@@ -28,6 +28,7 @@ export interface ProjectPageQuery {
 export interface ProjectChanges {
   name?: string;
   description?: string | null;
+  repositoryId?: number | null;
 }
 
 /**
@@ -106,12 +107,31 @@ export class ProjectStore {
    * @param {number} projectId - The project's internal id.
    * @param {ProjectChanges} changes - The fields to write.
    * @param {Date} updatedAt - The new `updated_at`.
+   * @param {EntityManager} [manager] - The transaction manager to write through.
    * @returns {Promise<boolean>} `false` when no live row matched (the project was deleted meanwhile).
    */
-  async update(projectId: number, changes: ProjectChanges, updatedAt: Date): Promise<boolean> {
-    const result = await this.projects.update({ id: projectId, deletedToken: 0 }, { ...changes, updatedAt });
+  async update(projectId: number, changes: ProjectChanges, updatedAt: Date, manager?: EntityManager): Promise<boolean> {
+    const result = await this.#repository(manager).update({ id: projectId, deletedToken: 0 }, { ...changes, updatedAt });
 
     return (result.affected ?? 0) > 0;
+  }
+
+  /**
+   * Turns a live project into a tombstone: `description` is cleared and `deleted_at` and
+   * `deleted_token` (the project's id) are written together, so the live-uniqueness indexes free
+   * its name and repository.
+   * @param {EntityManager} manager - The deleting transaction's manager.
+   * @param {number} projectId - The project's internal id.
+   * @param {Date} deletedAt - The deletion time.
+   * @returns {Promise<boolean>} `false` when no live row matched.
+   */
+  async markDeleted(manager: EntityManager, projectId: number, deletedAt: Date): Promise<boolean> {
+    const result: { affectedRows?: number } = await manager.query(
+      'UPDATE issues_projects SET description = NULL, deleted_at = ?, deleted_token = id WHERE id = ? AND deleted_token = 0',
+      [deletedAt, projectId],
+    );
+
+    return (result.affectedRows ?? 0) > 0;
   }
 
   /**

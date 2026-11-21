@@ -1,12 +1,23 @@
 import { Injectable } from '@nestjs/common';
+import { DataSource } from 'typeorm';
 import { duplicateEntryIndex } from './duplicate-entry.js';
 import type { IssuesProject } from './entities/issues-project.entity.js';
 import { IssuesAccess } from './issues-access.js';
 import { projectNameTaken, projectNotFound } from './issues-http-errors.js';
 import { ProjectOpenIssueCounts } from './open-issue-count.query.js';
 import { ProjectCreator } from './project-creator.js';
-import { listingResponse, projectResponse, type ProjectListingResponse, type ProjectResponse } from './project-response.js';
+import { ProjectLinks } from './project-links.js';
+import { ProjectRepositoryChanger } from './project-repository-changer.js';
+import {
+  deleteResponse,
+  listingResponse,
+  projectResponse,
+  type ProjectDeleteResponse,
+  type ProjectListingResponse,
+  type ProjectResponse,
+} from './project-response.js';
 import { type ProjectChanges, ProjectStore } from './project-store.js';
+import { stampOf } from './timestamps.js';
 import { Clock } from '../core/clock.js';
 import { RepositoriesService } from '../repositories/repositories.service.js';
 import type {
@@ -15,6 +26,7 @@ import type {
   EditProjectInput,
   ListProjectsInput,
   ProjectCreationInput,
+  ProjectRepositoryInput,
 } from './types/projects-api.types.js';
 
 // The unique index a rename race can hit (`model.md#issues_projects`).
@@ -35,7 +47,10 @@ export class ProjectsService {
    * @param {ProjectOpenIssueCounts} counts - The open-issue counts.
    * @param {RepositoriesService} repositories - The caller's repository rows.
    * @param {ProjectCreator} creator - Creation, shared by both routes.
-   * @param {Clock} clock - The time source of `updated_at`.
+   * @param {ProjectRepositoryChanger} changer - Repository connect, change and detach.
+   * @param {ProjectLinks} links - The project's issues, links and markers (deletion).
+   * @param {DataSource} dataSource - Opens the deletion transaction.
+   * @param {Clock} clock - The time source of `updated_at` and `deleted_at`.
    */
   constructor(
     private readonly access: IssuesAccess,
@@ -43,6 +58,9 @@ export class ProjectsService {
     private readonly counts: ProjectOpenIssueCounts,
     private readonly repositories: RepositoriesService,
     private readonly creator: ProjectCreator,
+    private readonly changer: ProjectRepositoryChanger,
+    private readonly links: ProjectLinks,
+    private readonly dataSource: DataSource,
     private readonly clock: Clock,
   ) {}
 
@@ -116,11 +134,49 @@ export class ProjectsService {
 
     if (changes.name !== undefined) await this.#assertNameFree(userId, project, changes.name);
 
-    const updatedAt = new Date(Math.floor(this.clock.now().getTime() / 1000) * 1000);
+    const updatedAt = stampOf(this.clock);
 
     if (!(await this.#write(project, changes, updatedAt))) throw projectNotFound();
 
     return this.#respond(userId, Object.assign(project, changes, { updatedAt }));
+  }
+
+  /**
+   * Connects, changes or detaches the project's repository
+   * (`docs/agents/specs/issues/api/projects.md#project-repository`). Never syncs or enqueues a job.
+   * @param {number} userId - The session's user.
+   * @param {string} projectUuid - The project's public id.
+   * @param {ProjectRepositoryInput} input - The validated input; `repository: null` detaches.
+   * @returns {Promise<ProjectResponse>} The project object, as stored after the change.
+   * @throws {NotFoundException} `NOT_FOUND` for a missing project or a ref that is not among the caller's rows.
+   * @throws {ConflictException} `PROJECT_REPOSITORY_NOT_ADDED`, `PROJECT_REPOSITORY_TAKEN` or `PROJECT_HAS_LINKS`.
+   */
+  async setRepository(userId: number, projectUuid: string, input: ProjectRepositoryInput): Promise<ProjectResponse> {
+    return this.#respond(userId, await this.changer.change(userId, projectUuid, input.repository));
+  }
+
+  /**
+   * Deletes a project: one transaction in the module's lock order. The project row is locked, its
+   * issues that have a pending marker are counted, its markers, links and issues are hard-deleted,
+   * and the row becomes a tombstone (`description` cleared, `deleted_at` and `deleted_token`
+   * written together), which frees its name and repository. Makes no GitHub call; a repeat
+   * answers `404`.
+   * @param {number} userId - The session's user.
+   * @param {string} projectUuid - The project's public id.
+   * @returns {Promise<ProjectDeleteResponse>} `{ unsentIssueCount }`, counted before the delete.
+   * @throws {NotFoundException} `NOT_FOUND` when no live project of this user has that uuid.
+   */
+  async delete(userId: number, projectUuid: string): Promise<ProjectDeleteResponse> {
+    const unsentIssueCount = await this.dataSource.transaction(async (manager) => {
+      const project = await this.access.findLiveProject(userId, projectUuid, manager, { lock: true });
+      const unsent = await this.links.purge(manager, project.id);
+
+      if (!(await this.store.markDeleted(manager, project.id, stampOf(this.clock)))) throw projectNotFound();
+
+      return unsent;
+    });
+
+    return deleteResponse(unsentIssueCount);
   }
 
   /**

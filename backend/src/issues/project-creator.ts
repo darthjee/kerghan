@@ -15,6 +15,7 @@ import {
 import { ProjectOpenIssueCounts } from './open-issue-count.query.js';
 import { projectResponse } from './project-response.js';
 import { ProjectStore } from './project-store.js';
+import { stampOf } from './timestamps.js';
 import { AccountHandleService } from '../auth/account-handle.service.js';
 import { Clock } from '../core/clock.js';
 import type { ProjectRepositoryLookup, RepoRef } from '../repositories/repositories.public.js';
@@ -156,7 +157,7 @@ export class ProjectCreator {
       if (!(await this.accounts.lockExistingUserForUpdate(userId, manager))) throw projectNotFound();
       if (await this.store.countLive(userId, manager) >= this.config.maxProjectsPerUser) throw projectsLimitReached();
 
-      const now = this.#stamp();
+      const now = stampOf(this.clock);
 
       return this.store.insert(manager, {
         uuid: randomUUID(),
@@ -197,12 +198,5 @@ export class ProjectCreator {
     if (winner === null) throw error;
 
     return this.#existing(userId, winner, lookup, mode);
-  }
-
-  /**
-   * @returns {Date} The clock's now, in whole seconds (`datetime` keeps no fraction).
-   */
-  #stamp(): Date {
-    return new Date(Math.floor(this.clock.now().getTime() / 1000) * 1000);
   }
 }

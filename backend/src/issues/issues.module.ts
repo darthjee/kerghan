@@ -6,6 +6,8 @@ import { IssuesConfig } from './issues-config.js';
 import { IssuesEventsListener } from './issues-events.listener.js';
 import { ProjectOpenIssueCounts } from './open-issue-count.query.js';
 import { ProjectCreator } from './project-creator.js';
+import { ProjectLinks } from './project-links.js';
+import { ProjectRepositoryChanger } from './project-repository-changer.js';
 import { ProjectStore } from './project-store.js';
 import { ProjectsService } from './projects.service.js';
 import { AuthModule } from '../auth/auth.module.js';
@@ -22,6 +24,8 @@ export const ISSUES_PROVIDERS: Provider[] = [
   IssuesEventsListener,
   ProjectOpenIssueCounts,
   ProjectCreator,
+  ProjectLinks,
+  ProjectRepositoryChanger,
   ProjectStore,
   ProjectsService,
 ];
