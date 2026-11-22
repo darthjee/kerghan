@@ -68,6 +68,9 @@ const FIELDS = new Map([
  * #561 and #562 add the rate-limit and link codes.
  */
 const ProjectErrorMessages = {
+  /** Shown on Name when the shortcut found the default name taken. */
+  nameTaken: 'A project with this name already exists',
+
   /**
    * Describe an error for display, as React text (never markup: S1).
    *

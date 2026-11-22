@@ -112,6 +112,39 @@ function renderAdd(repository, addState, handlers) {
 }
 
 /**
+ * Render the "Project" shortcut button of an added row, its spinner while running, and its
+ * inline error.
+ *
+ * @param {object} repository - The row.
+ * @param {{status: string, message: string, link: (object|undefined)}|undefined} projectState -
+ *   The row's shortcut state.
+ * @param {{onProject: Function}} handlers - Event handlers.
+ * @returns {React.ReactElement|null} The button, or `null` for a row that is not added.
+ */
+function renderProject(repository, projectState, handlers) {
+  if (repository.status !== 'added') {
+    return null;
+  }
+
+  const pending = projectState?.status === 'pending';
+
+  return (
+    <>
+      <button
+        type="button"
+        className="btn btn-sm btn-outline-primary"
+        disabled={pending}
+        onClick={handlers.onProject(repository)}
+      >
+        {pending ? <span className="spinner-border spinner-border-sm me-1" role="status" aria-label="Opening project" /> : null}
+        Project
+      </button>
+      {projectState?.status === 'error' ? renderAddError(projectState) : null}
+    </>
+  );
+}
+
+/**
  * Render one repository row.
  *
  * @param {object} repository - The row.
@@ -138,7 +171,10 @@ function renderRow(repository, state, handlers) {
       </td>
       <td>{renderSources(repository.sources, state.sync.sources)}</td>
       <td>{STATUS_LABELS.get(repository.status) ?? repository.status}</td>
-      <td>{renderAdd(repository, state.addState.get(repository.githubId), handlers)}</td>
+      <td>
+        {renderAdd(repository, state.addState.get(repository.githubId), handlers)}
+        {renderProject(repository, state.projectState.get(repository.githubId), handlers)}
+      </td>
     </tr>
   );
 }
@@ -150,9 +186,9 @@ const RepositoriesTableHelper = {
   /**
    * Render the table of repositories.
    *
-   * @param {{listing: {repositories: Array<object>}, sync: object, addState: Map}} state - Page
-   *   state.
-   * @param {{onAdd: Function}} handlers - Event handlers.
+   * @param {{listing: {repositories: Array<object>}, sync: object, addState: Map,
+   *   projectState: Map}} state - Page state.
+   * @param {{onAdd: Function, onProject: Function}} handlers - Event handlers.
    * @returns {React.ReactElement} The table.
    */
   render(state, handlers) {

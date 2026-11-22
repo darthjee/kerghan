@@ -85,6 +85,18 @@ export default class DirtyFormGuardController {
   }
 
   /**
+   * Leave at once, without asking: for the form's own successful save, which navigates away
+   * from a form that is still dirty.
+   *
+   * @param {string} targetHash - The hash to go to.
+   * @returns {void} Nothing.
+   */
+  forceLeave(targetHash) {
+    this.#bypass = true;
+    DirtyFormGuardController.#navigate(targetHash);
+  }
+
+  /**
    * Keep editing: drop the pending target.
    *
    * @returns {void} Nothing.

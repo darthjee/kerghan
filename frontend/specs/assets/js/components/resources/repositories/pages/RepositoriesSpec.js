@@ -19,6 +19,7 @@ describe('Repositories', () => {
         query: INITIAL_QUERY,
         loadState: { loading: true, error: null },
         addState: new Map(),
+        projectState: new Map(),
         dismissed: new Set(),
         refreshNotice: null,
         cooldownUntil: null,
@@ -34,6 +35,16 @@ describe('Repositories', () => {
     handlers.onAdd(7)();
 
     expect(RepositoriesController.prototype.add).toHaveBeenCalledWith(7);
+  });
+
+  it('wires the Project shortcut handler to the page controller', () => {
+    spyOn(RepositoriesController.prototype, 'openProject').and.resolveTo();
+    const handlers = renderCapturingHandlers(Repositories, RepositoriesHelper);
+    const repository = { githubId: 7, fullName: 'a/b' };
+
+    handlers.onProject(repository)();
+
+    expect(RepositoriesController.prototype.openProject).toHaveBeenCalledWith(repository);
   });
 
   describe('buildLoadEffect', () => {

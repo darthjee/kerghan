@@ -26,6 +26,7 @@ describe('RepositoriesHelper', () => {
       query: { page: 1, filter: 'all', search: '' },
       loadState: { loading: false, error: null },
       addState: new Map(),
+      projectState: new Map(),
       dismissed: new Set(),
       refreshNotice: null,
       now: Date.parse('2026-11-07T12:00:00Z'),

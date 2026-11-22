@@ -62,6 +62,18 @@ describe('DirtyFormGuardController', () => {
     });
   });
 
+  describe('#forceLeave', () => {
+    it('navigates without asking, even from a dirty attached form', () => {
+      controller.attach(true);
+
+      controller.forceLeave('#/projects/abc');
+      fakeWindow.dispatchEvent(new Event('hashchange'));
+
+      expect(fakeWindow.location.hash).toBe('#/projects/abc');
+      expect(setPendingHash).not.toHaveBeenCalled();
+    });
+  });
+
   describe('#cancelLeave', () => {
     it('clears the pending target and stays', () => {
       controller.cancelLeave();

@@ -22,6 +22,7 @@ describe('useDirtyFormGuard', () => {
   it('exposes leave, confirmLeave and cancelLeave', () => {
     expect(renderGuard(false)).toEqual(jasmine.objectContaining({
       leave: jasmine.any(Function), confirmLeave: jasmine.any(Function), cancelLeave: jasmine.any(Function),
+      forceLeave: jasmine.any(Function),
     }));
   });
 });

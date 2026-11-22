@@ -33,13 +33,14 @@ export default function Repositories() {
   const [query, setQuery] = useState(INITIAL_QUERY);
   const [loadState, setLoadState] = useState(INITIAL_LOAD_STATE);
   const [addState, setAddState] = useState(new Map());
+  const [projectState, setProjectState] = useState(new Map());
   const [dismissed, setDismissed] = useState(new Set());
   const [refreshNotice, setRefreshNotice] = useState(null);
   const [now, setNow] = useState(Date.now());
   const [cooldownUntil, setCooldownUntil] = useState(null);
 
   const controller = useMemo(() => new RepositoriesController({
-    setListing, setSync, setQuery, setLoadState, setAddState, setDismissed,
+    setListing, setSync, setQuery, setLoadState, setAddState, setProjectState, setDismissed,
     setRefreshNotice, setNow, setCooldownUntil,
   }), []);
 
@@ -47,7 +48,7 @@ export default function Repositories() {
 
   return RepositoriesHelper.render(
     {
-      listing, sync, query, loadState, addState, dismissed, refreshNotice, now, cooldownUntil,
+      listing, sync, query, loadState, addState, projectState, dismissed, refreshNotice, now, cooldownUntil,
     },
     RepositoriesHandlers.build(controller),
   );
