@@ -16,6 +16,13 @@ const ROUTES = [
   ['/account/sessions', 'sessions'],
   ['/account/my-account', 'my-account'],
   ['/repositories', 'repositories'],
+  ['/projects/new', 'project-new'],
+  ['/projects/:projectId/issues/new', 'issue-new'],
+  ['/projects/:projectId/issues/:issueId/edit', 'issue-edit'],
+  ['/projects/:projectId/issues/:issueId', 'issue'],
+  ['/projects/:projectId/edit', 'project-edit'],
+  ['/projects/:projectId', 'project'],
+  ['/projects', 'projects'],
   ['/', 'home'],
 ];
 

@@ -5,6 +5,7 @@ import LoginModal from '../../../../../assets/js/components/common/loginModal/Lo
 import ModalRedirect from '../../../../../assets/js/components/common/ModalRedirect.jsx';
 import Integrations from '../../../../../assets/js/components/resources/accounts/pages/Integrations.jsx';
 import Repositories from '../../../../../assets/js/components/resources/repositories/pages/Repositories.jsx';
+import ProjectsPlaceholder from '../../../../../assets/js/components/resources/projects/pages/ProjectsPlaceholder.jsx';
 import Sessions from '../../../../../assets/js/components/resources/accounts/pages/Sessions.jsx';
 import ResetPasswordLanding from '../../../../../assets/js/components/resources/accounts/pages/ResetPasswordLanding.jsx';
 
@@ -59,6 +60,12 @@ describe('AppHelper', () => {
 
   it('renders the repositories page for the repositories key', () => {
     expect(partsOf('repositories').page.type).toBe(Repositories);
+  });
+
+  ['issue-new', 'issue', 'issue-edit'].forEach((key) => {
+    it(`renders the placeholder page for the ${key} key`, () => {
+      expect(partsOf(key).page.type).toBe(ProjectsPlaceholder);
+    });
   });
 
   it('renders the sessions page for the sessions key', () => {

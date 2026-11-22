@@ -9,6 +9,7 @@ import AuthorizationRequests from '../resources/accounts/pages/AuthorizationRequ
 import Integrations from '../resources/accounts/pages/Integrations.jsx';
 import MyAccount from '../resources/accounts/pages/MyAccount.jsx';
 import Repositories from '../resources/repositories/pages/Repositories.jsx';
+import ProjectsPlaceholder from '../resources/projects/pages/ProjectsPlaceholder.jsx';
 import Sessions from '../resources/accounts/pages/Sessions.jsx';
 
 const PAGES = new Map([
@@ -22,6 +23,9 @@ const PAGES = new Map([
   ['sessions', <Sessions />],
   ['my-account', <MyAccount />],
   ['repositories', <Repositories />],
+  ['issue-new', <ProjectsPlaceholder />],
+  ['issue', <ProjectsPlaceholder />],
+  ['issue-edit', <ProjectsPlaceholder />],
   ['home', <Home />],
 ]);
 
