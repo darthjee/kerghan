@@ -20,12 +20,17 @@ which installations they can access.
 
 ## Required permissions
 
-- The app is registered with exactly **Issues: read** and **Metadata: read** (repository
-  permissions), and nothing else: no write permission, no organization or account permission.
+- The app is registered with exactly **Issues: write** and **Metadata: read** (repository
+  permissions), and nothing else: no organization or account permission. Issues: write is what
+  the issue push (`IntegrationsGithubIssueWriter.updateIssue`) needs; reads mint with
+  `issues: read`, the push with `issues: write`
+  ([issues](../github-service/issues.md#github-app-token-permissions)).
+- **Operator action:** the registered app must be updated on GitHub to Issues: write, and each
+  installation owner must accept the new permission. Installations still on `issues: read` are
+  accepted as before, and their pushes answer `forbidden`.
 - An installation is accepted only if its `permissions` object (from
   `GET /app/installations/{id}`) has `issues` and `metadata` each set to `read` or `write`.
-  `write` can only appear if the app's permissions were changed on GitHub; it is accepted but
-  recorded as-is in `metadata.permissions`.
+  `write` is accepted and recorded as-is in `metadata.permissions`.
 - When the app's permissions change, GitHub asks each installation's owner to accept the new
   ones; until they do, the installation keeps the old set. A missing permission therefore means
   an installation that hasn't accepted an update.
