@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { DataSource, type EntityManager } from 'typeorm';
-import { duplicateEntryIndex } from './duplicate-entry.js';
+import { duplicateEntryIndex, PROJECT_REPOSITORY_INDEX } from './duplicate-entry.js';
 import type { IssuesProject } from './entities/issues-project.entity.js';
 import { IssuesAccess } from './issues-access.js';
 import {
@@ -18,7 +18,6 @@ import type { ProjectRepositoryLookup, RepoRef } from '../repositories/repositor
 import { RepositoriesService } from '../repositories/repositories.service.js';
 
 // The unique index a repository change race can hit (`model.md#issues_projects`).
-const REPOSITORY_INDEX = 'idx_issues_projects_user_id_repository_id_deleted_token';
 
 /**
  * Connects, changes or detaches a project's repository
@@ -139,7 +138,7 @@ export class ProjectRepositoryChanger {
    * @returns {Promise<unknown>} The error to throw.
    */
   async #lostRace(userId: number, error: unknown, lookup: ProjectRepositoryLookup | null): Promise<unknown> {
-    if (duplicateEntryIndex(error) !== REPOSITORY_INDEX || lookup === null) return error;
+    if (duplicateEntryIndex(error) !== PROJECT_REPOSITORY_INDEX || lookup === null) return error;
 
     const winner = await this.store.findLiveByRepository(userId, lookup.repositoryId);
 

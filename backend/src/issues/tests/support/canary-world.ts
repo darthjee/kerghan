@@ -21,6 +21,16 @@ export interface CanaryWorld {
   issue: SeededIssue;
 }
 
+/** User content a world can carry, for the content canary: each field defaults to a plain value. */
+export interface CanaryContent {
+  projectName?: string;
+  projectDescription?: string;
+  issueTitle?: string;
+  issueBody?: string;
+  repositoryOwner?: string;
+  repositoryName?: string;
+}
+
 let run = 0;
 
 /**
@@ -29,9 +39,14 @@ let run = 0;
  * them lists, and a local issue.
  * @param harness - The canary harness.
  * @param types - The integration types, oldest first (default one PAT).
+ * @param content - User content to seed (project name and description, issue title and body, repository owner and name).
  * @returns The world.
  */
-export async function buildCanaryWorld(harness: IssuesCanaryHarness, types: IntegrationType[] = ['pat']): Promise<CanaryWorld> {
+export async function buildCanaryWorld(
+  harness: IssuesCanaryHarness,
+  types: IntegrationType[] = ['pat'],
+  content: CanaryContent = {},
+): Promise<CanaryWorld> {
   run += 1;
   harness.clock.set(new Date(Date.UTC(2026, 5, 1, 12, 0, 0) + run * 3_600_000));
   harness.repositories.reset();
@@ -43,10 +58,19 @@ export async function buildCanaryWorld(harness: IssuesCanaryHarness, types: Inte
 
   for (const type of types) integrations.push(await harness.seedIntegration(userId, { type }));
 
-  harness.repositories.seed(userId, { ...CANARY_REPOSITORY, integrationSourceIds: integrations.map((integration) => integration.id) });
+  harness.repositories.seed(userId, {
+    ...CANARY_REPOSITORY,
+    owner: content.repositoryOwner ?? CANARY_REPOSITORY.owner,
+    name: content.repositoryName ?? CANARY_REPOSITORY.name,
+    integrationSourceIds: integrations.map((integration) => integration.id),
+  });
 
-  const project = await seedProject(harness.ds, userId, { repositoryId: CANARY_REPOSITORY.repositoryId });
-  const issue = await seedIssue(harness.ds, project.id, { title: 'Local', body: 'Local body' });
+  const project = await seedProject(harness.ds, userId, {
+    repositoryId: CANARY_REPOSITORY.repositoryId,
+    ...(content.projectName === undefined ? {} : { name: content.projectName }),
+    description: content.projectDescription ?? null,
+  });
+  const issue = await seedIssue(harness.ds, project.id, { title: content.issueTitle ?? 'Local', body: content.issueBody ?? 'Local body' });
 
   return { userId, cookie: harness.sessionFor(userId), integrations, project, issue };
 }

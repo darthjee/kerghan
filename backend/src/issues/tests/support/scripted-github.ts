@@ -31,6 +31,7 @@ export class ScriptedGithub {
   readonly fetch: jest.Mock;
   readonly #now: () => Date;
   readonly #taken = new Map<GithubCase, number>();
+  readonly #readsByNumber = new Map<number, GithubCase>();
   #reads: GithubCase = issue(githubIssue({ number: 12, title: 'T', body: 'B' }), { etag: 'W/"g1"' });
   #probes: GithubCase = issuePage([]);
   #writes: GithubCase = issue(githubIssue({ number: 12, title: 'T', body: 'B' }), { etag: 'W/"g2"' });
@@ -47,6 +48,13 @@ export class ScriptedGithub {
   /** Scripts the answer of the issue `GET`. */
   reads(answer: GithubCase): this {
     this.#reads = answer;
+
+    return this;
+  }
+
+  /** Scripts the answer of the issue `GET` for one issue number (the other numbers keep the `reads` answer). */
+  readsFor(number: number, answer: GithubCase): this {
+    this.#readsByNumber.set(number, answer);
 
     return this;
   }
@@ -81,6 +89,7 @@ export class ScriptedGithub {
   clear(): void {
     this.calls.length = 0;
     this.#taken.clear();
+    this.#readsByNumber.clear();
     this.fetch.mockClear();
   }
 
@@ -100,11 +109,13 @@ export class ScriptedGithub {
     if (route === undefined) throw new UnexpectedNetworkCall(url);
     if (route.target === 'mint') return this.#mint();
 
-    return this.#respond(this.#scripted(route.target));
+    return this.#respond(this.#scripted(route.target, url));
   }
 
-  #scripted(target: 'reads' | 'probes' | 'writes'): GithubCase {
-    return { reads: this.#reads, probes: this.#probes, writes: this.#writes }[target];
+  #scripted(target: 'reads' | 'probes' | 'writes', url: string): GithubCase {
+    if (target === 'reads') return this.#readsByNumber.get(Number(url.split('/').at(-1))) ?? this.#reads;
+
+    return { probes: this.#probes, writes: this.#writes }[target];
   }
 
   #mint(): Response {

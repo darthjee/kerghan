@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { Injectable } from '@nestjs/common';
 import { DataSource } from 'typeorm';
-import { duplicateEntryIndex } from './duplicate-entry.js';
+import { duplicateEntryIndex, PROJECT_NAME_INDEX, PROJECT_REPOSITORY_INDEX } from './duplicate-entry.js';
 import type { IssuesProject } from './entities/issues-project.entity.js';
 import { IssuesConfig } from './issues-config.js';
 import {
@@ -23,8 +23,6 @@ import { RepositoriesService } from '../repositories/repositories.service.js';
 import type { CreationMode, CreationResult, ProjectCreationInput } from './types/projects-api.types.js';
 
 // The unique indexes a creation race can hit (`model.md#issues_projects`).
-const NAME_INDEX = 'idx_issues_projects_user_id_name_deleted_token';
-const REPOSITORY_INDEX = 'idx_issues_projects_user_id_repository_id_deleted_token';
 // The longest project name, in code points: a longer `owner/name` default is cut to it.
 const MAX_NAME_CODE_POINTS = 100;
 
@@ -191,12 +189,12 @@ export class ProjectCreator {
   ): Promise<CreationResult> {
     const index = duplicateEntryIndex(error);
 
-    if (index !== NAME_INDEX && index !== REPOSITORY_INDEX) throw error;
+    if (index !== PROJECT_NAME_INDEX && index !== PROJECT_REPOSITORY_INDEX) throw error;
 
     const winner = lookup === null ? null : await this.store.findLiveByRepository(userId, lookup.repositoryId);
 
     if (winner !== null && lookup !== null) return this.#existing(userId, winner, lookup, mode);
-    if (index === NAME_INDEX) throw projectNameTaken();
+    if (index === PROJECT_NAME_INDEX) throw projectNameTaken();
 
     throw error;
   }

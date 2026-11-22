@@ -4,10 +4,10 @@ import { ISSUES_RECONCILE_JOB } from '../jobs/issues-reconcile.job.js';
 import { expectNoCanary, serializeJobs, serializeLogs, serializeResponse } from './support/canary-assertions.js';
 import { buildCanaryWorld, CANARY_NUMBER, type CanaryWorld } from './support/canary-world.js';
 import { buildIssuesCanaryHarness, postAs, type IssuesCanaryHarness } from './support/issues-canary-harness.js';
-import { seedLink, seedMarker } from './support/issues-seeds.js';
 import { ISSUE_ID, PROJECT_ID, ROUTE_ROWS, registeredRoutes, type RouteRow } from './support/registered-routes.js';
+import { linkIssue as linkIssueOf, remoteIssue, runOutcome, SYNC_OUTCOMES } from './support/sync-outcomes.js';
 import {
-  forbidden, githubIssue, githubPullRequest, issue as issueCase, issueMoved, issuePage, notFound, notModified, rateLimited, serverError,
+  forbidden, githubPullRequest, issue as issueCase, issueMoved, notFound, notModified, rateLimited, serverError,
   timeout, unauthorized, type GithubCase,
 } from '../../integrations/tests/support/github-builders.js';
 import { canaryAppKey, CANARY, CANARY_ERROR_BODY } from '../../integrations/tests/support/integrations-github-harness.js';
@@ -90,21 +90,10 @@ describe('Issues credential canary sweep (real MySQL)', () => {
   const bodyOf = (row: RouteRow): Record<string, unknown> => (row.path.endsWith('from-repository.json') ? { repository: { githubId: 700 } } : row.body);
   const send = (row: RouteRow, w: CanaryWorld, cookie = w.cookie, body = bodyOf(row)) => record(postAs(harness, resolve(row, w), cookie, body));
 
-  /** Links the world's issue to GitHub issue 12, with a pending write when asked, as the Issues routes would leave it. */
-  async function linkIssue(w: CanaryWorld, marker = false): Promise<number> {
-    const link = await seedLink(harness.ds, {
-      userId: w.userId, issueId: w.issue.id, githubNumber: CANARY_NUMBER, etag: 'W/"old"', githubUpdatedAt: new Date('2026-06-01T11:00:00Z'),
-      lastSyncedAt: harness.clock.now(), base: { title: 'Base', body: 'Local body', state: 'open' },
-    });
-
-    if (marker) await seedMarker(harness.ds, link.id);
-
-    return link.id;
-  }
-
-  const remote = (title: string, updatedAt = '2026-06-01T11:00:00Z', etag = 'W/"g1"') => issueCase(
-    githubIssue({ number: CANARY_NUMBER, title, body: 'Local body', updatedAt: new Date(updatedAt) }), { etag },
+  const remote = (title: string, updatedAt = '2026-06-01T11:00:00Z', etag = 'W/"g1"') => remoteIssue(
+    { title, body: 'Local body', local: 'Local', now: harness.clock.now() }, title, updatedAt, etag,
   );
+  const linkIssue = (w: CanaryWorld, marker = false) => linkIssueOf(harness, w, marker);
 
   describe('every route (testing.md#security-verification: the credential canary)', () => {
     it('covers every route the Issues module registers', () => {
@@ -194,10 +183,8 @@ describe('Issues credential canary sweep (real MySQL)', () => {
   });
 
   describe('every sync outcome (testing.md#security-verification: E17, E19 to E22, E24, exhausted retries)', () => {
-    /** Runs the reconcile job of one pending write and then reads the link and issue back as the owner and the intruder. */
-    async function drainAndRead(w: CanaryWorld): Promise<void> {
-      await harness.drainJobs();
-
+    /** Reads the link and issue back through the routes, as the owner and as the intruder. */
+    async function readBack(w: CanaryWorld): Promise<void> {
       const base = `/projects/${w.project.uuid}`;
 
       await record(postAs(harness, `${base}/issues/${w.issue.uuid}/show.json`, w.cookie));
@@ -207,95 +194,27 @@ describe('Issues credential canary sweep (real MySQL)', () => {
       await record(postAs(harness, `${base}/issues/${w.issue.uuid}/show.json`, harness.intruderCookie()));
     }
 
-    async function pending(w: CanaryWorld): Promise<void> {
-      const linkId = await linkIssue(w, true);
-
-      await harness.ds.query('UPDATE issues SET title = ? WHERE id = ?', ['Local', w.issue.id]);
-      harness.workers.enqueue(ISSUES_RECONCILE_JOB, { linkId });
-    }
-
     describe.each(TYPES)('with a %s credential', (type) => {
-      it('success: the pending write is pushed', async () => {
-        const w = await world([type]);
+      it.each(SYNC_OUTCOMES.filter((outcome) => outcome.noIntegration !== true && outcome.denyOwner !== true).map((outcome) => [outcome.title, outcome] as const))(
+        '%s',
+        async (_title, outcome) => {
+          const w = await world([type]);
 
-        await pending(w);
-        harness.github.reads(remote('Base')).writes(remote('Local', '2026-06-01T13:00:00Z', 'W/"g2"'));
-        await drainAndRead(w);
-
-        expect(harness.github.issueCalls().map((call) => call.method)).toEqual(['GET', 'PATCH']);
-      });
-
-      it('E17: a rate limit pauses the integration', async () => {
-        const w = await world([type]);
-
-        await pending(w);
-        harness.github.reads(rateLimited(new Date(harness.clock.now().getTime() + 600_000)));
-        await drainAndRead(w);
-      });
-
-      it('E19: a revoked credential (401) stops the job and keeps the marker', async () => {
-        const w = await world([type]);
-
-        await pending(w);
-        harness.github.reads(unauthorized());
-        await drainAndRead(w);
-      });
-
-      it('E21 and E5: a read-only credential (403 on the push) fails with a credential reason', async () => {
-        const w = await world([type]);
-
-        await pending(w);
-        harness.github.reads(remote('Base')).writes(forbidden());
-        await drainAndRead(w);
-      });
-
-      it.each([
-        ['a failing probe (403): access loss', forbidden],
-        ['a failing probe (401): access loss', unauthorized],
-        ['a failing probe (404): access loss', notFound],
-        ['a failing probe (5xx): unavailable', serverError],
-        ['a passing probe: the link is gone', () => issuePage([])],
-      ])('E22: a 404 with %s', async (_label, probe) => {
-        const w = await world([type]);
-
-        await pending(w);
-        harness.github.reads(notFound()).probes(probe());
-        await drainAndRead(w);
-      });
-
-      it.each([['a timeout', timeout], ['a 5xx', serverError]])('exhausted retries: %s exhausts the attempts and records the failure', async (_label, answer) => {
-        const w = await world([type]);
-
-        await pending(w);
-        harness.github.reads(answer());
-        await drainAndRead(w);
-
-        await expect(harness.ds.query('SELECT status_reason FROM issues_github_links WHERE user_id = ?', [w.userId])).resolves.toEqual([{ status_reason: 'retries_exhausted' }]);
-      });
+          await runOutcome(harness, w, outcome);
+          await readBack(w);
+        },
+      );
     });
 
-    it('E20: no integration at all makes no GitHub call and keeps the marker', async () => {
-      const w = await world([]);
+    it.each(SYNC_OUTCOMES.filter((outcome) => outcome.noIntegration === true || outcome.denyOwner === true).map((outcome) => [outcome.title, outcome] as const))(
+      '%s',
+      async (_title, outcome) => {
+        const w = await world(outcome.noIntegration ? [] : ['github_app']);
 
-      await pending(w);
-      await drainAndRead(w);
-
-      expect(harness.github.calls).toEqual([]);
-      await expect(harness.ds.query('SELECT id FROM issues_pending_writes')).resolves.not.toHaveLength(0);
-    });
-
-    it('E24: an owner who is not approved makes no fetch call and keeps the markers', async () => {
-      const w = await world(['github_app']);
-
-      await pending(w);
-      await harness.ds.query("UPDATE auth_users SET status = 'denied' WHERE id = ?", [w.userId]);
-      harness.github.reads(remote('Base')).writes(remote('Local'));
-      await harness.drainJobs();
-
-      expect(harness.github.fetch).not.toHaveBeenCalled();
-      await expect(harness.ds.query('SELECT id FROM issues_pending_writes WHERE link_id IN (SELECT id FROM issues_github_links WHERE user_id = ?)', [w.userId]))
-        .resolves.toHaveLength(1);
-    });
+        await runOutcome(harness, w, outcome);
+        await readBack(w);
+      },
+    );
   });
 
   describe('the whole sweep (testing.md#security-verification)', () => {
