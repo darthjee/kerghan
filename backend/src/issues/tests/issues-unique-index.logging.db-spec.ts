@@ -156,6 +156,32 @@ describe('Issues unique-index duplicates are mapped and never logged (real MySQL
     });
   });
 
+  // MySQL's message carries the name unescaped before the real `for key '...'` suffix: a name that imitates
+  // that suffix must neither hide the violated index (a 500 instead of the 409) nor reach the logs.
+  describe('a project name imitating the key suffix of the duplicate-entry message', () => {
+    const IMITATION = 'CANARYimitateVALUE';
+    const NAME = `${IMITATION}' for key '${PROJECT_NAME_INDEX}`;
+    const expectImitationNotLogged = (): void => expectNoCanary([serializeLogs(harness.logs)], [IMITATION, 'ER_DUP_ENTRY', 'Duplicate entry', 'duplicate key']);
+
+    it('answers 409 PROJECT_NAME_TAKEN on creation and on rename, and logs nothing of the name', async () => {
+      const w = await buildCanaryWorld(harness, ['pat'], { projectName: 'Owner project' });
+      const first = await create(w, { name: NAME });
+      const second = await create(w, { name: NAME });
+      const other = await create(w, { name: `${IMITATION} other` });
+      const rename = await call(w, `/projects/${other.body.id}/edit.json`, { name: NAME });
+
+      expect([first, second, other, rename].map(statusOf)).toEqual(['201', 'PROJECT_NAME_TAKEN', '201', 'PROJECT_NAME_TAKEN']);
+      expectImitationNotLogged();
+    });
+
+    it('answers 409 PROJECT_NAME_TAKEN for two creations at once, never a 500', async () => {
+      const w = await buildCanaryWorld(harness, ['pat'], { projectName: 'Owner project' });
+
+      expect((await together([1, 2].map(() => () => create(w, { name: NAME })))).sort()).toEqual(['201', 'PROJECT_NAME_TAKEN']);
+      expectImitationNotLogged();
+    });
+  });
+
   it('documents the uuid indexes as unreachable: a random v4 uuid cannot be chosen by a request', () => {
     expect(ISSUES_UNIQUE_INDEX_MAPPINGS.filter((entry) => entry.index.endsWith('uuid')).map((entry) => entry.mappedBy)).toEqual([
       'a random v4 uuid: no route can provoke it',

@@ -35,7 +35,9 @@ export const ISSUES_UNIQUE_INDEX_MAPPINGS: ReadonlyArray<{ index: string; mapped
 const MYSQL_DUPLICATE_ENTRY_CODE = 'ER_DUP_ENTRY';
 
 // MySQL 8 names the violated key as `table.index` in the message: `... for key 'issues_projects.idx_x'`.
-const KEY_IN_MESSAGE = /for key '(?:[^'.]*\.)?([^']+)'/;
+// The duplicated value comes first in the message, unescaped, so a value (a project name) can imitate
+// `for key '...'`: the match is anchored to the end of the message, where the real key always is.
+const KEY_IN_MESSAGE = /for key '(?:[^'.]*\.)?([^']+)'\s*$/;
 
 /**
  * Reads which unique index an insert violated.
