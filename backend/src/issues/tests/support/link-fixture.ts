@@ -11,6 +11,8 @@ import { seedProject, type SeededProject } from './issues-seeds.js';
 export const INTEGRATION_ID = 41;
 /** The fixture repository's internal id. */
 export const REPOSITORY_ID = 7001;
+/** The second repository's internal id (`seedSecondProject`). */
+export const SECOND_REPOSITORY_ID = 7002;
 /** The fixture repository's GitHub id and names. */
 export const REPOSITORY = { githubId: 700, owner: 'darthjee', name: 'kerghan' } as const;
 
@@ -114,4 +116,24 @@ export async function rowCount(harness: IssuesHttpDbHarness, table: string): Pro
   const rows: Array<{ total: string }> = await harness.ds.query(`SELECT COUNT(*) AS total FROM ${table}`);
 
   return Number(rows[0].total);
+}
+
+/**
+ * Seeds a second repository, listed by the same integration, and a project of the user on it (one
+ * project per repository, so a second live project needs its own).
+ * @param harness - The harness.
+ * @param userId - The user.
+ * @param name - The project's name.
+ * @returns The new project.
+ */
+export async function seedSecondProject(harness: IssuesHttpDbHarness, userId: number, name = 'other'): Promise<SeededProject> {
+  harness.repositories.seed(userId, {
+    repositoryId: SECOND_REPOSITORY_ID,
+    githubId: 701,
+    owner: 'darthjee',
+    name: 'second',
+    integrationSourceIds: [INTEGRATION_ID],
+  });
+
+  return seedProject(harness.ds, userId, { repositoryId: SECOND_REPOSITORY_ID, name });
 }
