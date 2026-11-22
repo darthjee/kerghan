@@ -3,7 +3,10 @@ import type { Integration } from '../entities/integration.entity.js';
 import { githubAppTestKey } from './support/github-app-test-key.js';
 import {
   forbidden,
+  githubIssue,
   githubRepo,
+  issue,
+  issuePage,
   jsonResponse,
   listingPage,
   notFound,
@@ -46,6 +49,11 @@ function minted(): Response {
 function stored(harness: GithubServiceHarness, row: Integration): Integration {
   return harness.repo.rows.find((candidate) => candidate.id === row.id) as Integration;
 }
+
+const ISSUE_REPO = { githubId: 2 ** 31 + 4242, owner: 'octo-org', name: 'widgets' };
+const ISSUE_NUMBER = 7;
+const CANARY_TITLE = 'CANARYcanaryTITLE issue title';
+const CANARY_BODY = 'CANARYcanaryBODY issue body';
 
 describe('IntegrationsGithubService', () => {
   installNoNetworkGuard();
@@ -350,6 +358,132 @@ describe('IntegrationsGithubService', () => {
         operation: 'list_repositories',
         result: 'invalid_credentials',
       }));
+    });
+  });
+
+  describe('issue reads (getIssue and probeIssues)', () => {
+    it.each([
+      ['a missing integration', 404],
+      ['a foreign integration', 'foreign'],
+    ])('%s answers integration_unusable (missing) with no fetch', async (_name, target) => {
+      const row = await harness.seed({ userId: INTRUDER });
+      const id = target === 'foreign' ? row.id : target as number;
+
+      expect(await harness.service.getIssue(USER, id, ISSUE_REPO, ISSUE_NUMBER)).toEqual({ kind: 'integration_unusable', reason: 'missing' });
+      expect(await harness.service.probeIssues(USER, id, ISSUE_REPO)).toEqual({ kind: 'integration_unusable', reason: 'missing' });
+      expect(fetchCalls()).toHaveLength(0);
+    });
+
+    it('does not call an invalid integration, and a disabled type', async () => {
+      const invalid = await harness.seed({ status: 'invalid' });
+      const app = await harness.seed({ type: 'github_app' });
+
+      harness.enabled.github_app = false;
+
+      expect(await harness.service.getIssue(USER, invalid.id, ISSUE_REPO, ISSUE_NUMBER)).toEqual({ kind: 'integration_unusable', reason: 'status' });
+      expect(await harness.service.probeIssues(USER, app.id, ISSUE_REPO)).toEqual({ kind: 'integration_unusable', reason: 'type_disabled' });
+      expect(fetchCalls()).toHaveLength(0);
+    });
+
+    it.each([
+      ['pat', 'bad_credentials'],
+      ['oauth_app', 'revoked'],
+    ] as const)('a %s 401 sets it invalid + %s, for both reads', async (type, reason) => {
+      const first = await harness.seed({ type });
+      const second = await harness.seed({ type });
+
+      replyOnce(fetchMock(), unauthorized());
+      replyOnce(fetchMock(), unauthorized());
+
+      expect(await harness.service.getIssue(USER, first.id, ISSUE_REPO, ISSUE_NUMBER)).toEqual({ kind: 'invalid_credentials' });
+      expect(await harness.service.probeIssues(USER, second.id, ISSUE_REPO)).toEqual({ kind: 'invalid_credentials' });
+      expect(stored(harness, first)).toMatchObject({ status: 'invalid', statusReason: reason });
+      expect(stored(harness, second)).toMatchObject({ status: 'invalid', statusReason: reason });
+    });
+
+    it('a 403 that is not a rate limit is forbidden and never changes the status', async () => {
+      const row = await harness.seed();
+
+      replyOnce(fetchMock(), forbidden());
+
+      expect(await harness.service.getIssue(USER, row.id, ISSUE_REPO, ISSUE_NUMBER)).toEqual({ kind: 'forbidden' });
+      expect(stored(harness, row)).toMatchObject({ status: 'active', statusReason: null });
+    });
+
+    it('a github_app call mints with { issues: read, metadata: read } for both reads, and reuses the token', async () => {
+      const row = await harness.seed({ type: 'github_app' });
+
+      fetchMock().mockResolvedValueOnce(minted());
+      replyOnce(fetchMock(), issue(githubIssue()));
+      replyOnce(fetchMock(), issuePage([]));
+
+      await harness.service.getIssue(USER, row.id, ISSUE_REPO, ISSUE_NUMBER);
+      await harness.service.probeIssues(USER, row.id, ISSUE_REPO);
+
+      const calls = fetchCalls();
+
+      expect(calls).toHaveLength(3);
+      expect(calls[0].init.body).toBe('{"permissions":{"issues":"read","metadata":"read"}}');
+      expect(calls.slice(1).map(({ headers }) => headers.Authorization)).toEqual([
+        `Bearer ${CANARY_INSTALLATION_TOKEN}`,
+        `Bearer ${CANARY_INSTALLATION_TOKEN}`,
+      ]);
+    });
+
+    it('a repository listing token is not reused for an issue read (another permission set)', async () => {
+      const row = await harness.seed({ type: 'github_app' });
+
+      fetchMock().mockResolvedValueOnce(minted());
+      replyOnce(fetchMock(), listingPage(1, [], { etag: null }), 'installation');
+      fetchMock().mockResolvedValueOnce(minted());
+      replyOnce(fetchMock(), issue(githubIssue()));
+
+      await harness.service.listRepositories(USER, row.id, 1);
+      await harness.service.getIssue(USER, row.id, ISSUE_REPO, ISSUE_NUMBER);
+
+      expect(fetchCalls().map(({ init }) => init.body)).toEqual([
+        '{"permissions":{"metadata":"read"}}',
+        undefined,
+        '{"permissions":{"issues":"read","metadata":"read"}}',
+        undefined,
+      ]);
+    });
+
+    it('logs only safe fields for a failed call: no title, body, URL or token', async () => {
+      const row = await harness.seed();
+
+      fetchMock().mockResolvedValueOnce(jsonResponse(403, { message: `${CANARY_TITLE} ${CANARY_BODY}` }));
+      replyOnce(fetchMock(), issue(githubIssue({ title: CANARY_TITLE, body: CANARY_BODY })));
+
+      await harness.service.getIssue(USER, row.id, ISSUE_REPO, ISSUE_NUMBER);
+      await harness.service.getIssue(USER, row.id, ISSUE_REPO, ISSUE_NUMBER);
+
+      const logged = Object.values(harness.logger).flatMap((mock) => mock.mock.calls);
+
+      expect(harness.logger.warn.mock.calls).toEqual([[
+        'github repo call failed',
+        { integrationId: row.id, operation: 'get_issue', status: 403, result: 'forbidden' },
+      ]]);
+      expect(JSON.stringify(logged)).not.toMatch(/CANARYcanary|api\.github\.com|octo-org/);
+    });
+
+    it('is quiet for ok, not_modified and not_found', async () => {
+      const row = await harness.seed();
+
+      replyOnce(fetchMock(), issue(githubIssue()));
+      replyOnce(fetchMock(), notFound());
+
+      await harness.service.getIssue(USER, row.id, ISSUE_REPO, ISSUE_NUMBER);
+      await harness.service.probeIssues(USER, row.id, ISSUE_REPO);
+
+      expect(harness.logger.warn).not.toHaveBeenCalled();
+    });
+
+    it('has no unauthenticated variant: the id is required, and the budget is never touched', async () => {
+      const spy = jest.spyOn(harness.budget, 'tryAcquire');
+
+      expect(await harness.service.getIssue(USER, 404, ISSUE_REPO, ISSUE_NUMBER)).toEqual({ kind: 'integration_unusable', reason: 'missing' });
+      expect(spy).not.toHaveBeenCalled();
     });
   });
 });
