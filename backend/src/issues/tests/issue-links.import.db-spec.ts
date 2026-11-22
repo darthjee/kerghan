@@ -1,8 +1,8 @@
-import { Issue } from '../entities/issue.entity.js';
 import { IssueGithubLink } from '../entities/issue-github-link.entity.js';
+import { Issue } from '../entities/issue.entity.js';
 import { buildIssuesHttpDbHarness, type IssuesHttpDbHarness } from './support/issues-http-db-harness.js';
-import { buildLinkWorld, INTEGRATION_ID, linkApi, type LinkWorld, REPOSITORY, rowCount, scriptIssue } from './support/link-fixture.js';
 import { seedIssue } from './support/issues-seeds.js';
+import { buildLinkWorld, INTEGRATION_ID, linkApi, type LinkWorld, REPOSITORY, rowCount, scriptIssue } from './support/link-fixture.js';
 
 // POST import.json over real MySQL: the issue and its link are created together from the single
 // GitHub read (`docs/agents/specs/issues/api/github-link.md`).

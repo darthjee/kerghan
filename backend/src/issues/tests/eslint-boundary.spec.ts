@@ -26,6 +26,7 @@ const FORBIDDEN = [
 
 const ALLOWED = [
   "import { IntegrationsGithubService } from '../integrations/integrations-github.public.js';",
+  "import { IntegrationsModule, type GithubIssue } from '../integrations/integrations-github.public.js';",
   "import { AccountHandleService } from '../auth/account-handle.service.js';",
   "import { AuthModule } from '../auth/auth.module.js';",
   "import { UserDeletedEvent } from '../auth/events/user-deleted.event.js';",

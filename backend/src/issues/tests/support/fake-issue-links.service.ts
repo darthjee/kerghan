@@ -1,7 +1,7 @@
-import type { IssueResponse } from '../../issue-response.js';
-import type { IssueLinksService } from '../../issue-links.service.js';
-import type { AttachIssueInput, ImportIssueInput, UnlinkIssueInput, UnlinkIssueResponse } from '../../types/issues-api.types.js';
 import { sampleIssue } from './fake-issues.service.js';
+import type { IssueLinksService } from '../../issue-links.service.js';
+import type { IssueResponse } from '../../issue-response.js';
+import type { AttachIssueInput, ImportIssueInput, UnlinkIssueInput, UnlinkIssueResponse } from '../../types/issues-api.types.js';
 
 /** The `IssueLinksService` methods the controller uses. */
 export type IssueLinksServiceSurface = Pick<IssueLinksService, 'import' | 'attach' | 'unlink'>;

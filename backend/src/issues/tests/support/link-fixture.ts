@@ -1,11 +1,11 @@
 import type request from 'supertest';
-import { issue as issueCase, githubIssue } from '../../../integrations/tests/support/github-builders.js';
-import type { GithubIssue } from '../../../integrations/integrations-github.public.js';
-import { seedUser } from '../../../repositories/tests/support/two-user-baseline.js';
 import { integrationRef } from './integration-refs.js';
 import type { IssuesHttpDbHarness } from './issues-http-db-harness.js';
 import { post } from './issues-http-db-harness.js';
 import { seedProject, type SeededProject } from './issues-seeds.js';
+import type { GithubIssue } from '../../../integrations/integrations-github.public.js';
+import { issue as issueCase, githubIssue } from '../../../integrations/tests/support/github-builders.js';
+import { seedUser } from '../../../repositories/tests/support/two-user-baseline.js';
 
 /** The integration that lists the fixture's repository. */
 export const INTEGRATION_ID = 41;
@@ -127,6 +127,19 @@ export async function rowCount(harness: IssuesHttpDbHarness, table: string): Pro
  * @returns The new project.
  */
 export async function seedSecondProject(harness: IssuesHttpDbHarness, userId: number, name = 'other'): Promise<SeededProject> {
+  seedSecondRepository(harness, userId);
+
+  return seedProject(harness.ds, userId, { repositoryId: SECOND_REPOSITORY_ID, name });
+}
+
+/**
+ * Seeds the second repository (GitHub id 701) for a user, listed by the same integration, without
+ * a project on it: a repository a project can be moved to.
+ * @param harness - The harness.
+ * @param userId - The user.
+ * @returns Nothing.
+ */
+export function seedSecondRepository(harness: IssuesHttpDbHarness, userId: number): void {
   harness.repositories.seed(userId, {
     repositoryId: SECOND_REPOSITORY_ID,
     githubId: 701,
@@ -134,6 +147,4 @@ export async function seedSecondProject(harness: IssuesHttpDbHarness, userId: nu
     name: 'second',
     integrationSourceIds: [INTEGRATION_ID],
   });
-
-  return seedProject(harness.ds, userId, { repositoryId: SECOND_REPOSITORY_ID, name });
 }

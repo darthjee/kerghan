@@ -1,3 +1,9 @@
+import type request from 'supertest';
+import { integrationRef } from './support/integration-refs.js';
+import { buildIssuesHttpDbHarness, type IssuesHttpDbHarness } from './support/issues-http-db-harness.js';
+import { seedIssue, seedProject } from './support/issues-seeds.js';
+import { buildLinkWorld, INTEGRATION_ID, linkApi, linkRepository, type LinkWorld, rowCount, scriptIssue } from './support/link-fixture.js';
+import type { FakeAnswer } from '../../integrations/tests/support/fake-integrations-github.service.js';
 import {
   forbidden,
   githubPullRequest,
@@ -10,11 +16,6 @@ import {
   timeout,
   unauthorized,
 } from '../../integrations/tests/support/github-builders.js';
-import type { FakeAnswer } from '../../integrations/tests/support/fake-integrations-github.service.js';
-import { integrationRef } from './support/integration-refs.js';
-import { buildIssuesHttpDbHarness, type IssuesHttpDbHarness } from './support/issues-http-db-harness.js';
-import { seedIssue, seedProject } from './support/issues-seeds.js';
-import { buildLinkWorld, INTEGRATION_ID, linkApi, linkRepository, type LinkWorld, rowCount, scriptIssue } from './support/link-fixture.js';
 
 // Every refusal of a link creation leaves the issue, link and marker tables as they were
 // (`api/github-link.md#order-of-checks-import-and-attach`, E3, E57 to E60).
@@ -36,7 +37,7 @@ describe('Issue link refusals (real MySQL)', () => {
   const script = (...answers: FakeAnswer[]) => harness.github.script(INTEGRATION_ID, 'getIssue', 12, ...answers);
 
   /** Both link routes, so every refusal is proved on import and on attach. */
-  const routes = (): Array<[string, () => Promise<{ status: number; body: any; headers: Record<string, string> }>]> => [
+  const routes = (): Array<[string, () => Promise<request.Response>]> => [
     ['import', async () => api().importIssue()],
     ['attach', async () => {
       const local = await seedIssue(harness.ds, world.project.id, { title: 'Local' });
