@@ -1,0 +1,104 @@
+import ApiError from '../../../../../../../assets/js/client/ApiError.js';
+import ProjectErrorMessages from '../../../../../../../assets/js/components/resources/projects/errors/errorMessages.js';
+import { PROJECT_ID } from '../../../../../../support/issuesBuilders.js';
+
+describe('ProjectErrorMessages', () => {
+  const error = (status, code, message, meta, details) => new ApiError(status, message, code, details, undefined, undefined, meta);
+
+  describe('.describe', () => {
+    it('defaults to the API message', () => {
+      expect(ProjectErrorMessages.describe(error(409, 'PROJECT_NAME_TAKEN', 'A project with this name already exists')))
+        .toEqual({ message: 'A project with this name already exists' });
+    });
+
+    it('falls back to a generic message without one', () => {
+      expect(ProjectErrorMessages.describe(undefined)).toEqual({ message: 'Request failed' });
+      expect(ProjectErrorMessages.describe({ message: '' })).toEqual({ message: 'Request failed' });
+    });
+
+    describe('PROJECT_REPOSITORY_TAKEN', () => {
+      it('links to the existing project', () => {
+        const described = ProjectErrorMessages.describe(
+          error(409, 'PROJECT_REPOSITORY_TAKEN', 'This repository already has a project', { projectId: PROJECT_ID }),
+        );
+
+        expect(described.message).toBe('This repository already has a project');
+        expect(described.link).toEqual({ href: `#/projects/${PROJECT_ID}`, text: 'Open the existing project' });
+      });
+
+      ['../admin', '..%2Fadmin', undefined, 12].forEach((projectId) => {
+        it(`shows no link for a non-uuid meta.projectId (${projectId})`, () => {
+          const described = ProjectErrorMessages.describe(
+            error(409, 'PROJECT_REPOSITORY_TAKEN', 'Taken', { projectId }),
+          );
+
+          expect(described).toEqual({ message: 'Taken' });
+        });
+      });
+
+      it('shows no link without meta', () => {
+        expect(ProjectErrorMessages.describe(error(409, 'PROJECT_REPOSITORY_TAKEN', 'Taken')).link).toBeUndefined();
+      });
+    });
+
+    describe('PROJECT_HAS_LINKS', () => {
+      it('builds the sentence from meta.linkCount', () => {
+        expect(ProjectErrorMessages.describe(error(409, 'PROJECT_HAS_LINKS', 'api', { linkCount: 3 })).message)
+          .toBe('3 linked issues use this repository; unlink them before changing it');
+      });
+
+      [undefined, { linkCount: 'x' }, { linkCount: -1 }, { linkCount: 1.5 }].forEach((meta) => {
+        it(`falls back to the API message for ${JSON.stringify(meta)}`, () => {
+          expect(ProjectErrorMessages.describe(error(409, 'PROJECT_HAS_LINKS', 'api', meta)).message).toBe('api');
+        });
+      });
+    });
+
+    it('words PROJECT_REPOSITORY_CHANGED', () => {
+      expect(ProjectErrorMessages.describe(error(409, 'PROJECT_REPOSITORY_CHANGED', 'api')).message)
+        .toBe('The project\'s repository changed; try again.');
+    });
+
+    it('words GITHUB_UNAVAILABLE', () => {
+      expect(ProjectErrorMessages.describe(error(502, 'GITHUB_UNAVAILABLE', 'api')).message)
+        .toBe('GitHub is unavailable right now; try again.');
+    });
+
+    it('lists the VALIDATION_FAILED details', () => {
+      const described = ProjectErrorMessages.describe(
+        error(400, 'VALIDATION_FAILED', 'bad', undefined, ['name must not be empty']),
+      );
+
+      expect(described).toEqual({ message: 'bad', details: ['name must not be empty'] });
+    });
+
+    it('lists no details when VALIDATION_FAILED carries none', () => {
+      expect(ProjectErrorMessages.describe(error(400, 'VALIDATION_FAILED', 'bad')).details).toEqual([]);
+    });
+  });
+
+  describe('.fieldOf', () => {
+    it('targets the Name field for PROJECT_NAME_TAKEN', () => {
+      expect(ProjectErrorMessages.fieldOf(error(409, 'PROJECT_NAME_TAKEN', 'x'))).toBe('name');
+    });
+
+    ['PROJECT_REPOSITORY_NOT_ADDED', 'PROJECT_REPOSITORY_TAKEN'].forEach((code) => {
+      it(`targets the Repository field for ${code}`, () => {
+        expect(ProjectErrorMessages.fieldOf(error(409, code, 'x'))).toBe('repository');
+      });
+    });
+
+    it('targets the Repository field for the repository 404', () => {
+      expect(ProjectErrorMessages.fieldOf(error(404, 'NOT_FOUND', 'Repository not found'))).toBe('repository');
+    });
+
+    it('keeps the project 404 off the Repository field', () => {
+      expect(ProjectErrorMessages.fieldOf(error(404, 'NOT_FOUND', 'Project not found'))).toBe('form');
+    });
+
+    it('makes PROJECTS_LIMIT_REACHED and unknown errors form-level', () => {
+      expect(ProjectErrorMessages.fieldOf(error(422, 'PROJECTS_LIMIT_REACHED', 'x'))).toBe('form');
+      expect(ProjectErrorMessages.fieldOf(undefined)).toBe('form');
+    });
+  });
+});

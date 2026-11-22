@@ -1,5 +1,5 @@
 import ApiError from './ApiError.js';
-import { isUuid } from '../utils/validation/uuid.js';
+import { isUuid } from '../utils/ids/uuid.js';
 
 /**
  * Turn an id into a safe request-path segment (S3).

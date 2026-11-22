@@ -2,7 +2,7 @@ import {
   buildErrorBody, buildFailure, buildIssue, buildIssueListing, buildLink, buildPagination,
   buildProject, buildProjectListing, buildProjectRepository, ISSUE_ID, PROJECT_ID,
 } from './issuesBuilders.js';
-import { isUuid } from '../../assets/js/utils/validation/uuid.js';
+import { isUuid } from '../../assets/js/utils/ids/uuid.js';
 
 describe('issuesBuilders support', () => {
   it('exposes well-formed uuids', () => {

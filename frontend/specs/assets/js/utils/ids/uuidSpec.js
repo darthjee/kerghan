@@ -1,4 +1,4 @@
-import { isUuid } from '../../../../../assets/js/utils/validation/uuid.js';
+import { isUuid } from '../../../../../assets/js/utils/ids/uuid.js';
 
 describe('isUuid', () => {
   it('accepts a canonical uuid, in any case', () => {
