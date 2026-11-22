@@ -181,6 +181,7 @@ The link object's `url` is built by the backend from the stored repository `owne
 - Job params are `{ linkId }` only.
 - Internal ids are allowed in logs (they never reach responses). Repository `owner`/`name` are not logged, because for a private repository they are private metadata; `linkId` or `projectId` identifies the row.
 - Refusals (`4xx`), cap hits and rate-limit hits are not logged beyond the access line, whose status code already records them. This keeps a flood of refused requests from flooding the logs.
+  - The one exception is the existing Integrations `warn` line (`github repo call failed`: integration id, operation, HTTP status, result kind), which a GitHub `401`/`403` refusal on link creation still produces next to the `4xx`. It is allowed by the Integrations row above and carries no content or credential. Issues code itself logs nothing on a refusal.
 
 ### Exception messages never reach the logs
 
@@ -263,4 +264,4 @@ Logs:
 
 - The content canary: a project name, description, issue title and body, and a repository owner/name carrying canary strings are run through every route and through the reconcile job, including refusals and failures, and no log line contains any of them.
 - `(db)`: each unique index's duplicate answers its mapped `409` (or the shortcut's `200`) and logs nothing containing the duplicated value.
-- A `4xx` refusal produces only the access line.
+- A `4xx` refusal produces only the access line, bar the Integrations module's own allowed `warn` line for a GitHub refusal (see [What may be logged](#what-may-be-logged)).
