@@ -8,8 +8,15 @@ import type { GithubRepo, RepoFailure, UnavailableReason } from './github-repo-r
 import { Secret } from './secret.js';
 import type { Clock } from '../core/clock.js';
 
-/** The fixed repo operations, as the error mapping distinguishes them. */
-export type RepoOperation = 'user_repos' | 'installation_repos' | 'handle_repos' | 'repository';
+/** The fixed repo and issue operations, as the error mapping distinguishes them. */
+export type RepoOperation =
+  | 'user_repos'
+  | 'installation_repos'
+  | 'handle_repos'
+  | 'repository'
+  | 'issue'
+  | 'issue_probe'
+  | 'issue_update';
 
 /** What a non-`200` answer classifies as (`null` for a `200`, whose body is parsed next). */
 export type RepoClassification =

@@ -16,6 +16,16 @@ export type {
   RepoResult,
   UnavailableReason,
 } from './github-repo-results.js';
+export type {
+  GithubIssue,
+  GithubIssueChanges,
+  GithubIssueRepo,
+  IssueFailure,
+  IssueProbeResult,
+  IssueResult,
+  IssueUpdateResult,
+  RenamedTo,
+} from './github-issue-results.js';
 export {
   ADD_WALK_MAX_CALLS,
   type AddWalkInput,
