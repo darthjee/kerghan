@@ -1,20 +1,9 @@
 import Table from 'react-bootstrap/cjs/Table.js';
+import IssueStateBadge from '../../IssueStateBadge.jsx';
 import ProjectPaths from '../../../projects/paths.js';
 import IssueLinkCellHelper from './IssueLinkCellHelper.jsx';
 
 const TITLE_STYLE = { overflowWrap: 'anywhere', maxWidth: '32rem' };
-
-/**
- * Render the Open/Closed badge.
- *
- * @param {string} state - The issue's state.
- * @returns {React.ReactElement} The badge.
- */
-function renderStateBadge(state) {
-  const closed = state === 'closed';
-
-  return <span className={`badge text-bg-${closed ? 'secondary' : 'success'}`}>{closed ? 'Closed' : 'Open'}</span>;
-}
 
 /**
  * Render one issue row: the title as a link to the issue, its state, creation date and GitHub
@@ -40,7 +29,7 @@ function renderRow(projectId, issue) {
           {issue.title}
         </a>
       </td>
-      <td>{renderStateBadge(issue.state)}</td>
+      <td><IssueStateBadge state={issue.state} /></td>
       <td>{new Date(issue.createdAt).toLocaleDateString()}</td>
       <td>{IssueLinkCellHelper.render(issue.link)}</td>
     </tr>
