@@ -3,6 +3,7 @@ import { validateIssueBody, validateIssueTitle } from '../../../../../utils/vali
 import ProjectErrorMessages from '../../../projects/errors/errorMessages.js';
 import FormErrors from '../../../projects/pages/common/formErrors.js';
 import ProjectPaths from '../../../projects/paths.js';
+import SavedIssueSignal from '../../sync/savedIssueSignal.js';
 
 /**
  * Controller of the issue create and edit forms: validation, the create or save call and the
@@ -83,7 +84,8 @@ export default class IssueFormController {
   }
 
   /**
-   * Validate and save the issue; a `200` goes back to the issue page.
+   * Validate and save the issue; a `200` records the saved-issue signal (so the issue page
+   * starts the bounded re-read) and goes back to the issue page.
    *
    * @param {string} projectId - The project's uuid.
    * @param {string} issueId - The issue's uuid.
@@ -95,7 +97,10 @@ export default class IssueFormController {
     return this.#run(
       fields,
       () => this.#client.edit(projectId, issueId, { title: fields.title.trim(), body: fields.body, state: fields.state }),
-      () => forceLeave(ProjectPaths.issue(projectId, issueId)),
+      (updated) => {
+        SavedIssueSignal.record(issueId, updated);
+        forceLeave(ProjectPaths.issue(projectId, issueId));
+      },
     );
   }
 

@@ -2,6 +2,7 @@ import ApiError from '../../../../../../../../assets/js/client/ApiError.js';
 import DirtyFormGuardController from '../../../../../../../../assets/js/components/common/forms/controllers/DirtyFormGuardController.js';
 import IssueFormController from '../../../../../../../../assets/js/components/resources/issues/pages/form/IssueFormController.js';
 import { MAX_ISSUE_BODY_LENGTH, MAX_ISSUE_TITLE_LENGTH } from '../../../../../../../../assets/js/utils/validation/issueValidators.js';
+import SavedIssueSignal from '../../../../../../../../assets/js/components/resources/issues/sync/savedIssueSignal.js';
 import { buildIssue, ISSUE_ID, PROJECT_ID } from '../../../../../../../support/issuesBuilders.js';
 
 describe('IssueFormController', () => {
@@ -28,6 +29,10 @@ describe('IssueFormController', () => {
       setFormError: (value) => { state.formError = value; },
       setSubmitting: (value) => state.submitting.push(value),
     }, onNotFound, client);
+  });
+
+  afterEach(() => {
+    SavedIssueSignal.consume(ISSUE_ID);
   });
 
   describe('#create', () => {
@@ -119,6 +124,28 @@ describe('IssueFormController', () => {
       expect(forceLeave).toHaveBeenCalledOnceWith(`#/projects/${PROJECT_ID}/issues/${ISSUE_ID}`);
     });
 
+    it('S4: records the saved issue in the one-shot signal (memory only) before leaving', async () => {
+      const saved = buildIssue({ title: 'saved' });
+
+      client.edit.and.resolveTo(saved);
+      forceLeave.and.callFake(() => {
+        expect(SavedIssueSignal.consume(ISSUE_ID)).toBe(saved);
+        SavedIssueSignal.record(ISSUE_ID, saved);
+      });
+
+      await controller.save(PROJECT_ID, ISSUE_ID, fields(), forceLeave);
+
+      expect(SavedIssueSignal.consume(ISSUE_ID)).toBe(saved);
+    });
+
+    it('does not record the signal when the save is refused', async () => {
+      client.edit.and.rejectWith(new ApiError(500, 'Boom', 'INTERNAL'));
+
+      await controller.save(PROJECT_ID, ISSUE_ID, fields(), forceLeave);
+
+      expect(SavedIssueSignal.consume(ISSUE_ID)).toBeUndefined();
+    });
+
     it('validates before any call', async () => {
       await controller.save(PROJECT_ID, ISSUE_ID, fields({ title: '' }), forceLeave);
 
@@ -141,6 +168,14 @@ describe('IssueFormController', () => {
       await controller.save(PROJECT_ID, ISSUE_ID, fields(), forceLeave);
 
       expect(onNotFound).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('#create and the signal', () => {
+    it('does not record the saved-issue signal (a new issue is unlinked)', async () => {
+      await controller.create(PROJECT_ID, fields(), forceLeave);
+
+      expect(SavedIssueSignal.consume(ISSUE_ID)).toBeUndefined();
     });
   });
 
