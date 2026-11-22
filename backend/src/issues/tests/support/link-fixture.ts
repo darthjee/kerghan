@@ -3,6 +3,7 @@ import { integrationRef } from './integration-refs.js';
 import type { IssuesHttpDbHarness } from './issues-http-db-harness.js';
 import { post } from './issues-http-db-harness.js';
 import { seedProject, type SeededProject } from './issues-seeds.js';
+import { releaseQueuedLinks } from './sync-fixture.js';
 import type { GithubIssue } from '../../../integrations/integrations-github.public.js';
 import { issue as issueCase, githubIssue } from '../../../integrations/tests/support/github-builders.js';
 import { seedUser } from '../../../repositories/tests/support/two-user-baseline.js';
@@ -37,6 +38,7 @@ export async function buildLinkWorld(harness: IssuesHttpDbHarness, username = 'o
   harness.clock.set(new Date(Date.UTC(2026, 5, 1, 12, 0, 0) + run * 3_600_000));
   harness.repositories.reset();
   harness.github.calls.length = 0;
+  releaseQueuedLinks(harness);
 
   return addLinkUser(harness, username);
 }
@@ -87,6 +89,12 @@ export interface LinkApi {
   importIssue(body?: Record<string, unknown>): request.Test;
   attach(issueUuid: string, body?: Record<string, unknown>): request.Test;
   unlink(issueUuid: string, body?: Record<string, unknown>): request.Test;
+  /** T2. */
+  refresh(issueUuid: string): request.Test;
+  /** T3. */
+  refreshProject(): request.Test;
+  /** T4. */
+  retrySync(issueUuid: string): request.Test;
 }
 
 /**
@@ -103,6 +111,9 @@ export function linkApi(harness: IssuesHttpDbHarness, world: LinkWorld, cookie =
     importIssue: (body = { number: 12 }) => post(harness, `${base}/import.json`, cookie, body),
     attach: (issueUuid, body = { number: 12 }) => post(harness, `${base}/${issueUuid}/attach.json`, cookie, body),
     unlink: (issueUuid, body = {}) => post(harness, `${base}/${issueUuid}/unlink.json`, cookie, body),
+    refresh: (issueUuid) => post(harness, `${base}/${issueUuid}/refresh.json`, cookie),
+    refreshProject: () => post(harness, `/projects/${world.project.uuid}/refresh.json`, cookie),
+    retrySync: (issueUuid) => post(harness, `${base}/${issueUuid}/retry-sync.json`, cookie),
   };
 }
 

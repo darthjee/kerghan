@@ -7,8 +7,9 @@ It has **no HTTP surface** (no controller, routes, DTOs, entities or migrations)
 consume it through the exported `WorkersService`, injected via direct DI.
 
 **Use cases:** work that must outlive a request but is cheap to redo, such as a GitHub
-repository sync launched by a request. No job exists yet; this module only provides the pool
-([#479](../issues/479-add-navi-worker-deku-swarm.md)).
+repository sync launched by a request. This module only provides the pool
+([#479](../issues/479-add-navi-worker-deku-swarm.md)); the one job registered today is
+`issues.reconcile` ([below](#registered-jobs)).
 
 ## In-process model
 
@@ -61,6 +62,19 @@ non-numeric, non-integer or non-positive value falls back to the default and nev
 The drain timeout (10 s) and poll interval (100 ms) are fixed constants, not env vars; they are
 exposed on `WorkersConfig` so specs can override them.
 
+## Registered jobs
+
+| Name | Owner | Params | Retry values | Triggers |
+|---|---|---|---|---|
+| `issues.reconcile` | Issues (`backend/src/issues/jobs/issues-reconcile.job.ts`, registered by `IssuesSyncBootstrap` on init) | `{ linkId }` only (an internal id; no content, no credential) | `maxRetries` 5 and a fixed `cooldown` of 30 s, from `KERGHAN_ISSUES_SYNC_MAX_RETRIES` and `KERGHAN_ISSUES_SYNC_COOLDOWN_MS` through the job's own getters, independent of the engine-wide `KERGHAN_WORKERS_*` values | A local edit of a linked issue (T1), the manual refresh, project refresh and retry sync routes (T2 to T4), the boot sweep of every pending marker (T5), a compare-and-clear miss (T6) and the rate-limit resume timer |
+
+The sync service, the per-link queue and `IssuesConfig` are the job's injected attributes. Every
+trigger enqueues through `IssueSyncQueue`, which drops a second enqueue of a link that is queued
+and not yet started (per process, lost on restart). The job keeps a private attempt counter, so
+the last attempt is known without the library's `exhausted()`, and a rate-limited job finishes
+without `_fail`, so a wait never consumes an attempt. See
+`docs/agents/specs/issues/sync.md#job`.
+
 ## Edge cases
 
 - **Shutdown drain** — bounded (10 s); jobs still running after that are abandoned.
@@ -69,8 +83,10 @@ exposed on `WorkersConfig` so specs can override them.
 - **Unbounded growth** — `finished` and `dead` collections are never pruned; pruning is
   deferred.
 - **Double initialization** — `onModuleInit` twice is safe (`ensureBuild`).
-- **Job retries** — `Job#maxRetries` defaults to 3 per job; a job counts a failed attempt only
-  when it calls `_fail(error)` from `perform`.
+- **Job retries** — `Job#maxRetries` defaults to 3 per job, and a class may override the
+  `maxRetries` and `cooldown` getters (`issues.reconcile` does); a job counts a failed attempt only
+  when it calls `_fail(error)` from `perform`. The worker logs the failed error's text, so a job
+  fails with a fixed message that carries no content.
 - **Event-loop starvation** — a negative `sleepMs` makes the `keepAlive` engine loop
   microtask-only and blocks timers; always use a positive `sleepMs`.
 
@@ -91,7 +107,10 @@ exposed on `WorkersConfig` so specs can override them.
 
 ## Testing
 
-Unit specs under `backend/src/workers/tests/`, no database. The three `deku-swarm` singletons
+Unit specs under `backend/src/workers/tests/`, no database. `FakeWorkersService`
+(`tests/support/fake-workers.service.ts`) records `register` and `enqueue` and runs the captured
+jobs on demand (`runAll()`), for specs of the modules that use the pool; a few `(engine)` specs run
+the real service (`backend/src/issues/tests/issues-reconcile.engine.spec.ts`). The three `deku-swarm` singletons
 are global, so every spec calls `resetDekuSwarm()`
 (`tests/support/reset-deku-swarm.ts`) in `afterEach`; the same file has a throwaway
 `ThrowawayJob` and a `done()` deferred promise to await instead of sleeping. Specs call the
@@ -99,7 +118,7 @@ lifecycle hooks directly and override the drain timeout through `WorkersConfig`.
 
 ## Not built
 
-- No job, no endpoint that enqueues one.
+- No endpoint that exposes the queue.
 - No persistence of queues and no scheduling (recurring jobs).
 - No pruning of finished/dead jobs.
 - Tracked upstream in darthjee/navi#1004, #1005 and #1006.

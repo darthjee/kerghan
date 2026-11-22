@@ -15,6 +15,7 @@ import type {
   MarkAddedOutcome,
   ProjectRepositoryLookup,
   RepoRef,
+  RepositoryRename,
   RepositorySnapshot,
   RepositorySummary,
   SyncStateResult,
@@ -162,6 +163,19 @@ export class RepositoriesService {
    */
   integrationSourceIds(userId: number, repositoryId: number): Promise<number[]> {
     return this.addStore.integrationSourceIds(userId, repositoryId);
+  }
+
+  /**
+   * Persists a rename GitHub reported (a `301` of a read or push, E65): refreshes the stored owner
+   * and name of one of the user's rows, so later calls address the repository by its new name.
+   * Nothing else on the row changes, and a row the user does not hold is left alone.
+   * @param {number} userId - The user.
+   * @param {number} repositoryId - The internal id stored by a project.
+   * @param {RepositoryRename} renamedTo - The new `owner` and `name`.
+   * @returns {Promise<void>} Resolves once the row is up to date.
+   */
+  applyRename(userId: number, repositoryId: number, renamedTo: RepositoryRename): Promise<void> {
+    return this.addStore.rename(userId, repositoryId, renamedTo);
   }
 
   /**

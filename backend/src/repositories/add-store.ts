@@ -2,12 +2,16 @@ import { Injectable } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 import { parseSourceKey } from './source-key.js';
 import { Clock } from '../core/clock.js';
-import type { RepoRef, RepositorySnapshot } from './types/repositories-api.types.js';
+import type { RepoRef, RepositoryRename, RepositorySnapshot } from './types/repositories-api.types.js';
 
 /** A resolved row: its internal id never leaves the module. */
 export interface ResolvedRow {
   id: number;
 }
+
+// The `repositories.owner` and `repositories.name` column widths.
+const OWNER_MAX = 39;
+const NAME_MAX = 100;
 
 /** How a conditional mark ended. */
 export type MarkResult = 'added' | 'already_added' | 'gone';
@@ -95,6 +99,28 @@ export class AddStore {
     return (await this.#first('SELECT id FROM repositories WHERE id = ? AND user_id = ?', [row.id, userId])) === null
       ? 'gone'
       : 'already_added';
+  }
+
+  /**
+   * Refreshes a row's stored owner and name after GitHub renamed the repository (a `301` of a
+   * read or push, E65). Only the caller's own row is written, and nothing else on it changes (not
+   * `added_at`, not the access link). A name that does not fit the columns is ignored. The same
+   * names again write nothing.
+   * @param {number} userId - The user.
+   * @param {number} repositoryId - The internal repository id.
+   * @param {RepositoryRename} renamedTo - The new owner and name.
+   * @returns {Promise<void>} Resolves once the row is up to date (or was not found).
+   */
+  async rename(userId: number, repositoryId: number, renamedTo: RepositoryRename): Promise<void> {
+    const { owner, name } = renamedTo;
+
+    if (owner.length === 0 || owner.length > OWNER_MAX || name.length === 0 || name.length > NAME_MAX) return;
+
+    await this.dataSource.query(
+      'UPDATE repositories SET owner = ?, name = ?, updated_at = ? '
+      + 'WHERE id = ? AND user_id = ? AND (owner <> ? OR name <> ?)',
+      [owner, name, this.clock.now(), repositoryId, userId, owner, name],
+    );
   }
 
   /**

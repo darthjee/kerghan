@@ -5,4 +5,4 @@
  * store or a sync class.
  */
 export { RepoRefDto, toRepoRef } from './dto/repo-ref.dto.js';
-export type { ProjectRepositoryLookup, RepoRef, RepositorySummary } from './types/repositories-api.types.js';
+export type { ProjectRepositoryLookup, RepoRef, RepositoryRename, RepositorySummary } from './types/repositories-api.types.js';

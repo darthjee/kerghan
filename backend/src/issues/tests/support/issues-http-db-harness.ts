@@ -19,12 +19,16 @@ import { HttpExceptionFilter } from '../../../core/http-exception.filter.js';
 import { JwtGuard } from '../../../core/jwt.guard.js';
 import { LoggerService } from '../../../core/logger.service.js';
 import { OriginGuard } from '../../../core/origin.guard.js';
+import { Scheduler } from '../../../core/scheduler.js';
 import { SESSION_LOOKUP, type SessionLookup, type SessionUser } from '../../../core/session-lookup.js';
 import { FakeClock } from '../../../core/tests/support/fake-clock.js';
+import { FakeScheduler } from '../../../core/tests/support/fake-scheduler.js';
 import { buildDbTierOptions } from '../../../database/tests/db-tier/db-tier-options.js';
-import { IntegrationsGithubService } from '../../../integrations/integrations-github.public.js';
+import { IntegrationsGithubIssueWriter, IntegrationsGithubService } from '../../../integrations/integrations-github.public.js';
 import { FakeIntegrationsGithubService } from '../../../integrations/tests/support/fake-integrations-github.service.js';
 import { RepositoriesService } from '../../../repositories/repositories.service.js';
+import { FakeWorkersService } from '../../../workers/tests/support/fake-workers.service.js';
+import { WorkersService } from '../../../workers/workers.service.js';
 import { ISSUES_ENTITIES } from '../../entities/index.js';
 import { IssueLinksController } from '../../issue-links.controller.js';
 import { IssuesController } from '../../issues.controller.js';
@@ -48,6 +52,10 @@ export interface IssuesHttpDbHarness {
   app: INestApplication;
   ds: DataSource;
   clock: FakeClock;
+  /** The timer source the rate-limit timers use, driven by `clock`. */
+  scheduler: FakeScheduler;
+  /** Captures the sync job's registration and enqueues; nothing runs until `runAll()`. */
+  workers: FakeWorkersService;
   logger: FakeLogger;
   repositories: FakeProjectRepositories;
   /** The scripted `IntegrationsGithubService` the link routes read GitHub through. */
@@ -68,6 +76,8 @@ export interface IssuesHttpDbHarness {
  */
 export async function buildIssuesHttpDbHarness(env: Record<string, string> = {}): Promise<IssuesHttpDbHarness> {
   const clock = new FakeClock(HARNESS_START);
+  const scheduler = new FakeScheduler(clock);
+  const workers = new FakeWorkersService();
   const repositories = new FakeProjectRepositories();
   const github = new FakeIntegrationsGithubService();
   const logger: FakeLogger & { log: jest.Mock; verbose: jest.Mock } = {
@@ -92,9 +102,12 @@ export async function buildIssuesHttpDbHarness(env: Record<string, string> = {})
       ...ISSUES_PROVIDERS,
       AccountHandleService,
       { provide: Clock, useValue: clock },
+      { provide: Scheduler, useValue: scheduler },
+      { provide: WorkersService, useValue: workers },
       { provide: LoggerService, useValue: logger },
       { provide: RepositoriesService, useValue: repositories },
       { provide: IntegrationsGithubService, useValue: github },
+      { provide: IntegrationsGithubIssueWriter, useValue: github.asWriter() },
       { provide: SESSION_LOOKUP, useValue: sessions },
       { provide: APP_GUARD, useClass: OriginGuard },
       { provide: APP_GUARD, useClass: JwtGuard },
@@ -115,6 +128,8 @@ export async function buildIssuesHttpDbHarness(env: Record<string, string> = {})
     app,
     ds: module.get(DataSource),
     clock,
+    scheduler,
+    workers,
     logger,
     repositories,
     github,

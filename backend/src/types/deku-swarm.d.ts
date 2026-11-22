@@ -19,6 +19,16 @@ declare module 'deku-swarm' {
   export class Job {
     id: string;
     constructor(params?: JobParams);
+    /**
+     * The retry limit of this job (deku-swarm 1.12.0: the `maxRetries` param, else 3). A subclass may
+     * override the getter to give its own limit.
+     */
+    get maxRetries(): number;
+    /**
+     * The cooldown in milliseconds applied on failure (deku-swarm 1.12.0: the `cooldown` param, else
+     * `undefined`, which falls back to the registry's). A subclass may override the getter.
+     */
+    get cooldown(): number | undefined;
     perform(logger?: JobLogger): Promise<unknown>;
     protected _fail(error: unknown): never;
   }

@@ -45,7 +45,7 @@ type ReadIssue = Extract<LinkReadOutcome, { kind: 'ok' }>;
  * checks, the cheap `409` pre-checks that make no GitHub call, then the single GitHub read
  * outside any transaction (no lock is held across the network call), then one transaction that
  * re-checks and writes (`IssueLinkWriter`). It never writes to GitHub, creates no marker and
- * enqueues nothing: the first sync belongs to #558. Unlink is local-only and works in every link
+ * enqueues nothing: a link creation read GitHub in the request and needs no sync. Unlink is local-only and works in every link
  * state. The `404`s all come from `IssuesAccess`.
  */
 @Injectable()

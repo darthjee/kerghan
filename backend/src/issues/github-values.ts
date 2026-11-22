@@ -23,6 +23,23 @@ export function githubValues(issue: GithubIssue): IssueValues {
   return { title: issue.title, body: normalizeBody(issue.body), state: issue.state };
 }
 
+/** The three synced fields, in the order every list of them uses (title, body, state). */
+export const SYNC_FIELDS: readonly AttachDifference[] = ['title', 'body', 'state'];
+
+/**
+ * Whether two sets of values agree on one field. The body compares through `normalizeBody`, so
+ * `NULL` equals `''`; the title and the state compare verbatim (no trimming, no case folding). The
+ * one comparison behind every "values differ" test of the sync, so the normalization invariant
+ * stays structural (`docs/agents/specs/issues/sync.md#fields-and-ownership`).
+ * @param {AttachDifference} field - The field to compare.
+ * @param {IssueValues} a - One side's values.
+ * @param {IssueValues} b - The other side's values.
+ * @returns {boolean} `true` when the field is equal on both sides.
+ */
+export function sameField(field: AttachDifference, a: IssueValues, b: IssueValues): boolean {
+  return field === 'body' ? normalizeBody(a.body) === normalizeBody(b.body) : a[field] === b[field];
+}
+
 /**
  * The fields where a local issue differs from the GitHub values, in the order title, body, state.
  * Bodies compare through `normalizeBody`, so `NULL` equals `''`; nothing else is normalized (no
@@ -32,11 +49,5 @@ export function githubValues(issue: GithubIssue): IssueValues {
  * @returns {AttachDifference[]} The differing fields; empty when the values match.
  */
 export function differencesOf(local: IssueValues, github: IssueValues): AttachDifference[] {
-  const differences: AttachDifference[] = [];
-
-  if (local.title !== github.title) differences.push('title');
-  if (normalizeBody(local.body) !== normalizeBody(github.body)) differences.push('body');
-  if (local.state !== github.state) differences.push('state');
-
-  return differences;
+  return SYNC_FIELDS.filter((field) => !sameField(field, local, github));
 }

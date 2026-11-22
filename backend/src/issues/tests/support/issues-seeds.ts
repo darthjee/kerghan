@@ -104,6 +104,12 @@ export interface LinkSeed {
   statusReason?: string | null;
   /** Defaults to `null` (the column is nullable); a link creation always sets it. */
   lastSyncedAt?: Date | null;
+  /** The stored `ETag` (default `null`). */
+  etag?: string | null;
+  /** GitHub's `updated_at` as last synced (default `null`). */
+  githubUpdatedAt?: Date | null;
+  /** The base snapshot (default: copied from the issue), for a link whose base differs from the issue. */
+  base?: { title?: string; body?: string | null; state?: IssueState };
 }
 
 /**
@@ -116,6 +122,7 @@ export interface LinkSeed {
 export async function seedLink(ds: DataSource, seed: LinkSeed): Promise<{ id: number }> {
   const issue = await ds.getRepository(Issue).findOneByOrFail({ id: seed.issueId });
   const repository = ds.getRepository(IssueGithubLink);
+  const base = { title: issue.title, body: issue.body, state: issue.state, ...seed.base };
   const saved = await repository.save(repository.create({
     userId: seed.userId,
     issueId: seed.issueId,
@@ -123,12 +130,12 @@ export async function seedLink(ds: DataSource, seed: LinkSeed): Promise<{ id: nu
     githubNumber: seed.githubNumber ?? 1,
     status: seed.status ?? 'linked',
     statusReason: seed.statusReason ?? null,
-    baseTitle: issue.title,
-    baseBody: issue.body,
-    baseState: issue.state,
-    githubUpdatedAt: null,
+    baseTitle: base.title,
+    baseBody: base.body,
+    baseState: base.state,
+    githubUpdatedAt: seed.githubUpdatedAt ?? null,
     lastSyncedAt: seed.lastSyncedAt ?? null,
-    etag: null,
+    etag: seed.etag ?? null,
     createdAt: SEED_TIME,
     updatedAt: SEED_TIME,
   }));
@@ -143,12 +150,13 @@ export async function seedLink(ds: DataSource, seed: LinkSeed): Promise<{ id: nu
  * @param seed - Optional fields.
  * @param seed.revision - The revision (default 1).
  * @param seed.markedAt - The `marked_at` time (default `SEED_TIME`).
+ * @param seed.updatedAt - The `updated_at` time, i.e. `Tm` (default `markedAt`).
  * @returns The marker's internal id.
  */
 export async function seedMarker(
   ds: DataSource,
   linkId: number,
-  seed: { revision?: number; markedAt?: Date } = {},
+  seed: { revision?: number; markedAt?: Date; updatedAt?: Date } = {},
 ): Promise<{ id: number }> {
   const repository = ds.getRepository(IssuePendingWrite);
   const markedAt = seed.markedAt ?? SEED_TIME;
@@ -156,7 +164,7 @@ export async function seedMarker(
     linkId,
     revision: seed.revision ?? 1,
     markedAt,
-    updatedAt: markedAt,
+    updatedAt: seed.updatedAt ?? markedAt,
   }));
 
   return { id: saved.id };

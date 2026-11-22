@@ -9,3 +9,13 @@ import type { Clock } from '../core/clock.js';
 export function stampOf(clock: Clock): Date {
   return new Date(Math.floor(clock.now().getTime() / 1000) * 1000);
 }
+
+/**
+ * A date truncated to whole seconds: GitHub's timestamps carry none, and `datetime` columns keep no
+ * fraction, so a value read back equals the one compared.
+ * @param {Date} date - The instant.
+ * @returns {Date} The instant, truncated to the second.
+ */
+export function wholeSeconds(date: Date): Date {
+  return new Date(Math.floor(date.getTime() / 1000) * 1000);
+}

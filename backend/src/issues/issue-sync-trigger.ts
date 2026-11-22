@@ -14,9 +14,9 @@ export abstract class IssueSyncTrigger {
 }
 
 /**
- * The default binding until #558: nothing is enqueued yet. The marker is the durable record, and
- * the boot sweep (T5) re-enqueues it. #558 swaps this binding for the real enqueue through the
- * per-link dedupe.
+ * A binding that enqueues nothing: the marker is the durable record, and the boot sweep (T5)
+ * re-enqueues it. `EnqueueIssueSyncTrigger` is the real binding (T1); this one stays for specs
+ * that need an inert port.
  */
 @Injectable()
 export class NoopIssueSyncTrigger extends IssueSyncTrigger {

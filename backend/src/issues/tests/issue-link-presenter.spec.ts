@@ -1,7 +1,9 @@
 import type { DataSource, EntityManager } from 'typeorm';
 import { FakeClock } from '../../core/tests/support/fake-clock.js';
+import { FakeScheduler } from '../../core/tests/support/fake-scheduler.js';
 import type { RepositoriesService } from '../../repositories/repositories.service.js';
 import { IssueLinkPresenter, type LinkResponseInput, linkResponse, statesOf } from '../issue-link-presenter.js';
+import { IssueRateLimitPauses } from '../issue-rate-limit-pauses.js';
 import { IssueRateLimitWaits } from '../issue-rate-limit-waits.js';
 import { IssuesConfig } from '../issues-config.js';
 import { FakeProjectRepositories } from './support/fake-project-repositories.js';
@@ -182,6 +184,31 @@ describe('IssueLinkPresenter', () => {
 
     expect(waits.calls).toEqual([[5]]);
     expect(link).toMatchObject({ state: 'rate_limited', rateLimitedUntil: '2026-11-17T12:10:00.000Z' });
+  });
+
+  it('shows rate_limited with rateLimitedUntil while the link waits in the real pauses, and not after the reset', async () => {
+    const clock = new FakeClock(NOW);
+    const pauses = new IssueRateLimitPauses(
+      clock,
+      new FakeScheduler(clock),
+      { enqueue: jest.fn() },
+      { markedAtFor: jest.fn(async () => new Map()) } as never,
+      { error: jest.fn() } as never,
+    );
+    const { presenter } = build([rawLink], [], pauses as unknown as FakeWaits);
+
+    pauses.pause(41, new Date('2026-11-17T12:10:00Z'));
+    pauses.wait(41, 5);
+
+    expect((await presenter.forIssues([9])).get(9)).toMatchObject({
+      state: 'rate_limited',
+      states: ['rate_limited'],
+      rateLimitedUntil: '2026-11-17T12:10:00.000Z',
+    });
+
+    pauses.release(5);
+
+    expect((await presenter.forIssues([9])).get(9)).toMatchObject({ state: 'linked', rateLimitedUntil: null });
   });
 
   it('falls back to created_at when last_synced_at is null', async () => {

@@ -287,3 +287,14 @@ export function issueLinkRateLimited(retryAfterSeconds: number): HttpException {
     HttpStatus.TOO_MANY_REQUESTS,
   );
 }
+
+/**
+ * 409 `ISSUE_LINK_GONE`: a refresh or retry of a `gone` link, which is left only by unlinking.
+ * @returns {ConflictException} The exception.
+ */
+export function issueLinkGone(): ConflictException {
+  return new ConflictException({
+    code: ErrorCodes.ISSUE_LINK_GONE,
+    message: 'The GitHub issue is no longer available',
+  });
+}

@@ -29,6 +29,7 @@ import { SESSION_LOOKUP } from '../../../core/session-lookup.js';
 import { createConsoleSpies, type ConsoleSpies } from '../../../core/tests/console-spies.test-support.js';
 import { IssueLinksController } from '../../issue-links.controller.js';
 import { IssueLinksService } from '../../issue-links.service.js';
+import { IssueSyncTriggersService } from '../../issue-sync-triggers.service.js';
 import { IssuesController } from '../../issues.controller.js';
 import { IssuesService } from '../../issues.service.js';
 import { ProjectsController } from '../../projects.controller.js';
@@ -39,7 +40,7 @@ export interface IssuesTestContext {
   app: INestApplication;
   projects: FakeProjectsService;
   issues: FakeIssuesService;
-  /** The recording stand-in behind the GitHub link routes. */
+  /** The recording stand-in behind the GitHub link routes and the sync trigger routes. */
   links: FakeIssueLinksService;
   ids: { owner: number; intruder: number };
   /** Cookie of `darthjee` (the main user). */
@@ -77,6 +78,7 @@ export async function buildIssuesTestApp(env: Record<string, unknown> = {}): Pro
       { provide: ProjectsService, useValue: projects },
       { provide: IssuesService, useValue: issues },
       { provide: IssueLinksService, useValue: links },
+      { provide: IssueSyncTriggersService, useValue: links },
       { provide: APP_GUARD, useClass: OriginGuard },
       { provide: APP_GUARD, useClass: JwtGuard },
       { provide: APP_GUARD, useClass: AdminGuard },

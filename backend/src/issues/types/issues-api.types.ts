@@ -54,3 +54,26 @@ export interface UnlinkIssueResponse {
   issue: IssueResponse;
   droppedUnsentChanges: boolean;
 }
+
+/** What a sync trigger answers: the HTTP status (`200` when nothing was enqueued, else `202`) and the body. */
+export interface TriggerResult<T> {
+  status: number;
+  body: T;
+}
+
+/** T2's wire shape: the issue, and whether the refresh was skipped because the link is already fresh. */
+export interface RefreshIssueResponse {
+  issue: IssueResponse;
+  alreadyFresh: boolean;
+}
+
+/** T3's wire shape: how many reconciles were enqueued, and how many fresh links were skipped. */
+export interface RefreshProjectResponse {
+  enqueued: number;
+  skippedFresh: number;
+}
+
+/** T4's wire shape: the issue, after the reset. */
+export interface RetrySyncResponse {
+  issue: IssueResponse;
+}

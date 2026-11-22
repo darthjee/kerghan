@@ -30,7 +30,8 @@ type Step = { final: LinkReadOutcome } | { fallback: 'forbidden' | 'credential_i
  *
  * Only credential failures (`invalid_credentials`, `forbidden`, `integration_unusable`) fall back
  * to the next candidate; a rate limit, an unavailable GitHub, `not_found`, `gone` or `moved` ends
- * the walk at once. A `renamedTo` hint on an answer is ignored: the rename hand-off belongs to #558.
+ * the walk at once. A `renamedTo` hint on an answer is ignored: the rename hand-off belongs to the
+ * sync, not to link creation.
  * Logs carry the integration id and the outcome kind only.
  */
 @Injectable()

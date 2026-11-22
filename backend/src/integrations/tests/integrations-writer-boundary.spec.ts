@@ -7,10 +7,10 @@ import { INTEGRATIONS_ROOT, SRC_ROOT, sourcesUnder } from './support/source-file
 // and only the issues sync service may inject it. No app boot, no DB.
 
 /**
- * The files outside Integrations that may reference the writer (paths relative to `backend/src`).
- * Empty in #554; #558 adds the issues sync service here.
+ * The files outside Integrations that may reference the writer (paths relative to `backend/src`):
+ * the issues sync service only.
  */
-const WRITER_INJECTORS: string[] = [];
+const WRITER_INJECTORS: string[] = ['issues/issues-sync.service.ts'];
 
 const WRITER_REFERENCE = /\bIntegrationsGithubIssueWriter\b|integrations-github-issue-writer\.service/;
 
@@ -32,8 +32,12 @@ describe('IntegrationsGithubIssueWriter boundary (static)', () => {
     expect(offenders).toEqual([]);
   });
 
-  it('starts with an empty allowlist', () => {
-    expect(WRITER_INJECTORS).toEqual([]);
+  it('allows the issues sync service alone', () => {
+    expect(WRITER_INJECTORS).toEqual(['issues/issues-sync.service.ts']);
+  });
+
+  it('the issues sync service does reference the writer', () => {
+    expect(WRITER_REFERENCE.test(readFileSync(path.join(SRC_ROOT, 'issues/issues-sync.service.ts'), 'utf8'))).toBe(true);
   });
 
   it('the matcher flags an import and a constructor injection, and not the read service', () => {
