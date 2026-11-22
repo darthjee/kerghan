@@ -91,7 +91,7 @@ export const ISSUES_PROVIDERS: Provider[] = [
  * The only Issues code that calls GitHub is the link creation read (`IssueLinksController`, through
  * the exported, `GET`-only `IntegrationsGithubService`) and the two-way sync (`IssuesSyncService`,
  * the `issues.reconcile` job): it reads with the same service, and is the only injector of the
- * exported `IntegrationsGithubIssueWriter`, which sends the one `PATCH` of a diff. The job is
+ * exported issue writer of Integrations, which sends the one `PATCH` of a diff. The job is
  * registered on `WorkersService` by `IssuesSyncBootstrap`, which also re-enqueues every pending
  * marker at boot; triggers T1 (an edit), T2 to T4 (the refresh and retry routes) and the rate-limit
  * timers enqueue through the per-link dedupe (`IssueSyncQueue`). In-memory state (the queue, the
