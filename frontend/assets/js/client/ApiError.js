@@ -1,6 +1,6 @@
 /**
  * Error raised when an API request fails, carrying the response's HTTP status and the
- * backend's standard error body fields (`error.message`, `error.code`, `error.details`), plus
+ * backend's standard error body fields (`error.message`, `error.code`, `error.details`, `error.meta`), plus
  * the `Retry-After` header (`retryAfter`, in seconds) when the response carried one.
  */
 export default class ApiError extends Error {
@@ -18,8 +18,10 @@ export default class ApiError extends Error {
    *   `Retry-After` header (e.g. on a `429`); `undefined` when absent or invalid.
    * @param {number} [retryAfterSeconds] - Seconds to wait before retrying: the error body's
    *   `retryAfterSeconds` when valid, else the `Retry-After` header; `undefined` when neither.
+   * @param {object} [meta] - The error body's `error.meta` object (e.g. `projectId`,
+   *   `linkCount`); `undefined` when the response carried none.
    */
-  constructor(status, message, code, details, retryAfter, retryAfterSeconds) {
+  constructor(status, message, code, details, retryAfter, retryAfterSeconds, meta) {
     super(message);
     this.name = 'ApiError';
     this.status = status;
@@ -27,5 +29,6 @@ export default class ApiError extends Error {
     this.details = details;
     this.retryAfter = retryAfter;
     this.retryAfterSeconds = retryAfterSeconds;
+    this.meta = meta;
   }
 }

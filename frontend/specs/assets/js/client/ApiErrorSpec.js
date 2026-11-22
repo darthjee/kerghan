@@ -38,6 +38,16 @@ describe('ApiError', () => {
     expect(error.retryAfterSeconds).toBe(120);
   });
 
+  it('carries the meta object', () => {
+    const error = new ApiError(409, 'Taken', 'PROJECT_REPOSITORY_TAKEN', undefined, undefined, undefined, { projectId: 'p1' });
+
+    expect(error.meta).toEqual({ projectId: 'p1' });
+  });
+
+  it('leaves meta undefined when not given', () => {
+    expect(new ApiError(500, 'Request failed').meta).toBeUndefined();
+  });
+
   it('leaves code, details and retryAfter undefined when not given', () => {
     const error = new ApiError(500, 'Request failed');
 
