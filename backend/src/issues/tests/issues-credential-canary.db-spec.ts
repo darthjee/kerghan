@@ -1,6 +1,7 @@
 import type request from 'supertest';
 import type { IntegrationType } from '../../integrations/integration-enums.js';
 import { ISSUES_RECONCILE_JOB } from '../jobs/issues-reconcile.job.js';
+import { FORBIDDEN_BODY_KEYS, keysOf } from './support/build-issues-test-app.js';
 import { expectNoCanary, serializeJobs, serializeLogs, serializeResponse } from './support/canary-assertions.js';
 import { buildCanaryWorld, CANARY_NUMBER, type CanaryWorld } from './support/canary-world.js';
 import { buildIssuesCanaryHarness, postAs, type IssuesCanaryHarness } from './support/issues-canary-harness.js';
@@ -23,7 +24,11 @@ const LINKED_ROUTES = ['unlink.json', 'refresh.json', 'retry-sync.json'];
 const LIMIT = 2;
 
 /** The credential material searched for everywhere: tokens, the App key, GitHub's error body, the header scheme. */
-const CANARIES = [CANARY, CANARY_ERROR_BODY, ...canaryAppKey(), 'ghp_', 'gho_', 'ghs_', 'Bearer ', 'eyJhbGci'];
+const CANARIES = [
+  CANARY, CANARY_ERROR_BODY, ...canaryAppKey(), 'ghp_', 'gho_', 'ghs_', 'Bearer ', 'eyJhbGci',
+  // The ETags the links store and GitHub's host: never in a response, a log or a job param (security checklist 5).
+  'W/"old"', 'W/"g1"', 'W/"g2"', 'api.github.com',
+];
 
 /** A GitHub failure the link routes can meet, with the issue-read answer that causes it. */
 const GITHUB_FAILURES: Array<[string, () => GithubCase]> = [
@@ -228,6 +233,17 @@ describe('Issues credential canary sweep (real MySQL)', () => {
 
     it('leaks no credential in any response body, header or error.meta', () => {
       expectNoCanary(responses.map(serializeResponse), canaries());
+    });
+
+    it('carries no internal id, user id, integration field or deletion column in any body, error.meta included (data-access checklist 3)', () => {
+      // `meta.projectId` / `meta.issueId` of a 409 are public uuids (the winner's), allowed in errors only.
+      const allowedInMeta = ['projectId', 'issueId'];
+
+      for (const response of responses) {
+        const forbidden = FORBIDDEN_BODY_KEYS.filter((key) => !(response.status >= 400 && allowedInMeta.includes(key)));
+
+        expect(keysOf(response.body).filter((key) => forbidden.includes(key))).toEqual([]);
+      }
     });
 
     it('leaks no credential in any captured log line, and logged the requests', () => {

@@ -1,6 +1,12 @@
+import { RequestMethod } from '@nestjs/common';
+import { METHOD_METADATA, PATH_METADATA } from '@nestjs/common/constants.js';
 import type request from 'supertest';
 import { expectErrorBody } from '../../auth/tests/support/error-body.js';
+import { IS_ADMIN_ONLY_KEY } from '../../core/admin-only.decorator.js';
+import { CacheClass } from '../../core/cache-class.js';
+import { CACHE_CLASS_KEY } from '../../core/cache-policy.decorator.js';
 import { ErrorCodes } from '../../core/error-codes.js';
+import { IS_PUBLIC_KEY } from '../../core/public.decorator.js';
 import { issueNotFound, projectNotFound } from '../issues-http-errors.js';
 import {
   call,
@@ -11,7 +17,7 @@ import {
 } from './support/build-issues-test-app.js';
 import { sampleIssue } from './support/fake-issues.service.js';
 import { sampleProject } from './support/fake-projects.service.js';
-import { ISSUE_ID, PROJECT_ID, registeredRoutes, ROUTE_ROWS, type RouteRow } from './support/registered-routes.js';
+import { ISSUE_ID, issuesControllers, PROJECT_ID, registeredRoutes, ROUTE_ROWS, type RouteRow } from './support/registered-routes.js';
 
 const CROSS_SITE = { 'Sec-Fetch-Site': 'cross-site', Origin: 'https://evil.example' };
 
@@ -38,6 +44,30 @@ describe('Issues routes access matrix (e2e)', () => {
 
   it('has a row for every route the Issues module registers (completeness)', () => {
     expect(registeredRoutes()).toEqual(MATRIX.map((row) => `POST ${row.path}`).sort());
+  });
+
+  it('declares every route user-scoped, with no @Public and no @AdminOnly, on a POST handler only (security checklist 1)', () => {
+    const controllers = issuesControllers();
+
+    expect(controllers.length).toBeGreaterThan(0);
+    for (const controller of controllers) {
+      const prototype = controller.prototype as Record<string, object>;
+      const handlers = Object.getOwnPropertyNames(prototype)
+        .filter((name) => name !== 'constructor')
+        .map((name) => prototype[name])
+        .filter((handler) => Reflect.getMetadata(PATH_METADATA, handler) !== undefined);
+
+      expect(Reflect.getMetadata(CACHE_CLASS_KEY, controller)).toBe(CacheClass.UserScoped);
+      expect(Reflect.getMetadata(IS_PUBLIC_KEY, controller)).toBeUndefined();
+      expect(Reflect.getMetadata(IS_ADMIN_ONLY_KEY, controller)).toBeUndefined();
+
+      for (const handler of handlers) {
+        expect(Reflect.getMetadata(METHOD_METADATA, handler)).toBe(RequestMethod.POST);
+        expect(Reflect.getMetadata(IS_PUBLIC_KEY, handler)).toBeUndefined();
+        expect(Reflect.getMetadata(IS_ADMIN_ONLY_KEY, handler)).toBeUndefined();
+        expect([undefined, CacheClass.UserScoped]).toContain(Reflect.getMetadata(CACHE_CLASS_KEY, handler));
+      }
+    }
   });
 
   describe.each(MATRIX.map((row) => [`POST ${row.path}`, row] as const))('%s', (_name, row) => {
