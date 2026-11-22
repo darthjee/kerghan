@@ -5,7 +5,7 @@ import IssueHeaderHelper from './IssueHeaderHelper.jsx';
 import IssueLinkPanelSlotHelper from './IssueLinkPanelSlotHelper.jsx';
 
 /**
- * Rendering helper of the issue page: composes the header, the (empty) link-panel slot, the
+ * Rendering helper of the issue page: composes the header, the link-panel slot, the
  * body and the actions.
  */
 const IssuePageHelper = {
@@ -23,7 +23,7 @@ const IssuePageHelper = {
     return IssueLoadViewHelper.render(state, handlers.onRetry, (project, issue) => (
       <div className="container mt-4">
         {IssueHeaderHelper.render(project, issue)}
-        {IssueLinkPanelSlotHelper.render(project, issue)}
+        {IssueLinkPanelSlotHelper.render(project, issue, handlers)}
         <IssueBody body={issue.body} />
         <IssueActions
           projectId={project.id}

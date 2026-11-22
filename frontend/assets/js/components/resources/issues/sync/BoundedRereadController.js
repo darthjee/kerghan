@@ -122,12 +122,17 @@ export default class BoundedRereadController {
   }
 
   /**
-   * Hand a read issue to the caller and stop when the sync moved on.
+   * Hand a read issue to the caller and stop when the sync moved on. An empty answer (the
+   * session expired) is skipped.
    *
    * @param {object} issue - The issue read.
    * @returns {void} Nothing.
    */
   handleIssue(issue) {
+    if (!issue) {
+      return;
+    }
+
     this.onIssue(issue);
 
     if (!shouldReread(issue) || hasChanged(this.trigger, issue.link)) {

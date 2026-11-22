@@ -139,6 +139,19 @@ describe('BoundedRereadController', () => {
     expect(onDone).toHaveBeenCalledTimes(1);
   });
 
+  it('skips an empty answer (the session expired) and keeps reading', async () => {
+    read.and.callFake(async () => undefined);
+    controller.start(trigger);
+
+    await advance(2000);
+
+    expect(onIssue).not.toHaveBeenCalled();
+    expect(onDone).not.toHaveBeenCalled();
+    await advance(8000);
+    expect(read).toHaveBeenCalledTimes(3);
+    expect(onDone).toHaveBeenCalledTimes(1);
+  });
+
   it('does nothing for an unlinked or gone issue', async () => {
     expect(controller.start(buildIssue())).toBeFalse();
     expect(controller.start(buildIssue({ link: buildLink({ state: 'gone' }) }))).toBeFalse();
