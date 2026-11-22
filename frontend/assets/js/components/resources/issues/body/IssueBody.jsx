@@ -1,4 +1,5 @@
 import React, { Suspense, lazy } from 'react';
+import IssueBodyPlain from './IssueBodyPlain.jsx';
 
 const IssueBodyMarkdown = lazy(() => import('./IssueBodyMarkdown.jsx'));
 
@@ -17,7 +18,7 @@ export default function IssueBody({ body }) {
   }
 
   return (
-    <Suspense fallback={<pre className="issue-body-plain">{body}</pre>}>
+    <Suspense fallback={<IssueBodyPlain body={body} />}>
       <IssueBodyMarkdown body={body} />
     </Suspense>
   );

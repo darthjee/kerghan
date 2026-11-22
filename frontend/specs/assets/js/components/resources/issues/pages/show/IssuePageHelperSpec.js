@@ -1,9 +1,11 @@
 import React from 'react';
+import IssueBody from '../../../../../../../../assets/js/components/resources/issues/body/IssueBody.jsx';
 import IssueLoadViewHelper from '../../../../../../../../assets/js/components/resources/issues/pages/common/IssueLoadViewHelper.jsx';
 import IssuePageHelper from '../../../../../../../../assets/js/components/resources/issues/pages/show/IssuePageHelper.jsx';
 import {
   buildIssue, buildLink, buildProject, PROJECT_ID,
 } from '../../../../../../../support/issuesBuilders.js';
+import { findElements } from '../../../../../../../support/elementTree.js';
 import { renderedOutput } from '../../../../../../../support/renderedOutput.js';
 
 describe('IssuePageHelper', () => {
@@ -28,8 +30,16 @@ describe('IssuePageHelper', () => {
     expect(outputOf(buildIssue({ body: '' })).contains('No description.')).toBe(true);
   });
 
-  it('shows the body through the plain-text fallback (P5)', () => {
-    expect(outputOf(buildIssue({ body: '# Hi' })).containsTag('pre')).toBe(true);
+  it('hands the body to IssueBody, which owns the plain-text fallback (P5)', () => {
+    const tree = IssuePageHelper.render({
+      projectId: PROJECT_ID,
+      project: buildProject(),
+      issue: buildIssue({ body: '# Hi' }),
+      loadState: { loading: false, error: null, notFound: null },
+    }, handlers);
+    const [body] = findElements(tree, (node) => node.type === IssueBody);
+
+    expect(body.props.body).toBe('# Hi');
   });
 
   it('renders nothing in the link-panel slot', () => {
