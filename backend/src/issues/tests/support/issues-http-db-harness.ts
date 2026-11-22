@@ -15,6 +15,7 @@ import { type FakeLogger, HARNESS_START } from './issues-db-harness.js';
 import { type Intruder } from './issues-seeds.js';
 import { AccountHandleService } from '../../../auth/account-handle.service.js';
 import { User } from '../../../auth/entities/user.entity.js';
+import { AdminGuard } from '../../../core/admin.guard.js';
 import { CachePolicyInterceptor } from '../../../core/cache-policy.interceptor.js';
 import { Clock } from '../../../core/clock.js';
 import { HttpExceptionFilter } from '../../../core/http-exception.filter.js';
@@ -62,8 +63,8 @@ export interface IssuesHttpDbHarness {
   repositories: FakeProjectRepositories;
   /** The scripted `IntegrationsGithubService` the link routes read GitHub through. */
   github: FakeIntegrationsGithubService;
-  /** Mints an access-token cookie for a user (a live session, as a login would issue). */
-  sessionFor(userId: number): string;
+  /** Mints an access-token cookie for a user (a live session, as a login would issue; `isAdmin` makes it an admin's). */
+  sessionFor(userId: number, isAdmin?: boolean): string;
   /** The intruder seeded before every test: a second approved user with an integration, a project, an issue, a link and a marker. */
   readonly intruder: Intruder;
   /** A fresh session cookie of the intruder. */
@@ -117,6 +118,7 @@ export async function buildIssuesHttpDbHarness(env: Record<string, string> = {})
       { provide: SESSION_LOOKUP, useValue: sessions },
       { provide: APP_GUARD, useClass: OriginGuard },
       { provide: APP_GUARD, useClass: JwtGuard },
+      { provide: APP_GUARD, useClass: AdminGuard },
       { provide: APP_INTERCEPTOR, useClass: CachePolicyInterceptor },
       { provide: APP_FILTER, useClass: HttpExceptionFilter },
     ],
@@ -130,10 +132,10 @@ export async function buildIssuesHttpDbHarness(env: Record<string, string> = {})
   const jwt = app.get(JwtService);
   const ds = module.get(DataSource);
   const baseline = seedIntruderEachTest(() => ds);
-  const sessionFor = (userId: number): string => {
+  const sessionFor = (userId: number, isAdmin = false): string => {
     const sid = randomUUID();
 
-    sessions.sessions.set(sid, { id: userId, username: `user-${userId}`, isAdmin: false });
+    sessions.sessions.set(sid, { id: userId, username: `user-${userId}`, isAdmin });
     return `access_token=${jwt.sign({ sub: userId, sid })}`;
   };
 

@@ -42,11 +42,13 @@ export interface IssuesTestContext {
   issues: FakeIssuesService;
   /** The recording stand-in behind the GitHub link routes and the sync trigger routes. */
   links: FakeIssueLinksService;
-  ids: { owner: number; intruder: number };
+  ids: { owner: number; intruder: number; admin: number };
   /** Cookie of `darthjee` (the main user). */
   owner: string;
   /** Cookie of `intruder` (another user). */
   intruder: string;
+  /** Cookie of `admin` (a user with `isAdmin: true`: admins get no access to other users' rows). */
+  admin: string;
 }
 
 /**
@@ -102,11 +104,11 @@ export async function buildIssuesTestApp(env: Record<string, unknown> = {}): Pro
 
   const tokenService = app.get(TokenService);
   const sessions = await Promise.all(
-    ['darthjee', 'intruder'].map(async (username) => {
+    ['darthjee', 'intruder', 'admin'].map(async (username) => {
       const user = await userRepo.save(userRepo.create({
         username,
         email: `${username}@example.com`,
-        isAdmin: false,
+        isAdmin: username === 'admin',
         status: 'approved',
       }));
       const { accessToken } = await tokenService.issueTokens(user);
@@ -114,16 +116,17 @@ export async function buildIssuesTestApp(env: Record<string, unknown> = {}): Pro
       return { id: user.id, cookie: `access_token=${accessToken}` };
     }),
   );
-  const [owner, intruder] = sessions;
+  const [owner, intruder, admin] = sessions;
 
   return {
     app,
     projects,
     issues,
     links,
-    ids: { owner: owner.id, intruder: intruder.id },
+    ids: { owner: owner.id, intruder: intruder.id, admin: admin.id },
     owner: owner.cookie,
     intruder: intruder.cookie,
+    admin: admin.cookie,
   };
 }
 
