@@ -36,6 +36,17 @@ export async function buildLinkWorld(harness: IssuesHttpDbHarness, username = 'o
   harness.repositories.reset();
   harness.github.calls.length = 0;
 
+  return addLinkUser(harness, username);
+}
+
+/**
+ * Seeds one more user with the fixture repository and a project, leaving the clock and the
+ * in-memory state as they are (a second user next to the first).
+ * @param harness - The harness.
+ * @param username - The user to seed.
+ * @returns The user, their session cookie and their project.
+ */
+export async function addLinkUser(harness: IssuesHttpDbHarness, username: string): Promise<LinkWorld> {
   const userId = await seedUser(harness.ds, username);
 
   linkRepository(harness, userId);
