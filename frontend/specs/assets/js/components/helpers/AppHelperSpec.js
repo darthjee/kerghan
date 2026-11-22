@@ -6,6 +6,8 @@ import ModalRedirect from '../../../../../assets/js/components/common/ModalRedir
 import Integrations from '../../../../../assets/js/components/resources/accounts/pages/Integrations.jsx';
 import Repositories from '../../../../../assets/js/components/resources/repositories/pages/Repositories.jsx';
 import Projects from '../../../../../assets/js/components/resources/projects/pages/Projects.jsx';
+import ProjectNew from '../../../../../assets/js/components/resources/projects/pages/ProjectNew.jsx';
+import ProjectPage from '../../../../../assets/js/components/resources/projects/pages/ProjectPage.jsx';
 import ProjectsPlaceholder from '../../../../../assets/js/components/resources/projects/pages/ProjectsPlaceholder.jsx';
 import Sessions from '../../../../../assets/js/components/resources/accounts/pages/Sessions.jsx';
 import ResetPasswordLanding from '../../../../../assets/js/components/resources/accounts/pages/ResetPasswordLanding.jsx';
@@ -65,6 +67,14 @@ describe('AppHelper', () => {
 
   it('renders the project list for the projects key', () => {
     expect(partsOf('projects').page.type).toBe(Projects);
+  });
+
+  it('renders the creation form for the project-new key', () => {
+    expect(partsOf('project-new').page.type).toBe(ProjectNew);
+  });
+
+  it('renders the project page for the project key', () => {
+    expect(partsOf('project').page.type).toBe(ProjectPage);
   });
 
   ['issue-new', 'issue', 'issue-edit'].forEach((key) => {
