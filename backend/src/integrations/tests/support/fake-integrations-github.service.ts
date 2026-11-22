@@ -1,10 +1,12 @@
-import type { GithubCase, GithubOperation } from './github-builders.js';
+import type { GithubCase, GithubOperation, GithubResult } from './github-builders.js';
 import { deferred, type Deferred } from './no-network-guard.js';
+import type { GithubIssueChanges, GithubIssueRepo, IssueProbeResult, IssueResult, IssueUpdateResult } from '../../github-issue-results.js';
 import type { IntegrationRef, RepoPageResult, RepoResult } from '../../github-repo-results.js';
+import { assertIssueChanges, type IntegrationsGithubIssueWriter } from '../../integrations-github-issue-writer.service.js';
 import type { IntegrationsGithubService } from '../../integrations-github.service.js';
 
 /** A scripted answer: a builder case, or a typed result. */
-export type FakeAnswer = GithubCase | RepoPageResult | RepoResult;
+export type FakeAnswer = GithubCase | GithubResult;
 
 /** One logged call. */
 export interface FakeCall {
@@ -15,6 +17,12 @@ export interface FakeCall {
   page?: number;
   etag?: string | null;
   handle?: string;
+  /** The repository passed to an issue operation (copied). */
+  repo?: GithubIssueRepo;
+  /** The issue number passed to `getIssue` / `updateIssue`. */
+  number?: number;
+  /** The diff passed to `updateIssue` (copied), so a spec asserts the `PATCH` carried only the diff. */
+  changes?: GithubIssueChanges;
 }
 
 // The script slot that answers any page of a (integration, operation) pair.
@@ -26,7 +34,8 @@ const ANY_PAGE = '*';
  * the exported typed results only and never touches `fetch`.
  *
  * - **Scripting:** `script(integrationId | null, operation, page | '*', ...answers)`;
- *   for `getRepository` the "page" slot is the `githubId`. Answers are used
+ *   for `getRepository` the "page" slot is the `githubId`, for `getIssue` and
+ *   `updateIssue` it is the issue `number`, and for `probeIssues` it is `0`. Answers are used
  *   in order, the last one sticking. An unscripted call throws.
  * - **Integrations:** `setUsable` / `setIntegrations` set what the two list
  *   operations answer; with no `setIntegrations`, `listIntegrations` answers
@@ -35,12 +44,21 @@ const ANY_PAGE = '*';
  *   so a spec asserts counts, order and "no GitHub call" (`githubCalls()`).
  * - **Deferred answers:** `hold(...)` parks the next call of a slot on a
  *   deferred promise, released by the spec (race specs).
+ * - **The writer:** it also implements `updateIssue`, with the writer's allowlist
+ *   (the same `TypeError`), so one fake stands in for `IntegrationsGithubService`
+ *   and `IntegrationsGithubIssueWriter` (`asWriter()` for Nest overrides).
  * - Add's candidate walk runs the shared `walkAddCandidates` over this
  *   fake's `getRepository`, like it does over the real service.
  */
 export class FakeIntegrationsGithubService implements Pick<
   IntegrationsGithubService,
-  'listUsableIntegrations' | 'listIntegrations' | 'listRepositories' | 'listHandleRepositories' | 'getRepository'
+  | 'listUsableIntegrations'
+  | 'listIntegrations'
+  | 'listRepositories'
+  | 'listHandleRepositories'
+  | 'getRepository'
+  | 'getIssue'
+  | 'probeIssues'
 > {
   readonly calls: FakeCall[] = [];
   readonly #usable = new Map<number, IntegrationRef[]>();
@@ -100,7 +118,8 @@ export class FakeIntegrationsGithubService implements Pick<
   }
 
   /**
-   * The logged calls that stand for a GitHub call (every operation but the two list operations).
+   * The logged calls that stand for a GitHub call (every operation but the two list operations),
+   * the issue operations included.
    * @returns {FakeCall[]} The calls.
    */
   githubCalls(): FakeCall[] {
@@ -138,7 +157,53 @@ export class FakeIntegrationsGithubService implements Pick<
     return this.#answer(integrationId, 'getRepository', githubId) as Promise<RepoResult>;
   }
 
-  async #answer(integrationId: number | null, operation: GithubOperation, page: number): Promise<RepoPageResult | RepoResult> {
+  getIssue(
+    userId: number,
+    integrationId: number,
+    repo: GithubIssueRepo,
+    number: number,
+    etag?: string | null,
+  ): Promise<IssueResult> {
+    this.calls.push({ operation: 'getIssue', userId, integrationId, repo: { ...repo }, number, etag: etag ?? null });
+    return this.#answer(integrationId, 'getIssue', number) as Promise<IssueResult>;
+  }
+
+  probeIssues(userId: number, integrationId: number, repo: GithubIssueRepo): Promise<IssueProbeResult> {
+    this.calls.push({ operation: 'probeIssues', userId, integrationId, repo: { ...repo } });
+    return this.#answer(integrationId, 'probeIssues', 0) as Promise<IssueProbeResult>;
+  }
+
+  /**
+   * Validates the diff like the real writer (before anything is logged), then answers.
+   * @param {number} userId - The owner's id.
+   * @param {number} integrationId - The internal `integrations.id`.
+   * @param {GithubIssueRepo} repo - The repository.
+   * @param {number} number - The issue number.
+   * @param {GithubIssueChanges} changes - The diff.
+   * @returns {Promise<IssueUpdateResult>} The scripted answer.
+   * @throws {TypeError} Synchronously, as the writer does, for a diff it would refuse.
+   */
+  updateIssue(
+    userId: number,
+    integrationId: number,
+    repo: GithubIssueRepo,
+    number: number,
+    changes: GithubIssueChanges,
+  ): Promise<IssueUpdateResult> {
+    assertIssueChanges(changes);
+    this.calls.push({ operation: 'updateIssue', userId, integrationId, repo: { ...repo }, number, changes: { ...changes } });
+    return this.#answer(integrationId, 'updateIssue', number) as Promise<IssueUpdateResult>;
+  }
+
+  /**
+   * The fake as the writer, for Nest overrides of `IntegrationsGithubIssueWriter`.
+   * @returns {Pick<IntegrationsGithubIssueWriter, 'updateIssue'>} The writer view.
+   */
+  asWriter(): Pick<IntegrationsGithubIssueWriter, 'updateIssue'> {
+    return { updateIssue: (...args) => this.updateIssue(...args) };
+  }
+
+  async #answer(integrationId: number | null, operation: GithubOperation, page: number): Promise<GithubResult> {
     const held = this.#takeHeld(integrationId, operation, page);
     const answer = held === undefined ? this.#scripted(integrationId, operation, page) : await held.promise;
 

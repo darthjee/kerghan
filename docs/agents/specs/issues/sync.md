@@ -153,18 +153,18 @@ Complements the marker rules of [model.md](model.md#issues_pending_writes-the-pe
 
 ## GitHub issue client operations
 
-`getIssue` and `probeIssues` are added to `IntegrationsGithubService`, which stays `GET`-only; `updateIssue` lives on the separate exported `IntegrationsGithubIssueWriter`, injected only by the issues sync service ([security.md](security.md#the-integrations-boundary)). Both follow the existing service shape (`(userId, integrationId, …)`, `kind` unions sharing `RepoFailure` = `invalid_credentials | rate_limited{resetAt} | unavailable{reason} | integration_unusable{reason}`). `repo` is `{ owner, name }` from the repository row; `issue` is `{ id, number, title, body, state, updatedAt, isPullRequest }`.
+`getIssue` and `probeIssues` are added to `IntegrationsGithubService`, which stays `GET`-only; `updateIssue` lives on the separate exported `IntegrationsGithubIssueWriter`, injected only by the issues sync service ([security.md](security.md#the-integrations-boundary)). Both follow the existing service shape (`(userId, integrationId, …)`, `kind` unions sharing `RepoFailure` = `invalid_credentials | rate_limited{resetAt} | unavailable{reason} | integration_unusable{reason}`). `repo` is `{ githubId, owner, name }` from the repository row (the rename check compares the repository id); `issue` is `{ id, number, title, body, state, updatedAt, isPullRequest }`.
 
 | Operation | Success kinds | Issue-specific kinds (plus `RepoFailure`) |
 |---|---|---|
-| `getIssue(userId, integrationId, repo, number, etag?)` | `ok{issue, etag}`, `not_modified` | `not_found`, `gone` (`410`), `moved`, `forbidden` |
-| `updateIssue(userId, integrationId, repo, number, changes)` | `ok{issue}` | `not_found`, `gone`, `moved`, `forbidden` |
+| `getIssue(userId, integrationId, repo, number, etag?)` | `ok{issue, etag, renamedTo?}`, `not_modified` | `not_found`, `gone` (`410`), `moved`, `forbidden` |
+| `updateIssue(userId, integrationId, repo, number, changes)` | `ok{issue, renamedTo?}` | `not_found`, `gone`, `moved`, `forbidden` |
 | `probeIssues(userId, integrationId, repo)` | `ok` | `not_found`, `forbidden` |
 
 - `changes` holds only the fields to push (`title?`, `body?`, `state?`); never `state_reason`. The writer rejects any other field before a call.
 - **Token permissions per operation** (GitHub App): `getIssue` and `probeIssues` mint `{ issues: read, metadata: read }`, `updateIssue` mints `{ issues: write }`; the token cache is keyed by installation and permission set ([security.md](security.md#the-github-app-gains-issues-write)).
-- **Redirect host check.** No client follows a redirect automatically. A rename is followed once only when the `Location` is `https://api.github.com/` in the rename form; any other scheme, host, port or path shape is unclassifiable: not followed, no credential sent, outcome `transient` (E65). This applies to `updateIssue` too.
-- `renamed` stays adapter-internal: the client retries once at the `Location` and returns the result with a `renamedTo` hint, which the caller hands to Repositories (E65).
+- **Redirect host check.** No client follows a redirect automatically. A rename is followed once only when the `Location` is `https://api.github.com/` in the rename form; any other scheme, host, port or path shape is unclassifiable: not followed, no credential sent; the client answers `unavailable{reason:'redirect'}`, which the sync treats as `transient` (E65). This applies to `updateIssue` too.
+- `renamed` stays adapter-internal: the client retries once at the `Location` and returns the result with a `renamedTo: { owner, name }` hint, which the caller hands to Repositories (E65).
 - **`forbidden` is its own kind** (a non-rate-limit `403`) for issue operations, rather than `unavailable{reason:'forbidden'}`, so the sync tells E5 and E21 apart from transient failures without inspecting reasons.
 - Listing for import is not part of this spec (link creation, #487 and [api.md](api.md)).
 

@@ -1,6 +1,7 @@
 import { FakeClock } from '../../core/tests/support/fake-clock.js';
 import { GITHUB_API_VERSION } from '../github-client.service.js';
 import { hasNextLink } from '../github-http.js';
+import { ISSUE_READ_PERMISSIONS, ISSUE_WRITE_PERMISSIONS, REPO_LISTING_PERMISSIONS } from '../github-installation-permissions.js';
 import {
   GITHUB_REPO_LISTING_MAX_BODY_BYTES,
   GITHUB_REPO_MAX_BODY_BYTES,
@@ -285,7 +286,7 @@ describe('GithubRepoClientService', () => {
     it('POSTs with exactly {"permissions":{"metadata":"read"}} and parses the token into a Secret', async () => {
       fetchMock().mockResolvedValueOnce(jsonResponse(201, { token: 'ghs_CANARYcanaryMINT', expires_at: '2026-01-01T01:00:00Z' }));
 
-      const minted = await client.mintInstallationToken(JWT, 77);
+      const minted = await client.mintInstallationToken(JWT, 77, REPO_LISTING_PERMISSIONS);
       const [call] = fetchCalls();
 
       expect(call.url).toBe('https://api.github.com/app/installations/77/access_tokens');
@@ -295,6 +296,18 @@ describe('GithubRepoClientService', () => {
       expect(call.headers.Authorization).toBe('Bearer CANARYcanaryJWT');
       expect(minted).toEqual({ kind: 'ok', token: expect.any(Secret), expiresAt: new Date('2026-01-01T01:00:00Z') });
       expect(JSON.stringify(minted)).not.toContain('CANARYcanary');
+    });
+
+    it.each([
+      ['the listing set', REPO_LISTING_PERMISSIONS, '{"permissions":{"metadata":"read"}}'],
+      ['the issue read set', ISSUE_READ_PERMISSIONS, '{"permissions":{"issues":"read","metadata":"read"}}'],
+      ['the issue write set', ISSUE_WRITE_PERMISSIONS, '{"permissions":{"issues":"write"}}'],
+    ])('POSTs %s as the whole permissions body', async (_name, permissions, body) => {
+      fetchMock().mockResolvedValueOnce(jsonResponse(201, { token: 'ghs_x', expires_at: '2026-01-01T01:00:00Z' }));
+
+      await client.mintInstallationToken(JWT, 77, permissions);
+
+      expect(fetchCalls()[0].init.body).toBe(body);
     });
 
     it.each([
@@ -309,13 +322,13 @@ describe('GithubRepoClientService', () => {
     ])('maps a mint %i', async (status, headers, expected) => {
       fetchMock().mockResolvedValueOnce(jsonResponse(status, {}, headers as Record<string, string>));
 
-      expect(await client.mintInstallationToken(JWT, 77)).toEqual(expected);
+      expect(await client.mintInstallationToken(JWT, 77, REPO_LISTING_PERMISSIONS)).toEqual(expected);
     });
 
     it('maps a mint timeout', async () => {
       fetchMock().mockRejectedValueOnce(new DOMException('timed out', 'TimeoutError'));
 
-      expect(await client.mintInstallationToken(JWT, 77)).toEqual({ kind: 'unavailable', reason: 'timeout' });
+      expect(await client.mintInstallationToken(JWT, 77, REPO_LISTING_PERMISSIONS)).toEqual({ kind: 'unavailable', reason: 'timeout' });
     });
 
     it.each([
@@ -326,7 +339,7 @@ describe('GithubRepoClientService', () => {
     ])('answers unavailable (unexpected) for a 201 with %s', async (_name, body) => {
       fetchMock().mockResolvedValueOnce(jsonResponse(201, body));
 
-      expect(await client.mintInstallationToken(JWT, 77)).toEqual({ kind: 'unavailable', reason: 'unexpected' });
+      expect(await client.mintInstallationToken(JWT, 77, REPO_LISTING_PERMISSIONS)).toEqual({ kind: 'unavailable', reason: 'unexpected' });
     });
 
     it('parses an over-cap mint body as unexpected', () => {

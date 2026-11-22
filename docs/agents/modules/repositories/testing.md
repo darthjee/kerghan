@@ -101,6 +101,9 @@ shared builders, so the fidelity contract spec guards it; Repositories imports i
   GitHub call".
 - **Deferred answers:** an answer can be held on a deferred promise, for
   [race specs](testing-coverage.md#concurrency-and-races).
+- **Issue operations (#554):** the fake also answers `getIssue`, `probeIssues` and `updateIssue`
+  (`asWriter()` gives the `IntegrationsGithubIssueWriter` view), logging `repo`, `number` and
+  `changes`.
 
 ### Shared builders
 
@@ -109,6 +112,8 @@ Typed test-support builders, no recorded JSON (`integrations/tests/support/githu
 - `githubRepo({ id, private, owner, name })`, with default ids above 2³¹;
 - `listingPage(page, repos, { hasNext, etag })`;
 - `repository(repo)` (a `GET /repositories/{id}` answer);
+- issue builders `githubIssue`, `githubPullRequest`, `issuePage`, `issueGone`, `issueRenamed`,
+  `issueMoved`, `issueRedirectOffHost`;
 - `notModified()`, `rateLimited(resetAt)`, `unauthorized()`, `forbidden()`, `notFound()`,
   `timeout()`, `serverError()`, `redirect()`, `integrationUnusable(reason)`.
 
