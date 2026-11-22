@@ -54,6 +54,18 @@ export interface SyncWorld {
 let run = 0;
 
 /**
+ * Starts every job the previous spec left captured, so their links can queue again (the per-link
+ * dedupe is in memory and link ids repeat after each truncate), and forgets the captured calls.
+ * @param harness - A harness with a `FakeWorkersService`.
+ * @returns Nothing.
+ */
+export function releaseQueuedLinks(harness: Pick<IssuesDbHarness, 'workers' | 'get'>): void {
+  for (const params of harness.workers.paramsOf(ISSUES_RECONCILE_JOB)) harness.get(IssueSyncQueue).started(params.linkId as number);
+
+  harness.workers.reset();
+}
+
+/**
  * Clears the in-memory state of the previous spec, moves the clock to a fresh hour (so a pause of an
  * earlier spec has ended), and seeds a user with a project on a repository that one or more
  * integrations list, one issue with a link, and optionally a marker.
@@ -66,10 +78,7 @@ export async function buildSyncWorld(harness: IssuesDbHarness, options: SyncWorl
   harness.clock.set(new Date(Date.UTC(2026, 6, 1, 12, 0, 0) + run * 3_600_000));
   harness.repositories.reset();
   harness.github.calls.length = 0;
-  // Jobs of the previous spec that never ran still count as queued: start them, so their links can queue again.
-  for (const params of harness.workers.paramsOf(ISSUES_RECONCILE_JOB)) harness.get(IssueSyncQueue).started(params.linkId as number);
-
-  harness.workers.reset();
+  releaseQueuedLinks(harness);
 
   const userId = await seedUser(harness.ds, 'owner');
   const integrations = options.integrations ?? [SYNC_INTEGRATION];

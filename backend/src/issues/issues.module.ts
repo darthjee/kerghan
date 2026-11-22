@@ -21,6 +21,7 @@ import { IssueSyncGithub } from './issue-sync-github.js';
 import { IssueSyncQueue } from './issue-sync-queue.js';
 import { IssueSyncReader } from './issue-sync-reader.js';
 import { IssueSyncTrigger } from './issue-sync-trigger.js';
+import { IssueSyncTriggersService } from './issue-sync-triggers.service.js';
 import { IssuesAccess } from './issues-access.js';
 import { IssuesConfig } from './issues-config.js';
 import { IssuesEventsListener } from './issues-events.listener.js';
@@ -69,6 +70,7 @@ export const ISSUES_PROVIDERS: Provider[] = [
   IssueSyncGithub,
   IssuesSyncService,
   IssuesSyncBootstrap,
+  IssueSyncTriggersService,
   IssuesService,
   { provide: IssueSyncTrigger, useClass: EnqueueIssueSyncTrigger },
   ProjectOpenIssueCounts,
