@@ -10,6 +10,7 @@ import { GithubAppClientService } from './github-app-client.service.js';
 import { GithubAppRepoCaller } from './github-app-repo-caller.js';
 import { GithubClientService } from './github-client.service.js';
 import { GithubInstallationTokenCache } from './github-installation-token-cache.js';
+import { GithubIssueClientService } from './github-issue-client.service.js';
 import { GithubRepoClientService } from './github-repo-client.service.js';
 import { GithubUnauthenticatedBudget } from './github-unauthenticated-budget.js';
 import { IntegrationConnectionTestService } from './integration-connection-test.service.js';
@@ -105,6 +106,7 @@ import { PatStrategy } from './types/pat/pat.strategy.js';
     IntegrationsEncryptionService,
     GithubClientService,
     GithubRepoClientService,
+    GithubIssueClientService,
     GithubInstallationTokenCache,
     GithubUnauthenticatedBudget,
     IntegrationLifecycleService,
