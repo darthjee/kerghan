@@ -7,11 +7,14 @@ import { FakeClock } from '../../../core/tests/support/fake-clock.js';
 import type { Integration } from '../../entities/integration.entity.js';
 import { GithubAppRepoCaller } from '../../github-app-repo-caller.js';
 import { GithubInstallationTokenCache } from '../../github-installation-token-cache.js';
+import { GithubAuthenticatedRunner } from '../../github-authenticated-runner.js';
+import { GithubIssueClientService } from '../../github-issue-client.service.js';
 import { GithubRepoClientService } from '../../github-repo-client.service.js';
 import { GithubUnauthenticatedBudget } from '../../github-unauthenticated-budget.js';
 import type { IntegrationStatus, IntegrationType } from '../../integration-enums.js';
 import { IntegrationStoreService } from '../../integration-store.service.js';
 import { IntegrationsEncryptionService } from '../../integrations-encryption.service.js';
+import { IntegrationsGithubIssueWriter } from '../../integrations-github-issue-writer.service.js';
 import { IntegrationsGithubService } from '../../integrations-github.service.js';
 import { integrationsKeySetOf } from '../../integrations-key.js';
 import { Secret } from '../../secret.js';
@@ -50,6 +53,8 @@ export interface SeedOptions {
 /** The real `IntegrationsGithubService` over in-memory doubles, `FakeClock` and the guarded `fetch`. */
 export interface GithubServiceHarness {
   service: IntegrationsGithubService;
+  writer: IntegrationsGithubIssueWriter;
+  issueClient: GithubIssueClientService;
   client: GithubRepoClientService;
   repo: InMemoryIntegrationRepo;
   store: IntegrationStoreService;
@@ -85,8 +90,10 @@ export function buildGithubServiceHarness(): GithubServiceHarness {
   const budget = new GithubUnauthenticatedBudget(clock);
   const githubApp = new GithubAppRepoCaller(client, tokens, store, clock, logger as unknown as LoggerService,
     enabledGithubAppConfig());
-  const service = new IntegrationsGithubService(store, encryption, registry, client, githubApp, budget, clock,
-    logger as unknown as LoggerService);
+  const issueClient = new GithubIssueClientService(clock);
+  const runner = new GithubAuthenticatedRunner(store, encryption, registry, githubApp, clock, logger as unknown as LoggerService);
+  const service = new IntegrationsGithubService(store, runner, client, issueClient, budget, clock);
+  const writer = new IntegrationsGithubIssueWriter(runner, issueClient);
   const payloadOf = (type: IntegrationType, options: SeedOptions): Secret => (type === 'github_app'
     ? new Secret({ installationId: options.installationId ?? 4242 })
     : new Secret({ token: options.token ?? (type === 'pat' ? CANARY_PAT : CANARY_OAUTH_TOKEN) }));
@@ -94,7 +101,7 @@ export function buildGithubServiceHarness(): GithubServiceHarness {
   let seeded = 0;
 
   return {
-    service, client, repo, store, encryption, tokens, budget, clock, logger, enabled,
+    service, writer, issueClient, client, repo, store, encryption, tokens, budget, clock, logger, enabled,
     async seed(options = {}) {
       seeded += 1;
       const type = options.type ?? 'pat';

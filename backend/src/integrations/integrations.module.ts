@@ -10,6 +10,7 @@ import { GithubAppClientService } from './github-app-client.service.js';
 import { GithubAppRepoCaller } from './github-app-repo-caller.js';
 import { GithubClientService } from './github-client.service.js';
 import { GithubInstallationTokenCache } from './github-installation-token-cache.js';
+import { GithubAuthenticatedRunner } from './github-authenticated-runner.js';
 import { GithubIssueClientService } from './github-issue-client.service.js';
 import { GithubRepoClientService } from './github-repo-client.service.js';
 import { GithubUnauthenticatedBudget } from './github-unauthenticated-budget.js';
@@ -20,6 +21,7 @@ import { IntegrationLifecycleService } from './integration-lifecycle.service.js'
 import { IntegrationStoreService } from './integration-store.service.js';
 import { IntegrationTestCooldownService } from './integration-test-cooldown.service.js';
 import { IntegrationsEncryptionService } from './integrations-encryption.service.js';
+import { IntegrationsGithubIssueWriter } from './integrations-github-issue-writer.service.js';
 import { IntegrationsGithubService } from './integrations-github.service.js';
 import { IntegrationsKeyRotationService } from './integrations-key-rotation.service.js';
 import { buildIntegrationsKeys, INTEGRATIONS_KEY } from './integrations-key.js';
@@ -111,7 +113,9 @@ import { PatStrategy } from './types/pat/pat.strategy.js';
     GithubUnauthenticatedBudget,
     IntegrationLifecycleService,
     GithubAppRepoCaller,
+    GithubAuthenticatedRunner,
     IntegrationsGithubService,
+    IntegrationsGithubIssueWriter,
     IntegrationTypeRegistry,
     PatStrategy,
     OauthAppRevocationService,
@@ -138,7 +142,7 @@ import { PatStrategy } from './types/pat/pat.strategy.js';
     GithubAppFlowService,
     GithubAppEnabledGuard,
   ],
-  exports: [IntegrationsKeyRotationService, IntegrationsGithubService],
+  exports: [IntegrationsKeyRotationService, IntegrationsGithubService, IntegrationsGithubIssueWriter],
 })
 // NestJS module classes are intentionally empty; all behavior lives in @Module().
 // eslint-disable-next-line @typescript-eslint/no-extraneous-class
