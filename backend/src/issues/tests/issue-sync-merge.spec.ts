@@ -62,13 +62,21 @@ describe('mergeFields', () => {
     });
   });
 
-  it('decides each field on its own', () => {
+  it('E6: decides each field on its own (both changes are kept)', () => {
     const plan = mergeFields(input({
       local: { title: 'L', state: 'closed' },
       remote: { body: 'G', state: 'open' },
     }));
 
     expect(plan).toEqual({ push: { title: 'L', state: 'closed' }, pull: { body: 'G' }, adopt: {} });
+  });
+
+  it('E9: a refresh while a marker exists pulls what only GitHub changed and never pulls over a field with an unsent edit', () => {
+    const plan = mergeFields(input({ local: { title: 'L' }, remote: { body: 'G' }, localEditedAt: LATE, remoteUpdatedAt: EARLY }));
+
+    expect(plan.pull).toEqual({ body: 'G' });
+    expect(plan.push).toEqual({ title: 'L' });
+    expect(plan.pull).not.toHaveProperty('title');
   });
 
   it('mixes a pull, a push and an adopt in one run', () => {

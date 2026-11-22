@@ -51,7 +51,7 @@ describe('user.deleted listener (real MySQL)', () => {
     await expect(harness.ds.query('SELECT id FROM issues_pending_writes WHERE id = ?', [intruder.markerId])).resolves.toHaveLength(1);
   }
 
-  it('removes the user\'s markers, links, issues and projects (soft-deleted included), leaving the intruder\'s rows', async () => {
+  it('E31: removes the user\'s markers, links, issues and projects (soft-deleted included), leaving the intruder\'s rows', async () => {
     const userId = await seedUser(harness.ds, 'owner');
     const { intruder } = harness;
 
@@ -83,7 +83,7 @@ describe('user.deleted listener (real MySQL)', () => {
     await expectIntruderIntact(intruder);
   });
 
-  it('logs a failure at error level with safe fields only and does not throw (E53)', async () => {
+  it('E31 and E53: logs a failure at error level with safe fields only and does not throw', async () => {
     const userId = await seedUser(harness.ds, 'owner');
     const { intruder } = harness;
     const spy = jest.spyOn(harness.get(DataSource), 'transaction').mockRejectedValueOnce(new RangeError('boom secret'));

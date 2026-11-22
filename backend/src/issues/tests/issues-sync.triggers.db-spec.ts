@@ -63,6 +63,25 @@ describe('Issues sync triggers and job (real MySQL)', () => {
       expect(marker).toBeNull();
     });
 
+    it('E43: an edit that reverts to the base values leaves a marker that sends nothing, and the job clears it', async () => {
+      const world = await linkedIssue();
+
+      await issues.edit(world.userId, projectUuid, issueUuid, { title: 'Edited' });
+      await issues.edit(world.userId, projectUuid, issueUuid, { title: 'T' });
+      expect((await readState(harness, world)).marker).toMatchObject({ revision: 2 });
+
+      scriptGet(harness, SYNC_INTEGRATION, githubCase());
+      await harness.workers.runAll();
+
+      const { issue, link, marker } = await readState(harness, world);
+
+      expect(harness.workers.errors).toEqual([]);
+      expect(harness.github.githubCalls().filter((call) => call.operation === 'updateIssue')).toEqual([]);
+      expect(issue.title).toBe('T');
+      expect(link.baseTitle).toBe('T');
+      expect(marker).toBeNull();
+    });
+
     it('is the real trigger: it enqueues only after the edit committed (the marker is already there)', async () => {
       const world = await linkedIssue();
 

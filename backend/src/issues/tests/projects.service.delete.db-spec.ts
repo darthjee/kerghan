@@ -45,7 +45,7 @@ describe('ProjectsService#delete (real MySQL)', () => {
     return { ...project, issueIds: [plain.id, linked.id, unsentA.id, unsentB.id], linkIds };
   }
 
-  it('hard-deletes the markers, links and issues, and reports the unsent count counted before the delete', async () => {
+  it('E33: hard-deletes the markers, links and issues, and reports the unsent count counted before the delete', async () => {
     const project = await fullProject();
 
     expect(await service.delete(userId, project.uuid)).toEqual({ unsentIssueCount: 2 });
@@ -85,7 +85,7 @@ describe('ProjectsService#delete (real MySQL)', () => {
     expect(await service.delete(userId, project.uuid)).toEqual({ unsentIssueCount: 1 });
   });
 
-  it('answers the 404 on a second delete and on any route on the deleted project', async () => {
+  it('E40: answers the 404 on a second delete and on any route on the deleted project', async () => {
     const project = await seedProject(harness.ds, userId);
 
     await service.delete(userId, project.uuid);
@@ -94,6 +94,24 @@ describe('ProjectsService#delete (real MySQL)', () => {
     await expect(service.show(userId, project.uuid)).rejects.toBeInstanceOf(NotFoundException);
     await expect(service.edit(userId, project.uuid, { name: 'x' })).rejects.toBeInstanceOf(NotFoundException);
     await expect(service.setRepository(userId, project.uuid, { repository: null })).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('E49: soft-deleting an already-deleted project answers like a missing one and changes nothing', async () => {
+    const project = await seedProject(harness.ds, userId);
+
+    await service.delete(userId, project.uuid);
+
+    const tombstone = await harness.ds.query('SELECT * FROM issues_projects WHERE id = ?', [project.id]);
+
+    harness.clock.advance(60_000);
+
+    const again = await service.delete(userId, project.uuid).catch((error: unknown) => error as NotFoundException);
+    const missing = await service.delete(userId, '00000000-0000-4000-8000-000000000000').catch((error: unknown) => error as NotFoundException);
+
+    expect(again).toBeInstanceOf(NotFoundException);
+    expect((again as NotFoundException).getResponse()).toEqual((missing as NotFoundException).getResponse());
+    // `deleted_at` and `deleted_token` were set once, by the first delete.
+    expect(await harness.ds.query('SELECT * FROM issues_projects WHERE id = ?', [project.id])).toEqual(tombstone);
   });
 
   it('frees the name and the repository for a new project', async () => {

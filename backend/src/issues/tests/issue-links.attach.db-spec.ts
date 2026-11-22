@@ -27,7 +27,7 @@ describe('Issue attach (real MySQL)', () => {
     seedIssue(harness.ds, world.project.id, { title: 'Local', body: 'local body', ...seed })
   );
 
-  it('links an issue with equal values at once, with no confirmation and no issue write', async () => {
+  it('E61: links an issue with equal values at once, with no confirmation and no issue write', async () => {
     const local = await seedLocal({ title: 'Same', body: 'same body' });
     const before = await issueRow(local.id);
     const gh = scriptIssue(harness, { title: 'Same', body: 'same body' });
@@ -51,7 +51,7 @@ describe('Issue attach (real MySQL)', () => {
     expect(await linkOf(local.id)).not.toBeNull();
   });
 
-  it('answers 409 ISSUE_ATTACH_CONFIRMATION_REQUIRED with the differences and updatedAt, changing nothing', async () => {
+  it('E61: answers 409 ISSUE_ATTACH_CONFIRMATION_REQUIRED with the differences and updatedAt, changing nothing', async () => {
     const local = await seedLocal();
 
     scriptIssue(harness, { title: 'Remote', body: 'local body', state: 'closed' });
@@ -67,7 +67,7 @@ describe('Issue attach (real MySQL)', () => {
     expect(await issueRow(local.id)).toMatchObject({ title: 'Local', body: 'local body', state: 'open' });
   });
 
-  it('replaces the values on the current updatedAt, sets the base to the local values and writes nothing to GitHub', async () => {
+  it('E61: replaces the values on the current updatedAt, sets the base to the local values and writes nothing to GitHub', async () => {
     const local = await seedLocal();
 
     scriptIssue(harness, { title: 'Remote', body: null, state: 'closed' });
@@ -85,7 +85,7 @@ describe('Issue attach (real MySQL)', () => {
     expect(harness.github.githubCalls().map((entry) => entry.operation)).toEqual(['getIssue']);
   });
 
-  it('changes nothing for a stale confirmation, even when the edit happened in the same second as the warning', async () => {
+  it('E61: changes nothing for a stale confirmation, even when the edit happened in the same second as the warning', async () => {
     const created = await post(harness, `/projects/${world.project.uuid}/issues/create.json`, world.cookie, { title: 'Local' }).expect(201);
     const issueId = created.body.id as string;
     const internal = (await harness.ds.getRepository(Issue).findOneByOrFail({ uuid: issueId })).id;
