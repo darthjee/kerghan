@@ -2,6 +2,7 @@ import {
   forbidden, githubIssue, issue as issueCase, issueGone, issueMoved, issuePage, issueRenamed, notFound, notModified,
   rateLimited, serverError, timeout, unauthorized,
 } from '../../integrations/tests/support/github-builders.js';
+import { seedUser } from '../../repositories/tests/support/two-user-baseline.js';
 import { IssueRateLimitPauses } from '../issue-rate-limit-pauses.js';
 import { IssueSyncCommit } from '../issue-sync-commit.js';
 import { IssueSyncReader } from '../issue-sync-reader.js';
@@ -276,6 +277,24 @@ describe('IssuesSyncService (real MySQL)', () => {
     ])('is a silent no-op for %s: no call', async (_label, linkId) => {
       expect(await service.reconcile(await linkId(), { lastAttempt: false })).toEqual({ kind: 'stopped', reason: 'no_link' });
       expect(calls()).toEqual([]);
+    });
+
+    it('uses the project owner, not the link user_id, for approval, candidates and every GitHub call', async () => {
+      const w = await world({ local: { title: 'L' }, base: {}, marker: { revision: 3 } });
+      const other = await seedUser(harness.ds, 'link-user');
+
+      await harness.ds.query("UPDATE auth_users SET status = 'pending' WHERE id = ?", [other]);
+      await harness.ds.query('UPDATE issues_github_links SET user_id = ? WHERE id = ?', [other, w.linkId]);
+      scriptGet(harness, SYNC_INTEGRATION, githubCase());
+      scriptPut();
+
+      expect(await run(w)).toEqual({ kind: 'done' });
+      expect(calls().map((call) => [call.operation, call.userId, call.integrationId])).toEqual([
+        ['getIssue', w.userId, SYNC_INTEGRATION],
+        ['updateIssue', w.userId, SYNC_INTEGRATION],
+      ]);
+      expect(harness.github.calls.filter((call) => call.userId !== w.userId)).toEqual([]);
+      expect(harness.repositories.calls.filter((call) => call.userId !== w.userId)).toEqual([]);
     });
 
     it('E24: a user that is not approved stops with no call, the marker kept', async () => {

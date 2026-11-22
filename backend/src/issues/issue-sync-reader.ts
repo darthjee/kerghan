@@ -8,7 +8,11 @@ import { IssueMarkers, type MarkerState } from './issue-markers.js';
 /** Everything a reconcile reads before it calls GitHub, as one consistent snapshot. */
 export interface SyncSubject {
   linkId: number;
-  /** The project owner: whose integrations the job uses, whoever triggered it. */
+  /**
+   * The project owner's id (`issues_projects.user_id`, never the link's `user_id`, which is for
+   * uniqueness only): whose approval, repositories and integrations the job uses, whoever
+   * triggered it.
+   */
   userId: number;
   issueId: number;
   projectId: number;
@@ -72,9 +76,9 @@ export class IssueSyncReader {
   load(linkId: number): Promise<SyncSubject | null> {
     return this.dataSource.transaction(async (manager) => {
       const rows: SubjectRow[] = await manager.query(
-        'SELECT l.id AS link_id, l.user_id, l.issue_id, l.github_number, l.etag, l.github_updated_at, '
+        'SELECT l.id AS link_id, l.issue_id, l.github_number, l.etag, l.github_updated_at, '
         + 'l.base_title, l.base_body, l.base_state, i.title, i.body, i.state, i.updated_at AS issue_updated_at, '
-        + 'p.id AS project_id, p.repository_id '
+        + 'p.id AS project_id, p.user_id, p.repository_id '
         + 'FROM issues_github_links l JOIN issues i ON i.id = l.issue_id JOIN issues_projects p ON p.id = i.project_id '
         + "WHERE l.id = ? AND l.status <> 'gone' AND p.deleted_token = 0",
         [linkId],
