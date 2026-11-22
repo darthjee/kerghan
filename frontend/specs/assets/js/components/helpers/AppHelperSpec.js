@@ -9,7 +9,9 @@ import Projects from '../../../../../assets/js/components/resources/projects/pag
 import ProjectEdit from '../../../../../assets/js/components/resources/projects/pages/ProjectEdit.jsx';
 import ProjectNew from '../../../../../assets/js/components/resources/projects/pages/ProjectNew.jsx';
 import ProjectPage from '../../../../../assets/js/components/resources/projects/pages/ProjectPage.jsx';
-import ProjectsPlaceholder from '../../../../../assets/js/components/resources/projects/pages/ProjectsPlaceholder.jsx';
+import IssueEdit from '../../../../../assets/js/components/resources/issues/pages/IssueEdit.jsx';
+import IssueNew from '../../../../../assets/js/components/resources/issues/pages/IssueNew.jsx';
+import IssuePage from '../../../../../assets/js/components/resources/issues/pages/IssuePage.jsx';
 import Sessions from '../../../../../assets/js/components/resources/accounts/pages/Sessions.jsx';
 import ResetPasswordLanding from '../../../../../assets/js/components/resources/accounts/pages/ResetPasswordLanding.jsx';
 
@@ -82,10 +84,16 @@ describe('AppHelper', () => {
     expect(partsOf('project').page.type).toBe(ProjectPage);
   });
 
-  ['issue-new', 'issue', 'issue-edit'].forEach((key) => {
-    it(`renders the placeholder page for the ${key} key`, () => {
-      expect(partsOf(key).page.type).toBe(ProjectsPlaceholder);
-    });
+  it('renders the issue creation form for the issue-new key', () => {
+    expect(partsOf('issue-new').page.type).toBe(IssueNew);
+  });
+
+  it('renders the issue page for the issue key', () => {
+    expect(partsOf('issue').page.type).toBe(IssuePage);
+  });
+
+  it('renders the issue edit form for the issue-edit key', () => {
+    expect(partsOf('issue-edit').page.type).toBe(IssueEdit);
   });
 
   it('renders the sessions page for the sessions key', () => {

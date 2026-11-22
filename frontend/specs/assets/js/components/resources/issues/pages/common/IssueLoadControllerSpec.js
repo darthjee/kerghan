@@ -1,4 +1,5 @@
 import ApiError from '../../../../../../../../assets/js/client/ApiError.js';
+import IssuesClient from '../../../../../../../../assets/js/client/IssuesClient.js';
 import IssueLoadController from '../../../../../../../../assets/js/components/resources/issues/pages/common/IssueLoadController.js';
 import {
   buildIssue, buildProject, ISSUE_ID, PROJECT_ID,
@@ -128,5 +129,33 @@ describe('IssueLoadController', () => {
     await loading;
 
     expect(state.loadState).toBeNull();
+  });
+
+  describe('S3: a crafted issue id in the hash', () => {
+    let originalFetch;
+
+    beforeEach(() => {
+      originalFetch = globalThis.fetch;
+      globalThis.fetch = jasmine.createSpy('fetch');
+    });
+
+    afterEach(() => {
+      globalThis.fetch = originalFetch;
+    });
+
+    ['..%2Fadmin', '../admin', 'new'].forEach((issueId) => {
+      it(`shows "Issue not found" for ${issueId} and sends no request for it`, async () => {
+        const real = new IssueLoadController({
+          setProject: (value) => { state.project = value; },
+          setIssue: (value) => { state.issue = value; },
+          setLoadState: (value) => { state.loadState = value; },
+        }, projects, IssuesClient);
+
+        await real.load(PROJECT_ID, issueId);
+
+        expect(state.loadState).toEqual({ loading: false, error: null, notFound: 'issue' });
+        expect(globalThis.fetch).not.toHaveBeenCalled();
+      });
+    });
   });
 });
