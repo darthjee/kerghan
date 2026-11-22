@@ -1,4 +1,5 @@
 import { Issue } from '../entities/issue.entity.js';
+import type { IssueLinkResponse } from '../issue-link-presenter.js';
 import { issueDeleteResponse, issueListingResponse, issueListRow, issueResponse } from '../issue-response.js';
 
 function recordRow(): Omit<Issue, 'body'> {
@@ -6,6 +7,19 @@ function recordRow(): Omit<Issue, 'body'> {
 
   expect(body).toBe('Details');
   return record;
+}
+
+function linkObject(): IssueLinkResponse {
+  return {
+    number: 12,
+    url: 'https://github.com/darthjee/kerghan/issues/12',
+    state: 'linked',
+    states: ['linked'],
+    reason: null,
+    rateLimitedUntil: null,
+    lastSyncedAt: '2026-11-07T12:00:00.000Z',
+    stale: false,
+  };
 }
 
 function issueRow(): Issue {
@@ -51,7 +65,7 @@ describe('issue-response', () => {
 
   it('sets link to the presenter entry, or null when the map has none', () => {
     const row = issueRow();
-    const link = { status: 'synced' };
+    const link = linkObject();
 
     expect(issueResponse(row, link).link).toBe(link);
     expect(issueResponse(row, undefined).link).toBeNull();
@@ -59,7 +73,7 @@ describe('issue-response', () => {
 
   it('builds the listing body reading each row link from the map', () => {
     const record = recordRow();
-    const link = { status: 'synced' };
+    const link = linkObject();
     const listing = issueListingResponse(
       [record],
       new Map([[7, link]]),

@@ -22,8 +22,11 @@ import { OriginGuard } from '../../../core/origin.guard.js';
 import { SESSION_LOOKUP, type SessionLookup, type SessionUser } from '../../../core/session-lookup.js';
 import { FakeClock } from '../../../core/tests/support/fake-clock.js';
 import { buildDbTierOptions } from '../../../database/tests/db-tier/db-tier-options.js';
+import { IntegrationsGithubService } from '../../../integrations/integrations-github.public.js';
+import { FakeIntegrationsGithubService } from '../../../integrations/tests/support/fake-integrations-github.service.js';
 import { RepositoriesService } from '../../../repositories/repositories.service.js';
 import { ISSUES_ENTITIES } from '../../entities/index.js';
+import { IssueLinksController } from '../../issue-links.controller.js';
 import { IssuesController } from '../../issues.controller.js';
 import { ISSUES_PROVIDERS } from '../../issues.module.js';
 import { ProjectsController } from '../../projects.controller.js';
@@ -47,6 +50,8 @@ export interface IssuesHttpDbHarness {
   clock: FakeClock;
   logger: FakeLogger;
   repositories: FakeProjectRepositories;
+  /** The scripted `IntegrationsGithubService` the link routes read GitHub through. */
+  github: FakeIntegrationsGithubService;
   /** Mints an access-token cookie for a user (a live session, as a login would issue). */
   sessionFor(userId: number): string;
   get<T>(token: abstract new (...args: never[]) => T): T;
@@ -64,6 +69,7 @@ export interface IssuesHttpDbHarness {
 export async function buildIssuesHttpDbHarness(env: Record<string, string> = {}): Promise<IssuesHttpDbHarness> {
   const clock = new FakeClock(HARNESS_START);
   const repositories = new FakeProjectRepositories();
+  const github = new FakeIntegrationsGithubService();
   const logger: FakeLogger & { log: jest.Mock; verbose: jest.Mock } = {
     debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn(), log: jest.fn(), verbose: jest.fn(),
   };
@@ -81,13 +87,14 @@ export async function buildIssuesHttpDbHarness(env: Record<string, string> = {})
       } as never),
       TypeOrmModule.forFeature([...ISSUES_ENTITIES, User]),
     ],
-    controllers: [ProjectsController, IssuesController],
+    controllers: [ProjectsController, IssuesController, IssueLinksController],
     providers: [
       ...ISSUES_PROVIDERS,
       AccountHandleService,
       { provide: Clock, useValue: clock },
       { provide: LoggerService, useValue: logger },
       { provide: RepositoriesService, useValue: repositories },
+      { provide: IntegrationsGithubService, useValue: github },
       { provide: SESSION_LOOKUP, useValue: sessions },
       { provide: APP_GUARD, useClass: OriginGuard },
       { provide: APP_GUARD, useClass: JwtGuard },
@@ -110,6 +117,7 @@ export async function buildIssuesHttpDbHarness(env: Record<string, string> = {})
     clock,
     logger,
     repositories,
+    github,
     sessionFor: (userId) => {
       const sid = randomUUID();
 
