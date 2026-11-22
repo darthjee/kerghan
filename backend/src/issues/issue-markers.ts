@@ -55,4 +55,26 @@ export class IssueMarkers {
 
     return rows.length > 0;
   }
+
+  /**
+   * Locks the link's pending marker (`FOR UPDATE`, the fourth step of the lock order) and deletes
+   * it. Used by unlink, after it locked the link.
+   * @param {EntityManager} manager - The unlinking transaction's manager.
+   * @param {number} linkId - The link's internal id.
+   * @returns {Promise<boolean>} `true` when a marker existed (unsent changes are being dropped).
+   */
+  async lockAndDeleteForLink(manager: EntityManager, linkId: number): Promise<boolean> {
+    const rows: Array<{ id: number }> = await manager.query(
+      'SELECT id FROM issues_pending_writes WHERE link_id = ? FOR UPDATE',
+      [linkId],
+    );
+
+    if (rows.length === 0) {
+      return false;
+    }
+
+    await manager.query('DELETE FROM issues_pending_writes WHERE link_id = ?', [linkId]);
+
+    return true;
+  }
 }
