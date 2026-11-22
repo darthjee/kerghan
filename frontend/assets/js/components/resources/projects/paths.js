@@ -1,3 +1,8 @@
+import ListQuery from './listQuery.js';
+
+/** The issue list's `state` filter values; the first is the default. */
+const ISSUE_STATES = ['open', 'closed', 'all'];
+
 /**
  * Hashes of the project screens. Every id is `encodeURIComponent`-ed, so no id can change the
  * path (S3).
@@ -24,6 +29,50 @@ const ProjectPaths = {
    */
   edit(projectId) {
     return `#/projects/${encodeURIComponent(projectId)}/edit`;
+  },
+
+  /**
+   * The issue list of a project (the project page), with its query.
+   *
+   * @param {string} projectId - The project's uuid.
+   * @param {{page: number, search: string, state: string}} [query] - The list query
+   *   (defaults leave the query out).
+   * @returns {string} The hash.
+   */
+  issues(projectId, query = { page: 1, search: '', state: 'open' }) {
+    return ListQuery.toHash(`/projects/${encodeURIComponent(projectId)}`, query, { states: ISSUE_STATES });
+  },
+
+  /**
+   * The issue page.
+   *
+   * @param {string} projectId - The project's uuid.
+   * @param {string} issueId - The issue's uuid.
+   * @returns {string} The hash.
+   */
+  issue(projectId, issueId) {
+    return `#/projects/${encodeURIComponent(projectId)}/issues/${encodeURIComponent(issueId)}`;
+  },
+
+  /**
+   * The issue creation form.
+   *
+   * @param {string} projectId - The project's uuid.
+   * @returns {string} The hash.
+   */
+  newIssue(projectId) {
+    return `#/projects/${encodeURIComponent(projectId)}/issues/new`;
+  },
+
+  /**
+   * The issue edit form.
+   *
+   * @param {string} projectId - The project's uuid.
+   * @param {string} issueId - The issue's uuid.
+   * @returns {string} The hash.
+   */
+  editIssue(projectId, issueId) {
+    return `#/projects/${encodeURIComponent(projectId)}/issues/${encodeURIComponent(issueId)}/edit`;
   },
 
   /**
