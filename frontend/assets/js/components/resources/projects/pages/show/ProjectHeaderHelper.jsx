@@ -24,13 +24,14 @@ const ProjectHeaderHelper = {
    *
    * @param {{id: string, name: string, description: (string|null), repository: (object|null)}}
    *   project - The project.
-   * @returns {React.ReactElement} The header, with its "Edit" action.
+   * @returns {React.ReactElement} The header, with its "New issue" and "Edit" actions.
    */
   render(project) {
     return (
       <header className="mb-4">
         <div className="d-flex flex-wrap align-items-start gap-2">
           <h1 className="h2 me-auto" style={{ overflowWrap: 'anywhere' }}>{project.name}</h1>
+          <a className="btn btn-primary" href={ProjectPaths.newIssue(project.id)}>New issue</a>
           <a className="btn btn-outline-primary" href={ProjectPaths.edit(project.id)}>Edit</a>
         </div>
         {renderDescription(project.description)}

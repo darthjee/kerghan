@@ -44,6 +44,13 @@ describe('ProjectHeaderHelper', () => {
     expect(output.containsElement('a', 'Edit')).toBe(true);
   });
 
+  it('offers a New issue action to the issue creation form', () => {
+    const output = outputOf();
+
+    expect(output.containsAttribute('href', `#/projects/${PROJECT_ID}/issues/new`)).toBe(true);
+    expect(output.containsElement('a', 'New issue')).toBe(true);
+  });
+
   it('renders the name and description as text, never as markup (S1)', () => {
     const output = outputOf({ name: '<img src=x onerror=alert(1)>', description: '<script>alert(1)</script>' });
 

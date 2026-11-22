@@ -9,7 +9,7 @@ const INITIAL_LOAD_STATE = { loading: true, error: null, notFound: false };
 
 /**
  * Project page (`#/projects/:projectId`): the project's header (name, description,
- * repository, "Edit"), with the issue list to be mounted below it by #561. A missing, deleted
+ * repository, "New issue", "Edit"), with the project's issue list below it. A missing, deleted
  * or foreign project, or a malformed id, shows "Project not found" (U1, S3).
  *
  * @returns {React.ReactElement} The rendered page.

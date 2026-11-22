@@ -113,4 +113,49 @@ describe('ProjectErrorMessages', () => {
       expect(ProjectErrorMessages.fieldOf(undefined)).toBe('form');
     });
   });
+
+  describe('issue codes', () => {
+    it('maps ISSUE_LINKED to the unlink hint', () => {
+      expect(ProjectErrorMessages.describe(error(409, 'ISSUE_LINKED', 'Linked')))
+        .toEqual({ message: 'Unlink this issue before deleting it' });
+    });
+
+    ['ISSUES_LIMIT_REACHED', 'ISSUE_EDIT_RATE_LIMITED'].forEach((code) => {
+      it(`shows the API message of ${code} and files it form-level`, () => {
+        expect(ProjectErrorMessages.describe(error(429, code, 'Limit')).message).toBe('Limit');
+        expect(ProjectErrorMessages.fieldOf(error(429, code, 'Limit'))).toBe('form');
+      });
+    });
+
+    ['ISSUE_EDIT_RATE_LIMITED', 'ISSUE_LINK_RATE_LIMITED', 'GITHUB_RATE_LIMITED'].forEach((code) => {
+      it(`flags ${code} as a rate limit with its retryAfterSeconds`, () => {
+        const limited = new ApiError(429, 'Slow down', code, undefined, 5, 7);
+
+        expect(ProjectErrorMessages.isRateLimit(limited)).toBeTrue();
+        expect(ProjectErrorMessages.describe(limited)).toEqual({ message: 'Slow down', retryAfterSeconds: 7 });
+      });
+
+      it(`leaves retryAfterSeconds undefined for ${code} without one`, () => {
+        const limited = new ApiError(429, 'Slow down', code);
+
+        expect(ProjectErrorMessages.describe(limited).retryAfterSeconds).toBeUndefined();
+      });
+    });
+
+    it('does not flag other codes as a rate limit', () => {
+      expect(ProjectErrorMessages.isRateLimit(error(409, 'ISSUE_LINKED', 'x'))).toBeFalse();
+      expect(ProjectErrorMessages.isRateLimit(undefined)).toBeFalse();
+    });
+  });
+
+  describe('.isIssueNotFound', () => {
+    it('is true for a 404', () => {
+      expect(ProjectErrorMessages.isIssueNotFound(error(404, undefined, 'Not found'))).toBeTrue();
+    });
+
+    it('is false for other statuses and no error', () => {
+      expect(ProjectErrorMessages.isIssueNotFound(error(500, undefined, 'x'))).toBeFalse();
+      expect(ProjectErrorMessages.isIssueNotFound(undefined)).toBeFalse();
+    });
+  });
 });

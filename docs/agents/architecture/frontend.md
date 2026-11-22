@@ -198,13 +198,12 @@ rejects with a 404-shaped `ApiError` **before any request** (S3), so a crafted h
 | `#/projects/new` | `project-new` | Creation form (`pages/ProjectNew.jsx`) |
 | `#/projects/:projectId` | `project` | Project header (`pages/ProjectPage.jsx`) |
 | `#/projects/:projectId/edit` | `project-edit` | Management (`pages/ProjectEdit.jsx`) |
-| `#/projects/:projectId/issues/new` | `issue-new` | **Placeholder** (`ProjectsPlaceholder.jsx`) |
-| `#/projects/:projectId/issues/:issueId` | `issue` | **Placeholder** |
-| `#/projects/:projectId/issues/:issueId/edit` | `issue-edit` | **Placeholder** |
+| `#/projects/:projectId/issues/new` | `issue-new` | Issue creation form (`issues/pages/IssueNew.jsx`) |
+| `#/projects/:projectId/issues/:issueId` | `issue` | Issue page (`issues/pages/IssuePage.jsx`) |
+| `#/projects/:projectId/issues/:issueId/edit` | `issue-edit` | Issue edit form (`issues/pages/IssueEdit.jsx`) |
 
-The three issue routes resolve to "Coming soon" until #561 and #562 replace them; the project
-page shows the header only (the issue list, "Refresh project" and "Import" come with them). The
-header's "Projects" link shows for logged-in users only.
+The project page shows the header and, under it, the issue list (#561); "Refresh project" and
+"Import" come with #562. The header's "Projects" link shows for logged-in users only.
 
 **Layout** (`components/resources/projects/`): `pages/` holds one page component per screen,
 with `list/`, `new/`, `show/` and `edit/` for the controllers and helpers of each (the usual
@@ -238,6 +237,43 @@ after a successful save or delete. A clean form leaves silently. Nothing is writ
 spec fails on `dangerouslySetInnerHTML` (S1) or any storage use (S4) in the project screens,
 `ConfirmModal` and the form guard, and on integration or credential wording on the project
 screens (S5); names, descriptions and error messages render as React text.
+
+### Issue screens (#561)
+
+Under `components/resources/issues/`, built on `IssuesClient` and the pieces above:
+
+- **List** (`list/`): `IssueList` mounts under the project header. `IssuesController` keeps
+  `search`, `page` and `state` in the hash query through `listQuery.js` (normalized, U6),
+  debounces the search, ignores out-of-order answers and jumps to the last page when the
+  requested one is past the end (U5). The link column is `link/LinkStateBadge` and
+  `link/GithubLink` (rendered only for `https://github.com/` URLs); `IssueStateBadge` is shared
+  with the issue page.
+- **Issue page** (`pages/IssuePage.jsx`, `pages/show/`, `pages/common/`): `IssueLoadController`
+  loads the project, then the issue, and shows "Project not found" or "Issue not found" for a
+  400 or 404 (a malformed id makes no call). Close and Reopen send only `{ state }` and ignore a
+  second click while in flight (U2). Delete is disabled while the issue is linked, goes through
+  `ConfirmModal` and treats a 404 as done. The empty slot between the header and the body
+  (`IssueLinkPanelSlotHelper`) is where #562 mounts the link panel.
+- **Forms** (`pages/IssueNew.jsx`, `pages/IssueEdit.jsx`, `pages/form/`): title and body
+  validated by `utils/validation/issueValidators.js`; the body has Write and Preview tabs and
+  `IssueBody` mounts only while Preview is selected. Errors are form-level and keep the typed
+  values; the dirty-form guard is wired (U11).
+- **`IssueBody`** (`body/`): a lazy wrapper (`React.lazy`) with a `<pre>` fallback; an empty
+  body shows a muted "No description." and never loads the chunk. `IssueBodyMarkdown` is the
+  separate chunk (`react-markdown` 10.1.0 and `remark-gfm` 4.0.1, pinned exactly): raw HTML is
+  shown as escaped text, links are limited to `http`, `https` and `mailto`, images never render
+  an `<img>`, task checkboxes are disabled, and there is no `rehype` plugin. Specs render with
+  `renderToStaticMarkup`, where a lazy component shows its fallback, so the Markdown rules are
+  specified on the non-lazy `IssueBodyMarkdown`.
+- **Rate-limit countdown** (`components/common/forms/`, `RateLimitCountdownController` and
+  `useRateLimitCountdown`): "Try again in N s" from `retryAfterSeconds`; re-enables at 0, never
+  resubmits, clears its timer on unmount. `errorMessages.js` maps `ISSUE_LINKED`,
+  `ISSUES_LIMIT_REACHED`, `ISSUE_EDIT_RATE_LIMITED`, `ISSUE_LINK_RATE_LIMITED` and
+  `GITHUB_RATE_LIMITED`; only the edit form uses the countdown so far.
+- **Security** (`specs/assets/js/components/resources/issues/securityStaticSpec.js`): fails on
+  `dangerouslySetInnerHTML`, `.innerHTML`, `.outerHTML`, a `rehype` import, any
+  `localStorage`/`sessionStorage` use and integration or credential wording; a `<b>x</b>` title
+  renders as escaped text in the list, the page and the forms.
 
 ## No Vite proxy to the backend
 

@@ -39,6 +39,17 @@ function repositoryTaken(error) {
 }
 
 /**
+ * Message of a rate-limit code, with the seconds to wait.
+ *
+ * @param {{message: string, retryAfterSeconds: (number|undefined)}} error - The error.
+ * @returns {{message: string, retryAfterSeconds: (number|undefined)}} The API's message and
+ *   `retryAfterSeconds`, `undefined` when the error carried none.
+ */
+function rateLimited(error) {
+  return { message: error.message, retryAfterSeconds: error.retryAfterSeconds };
+}
+
+/**
  * Describers by error code; each receives the error and answers `{message, link?, details?}`.
  *
  * @type {Map<string, Function>}
@@ -48,8 +59,16 @@ const DESCRIBERS = new Map([
   ['PROJECT_HAS_LINKS', hasLinks],
   ['PROJECT_REPOSITORY_CHANGED', () => ({ message: 'The project\'s repository changed; try again.' })],
   ['GITHUB_UNAVAILABLE', () => ({ message: 'GitHub is unavailable right now; try again.' })],
+  ['ISSUE_LINKED', () => ({ message: 'Unlink this issue before deleting it' })],
+  ['ISSUES_LIMIT_REACHED', (error) => ({ message: error.message })],
+  ['ISSUE_EDIT_RATE_LIMITED', rateLimited],
+  ['ISSUE_LINK_RATE_LIMITED', rateLimited],
+  ['GITHUB_RATE_LIMITED', rateLimited],
   ['VALIDATION_FAILED', (error) => ({ message: error.message, details: error.details ?? [] })],
 ]);
+
+/** The error codes that carry a `retryAfterSeconds` countdown. */
+const RATE_LIMIT_CODES = new Set(['ISSUE_EDIT_RATE_LIMITED', 'ISSUE_LINK_RATE_LIMITED', 'GITHUB_RATE_LIMITED']);
 
 /**
  * The form field each code points at; anything not listed is a form-level error.
@@ -65,7 +84,7 @@ const FIELDS = new Map([
 /**
  * The shared code-to-renderer map of the Issues and Projects screens. Every error shows the
  * API's own message (`ApiError.message`) unless the screen adds something for its code.
- * #561 and #562 add the rate-limit and link codes.
+ * The issue codes (including the three rate-limit codes) are described here too.
  */
 const ProjectErrorMessages = {
   /** Shown on Name when the shortcut found the default name taken. */
@@ -75,10 +94,12 @@ const ProjectErrorMessages = {
    * Describe an error for display, as React text (never markup: S1).
    *
    * @param {{message: string, code: (string|undefined), meta: (object|undefined),
-   *   details: (string[]|undefined)}} error - The thrown error (usually an `ApiError`).
+   *   details: (string[]|undefined), retryAfterSeconds: (number|undefined)}} error - The thrown
+   *   error (usually an `ApiError`).
    * @returns {{message: string, link: ({href: string, text: string}|undefined),
-   *   details: (string[]|undefined)}} The text to show, plus a link to the existing project
-   *   (`PROJECT_REPOSITORY_TAKEN`) or the listed validation `details` when the code has them.
+   *   details: (string[]|undefined), retryAfterSeconds: (number|undefined)}} The text to show,
+   *   plus a link to the existing project (`PROJECT_REPOSITORY_TAKEN`), the listed validation
+   *   `details`, or `retryAfterSeconds` (the three rate-limit codes) when the code has them.
    */
   describe(error) {
     const describer = DESCRIBERS.get(error?.code);
@@ -121,6 +142,27 @@ const ProjectErrorMessages = {
    */
   isProjectNotFound(error) {
     return error?.status === 404 && ProjectErrorMessages.fieldOf(error) !== 'repository';
+  },
+
+  /**
+   * Tell whether an error means the issue (or its project) is gone: a `404` on an issue route.
+   *
+   * @param {{status: (number|undefined)}} error - The thrown error.
+   * @returns {boolean} `true` for a `404`.
+   */
+  isIssueNotFound(error) {
+    return error?.status === 404;
+  },
+
+  /**
+   * Tell whether an error is one of the three rate-limit codes (`ISSUE_EDIT_RATE_LIMITED`,
+   * `ISSUE_LINK_RATE_LIMITED`, `GITHUB_RATE_LIMITED`), which show a countdown.
+   *
+   * @param {{code: (string|undefined)}} error - The thrown error.
+   * @returns {boolean} `true` for a rate-limit code.
+   */
+  isRateLimit(error) {
+    return RATE_LIMIT_CODES.has(error?.code);
   },
 };
 
