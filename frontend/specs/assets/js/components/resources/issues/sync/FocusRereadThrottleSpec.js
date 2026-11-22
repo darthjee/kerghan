@@ -18,7 +18,7 @@ describe('FocusRereadThrottle', () => {
     expect(reread).toHaveBeenCalledTimes(1);
   });
 
-  it('throttles a focus within 30 s', () => {
+  it('U10, P4: throttles a focus within 30 s', () => {
     throttle.handleFocus();
     clock += 29999;
 
@@ -26,7 +26,7 @@ describe('FocusRereadThrottle', () => {
     expect(reread).toHaveBeenCalledTimes(1);
   });
 
-  it('re-reads again once 30 s passed', () => {
+  it('U10, P4: re-reads again once 30 s passed', () => {
     throttle.handleFocus();
     clock += 30000;
 

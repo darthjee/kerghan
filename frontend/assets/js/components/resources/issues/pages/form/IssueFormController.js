@@ -22,6 +22,8 @@ export default class IssueFormController {
 
   #setSubmitting;
 
+  #setChangedIssue;
+
   #onNotFound;
 
   #client;
@@ -29,16 +31,20 @@ export default class IssueFormController {
   /**
    * Create the controller.
    *
-   * @param {{setFieldErrors: Function, setFormError: Function, setSubmitting: Function}}
-   *   setters - React state setters: the per-field errors (`{ field: {message} }`), the
-   *   form-level error and the in-flight flag.
+   * @param {{setFieldErrors: Function, setFormError: Function, setSubmitting: Function,
+   *   setChangedIssue: (Function|undefined)}} setters - React state setters: the per-field
+   *   errors (`{ field: {message} }`), the form-level error, the in-flight flag and the fresher
+   *   issue found by the focus re-read (U10).
    * @param {Function} onNotFound - Called when the project or issue turned out to be gone.
    * @param {typeof IssuesClient} [client] - Issues HTTP client override, for testability.
    */
-  constructor({ setFieldErrors, setFormError, setSubmitting }, onNotFound, client = IssuesClient) {
+  constructor({
+    setFieldErrors, setFormError, setSubmitting, setChangedIssue = () => undefined,
+  }, onNotFound, client = IssuesClient) {
     this.#setFieldErrors = setFieldErrors;
     this.#setFormError = setFormError;
     this.#setSubmitting = setSubmitting;
+    this.#setChangedIssue = setChangedIssue;
     this.#onNotFound = onNotFound;
     this.#client = client;
   }
@@ -53,6 +59,58 @@ export default class IssueFormController {
    */
   static isDirty(fields, initial) {
     return fields.title !== initial.title || fields.body !== initial.body || fields.state !== initial.state;
+  }
+
+  /**
+   * Tell whether an `updatedAt` is later than the one the form loaded.
+   *
+   * @param {string} fresh - The `updatedAt` just read.
+   * @param {string} loaded - The `updatedAt` the form loaded.
+   * @returns {boolean} `true` when `fresh` is a later moment.
+   */
+  static isNewer(fresh, loaded) {
+    return Date.parse(fresh) > Date.parse(loaded);
+  }
+
+  /**
+   * The state of the form after "Discard my changes and reload" (U10): the fields and the
+   * start values are the fresh issue's, so the form is clean and no leave prompt (U11) shows.
+   *
+   * @param {{title: string, body: (string|null), state: string, updatedAt: string}} fresh - The
+   *   fresher issue.
+   * @returns {{fields: {title: string, body: string, state: string}, updatedAt: string}} The
+   *   fields to show (also the new baseline) and the `updatedAt` now loaded.
+   */
+  static reloaded(fresh) {
+    return {
+      fields: { title: fresh.title, body: fresh.body ?? '', state: fresh.state },
+      updatedAt: fresh.updatedAt,
+    };
+  }
+
+  /**
+   * Read the issue quietly on window focus (U10), touching no field: when its `updatedAt` is
+   * later than the one the form loaded, hand it on so the banner shows.
+   *
+   * @description A `404` means the issue is gone (U1); any other failure, and an `undefined`
+   * answer, is ignored.
+   * @param {string} projectId - The project's uuid.
+   * @param {string} issueId - The issue's uuid.
+   * @param {string} loadedUpdatedAt - The `updatedAt` the form loaded.
+   * @returns {Promise<void>} Resolves once the read settled.
+   */
+  async checkChanged(projectId, issueId, loadedUpdatedAt) {
+    try {
+      const fresh = await this.#client.show(projectId, issueId);
+
+      if (fresh && IssueFormController.isNewer(fresh.updatedAt, loadedUpdatedAt)) {
+        this.#setChangedIssue(fresh);
+      }
+    } catch (error) {
+      if (ProjectErrorMessages.isIssueNotFound(error)) {
+        this.#onNotFound();
+      }
+    }
   }
 
   /**

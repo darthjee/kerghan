@@ -1,4 +1,5 @@
 import ProjectFieldsHelper from '../../../projects/pages/common/ProjectFieldsHelper.jsx';
+import IssueChangedBanner from './IssueChangedBanner.jsx';
 import IssueFieldsHelper from './IssueFieldsHelper.jsx';
 
 /**
@@ -55,12 +56,13 @@ const IssueFormHelper = {
    * limit runs.
    *
    * @param {{mode: string, title: string, body: string, state: string, tab: string,
-   *   link: (object|null), fieldErrors: object, formError: (object|null), submitting: boolean,
-   *   countdown: {active: boolean, label: (string|null)}}} state - Form state; `mode` is
-   *   `new` or `edit`.
+   *   link: (object|null), changed: (boolean|undefined), fieldErrors: object,
+   *   formError: (object|null), submitting: boolean, countdown: {active: boolean, label:
+   *   (string|null)}}} state - Form state; `mode` is `new` or `edit`; `changed` shows the U10
+   *   banner.
    * @param {{onTitleChange: Function, onBodyChange: Function, onStateChange: Function,
-   *   onTabChange: Function, onSubmit: Function, onCancel: Function}} handlers - Event
-   *   handlers.
+   *   onTabChange: Function, onSubmit: Function, onCancel: Function,
+   *   onDiscardAndReload: Function}} handlers - Event handlers.
    * @returns {React.ReactElement} The form.
    */
   render(state, handlers) {
@@ -70,6 +72,7 @@ const IssueFormHelper = {
       <div className="container mt-4">
         <h1>{edit ? 'Edit issue' : 'New issue'}</h1>
         {edit ? renderLinkNote(state.link) : null}
+        {edit ? <IssueChangedBanner visible={state.changed} onDiscard={handlers.onDiscardAndReload} /> : null}
         <form onSubmit={handlers.onSubmit} noValidate>
           {ProjectFieldsHelper.renderFormError(state.formError)}
           {IssueFieldsHelper.renderTitle(state, handlers)}
