@@ -4,6 +4,7 @@ import { ISSUES_ENTITIES } from './entities/index.js';
 import { IssueEditRateLimiter } from './issue-edit-rate-limiter.js';
 import { IssueLinkPresenter } from './issue-link-presenter.js';
 import { IssueMarkers } from './issue-markers.js';
+import { EmptyIssueRateLimitWaits, IssueRateLimitWaits } from './issue-rate-limit-waits.js';
 import { IssueStore } from './issue-store.js';
 import { IssueSyncTrigger, NoopIssueSyncTrigger } from './issue-sync-trigger.js';
 import { IssuesAccess } from './issues-access.js';
@@ -32,6 +33,7 @@ export const ISSUES_PROVIDERS: Provider[] = [
   IssuesEventsListener,
   IssueEditRateLimiter,
   IssueLinkPresenter,
+  { provide: IssueRateLimitWaits, useClass: EmptyIssueRateLimitWaits },
   IssueMarkers,
   IssueStore,
   IssuesService,

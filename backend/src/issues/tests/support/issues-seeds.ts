@@ -102,6 +102,8 @@ export interface LinkSeed {
   githubNumber?: number;
   status?: string;
   statusReason?: string | null;
+  /** Defaults to `null` (the column is nullable); a link creation always sets it. */
+  lastSyncedAt?: Date | null;
 }
 
 /**
@@ -125,7 +127,7 @@ export async function seedLink(ds: DataSource, seed: LinkSeed): Promise<{ id: nu
     baseBody: issue.body,
     baseState: issue.state,
     githubUpdatedAt: null,
-    lastSyncedAt: null,
+    lastSyncedAt: seed.lastSyncedAt ?? null,
     etag: null,
     createdAt: SEED_TIME,
     updatedAt: SEED_TIME,
