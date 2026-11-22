@@ -20,8 +20,8 @@ const WRITE_ORDER: Record<IssuesWriteCapability, number> = { writable: 0, unknow
  * E20), ordered by known write capability (writable, then unknown, then read-only) and oldest
  * first inside each group. Nothing stores an integration id: it is resolved on every call.
  *
- * #557 uses it for the single read of link creation. #558 reuses it for refresh and push and adds
- * the skip of candidates that are paused by a rate limit.
+ * Link creation uses it for its single read; the sync reuses it for refresh and push, and the sync
+ * service skips the candidates that are paused by a rate limit.
  */
 @Injectable()
 export class IssueCandidates {

@@ -49,6 +49,11 @@ Every sync job runs the same **reconcile** of one link. An inbound refresh is a 
    - the marker is deleted `WHERE link_id = ? AND revision = R` (compare-and-clear).
 6. **Revision changed during the job** (E10, E41): only the push effects are committed (base of the pushed fields, timestamps). The pulled fields are skipped entirely, **neither local nor base** is touched, and the job is enqueued again (T6); the next reconcile re-reads GitHub and sees them again as a pull or a conflict. Updating the base without the local value would make the next run push the stale local value over GitHub's change. The marker revision is per link, so any edit skips all pulled fields; this adds no loss beyond E7's accepted per-issue timestamp limitation.
 
+- **Implementation notes (#558).**
+  - A link with no marker has no `Tm`: the issue's own `updated_at` stands in for it in the E7 rule.
+  - When the pulled fields are skipped (step 6) the stored `etag` is set to `NULL` too, so the next `GET` is a full one and sees the change again instead of answering `304`.
+  - The marker is read, locked and compared in the commit transaction: a marker that appeared since the read (none at `R`) also counts as a changed revision.
+  - A rate-limit pause that would end earlier than one still running keeps the later reset, so a slow concurrent job never shortens a pause.
 - **Ping-pong (E11).** A pull never creates a marker, and the base takes the pushed values together with the `PATCH`'s `updated_at`, so GitHub's own bump after our push is not seen as a remote change.
 - **ETag from `GET` only.** The `etag` is stored from each `200` `GET` and set to `NULL` after a `PATCH`, so the read after a push is a full `GET`. No assumption is made that a `PATCH` response's ETag matches a later `GET`.
 

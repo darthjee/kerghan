@@ -88,9 +88,14 @@ export const ISSUES_PROVIDERS: Provider[] = [
  * `issues_projects`, `issues`, `issues_github_links` and `issues_pending_writes`; every
  * `*_id` is a logical FK only. Its controllers are `ProjectsController` (the Projects API) and `IssuesController` (the Issues API). It reads Auth through
  * `AccountHandleService` and Repositories through the exported `RepositoriesService`.
- * The GitHub link routes (`IssueLinksController`) are the only Issues code that calls GitHub, and
- * only through the exported, `GET`-only `IntegrationsGithubService` (the one read of a link
- * creation); it writes nothing to GitHub. It imports `WorkersModule` for the sync job (#558).
+ * The only Issues code that calls GitHub is the link creation read (`IssueLinksController`, through
+ * the exported, `GET`-only `IntegrationsGithubService`) and the two-way sync (`IssuesSyncService`,
+ * the `issues.reconcile` job): it reads with the same service, and is the only injector of the
+ * exported `IntegrationsGithubIssueWriter`, which sends the one `PATCH` of a diff. The job is
+ * registered on `WorkersService` by `IssuesSyncBootstrap`, which also re-enqueues every pending
+ * marker at boot; triggers T1 (an edit), T2 to T4 (the refresh and retry routes) and the rate-limit
+ * timers enqueue through the per-link dedupe (`IssueSyncQueue`). In-memory state (the queue, the
+ * rate-limit pauses and waiting sets) is per process and lost on restart.
  */
 @Module({
   imports: [TypeOrmModule.forFeature(ISSUES_ENTITIES), AuthModule, RepositoriesModule, IntegrationsModule, WorkersModule],
