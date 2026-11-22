@@ -42,6 +42,19 @@ The module owns five tables and every row belongs to exactly one user. It reads 
 only through `IntegrationsGithubService` ([GitHub service](integrations/github-service.md)) and
 the handle only through Auth's `AccountHandleService` ([GitHub handle](auth/github-handle.md#auth-export)).
 
+### Lookups exported to Issues
+
+`RepositoriesService` answers the Issues module's repository questions; nothing here calls GitHub
+and every query is scoped by `user_id`:
+
+- `resolveForProject(userId, ref)`: the internal id, whether the row is added, and its summary.
+- `projectSummaries(userId, repositoryIds)`: the summaries of a page of projects' rows in one set of queries.
+- `integrationSourceIds(userId, repositoryId)`: the ids of the user's integrations whose source lists
+  the row, from the `integration:<id>` rows of `repositories_sources` (one indexed query, ascending).
+  A `handle` source is never returned, because a handle alone is not a credential candidate (E20).
+  Issues intersects it with the usable integrations and orders the result
+  ([integration selection](../specs/issues/sync.md#integration-selection)).
+
 ## Index
 
 | Doc | Read this when |

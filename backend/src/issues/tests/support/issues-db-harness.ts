@@ -10,6 +10,8 @@ import { Clock } from '../../../core/clock.js';
 import { LoggerService } from '../../../core/logger.service.js';
 import { FakeClock } from '../../../core/tests/support/fake-clock.js';
 import { buildDbTierOptions } from '../../../database/tests/db-tier/db-tier-options.js';
+import { IntegrationsGithubService } from '../../../integrations/integrations-github.public.js';
+import { FakeIntegrationsGithubService } from '../../../integrations/tests/support/fake-integrations-github.service.js';
 import { RepositoriesService } from '../../../repositories/repositories.service.js';
 import { ISSUES_ENTITIES } from '../../entities/index.js';
 import { ISSUES_PROVIDERS } from '../../issues.module.js';
@@ -33,6 +35,8 @@ export interface IssuesDbHarness {
   logger: FakeLogger;
   /** The in-memory Repositories lookups the Projects services call. */
   repositories: FakeProjectRepositories;
+  /** The scripted `IntegrationsGithubService` the link routes read GitHub through. */
+  github: FakeIntegrationsGithubService;
   get<T>(token: abstract new (...args: never[]) => T): T;
   close(): Promise<void>;
 }
@@ -48,6 +52,7 @@ export async function buildIssuesDbHarness(env: Record<string, string> = {}): Pr
   const clock = new FakeClock(HARNESS_START);
   const logger: FakeLogger = { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn() };
   const repositories = new FakeProjectRepositories();
+  const github = new FakeIntegrationsGithubService();
   const module = await Test.createTestingModule({
     imports: [
       ConfigModule.forRoot({ isGlobal: true, ignoreEnvFile: true, skipProcessEnv: true, load: [() => env] }),
@@ -66,6 +71,7 @@ export async function buildIssuesDbHarness(env: Record<string, string> = {}): Pr
       { provide: Clock, useValue: clock },
       { provide: LoggerService, useValue: logger },
       { provide: RepositoriesService, useValue: repositories },
+      { provide: IntegrationsGithubService, useValue: github },
     ],
   }).compile();
 
@@ -77,6 +83,7 @@ export async function buildIssuesDbHarness(env: Record<string, string> = {}): Pr
     clock,
     logger,
     repositories,
+    github,
     get: (token) => module.get(token),
     close: () => module.close(),
   };

@@ -67,13 +67,13 @@ describe('Repositories module boundaries (static)', () => {
   });
 
   describe('exported IntegrationsGithubService results', () => {
-    it('IntegrationRef carries id, uuid, label and type only', () => {
+    it('IntegrationRef carries id, uuid, label, type and issuesWrite only', () => {
       const row = {
         id: 1, uuid: 'u', userId: 2, label: 'l', type: 'pat', status: 'active', githubLogin: 'g',
         secretHint: 'h', secretIv: Buffer.alloc(12), secretCiphertext: Buffer.alloc(4), metadata: {},
       } as unknown as Integration;
 
-      expect(Object.keys(integrationRef(row)).sort()).toEqual(['id', 'label', 'type', 'uuid']);
+      expect(Object.keys(integrationRef(row)).sort()).toEqual(['id', 'issuesWrite', 'label', 'type', 'uuid']);
     });
 
     it('GithubRepo carries githubId, owner, name and private only', () => {

@@ -29,7 +29,7 @@ describe('Repositories routes user scoping (real MySQL)', () => {
     // The intruder added its copy of the shared repo, through its own integration.
     await harness.ds.query('UPDATE repositories SET added_at = ? WHERE user_id = ?', [new Date('2025-12-02T00:00:00Z'), intruderId]);
     intruderBefore = await snapshotUserRows(harness.ds, intruderId);
-    intruderIntegration = { id: intruderIntegrationId, uuid: 'intruder-uuid-zz', label: 'intruder-label-zz', type: 'pat' };
+    intruderIntegration = { id: intruderIntegrationId, uuid: 'intruder-uuid-zz', label: 'intruder-label-zz', type: 'pat', issuesWrite: 'writable' };
     harness.github.setUsable(intruderId, [intruderIntegration]);
     harness.github.setUsable(userId, [ref(5)]);
     cookie = harness.sessionFor(userId);

@@ -25,7 +25,7 @@ const GITHUB_ID = PUBLIC_REPO.githubId;
  * @returns {IntegrationRef} The ref.
  */
 function ref(id: number): IntegrationRef {
-  return { id, uuid: `00000000-0000-4000-8000-00000000000${id}`, label: `i${id}`, type: 'pat' };
+  return { id, uuid: `00000000-0000-4000-8000-00000000000${id}`, label: `i${id}`, type: 'pat', issuesWrite: 'writable' };
 }
 
 /**

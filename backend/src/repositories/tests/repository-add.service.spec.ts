@@ -21,7 +21,7 @@ import { RepositoryAddService } from '../repository-add.service.js';
 const OWNER = 1;
 const INTRUDER = 2;
 const GITHUB_ID = 4_000_000_001;
-const WORK: IntegrationRef = { id: 11, uuid: 'uuid-work', label: 'work-pat', type: 'pat' };
+const WORK: IntegrationRef = { id: 11, uuid: 'uuid-work', label: 'work-pat', type: 'pat', issuesWrite: 'writable' };
 const START = new Date('2026-11-07T12:00:00Z');
 
 interface Built {

@@ -17,6 +17,7 @@ const KNOWN_CONTROLLERS = [
   'GithubAppController',
   'HealthController',
   'IntegrationsController',
+  'IssueLinksController',
   'IssuesController',
   'OauthAppController',
   'ProjectsController',

@@ -115,9 +115,9 @@ describe('IntegrationsGithubService', () => {
       const find = jest.spyOn(harness.repo, 'find');
 
       expect(await harness.service.listUsableIntegrations(USER)).toEqual([
-        { id: older.id, uuid: older.uuid, label: 'older', type: 'oauth_app' },
-        { id: app.id, uuid: app.uuid, label: 'app', type: 'github_app' },
-        { id: newer.id, uuid: newer.uuid, label: 'newer', type: 'pat' },
+        { id: older.id, uuid: older.uuid, label: 'older', type: 'oauth_app', issuesWrite: 'writable' },
+        { id: app.id, uuid: app.uuid, label: 'app', type: 'github_app', issuesWrite: 'read_only' },
+        { id: newer.id, uuid: newer.uuid, label: 'newer', type: 'pat', issuesWrite: 'unknown' },
       ]);
       expect(find).toHaveBeenCalledWith({ where: { userId: USER }, order: { createdAt: 'ASC', id: 'ASC' } });
 
@@ -147,9 +147,9 @@ describe('IntegrationsGithubService', () => {
       const find = jest.spyOn(harness.repo, 'find');
 
       expect(await harness.service.listIntegrations(USER)).toEqual([
-        { id: invalid.id, uuid: invalid.uuid, label: 'invalid', type: 'pat' },
-        { id: app.id, uuid: app.uuid, label: 'app', type: 'github_app' },
-        { id: active.id, uuid: active.uuid, label: 'active', type: 'pat' },
+        { id: invalid.id, uuid: invalid.uuid, label: 'invalid', type: 'pat', issuesWrite: 'unknown' },
+        { id: app.id, uuid: app.uuid, label: 'app', type: 'github_app', issuesWrite: 'read_only' },
+        { id: active.id, uuid: active.uuid, label: 'active', type: 'pat', issuesWrite: 'unknown' },
       ]);
       expect(find).toHaveBeenCalledWith({ where: { userId: USER }, order: { createdAt: 'ASC', id: 'ASC' } });
       expect(fetchCalls()).toHaveLength(0);

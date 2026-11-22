@@ -1,8 +1,8 @@
 import { currentKeys, sourceRef } from '../repositories-listing.query.js';
 
 const integrations = [
-  { id: 3, uuid: 'u3', label: 'l3', type: 'pat' as const },
-  { id: 1, uuid: 'u1', label: 'l1', type: 'github_app' as const },
+  { id: 3, uuid: 'u3', label: 'l3', type: 'pat' as const, issuesWrite: 'writable' as const },
+  { id: 1, uuid: 'u1', label: 'l1', type: 'github_app' as const, issuesWrite: 'read_only' as const },
 ];
 
 describe('currentKeys', () => {

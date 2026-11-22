@@ -16,20 +16,23 @@ export interface FakeProjectRepoSeed {
   status?: RowStatus;
   /** Defaults to `true`; `false` makes the row "not added". */
   added?: boolean;
+  /** The ids of the integrations whose source lists the row (default none); a handle is never listed. */
+  integrationSourceIds?: number[];
 }
 
-/** The two `RepositoriesService` methods the Projects services use. */
-export type ProjectRepositoriesSurface = Pick<RepositoriesService, 'resolveForProject' | 'projectSummaries'>;
+/** The `RepositoriesService` methods the Issues module uses. */
+export type ProjectRepositoriesSurface = Pick<RepositoriesService, 'resolveForProject' | 'projectSummaries' | 'integrationSourceIds'>;
 
 /**
- * An in-memory stand-in for the two `RepositoriesService` lookups the Issues module uses
- * (`resolveForProject`, `projectSummaries`): rows are per user, a `fullName` matches
+ * An in-memory stand-in for the `RepositoriesService` lookups the Issues module uses
+ * (`resolveForProject`, `projectSummaries`, `integrationSourceIds`): rows are per user, a `fullName` matches
  * case-insensitively, a `githubId` exactly, only among the caller's rows. The real queries are
  * proven by `repositories.service.project-lookups.db-spec.ts`. `calls` logs every call.
  */
 export class FakeProjectRepositories implements ProjectRepositoriesSurface {
   readonly calls: Array<{ method: keyof ProjectRepositoriesSurface; userId: number; args: unknown[] }> = [];
   readonly #rows = new Map<number, Array<ProjectRepositoryLookup>>();
+  readonly #sources = new Map<string, number[]>();
 
   seed(userId: number, seed: FakeProjectRepoSeed): this {
     const owner = seed.owner ?? 'octo';
@@ -47,6 +50,7 @@ export class FakeProjectRepositories implements ProjectRepositoriesSurface {
     const others = (this.#rows.get(userId) ?? []).filter((row) => row.repositoryId !== seed.repositoryId);
 
     this.#rows.set(userId, [...others, { repositoryId: seed.repositoryId, added, summary }]);
+    this.#sources.set(`${userId}:${seed.repositoryId}`, [...(seed.integrationSourceIds ?? [])]);
 
     return this;
   }
@@ -54,6 +58,7 @@ export class FakeProjectRepositories implements ProjectRepositoriesSurface {
   /** Forgets every seeded row and logged call (user ids restart between DB specs). */
   reset(): this {
     this.#rows.clear();
+    this.#sources.clear();
     this.calls.length = 0;
 
     return this;
@@ -83,6 +88,12 @@ export class FakeProjectRepositories implements ProjectRepositoriesSurface {
     const rows = this.#rows.get(userId) ?? [];
 
     return new Map(rows.filter((row) => repositoryIds.includes(row.repositoryId)).map((row) => [row.repositoryId, row.summary]));
+  }
+
+  async integrationSourceIds(userId: number, repositoryId: number): Promise<number[]> {
+    this.calls.push({ method: 'integrationSourceIds', userId, args: [repositoryId] });
+
+    return [...(this.#sources.get(`${userId}:${repositoryId}`) ?? [])];
   }
 
   callsOf(method: keyof ProjectRepositoriesSurface): number {

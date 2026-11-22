@@ -1,9 +1,17 @@
 import { Module, type Provider } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ISSUES_ENTITIES } from './entities/index.js';
+import { IssueCandidates } from './issue-candidates.js';
 import { IssueEditRateLimiter } from './issue-edit-rate-limiter.js';
+import { IssueGithubReader } from './issue-github-reader.js';
 import { IssueLinkPresenter } from './issue-link-presenter.js';
+import { IssueLinkRateLimiter } from './issue-link-rate-limiter.js';
+import { IssueLinkStore } from './issue-link-store.js';
+import { IssueLinkWriter } from './issue-link-writer.js';
+import { IssueLinksController } from './issue-links.controller.js';
+import { IssueLinksService } from './issue-links.service.js';
 import { IssueMarkers } from './issue-markers.js';
+import { EmptyIssueRateLimitWaits, IssueRateLimitWaits } from './issue-rate-limit-waits.js';
 import { IssueStore } from './issue-store.js';
 import { IssueSyncTrigger, NoopIssueSyncTrigger } from './issue-sync-trigger.js';
 import { IssuesAccess } from './issues-access.js';
@@ -20,6 +28,7 @@ import { ProjectsController } from './projects.controller.js';
 import { ProjectsService } from './projects.service.js';
 import { AuthModule } from '../auth/auth.module.js';
 import { Clock, SystemClock } from '../core/clock.js';
+import { IntegrationsModule } from '../integrations/integrations-github.public.js';
 import { RepositoriesModule } from '../repositories/repositories.module.js';
 
 /**
@@ -31,7 +40,14 @@ export const ISSUES_PROVIDERS: Provider[] = [
   IssuesAccess,
   IssuesEventsListener,
   IssueEditRateLimiter,
+  IssueLinkRateLimiter,
+  IssueCandidates,
+  IssueGithubReader,
+  IssueLinkStore,
+  IssueLinkWriter,
+  IssueLinksService,
   IssueLinkPresenter,
+  { provide: IssueRateLimitWaits, useClass: EmptyIssueRateLimitWaits },
   IssueMarkers,
   IssueStore,
   IssuesService,
@@ -51,14 +67,17 @@ export const ISSUES_PROVIDERS: Provider[] = [
  * `issues_projects`, `issues`, `issues_github_links` and `issues_pending_writes`; every
  * `*_id` is a logical FK only. Its controllers are `ProjectsController` (the Projects API) and `IssuesController` (the Issues API). It reads Auth through
  * `AccountHandleService` and Repositories through the exported `RepositoriesService`.
+ * The GitHub link routes (`IssueLinksController`) are the only Issues code that calls GitHub, and
+ * only through the exported, `GET`-only `IntegrationsGithubService` (the one read of a link
+ * creation); it writes nothing to GitHub.
  */
 @Module({
-  imports: [TypeOrmModule.forFeature(ISSUES_ENTITIES), AuthModule, RepositoriesModule],
+  imports: [TypeOrmModule.forFeature(ISSUES_ENTITIES), AuthModule, RepositoriesModule, IntegrationsModule],
   providers: [
     ...ISSUES_PROVIDERS,
     { provide: Clock, useClass: SystemClock },
   ],
-  controllers: [ProjectsController, IssuesController],
+  controllers: [ProjectsController, IssuesController, IssueLinksController],
   exports: [IssuesAccess],
 })
 // NestJS module classes are intentionally empty; all behavior lives in @Module().

@@ -1,5 +1,5 @@
 import type { Integration } from './entities/integration.entity.js';
-import type { IntegrationRef } from './github-repo-results.js';
+import type { IntegrationRef, IssuesWriteCapability } from './github-repo-results.js';
 import type { IntegrationStatus, IntegrationTestResult, IntegrationType } from './integration-enums.js';
 import type { IntegrationView } from './types/integration-type-strategy.js';
 
@@ -113,8 +113,28 @@ function isoOrNull(date: Date | null | undefined): string | null {
  * The allowlisted cross-module reference of an integration row (never a
  * secret field), as `IntegrationsGithubService` lists it.
  * @param {Integration} row - The row.
- * @returns {IntegrationRef} `{ id, uuid, label, type }`.
+ * @returns {IntegrationRef} `{ id, uuid, label, type, issuesWrite }`.
  */
 export function integrationRef(row: Integration): IntegrationRef {
-  return { id: row.id, uuid: row.uuid, label: row.label, type: row.type as IntegrationType };
+  return { id: row.id, uuid: row.uuid, label: row.label, type: row.type as IntegrationType, issuesWrite: issuesWriteOf(row) };
+}
+
+/**
+ * The known write capability of an integration, for ordering issue candidates: an OAuth app and a
+ * classic PAT are `writable`; a fine-grained PAT is `unknown`; a GitHub App is `writable` when its
+ * recorded installation permissions have `issues: write` and `read_only` otherwise.
+ * @param {Integration} row - The row.
+ * @returns {IssuesWriteCapability} The capability.
+ */
+function issuesWriteOf(row: Integration): IssuesWriteCapability {
+  const metadata = (row.metadata ?? {}) as { tokenKind?: unknown; permissions?: { issues?: unknown } | null };
+
+  switch (row.type) {
+    case 'pat':
+      return metadata.tokenKind === 'classic' ? 'writable' : 'unknown';
+    case 'github_app':
+      return metadata.permissions?.issues === 'write' ? 'writable' : 'read_only';
+    default:
+      return 'writable';
+  }
 }

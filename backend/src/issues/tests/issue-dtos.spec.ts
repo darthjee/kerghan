@@ -1,10 +1,13 @@
 import 'reflect-metadata';
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
+import { AttachIssueDto, toAttachIssueInput } from '../dto/attach-issue.dto.js';
 import { CreateIssueDto, toCreateIssueInput } from '../dto/create-issue.dto.js';
 import { EditIssueDto, toEditIssueInput } from '../dto/edit-issue.dto.js';
+import { ImportIssueDto, toImportIssueInput } from '../dto/import-issue.dto.js';
 import { normalizeBody } from '../dto/issue-fields.js';
 import { ListIssuesDto, toListIssuesInput } from '../dto/list-issues.dto.js';
+import { UnlinkIssueDto, toUnlinkIssueInput } from '../dto/unlink-issue.dto.js';
 
 type Body = Record<string, unknown>;
 
@@ -153,5 +156,73 @@ describe('ListIssuesDto', () => {
 
   it('accepts 100 emoji as a search and perPage 100', async () => {
     expect((await check(ListIssuesDto, { search: '😀'.repeat(100), perPage: 100 })).errors).toEqual([]);
+  });
+});
+
+describe('ImportIssueDto', () => {
+  it.each([1, 2, 2_147_483_647])('accepts the number %j', async (number) => {
+    const { dto, errors } = await check(ImportIssueDto, { number });
+
+    expect(errors).toEqual([]);
+    expect(toImportIssueInput(dto)).toEqual({ number });
+  });
+
+  it.each([
+    ['a missing number', {}],
+    ['zero', { number: 0 }],
+    ['a negative number', { number: -1 }],
+    ['2147483648', { number: 2_147_483_648 }],
+    ['a numeric string', { number: '1' }],
+    ['a fraction', { number: 1.5 }],
+    ['null', { number: null }],
+  ])('rejects %s', async (_label, body) => {
+    expect((await check(ImportIssueDto, body)).errors).toEqual(['number']);
+  });
+});
+
+describe('AttachIssueDto', () => {
+  it('keeps the confirmation absent when not sent', async () => {
+    const { dto, errors } = await check(AttachIssueDto, { number: 7 });
+
+    expect(errors).toEqual([]);
+    expect(toAttachIssueInput(dto)).toEqual({ number: 7 });
+  });
+
+  it('parses the confirmation to an instant', async () => {
+    const { dto, errors } = await check(AttachIssueDto, { number: 7, confirmUpdatedAt: '2026-01-02T03:04:05.678Z' });
+
+    expect(errors).toEqual([]);
+    expect(toAttachIssueInput(dto)).toEqual({ number: 7, confirmUpdatedAt: new Date('2026-01-02T03:04:05.678Z') });
+  });
+
+  it.each([
+    ['a missing number', {}, 'number'],
+    ['a numeric string number', { number: '1' }, 'number'],
+    ['zero', { number: 0 }, 'number'],
+    ['2147483648', { number: 2_147_483_648 }, 'number'],
+    ['a malformed confirmation', { number: 1, confirmUpdatedAt: 'yesterday' }, 'confirmUpdatedAt'],
+    ['a confirmation without milliseconds', { number: 1, confirmUpdatedAt: '2026-01-02T03:04:05Z' }, 'confirmUpdatedAt'],
+    ['a confirmation with an offset', { number: 1, confirmUpdatedAt: '2026-01-02T03:04:05.678+01:00' }, 'confirmUpdatedAt'],
+    ['an impossible date', { number: 1, confirmUpdatedAt: '2026-13-45T03:04:05.678Z' }, 'confirmUpdatedAt'],
+    ['a numeric confirmation', { number: 1, confirmUpdatedAt: 1_767_323_045_678 }, 'confirmUpdatedAt'],
+  ])('rejects %s', async (_label, body, property) => {
+    expect((await check(AttachIssueDto, body)).errors).toEqual([property]);
+  });
+});
+
+describe('UnlinkIssueDto', () => {
+  it.each([
+    [{}, false],
+    [{ discardUnsentChanges: false }, false],
+    [{ discardUnsentChanges: true }, true],
+  ])('maps %j to discardUnsentChanges %j', async (body, expected) => {
+    const { dto, errors } = await check(UnlinkIssueDto, body);
+
+    expect(errors).toEqual([]);
+    expect(toUnlinkIssueInput(dto)).toEqual({ discardUnsentChanges: expected });
+  });
+
+  it.each([['"true"', 'true'], ['1', 1], ['null', null]])('rejects discardUnsentChanges %s', async (_label, value) => {
+    expect((await check(UnlinkIssueDto, { discardUnsentChanges: value })).errors).toEqual(['discardUnsentChanges']);
   });
 });

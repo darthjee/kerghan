@@ -7,6 +7,7 @@ import { Test } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import cookieParser from 'cookie-parser';
 import request from 'supertest';
+import { FakeIssueLinksService } from './fake-issue-links.service.js';
 import { FakeIssuesService } from './fake-issues.service.js';
 import { FakeProjectsService } from './fake-projects.service.js';
 import { AuthModule } from '../../../auth/auth.module.js';
@@ -26,6 +27,8 @@ import { LoggingModule } from '../../../core/logging.module.js';
 import { OriginGuard } from '../../../core/origin.guard.js';
 import { SESSION_LOOKUP } from '../../../core/session-lookup.js';
 import { createConsoleSpies, type ConsoleSpies } from '../../../core/tests/console-spies.test-support.js';
+import { IssueLinksController } from '../../issue-links.controller.js';
+import { IssueLinksService } from '../../issue-links.service.js';
 import { IssuesController } from '../../issues.controller.js';
 import { IssuesService } from '../../issues.service.js';
 import { ProjectsController } from '../../projects.controller.js';
@@ -36,6 +39,8 @@ export interface IssuesTestContext {
   app: INestApplication;
   projects: FakeProjectsService;
   issues: FakeIssuesService;
+  /** The recording stand-in behind the GitHub link routes. */
+  links: FakeIssueLinksService;
   ids: { owner: number; intruder: number };
   /** Cookie of `darthjee` (the main user). */
   owner: string;
@@ -44,7 +49,7 @@ export interface IssuesTestContext {
 }
 
 /**
- * Builds the HTTP-layer app: Auth plus the Projects and Issues controllers over fake services, with
+ * Builds the HTTP-layer app: Auth plus the Projects, Issues and GitHub link controllers over fake services, with
  * the global guards, interceptor, filter and `ValidationPipe` as in `AppModule` / `main.ts`
  * (copied from the Repositories test app, so #559 can extend the matrix to every Issues route).
  * Logs in two users through Auth's real `TokenService`.
@@ -55,6 +60,7 @@ export async function buildIssuesTestApp(env: Record<string, unknown> = {}): Pro
   const config: Record<string, unknown> = { KERGHAN_LOG_LEVEL: 'debug', ...env };
   const projects = new FakeProjectsService();
   const issues = new FakeIssuesService();
+  const links = new FakeIssueLinksService();
   const userRepo = createInMemoryRepo<User>();
   const refreshTokenRepo = createInMemoryRepo<RefreshToken>();
 
@@ -66,10 +72,11 @@ export async function buildIssuesTestApp(env: Record<string, unknown> = {}): Pro
       LoggingModule,
       AuthModule,
     ],
-    controllers: [ProjectsController, IssuesController],
+    controllers: [ProjectsController, IssuesController, IssueLinksController],
     providers: [
       { provide: ProjectsService, useValue: projects },
       { provide: IssuesService, useValue: issues },
+      { provide: IssueLinksService, useValue: links },
       { provide: APP_GUARD, useClass: OriginGuard },
       { provide: APP_GUARD, useClass: JwtGuard },
       { provide: APP_GUARD, useClass: AdminGuard },
@@ -111,6 +118,7 @@ export async function buildIssuesTestApp(env: Record<string, unknown> = {}): Pro
     app,
     projects,
     issues,
+    links,
     ids: { owner: owner.id, intruder: intruder.id },
     owner: owner.cookie,
     intruder: intruder.cookie,
