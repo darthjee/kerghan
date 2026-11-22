@@ -39,7 +39,7 @@ describe('IssueBodyMarkdown', () => {
     });
 
     ['javascript:alert(1)', 'data:text/html,x', 'vbscript:x', 'file:///etc/passwd', '/relative', 'relative/path',
-      '//evil.test/x'].forEach((url) => {
+      '//evil.test/x', 'https:/x', 'https:x', 'http:#/x'].forEach((url) => {
       it(`shows ${url} as its text only`, () => {
         const rendered = render(`[click me](${url})`);
 
@@ -86,6 +86,24 @@ describe('IssueBodyMarkdown', () => {
       expect(rendered.containsTag('img')).toBeFalse();
       expect(rendered.containsTag('a')).toBeFalse();
       expect(rendered.contains('a cat')).toBeTrue();
+    });
+
+    ['https:/x', 'https:x', 'http:#/x'].forEach((url) => {
+      it(`shows an image with the scheme-only URL ${url} as text`, () => {
+        const rendered = render(`![a cat](${url})`);
+
+        expect(rendered.containsTag('img')).toBeFalse();
+        expect(rendered.containsTag('a')).toBeFalse();
+        expect(rendered.contains('a cat')).toBeTrue();
+      });
+    });
+
+    it('does not nest an anchor when an image is inside a link', () => {
+      const rendered = render('[![a cat](https://a.test/cat.png)](https://b.test)');
+
+      expect(rendered.containsAttribute('href', 'https://b.test')).toBeTrue();
+      expect(rendered.containsAttribute('href', 'https://a.test/cat.png')).toBeFalse();
+      expect(rendered.contains('<a href="https://b.test" rel="noopener noreferrer" target="_blank">a cat</a>')).toBeTrue();
     });
 
     it('shows a relative image as text', () => {

@@ -1,18 +1,19 @@
-import React from 'react';
+import React, { createContext, useContext } from 'react';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
-const ALLOWED_LINK = /^(https?:|mailto:)/i;
-const WEB_URL = /^https?:/i;
+const ALLOWED_LINK = /^(https?:\/\/|mailto:)/i;
+const WEB_URL = /^https?:\/\//i;
+const InLinkContext = createContext(false);
 const PHRASING_PARENTS = new Set(['paragraph', 'heading', 'emphasis', 'strong', 'delete', 'link', 'tableCell']);
 const IMAGE_FALLBACK_LABEL = 'image';
 
 /**
- * Keep only the URLs a body may link to (`http:`, `https:` and `mailto:`).
+ * Keep only the URLs a body may link to (`http://`, `https://` and `mailto:`).
  *
  * @param {string} url - The URL found in the Markdown.
- * @returns {string} The same URL when allowed, otherwise an empty string (relative and
- *   protocol-relative URLs, `javascript:`, `data:`, `vbscript:`, `file:` and the rest).
+ * @returns {string} The same URL when allowed, otherwise an empty string (relative,
+ *   protocol-relative and scheme-only forms like `https:/x`, `javascript:`, `data:`, `vbscript:`, `file:` and the rest).
  */
 function allowedUrl(url) {
   return ALLOWED_LINK.test(url) ? url : '';
@@ -62,20 +63,26 @@ function BodyLink({ href, children }) {
     return <>{children}</>;
   }
 
-  return <a href={href} rel="noopener noreferrer" target="_blank">{children}</a>;
+  return (
+    <a href={href} rel="noopener noreferrer" target="_blank">
+      <InLinkContext.Provider value>{children}</InLinkContext.Provider>
+    </a>
+  );
 }
 
 /**
- * Renders an image as a link labelled with its alt text (`http`/`https` only) or as text. It
- * never renders an `<img>`, so no request leaves the browser for it.
+ * Renders an image as a link labelled with its alt text (`http`/`https` with `//` only) or as text. It
+ * never renders an `<img>`, so no request leaves the browser for it. Inside a link it renders
+ * the label alone, so no anchor is nested in another.
  *
  * @param {{src: (string|undefined), alt: (string|undefined)}} props - The image's URL and alt.
  * @returns {React.ReactElement} The link or the text.
  */
 function BodyImage({ src, alt }) {
   const label = alt || IMAGE_FALLBACK_LABEL;
+  const inLink = useContext(InLinkContext);
 
-  if (!WEB_URL.test(src ?? '')) {
+  if (inLink || !WEB_URL.test(src ?? '')) {
     return <>{label}</>;
   }
 
