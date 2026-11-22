@@ -1,5 +1,5 @@
 import type { Integration } from '../entities/integration.entity.js';
-import { toIntegrationResponse } from '../integration-response.js';
+import { integrationRef, toIntegrationResponse } from '../integration-response.js';
 
 const NOW = new Date('2026-10-01T12:00:00.000Z');
 
@@ -52,5 +52,22 @@ describe('toIntegrationResponse', () => {
 
   it('defaults now to the current time', () => {
     expect(toIntegrationResponse(row(), true, null).status).toBe('active');
+  });
+});
+
+describe('integrationRef issuesWrite', () => {
+  it.each([
+    ['an OAuth app', { type: 'oauth_app', metadata: {} }, 'writable'],
+    ['a classic PAT', { type: 'pat', metadata: { tokenKind: 'classic', scopes: ['repo'], permissionsVerified: true } }, 'writable'],
+    ['a fine-grained PAT', { type: 'pat', metadata: { tokenKind: 'fine_grained', scopes: null, permissionsVerified: false } }, 'unknown'],
+    ['a GitHub App with issues write', { type: 'github_app', metadata: { permissions: { issues: 'write', metadata: 'read' } } }, 'writable'],
+    ['a GitHub App with issues read', { type: 'github_app', metadata: { permissions: { issues: 'read', metadata: 'read' } } }, 'read_only'],
+    ['a GitHub App with unreadable metadata', { type: 'github_app', metadata: {} }, 'read_only'],
+  ])('is derived for %s', (_label, overrides, expected) => {
+    expect(integrationRef(row(overrides as Partial<Integration>)).issuesWrite).toBe(expected);
+  });
+
+  it('carries no metadata or secret field', () => {
+    expect(Object.keys(integrationRef(row())).sort()).toEqual(['id', 'issuesWrite', 'label', 'type', 'uuid']);
   });
 });

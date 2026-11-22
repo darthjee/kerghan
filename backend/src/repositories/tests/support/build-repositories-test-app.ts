@@ -48,9 +48,9 @@ export const INTRUDER_ONLY_GITHUB_ID = 4_000_000_002;
 export const MISSING_GITHUB_ID = 4_000_000_999;
 
 /** The owner's integration. */
-export const OWNER_INTEGRATION: IntegrationRef = { id: 11, uuid: '11111111-1111-4111-8111-111111111111', label: 'work-pat', type: 'pat' };
+export const OWNER_INTEGRATION: IntegrationRef = { id: 11, uuid: '11111111-1111-4111-8111-111111111111', label: 'work-pat', type: 'pat', issuesWrite: 'writable' };
 /** The intruder's own integration. */
-export const INTRUDER_INTEGRATION: IntegrationRef = { id: 22, uuid: '22222222-2222-4222-8222-222222222222', label: 'evil-pat', type: 'pat' };
+export const INTRUDER_INTEGRATION: IntegrationRef = { id: 22, uuid: '22222222-2222-4222-8222-222222222222', label: 'evil-pat', type: 'pat', issuesWrite: 'writable' };
 
 /** The running app and the doubles behind it. */
 export interface RepositoriesTestContext {

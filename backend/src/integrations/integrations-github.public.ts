@@ -12,6 +12,7 @@ export type {
   GithubRepo,
   IntegrationRef,
   IntegrationUnusableReason,
+  IssuesWriteCapability,
   RateLimitFields,
   RepoFailure,
   RepoPageResult,

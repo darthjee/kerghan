@@ -75,6 +75,31 @@ describe('RepositoriesService project lookups (real MySQL)', () => {
     });
   });
 
+  describe('integrationSourceIds', () => {
+    it('answers the integration sources of the row, never a handle source', async () => {
+      const id = await seedRepo(harness.ds, userId, {
+        githubId: 5,
+        addedAt: ADDED,
+        sources: [['integration:12', 1], ['handle', 1], ['integration:3', 1]],
+      });
+
+      expect(await service.integrationSourceIds(userId, id)).toEqual([3, 12]);
+    });
+
+    it('answers an empty list for a handle-only row and for an unknown row', async () => {
+      const id = await seedRepo(harness.ds, userId, { githubId: 5, addedAt: ADDED, sources: [['handle', 1]] });
+
+      expect(await service.integrationSourceIds(userId, id)).toEqual([]);
+      expect(await service.integrationSourceIds(userId, id + 1000)).toEqual([]);
+    });
+
+    it('never answers the sources of another user\'s row', async () => {
+      const id = await seedRepo(harness.ds, otherId, { githubId: 5, addedAt: ADDED, sources: [['integration:9', 1]] });
+
+      expect(await service.integrationSourceIds(userId, id)).toEqual([]);
+    });
+  });
+
   describe('projectSummaries', () => {
     it('answers an empty map for no ids', async () => {
       expect((await service.projectSummaries(userId, [])).size).toBe(0);

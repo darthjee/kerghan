@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { DataSource } from 'typeorm';
+import { parseSourceKey } from './source-key.js';
 import { Clock } from '../core/clock.js';
 import type { RepoRef, RepositorySnapshot } from './types/repositories-api.types.js';
 
@@ -48,6 +49,28 @@ export class AddStore {
       + 'ORDER BY last_seen_at DESC, id DESC LIMIT 1',
       [userId, parts[0], parts[1]],
     );
+  }
+
+  /**
+   * The ids of the user's integrations whose source lists a repository row: the `integration:<id>`
+   * rows of `repositories_sources`. A `handle` source is never returned. One indexed query.
+   * @param {number} userId - The user.
+   * @param {number} repositoryId - The internal repository id.
+   * @returns {Promise<number[]>} The integration ids, ascending.
+   */
+  async integrationSourceIds(userId: number, repositoryId: number): Promise<number[]> {
+    const rows: Array<{ source_key: string }> = await this.dataSource.query(
+      'SELECT source_key FROM repositories_sources WHERE user_id = ? AND repository_id = ? AND source_key LIKE \'integration:%\'',
+      [userId, repositoryId],
+    );
+
+    return rows
+      .flatMap(({ source_key: key }) => {
+        const parsed = parseSourceKey(key);
+
+        return parsed?.kind === 'integration' ? [parsed.integrationId] : [];
+      })
+      .sort((a, b) => a - b);
   }
 
   /**

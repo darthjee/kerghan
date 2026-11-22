@@ -9,7 +9,7 @@ fixed, `GET`-only operations; there is no generic `request(path)`:
 
 ```ts
 // Oldest first (created_at, then id); filtered by userId in the query.
-listUsableIntegrations(userId): Promise<IntegrationRef[]>   // { id, uuid, label, type }
+listUsableIntegrations(userId): Promise<IntegrationRef[]>   // { id, uuid, label, type, issuesWrite }
 listIntegrations(userId): Promise<IntegrationRef[]>         // every one, usable or not; same fields
 
 listRepositories(userId, integrationId, page, etag?): Promise<RepoPageResult>
@@ -29,6 +29,13 @@ probeIssues(userId, integrationId, repo): Promise<IssueProbeResult>
   Repositories computes its inputs and maps its outcome to HTTP answers, while the walk itself
   (order, 3-call cap, stop and link rules) stays here; the real service and the typed fake share
   it.
+
+- **`issuesWrite`** (added by #557) is the integration's *known write capability*, derived inside
+  the module from its type and metadata and used only to order the issue candidates
+  ([integration selection](../../../specs/issues/sync.md#integration-selection)), never as a gate:
+  `writable` for an OAuth app and a classic PAT; `unknown` for a fine-grained PAT (GitHub does not
+  expose its permissions); for a GitHub App, `writable` when the recorded installation
+  `permissions.issues` is `write` and `read_only` otherwise. It carries no metadata.
 
 - **`listIntegrations`** (added by #463) lists every one of the user's integrations, usable or
   not, oldest first, with the same allowlisted `IntegrationRef` fields and no GitHub call. The sync

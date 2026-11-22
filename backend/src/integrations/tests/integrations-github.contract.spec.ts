@@ -402,7 +402,7 @@ describe('FakeIntegrationsGithubService', () => {
 
   it('answers the usable list it was given', async () => {
     const fake = new FakeIntegrationsGithubService();
-    const refs = [{ id: 1, uuid: 'u', label: 'l', type: 'pat' as const }];
+    const refs = [{ id: 1, uuid: 'u', label: 'l', type: 'pat' as const, issuesWrite: 'writable' as const }];
 
     fake.setUsable(USER, refs);
 
@@ -412,8 +412,8 @@ describe('FakeIntegrationsGithubService', () => {
 
   it('answers the full list it was given, logged as a non-GitHub call', async () => {
     const fake = new FakeIntegrationsGithubService();
-    const usable = [{ id: 1, uuid: 'u', label: 'l', type: 'pat' as const }];
-    const all = [...usable, { id: 2, uuid: 'v', label: 'm', type: 'oauth_app' as const }];
+    const usable = [{ id: 1, uuid: 'u', label: 'l', type: 'pat' as const, issuesWrite: 'writable' as const }];
+    const all = [...usable, { id: 2, uuid: 'v', label: 'm', type: 'oauth_app' as const, issuesWrite: 'writable' as const }];
 
     fake.setUsable(USER, usable).setIntegrations(USER, all);
 
@@ -428,7 +428,7 @@ describe('FakeIntegrationsGithubService', () => {
     const row = await harness.seed({ type: 'pat', label: 'kept', status: 'invalid' });
     const refs = await harness.service.listIntegrations(USER);
 
-    expect(refs).toEqual([{ id: row.id, uuid: row.uuid, label: 'kept', type: 'pat' }]);
-    expect(Object.keys(refs[0]).sort()).toEqual(['id', 'label', 'type', 'uuid']);
+    expect(refs).toEqual([{ id: row.id, uuid: row.uuid, label: 'kept', type: 'pat', issuesWrite: 'unknown' }]);
+    expect(Object.keys(refs[0]).sort()).toEqual(['id', 'issuesWrite', 'label', 'type', 'uuid']);
   });
 });

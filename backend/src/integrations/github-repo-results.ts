@@ -18,6 +18,14 @@ export interface GithubRepo {
   private: boolean;
 }
 
+/**
+ * What is known of an integration's write access to issues: `writable` (an OAuth app, a classic
+ * PAT, or a GitHub App installation recorded with `issues: write`), `unknown` (a fine-grained
+ * PAT, whose permissions GitHub does not expose) or `read_only` (a GitHub App installation
+ * recorded with less than `issues: write`). It orders the issue candidates; it is never a gate.
+ */
+export type IssuesWriteCapability = 'writable' | 'unknown' | 'read_only';
+
 /** An integration, as listed by `listUsableIntegrations` / `listIntegrations`. */
 export interface IntegrationRef {
   /** The internal `integrations.id` (the logical FK Repositories stores). */
@@ -25,6 +33,8 @@ export interface IntegrationRef {
   uuid: string;
   label: string;
   type: IntegrationType;
+  /** The known write capability, derived inside Integrations from the type and its metadata. */
+  issuesWrite: IssuesWriteCapability;
 }
 
 /**

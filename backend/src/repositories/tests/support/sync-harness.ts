@@ -49,7 +49,7 @@ export function pastCooldown(harness: RepositoriesDbHarness): void {
  * @returns The reference.
  */
 export function ref(id: number, type: IntegrationRef['type'] = 'pat'): IntegrationRef {
-  return { id, uuid: `uuid-${id}`, label: `label-${id}`, type };
+  return { id, uuid: `uuid-${id}`, label: `label-${id}`, type, issuesWrite: 'writable' };
 }
 
 /**

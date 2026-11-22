@@ -153,6 +153,18 @@ export class RepositoriesService {
   }
 
   /**
+   * The ids of the user's integrations whose source lists a repository row (`integration:<id>`
+   * source rows). A GitHub handle's public listing is never returned: a handle alone is not a
+   * credential candidate. The Issues module orders and filters these into its candidates.
+   * @param {number} userId - The session's user.
+   * @param {number} repositoryId - The internal id stored by a project.
+   * @returns {Promise<number[]>} The integration ids, ascending; empty when none lists it.
+   */
+  integrationSourceIds(userId: number, repositoryId: number): Promise<number[]> {
+    return this.addStore.integrationSourceIds(userId, repositoryId);
+  }
+
+  /**
    * Add's conditional write (`docs/agents/backend/routes/repositories.md#add`): marks a not-added row of the
    * user as added with its access link. A link that is not one of the user's
    * own integrations is stored as `null` (the end-of-sync link fill fills it,
