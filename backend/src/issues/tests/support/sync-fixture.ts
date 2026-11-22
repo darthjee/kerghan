@@ -8,6 +8,8 @@ import { seedUser } from '../../../repositories/tests/support/two-user-baseline.
 import { IssueGithubLink } from '../../entities/issue-github-link.entity.js';
 import { IssuePendingWrite } from '../../entities/issue-pending-write.entity.js';
 import { Issue, type IssueState } from '../../entities/issue.entity.js';
+import { IssueSyncQueue } from '../../issue-sync-queue.js';
+import { ISSUES_RECONCILE_JOB } from '../../jobs/issues-reconcile.job.js';
 
 /** The integration that lists the sync fixture's repository. */
 export const SYNC_INTEGRATION = 41;
@@ -64,6 +66,9 @@ export async function buildSyncWorld(harness: IssuesDbHarness, options: SyncWorl
   harness.clock.set(new Date(Date.UTC(2026, 6, 1, 12, 0, 0) + run * 3_600_000));
   harness.repositories.reset();
   harness.github.calls.length = 0;
+  // Jobs of the previous spec that never ran still count as queued: start them, so their links can queue again.
+  for (const params of harness.workers.paramsOf(ISSUES_RECONCILE_JOB)) harness.get(IssueSyncQueue).started(params.linkId as number);
+
   harness.workers.reset();
 
   const userId = await seedUser(harness.ds, 'owner');

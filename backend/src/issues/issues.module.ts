@@ -13,15 +13,18 @@ import { IssueLinksService } from './issue-links.service.js';
 import { IssueMarkers } from './issue-markers.js';
 import { IssueRateLimitPauses } from './issue-rate-limit-pauses.js';
 import { IssueRateLimitWaits } from './issue-rate-limit-waits.js';
-import { IssueReconcileQueue, NoopIssueReconcileQueue } from './issue-reconcile-queue.js';
+import { IssueReconcileQueue } from './issue-reconcile-queue.js';
 import { IssueStore } from './issue-store.js';
 import { IssueSyncCommit } from './issue-sync-commit.js';
+import { EnqueueIssueSyncTrigger } from './issue-sync-enqueuer.js';
 import { IssueSyncGithub } from './issue-sync-github.js';
+import { IssueSyncQueue } from './issue-sync-queue.js';
 import { IssueSyncReader } from './issue-sync-reader.js';
-import { IssueSyncTrigger, NoopIssueSyncTrigger } from './issue-sync-trigger.js';
+import { IssueSyncTrigger } from './issue-sync-trigger.js';
 import { IssuesAccess } from './issues-access.js';
 import { IssuesConfig } from './issues-config.js';
 import { IssuesEventsListener } from './issues-events.listener.js';
+import { IssuesSyncBootstrap } from './issues-sync.bootstrap.js';
 import { IssuesSyncService } from './issues-sync.service.js';
 import { IssuesController } from './issues.controller.js';
 import { IssuesService } from './issues.service.js';
@@ -57,15 +60,17 @@ export const ISSUES_PROVIDERS: Provider[] = [
   IssueLinkPresenter,
   IssueRateLimitPauses,
   { provide: IssueRateLimitWaits, useExisting: IssueRateLimitPauses },
-  { provide: IssueReconcileQueue, useClass: NoopIssueReconcileQueue },
+  IssueSyncQueue,
+  { provide: IssueReconcileQueue, useExisting: IssueSyncQueue },
   IssueMarkers,
   IssueStore,
   IssueSyncReader,
   IssueSyncCommit,
   IssueSyncGithub,
   IssuesSyncService,
+  IssuesSyncBootstrap,
   IssuesService,
-  { provide: IssueSyncTrigger, useClass: NoopIssueSyncTrigger },
+  { provide: IssueSyncTrigger, useClass: EnqueueIssueSyncTrigger },
   ProjectOpenIssueCounts,
   ProjectCreator,
   ProjectLinks,
