@@ -47,7 +47,7 @@ export class IntegrationsGithubIssueWriter {
     number: number,
     changes: GithubIssueChanges,
   ): Promise<IssueUpdateResult> {
-    assertChanges(changes);
+    assertIssueChanges(changes);
 
     return this.runner.run<IssueUpdateResult>(userId, integrationId, 'update_issue', ISSUE_WRITE_PERMISSIONS, (token) =>
       this.issueClient.updateIssue(token, repo, number, changes));
@@ -55,11 +55,13 @@ export class IntegrationsGithubIssueWriter {
 }
 
 /**
- * Validates a diff; the messages are fixed and never echo a value.
+ * Validates a diff; the messages are fixed and never echo a value. Shared with
+ * the typed fake, so a spec cannot pass with a payload the writer would refuse.
  * @param {GithubIssueChanges} changes - The diff.
  * @returns {void}
+ * @throws {TypeError} When `changes` holds another field, an invalid value or nothing.
  */
-function assertChanges(changes: GithubIssueChanges): void {
+export function assertIssueChanges(changes: GithubIssueChanges): void {
   const fields = Object.keys(changes);
 
   if (fields.some((key) => !CHANGE_FIELDS.has(key))) {
