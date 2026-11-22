@@ -46,4 +46,10 @@ describe('ProjectPageHelper', () => {
     expect(output.contains('header')).toBe(true);
     expect(ProjectHeaderHelper.render).toHaveBeenCalledOnceWith(project);
   });
+
+  it('mounts the issue list below the header', () => {
+    const output = renderedOutput(ProjectPageHelper.render(stateWith({}, buildProject()), handlers));
+
+    expect(output.containsInOrder('header', 'Loading issues…')).toBe(true);
+  });
 });
