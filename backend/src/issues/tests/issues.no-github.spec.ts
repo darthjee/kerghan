@@ -26,6 +26,9 @@ const LINK_FILES = [
   'issue-links.service.ts',
   'issues.module.ts',
 ];
+// The sync (#558) reads and writes GitHub for a link, with the owner's integrations: the issues sync
+// service is the one file that may name the writer, and `issue-sync-github.ts` reads only.
+const SYNC_FILES = ['issue-sync-github.ts', 'issues-sync.service.ts'];
 const FORBIDDEN = [/integrations/i, /sync-launcher/i, /sync-runner/i, /\bqueue\b/i, /\bjob\b/i, /\bfetch\s*\(/];
 
 describe('Issues sources (static)', () => {
@@ -44,9 +47,9 @@ describe('Issues sources (static)', () => {
     const sourcesOf = (file: string): string[] => [...readFileSync(file, 'utf8').matchAll(/from '([^']*integrations[^']*)'/gi)].map((match) => match[1]);
     const importing = moduleSources().filter((file) => sourcesOf(file).length > 0).map((file) => path.relative(ISSUES_ROOT, file)).sort();
 
-    expect(importing).toEqual([...LINK_FILES].sort());
+    expect(importing).toEqual([...LINK_FILES, ...SYNC_FILES].sort());
 
-    for (const file of LINK_FILES) {
+    for (const file of [...LINK_FILES, ...SYNC_FILES]) {
       sourcesOf(path.join(ISSUES_ROOT, file)).forEach((source) => expect(source).toMatch(/integrations\/integrations-github\.public\.js$/));
     }
   });
@@ -55,6 +58,15 @@ describe('Issues sources (static)', () => {
     for (const file of LINK_FILES) {
       expect(readFileSync(path.join(ISSUES_ROOT, file), 'utf8')).not.toMatch(/\bupdateIssue\b|IntegrationsGithubIssueWriter/);
     }
+  });
+
+  it('names the writer and the PATCH only in the issues sync service', () => {
+    const named = moduleSources()
+      .filter((file) => /\bupdateIssue\b|IntegrationsGithubIssueWriter/.test(readFileSync(file, 'utf8')))
+      .map((file) => path.relative(ISSUES_ROOT, file));
+
+    expect(named).toEqual(['issues-sync.service.ts']);
+    expect(readFileSync(path.join(ISSUES_ROOT, 'issue-sync-github.ts'), 'utf8')).not.toMatch(/\bupdateIssue\b|IntegrationsGithubIssueWriter/);
   });
 
   it('gives the service no constructor dependency on a GitHub client', () => {

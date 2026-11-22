@@ -35,8 +35,8 @@ export type GoneReason = 'deleted' | 'moved';
 export interface SyncWrite {
   /** The fields whose base snapshot takes a value (the pushed ones and, when applied, the pulled ones). */
   base: Partial<IssueValues>;
-  /** The `PATCH` response's `updated_at`, or the `GET`'s when nothing was pushed. */
-  githubUpdatedAt: Date;
+  /** The `PATCH` response's `updated_at`, or the `GET`'s when nothing was pushed (the stored one after a `304`). */
+  githubUpdatedAt: Date | null;
   /** Stored from a `200` `GET`; `null` after a `PATCH`; the stored one again after a `304`. */
   etag: string | null;
   /** Leaves `sync_failed`: back to `linked` with no reason. Not set while an unsent write remains. */

@@ -24,7 +24,7 @@ import { SESSION_LOOKUP, type SessionLookup, type SessionUser } from '../../../c
 import { FakeClock } from '../../../core/tests/support/fake-clock.js';
 import { FakeScheduler } from '../../../core/tests/support/fake-scheduler.js';
 import { buildDbTierOptions } from '../../../database/tests/db-tier/db-tier-options.js';
-import { IntegrationsGithubService } from '../../../integrations/integrations-github.public.js';
+import { IntegrationsGithubIssueWriter, IntegrationsGithubService } from '../../../integrations/integrations-github.public.js';
 import { FakeIntegrationsGithubService } from '../../../integrations/tests/support/fake-integrations-github.service.js';
 import { RepositoriesService } from '../../../repositories/repositories.service.js';
 import { FakeWorkersService } from '../../../workers/tests/support/fake-workers.service.js';
@@ -107,6 +107,7 @@ export async function buildIssuesHttpDbHarness(env: Record<string, string> = {})
       { provide: LoggerService, useValue: logger },
       { provide: RepositoriesService, useValue: repositories },
       { provide: IntegrationsGithubService, useValue: github },
+      { provide: IntegrationsGithubIssueWriter, useValue: github.asWriter() },
       { provide: SESSION_LOOKUP, useValue: sessions },
       { provide: APP_GUARD, useClass: OriginGuard },
       { provide: APP_GUARD, useClass: JwtGuard },

@@ -15,10 +15,14 @@ import { IssueRateLimitPauses } from './issue-rate-limit-pauses.js';
 import { IssueRateLimitWaits } from './issue-rate-limit-waits.js';
 import { IssueReconcileQueue, NoopIssueReconcileQueue } from './issue-reconcile-queue.js';
 import { IssueStore } from './issue-store.js';
+import { IssueSyncCommit } from './issue-sync-commit.js';
+import { IssueSyncGithub } from './issue-sync-github.js';
+import { IssueSyncReader } from './issue-sync-reader.js';
 import { IssueSyncTrigger, NoopIssueSyncTrigger } from './issue-sync-trigger.js';
 import { IssuesAccess } from './issues-access.js';
 import { IssuesConfig } from './issues-config.js';
 import { IssuesEventsListener } from './issues-events.listener.js';
+import { IssuesSyncService } from './issues-sync.service.js';
 import { IssuesController } from './issues.controller.js';
 import { IssuesService } from './issues.service.js';
 import { ProjectOpenIssueCounts } from './open-issue-count.query.js';
@@ -56,6 +60,10 @@ export const ISSUES_PROVIDERS: Provider[] = [
   { provide: IssueReconcileQueue, useClass: NoopIssueReconcileQueue },
   IssueMarkers,
   IssueStore,
+  IssueSyncReader,
+  IssueSyncCommit,
+  IssueSyncGithub,
+  IssuesSyncService,
   IssuesService,
   { provide: IssueSyncTrigger, useClass: NoopIssueSyncTrigger },
   ProjectOpenIssueCounts,

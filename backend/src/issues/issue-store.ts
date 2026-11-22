@@ -106,6 +106,16 @@ export class IssueStore {
   }
 
   /**
+   * Locks an issue row (`FOR UPDATE`, the second step of the lock order) for the sync's commit.
+   * @param {EntityManager} manager - The commit transaction's manager.
+   * @param {number} issueId - The issue's internal id.
+   * @returns {Promise<Issue | null>} The locked issue, or `null` when it is gone (its project or user was deleted).
+   */
+  lockById(manager: EntityManager, issueId: number): Promise<Issue | null> {
+    return manager.getRepository(Issue).findOne({ where: { id: issueId }, lock: { mode: 'pessimistic_write' } });
+  }
+
+  /**
    * Deletes an issue.
    * @param {EntityManager} manager - The deleting transaction's manager.
    * @param {number} issueId - The issue's internal id.

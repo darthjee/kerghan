@@ -12,7 +12,7 @@ import { Scheduler } from '../../../core/scheduler.js';
 import { FakeClock } from '../../../core/tests/support/fake-clock.js';
 import { FakeScheduler } from '../../../core/tests/support/fake-scheduler.js';
 import { buildDbTierOptions } from '../../../database/tests/db-tier/db-tier-options.js';
-import { IntegrationsGithubService } from '../../../integrations/integrations-github.public.js';
+import { IntegrationsGithubIssueWriter, IntegrationsGithubService } from '../../../integrations/integrations-github.public.js';
 import { FakeIntegrationsGithubService } from '../../../integrations/tests/support/fake-integrations-github.service.js';
 import { RepositoriesService } from '../../../repositories/repositories.service.js';
 import { FakeWorkersService } from '../../../workers/tests/support/fake-workers.service.js';
@@ -84,6 +84,7 @@ export async function buildIssuesDbHarness(env: Record<string, string> = {}): Pr
       { provide: LoggerService, useValue: logger },
       { provide: RepositoriesService, useValue: repositories },
       { provide: IntegrationsGithubService, useValue: github },
+      { provide: IntegrationsGithubIssueWriter, useValue: github.asWriter() },
     ],
   }).compile();
 
