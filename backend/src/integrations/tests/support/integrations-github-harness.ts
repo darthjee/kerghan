@@ -1,5 +1,6 @@
 import { randomBytes, randomUUID } from 'node:crypto';
 import { enabledGithubAppConfig } from './github-app-test-config.js';
+import { githubAppTestKey } from './github-app-test-key.js';
 import { createInMemoryIntegrationRepo, type InMemoryIntegrationRepo } from './in-memory-integrations.js';
 import type { FakeLogger } from './integrations-harness.js';
 import type { LoggerService } from '../../../core/logger.service.js';
@@ -32,6 +33,22 @@ export const CANARY_OAUTH_TOKEN = 'gho_CANARYcanaryOAUTH00000000000000000c3d4';
 export const CANARY_INSTALLATION_TOKEN = 'ghs_CANARYcanaryINSTALLATION000000000e5f6';
 /** The fragment every canary carries. */
 export const CANARY = 'CANARYcanary';
+/** The GitHub error body every error answer of `github-builders.ts` embeds (`notFound()`, `serverError()`, ...). */
+export const CANARY_ERROR_BODY = `${CANARY}BODY`;
+
+/**
+ * Recognisable pieces of the GitHub App private key (the test-only RSA key, a valid key since it
+ * signs the app JWT): the PEM body line, the DER body in the one-line base64 form the env var holds,
+ * and the whole PEM. The key never leaves the Integrations module, so none may be found anywhere else.
+ * @returns {string[]} The pieces to search for.
+ */
+export function canaryAppKey(): string[] {
+  const { base64Pem } = githubAppTestKey();
+  const pem = Buffer.from(base64Pem, 'base64').toString();
+  const bodyLines = pem.split('\n').filter((line) => line.length > 0 && !line.startsWith('-----'));
+
+  return [bodyLines[2], base64Pem.slice(200, 260), pem.trim()];
+}
 /** The start of the `FakeClock`. */
 export const START = new Date('2026-01-01T00:00:00Z');
 
@@ -69,16 +86,30 @@ export interface GithubServiceHarness {
   replace(row: Integration, token?: string): void;
 }
 
+/** The real services over a store, as every harness wires them. */
+export interface GithubServices {
+  service: IntegrationsGithubService;
+  writer: IntegrationsGithubIssueWriter;
+  issueClient: GithubIssueClientService;
+  client: GithubRepoClientService;
+  store: IntegrationStoreService;
+  encryption: IntegrationsEncryptionService;
+  tokens: GithubInstallationTokenCache;
+  budget: GithubUnauthenticatedBudget;
+  enabled: EnabledTypes;
+}
+
 /**
- * Builds the harness. Call `installNoNetworkGuard()` in the spec too.
- * @returns {GithubServiceHarness} The harness.
+ * Wires the real `IntegrationsGithubService`, `IntegrationsGithubIssueWriter`, installation-token
+ * cache and credential encryption over an integrations repository (the in-memory one, or TypeORM's).
+ * @param {unknown} repo - The integrations repository.
+ * @param {FakeClock} clock - The time source.
+ * @param {unknown} logger - The logger the runner and the App caller write to.
+ * @returns {GithubServices} The services.
  */
-export function buildGithubServiceHarness(): GithubServiceHarness {
+export function buildGithubServices(repo: unknown, clock: FakeClock, logger: unknown): GithubServices {
   const encryption = new IntegrationsEncryptionService(integrationsKeySetOf(randomBytes(32)));
-  const repo = createInMemoryIntegrationRepo();
   const store = new IntegrationStoreService(repo as never);
-  const clock = new FakeClock(START);
-  const logger: FakeLogger = { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn() };
   const enabled: EnabledTypes = { pat: true, oauth_app: true, github_app: true };
   const registry = new IntegrationTypeRegistry([
     stubStrategy('pat', () => enabled.pat, parsePatPayload),
@@ -88,53 +119,90 @@ export function buildGithubServiceHarness(): GithubServiceHarness {
   const client = new GithubRepoClientService(clock);
   const tokens = new GithubInstallationTokenCache(clock, store);
   const budget = new GithubUnauthenticatedBudget(clock);
-  const githubApp = new GithubAppRepoCaller(client, tokens, store, clock, logger as unknown as LoggerService,
-    enabledGithubAppConfig());
+  const log = logger as LoggerService;
+  const githubApp = new GithubAppRepoCaller(client, tokens, store, clock, log, enabledGithubAppConfig());
   const issueClient = new GithubIssueClientService(clock);
-  const runner = new GithubAuthenticatedRunner(store, encryption, registry, githubApp, clock, logger as unknown as LoggerService);
-  const service = new IntegrationsGithubService(store, runner, client, issueClient, budget, clock);
-  const writer = new IntegrationsGithubIssueWriter(runner, issueClient);
-  const payloadOf = (type: IntegrationType, options: SeedOptions): Secret => (type === 'github_app'
-    ? new Secret({ installationId: options.installationId ?? 4242 })
-    : new Secret({ token: options.token ?? (type === 'pat' ? CANARY_PAT : CANARY_OAUTH_TOKEN) }));
+  const runner = new GithubAuthenticatedRunner(store, encryption, registry, githubApp, clock, log);
 
+  return {
+    service: new IntegrationsGithubService(store, runner, client, issueClient, budget, clock),
+    writer: new IntegrationsGithubIssueWriter(runner, issueClient),
+    issueClient, client, store, encryption, tokens, budget, enabled,
+  };
+}
+
+/**
+ * The row of one seeded integration, its credential really encrypted.
+ * @param {IntegrationsEncryptionService} encryption - The encryption.
+ * @param {SeedOptions} options - What to seed.
+ * @param {number} ordinal - The 1-based position of this seed (label and `created_at` default).
+ * @returns {Integration} The unsaved row.
+ */
+export function integrationRowOf(encryption: IntegrationsEncryptionService, options: SeedOptions, ordinal: number): Integration {
+  const type = options.type ?? 'pat';
+  const uuid = randomUUID();
+  const label = options.label ?? `integration ${ordinal}`;
+  const encrypted = encryption.encrypt(payloadFor(type, options), { uuid, type });
+
+  return {
+    uuid,
+    userId: options.userId ?? 1,
+    provider: 'github',
+    type,
+    label,
+    labelNormalized: label,
+    status: options.status ?? 'active',
+    statusReason: null,
+    githubLogin: 'octocat',
+    expiresAt: options.expiresAt ?? null,
+    lastTestedAt: null,
+    lastTestResult: null,
+    metadata: {},
+    secretHint: null,
+    secretKeyId: encrypted.keyId,
+    secretIv: encrypted.iv,
+    secretAuthTag: encrypted.authTag,
+    secretCiphertext: encrypted.ciphertext,
+    createdAt: options.createdAt ?? new Date(START.getTime() + ordinal * 1000),
+  } as Integration;
+}
+
+/**
+ * The credential payload of a seeded integration: the installation for a GitHub App, a canary token otherwise.
+ * @param {IntegrationType} type - The type.
+ * @param {SeedOptions} options - What to seed.
+ * @returns {Secret} The payload.
+ */
+function payloadFor(type: IntegrationType, options: SeedOptions): Secret {
+  if (type === 'github_app') return new Secret({ installationId: options.installationId ?? 4242 });
+
+  return new Secret({ token: options.token ?? (type === 'pat' ? CANARY_PAT : CANARY_OAUTH_TOKEN) });
+}
+
+/**
+ * Builds the harness. Call `installNoNetworkGuard()` in the spec too.
+ * @returns {GithubServiceHarness} The harness.
+ */
+export function buildGithubServiceHarness(): GithubServiceHarness {
+  const repo = createInMemoryIntegrationRepo();
+  const clock = new FakeClock(START);
+  const logger: FakeLogger = { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn() };
+  const services = buildGithubServices(repo, clock, logger);
+  const { encryption } = services;
   let seeded = 0;
 
   return {
-    service, writer, issueClient, client, repo, store, encryption, tokens, budget, clock, logger, enabled,
+    ...services, repo, clock, logger,
     async seed(options = {}) {
       seeded += 1;
-      const type = options.type ?? 'pat';
-      const uuid = randomUUID();
-      const encrypted = encryption.encrypt(payloadOf(type, options), { uuid, type });
-      const row = await repo.save({
-        uuid,
-        userId: options.userId ?? 1,
-        provider: 'github',
-        type,
-        label: options.label ?? `integration ${seeded}`,
-        labelNormalized: `integration ${seeded}`,
-        status: options.status ?? 'active',
-        statusReason: null,
-        githubLogin: 'octocat',
-        expiresAt: options.expiresAt ?? null,
-        lastTestedAt: null,
-        lastTestResult: null,
-        metadata: {},
-        secretHint: null,
-        secretKeyId: encrypted.keyId,
-        secretIv: encrypted.iv,
-        secretAuthTag: encrypted.authTag,
-        secretCiphertext: encrypted.ciphertext,
-        createdAt: options.createdAt ?? new Date(START.getTime() + seeded * 1000),
-      } as Integration);
+      const row = await repo.save(integrationRowOf(encryption, options, seeded));
 
       return repo.rows.find((candidate) => candidate.id === row.id) as Integration;
     },
     replace(row, token) {
       const stored = repo.rows.find((candidate) => candidate.id === row.id) as Integration;
       const type = stored.type as IntegrationType;
-      const encrypted = encryption.encrypt(payloadOf(type, { token, installationId: 4242 }), { uuid: stored.uuid, type });
+      const encrypted = encryption.encrypt(payloadFor(type, { token, installationId: 4242 }), { uuid: stored.uuid, type });
 
       Object.assign(stored, {
         secretKeyId: encrypted.keyId,

@@ -41,7 +41,7 @@ import { ProjectsController } from '../../projects.controller.js';
 export { HARNESS_START };
 
 /** Sessions keyed by `sid`, standing in for Auth's session table. */
-class MapSessionLookup implements SessionLookup {
+export class MapSessionLookup implements SessionLookup {
   readonly sessions = new Map<string, SessionUser>();
 
   async findActiveSessionUser(sid: string): Promise<SessionUser | null> {
