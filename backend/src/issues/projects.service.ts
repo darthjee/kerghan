@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { DataSource } from 'typeorm';
-import { duplicateEntryIndex } from './duplicate-entry.js';
+import { duplicateEntryIndex, PROJECT_NAME_INDEX } from './duplicate-entry.js';
 import type { IssuesProject } from './entities/issues-project.entity.js';
 import { IssuesAccess } from './issues-access.js';
 import { projectNameTaken, projectNotFound } from './issues-http-errors.js';
@@ -30,7 +30,6 @@ import type {
 } from './types/projects-api.types.js';
 
 // The unique index a rename race can hit (`model.md#issues_projects`).
-const NAME_INDEX = 'idx_issues_projects_user_id_name_deleted_token';
 
 /**
  * The Projects business logic (`docs/agents/specs/issues/projects.md`): the one surface of the
@@ -216,7 +215,7 @@ export class ProjectsService {
     try {
       return await this.store.update(project.id, changes, updatedAt);
     } catch (error) {
-      if (duplicateEntryIndex(error) === NAME_INDEX) throw projectNameTaken();
+      if (duplicateEntryIndex(error) === PROJECT_NAME_INDEX) throw projectNameTaken();
 
       throw error;
     }

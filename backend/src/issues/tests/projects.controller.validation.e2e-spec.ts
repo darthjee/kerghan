@@ -26,11 +26,7 @@ describe('ProjectsController validation (e2e)', () => {
     expect(ctx.projects.calls).toEqual([]);
   }
 
-  describe('path id', () => {
-    it.each(['show', 'edit', 'repository', 'delete'])('answers 400 VALIDATION_FAILED for a malformed uuid on %s.json', async (action) => {
-      await expectInvalid(`/projects/not-a-uuid/${action}.json`, { repository: null });
-    });
-  });
+  // The malformed path id cases live in the access matrix (`issues-routes.access-matrix.e2e-spec.ts`).
 
   describe('POST /projects/mine.json', () => {
     it.each([

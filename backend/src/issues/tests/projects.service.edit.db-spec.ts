@@ -5,7 +5,7 @@ import { IssuesProject } from '../entities/issues-project.entity.js';
 import { ProjectStore } from '../project-store.js';
 import { ProjectsService } from '../projects.service.js';
 import { buildIssuesDbHarness, HARNESS_START, type IssuesDbHarness } from './support/issues-db-harness.js';
-import { seedIntruder, seedIssue, seedProject, SEED_TIME } from './support/issues-seeds.js';
+import { seedIssue, seedProject, SEED_TIME } from './support/issues-seeds.js';
 
 describe('ProjectsService#edit (real MySQL)', () => {
   let harness: IssuesDbHarness;
@@ -139,7 +139,7 @@ describe('ProjectsService#edit (real MySQL)', () => {
   });
 
   it('answers the same 404 for a foreign, a deleted and a missing project, and touches no foreign row', async () => {
-    const intruder = await seedIntruder(harness.ds);
+    const { intruder } = harness;
     const deleted = await seedProject(harness.ds, userId, { deleted: true });
 
     for (const uuid of [intruder.projectUuid, deleted.uuid, '00000000-0000-4000-8000-000000000000']) {

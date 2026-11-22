@@ -1,6 +1,6 @@
 import { integrationRef } from './integration-refs.js';
 import type { IssuesDbHarness } from './issues-db-harness.js';
-import { seedIssue, seedLink, seedMarker, seedProject, SEED_TIME } from './issues-seeds.js';
+import { type Intruder, seedIssue, seedLink, seedMarker, seedProject, SEED_TIME } from './issues-seeds.js';
 import type { GithubIssue } from '../../../integrations/integrations-github.public.js';
 import { githubIssue } from '../../../integrations/tests/support/github-builders.js';
 import { issue as issueCase } from '../../../integrations/tests/support/github-builders.js';
@@ -49,6 +49,8 @@ export interface SyncWorld {
   projectId: number;
   issueId: number;
   linkId: number;
+  /** The harness's intruder (own project, issue, link and marker), for "never touched" assertions. */
+  intruder: Intruder;
 }
 
 let run = 0;
@@ -68,7 +70,8 @@ export function releaseQueuedLinks(harness: Pick<IssuesDbHarness, 'workers' | 'g
 /**
  * Clears the in-memory state of the previous spec, moves the clock to a fresh hour (so a pause of an
  * earlier spec has ended), and seeds a user with a project on a repository that one or more
- * integrations list, one issue with a link, and optionally a marker.
+ * integrations list, one issue with a link, and optionally a marker. The harness's intruder (a
+ * second user with a project, an issue, a link and a marker of his own) is already seeded.
  * @param harness - The harness.
  * @param options - What to seed.
  * @returns The ids.
@@ -102,7 +105,7 @@ export async function buildSyncWorld(harness: IssuesDbHarness, options: SyncWorl
 
   if (options.marker !== undefined && options.marker !== null) await seedMarker(harness.ds, link.id, options.marker);
 
-  return { userId, projectId: project.id, issueId: issue.id, linkId: link.id };
+  return { userId, projectId: project.id, issueId: issue.id, linkId: link.id, intruder: harness.intruder };
 }
 
 /**

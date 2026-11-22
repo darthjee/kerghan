@@ -2,7 +2,7 @@ import { NotFoundException } from '@nestjs/common';
 import { seedUser } from '../../repositories/tests/support/two-user-baseline.js';
 import { IssuesService } from '../issues.service.js';
 import { buildIssuesDbHarness, type IssuesDbHarness } from './support/issues-db-harness.js';
-import { seedIntruder, seedIssue, seedLink, seedMarker, seedProject, type SeededProject } from './support/issues-seeds.js';
+import { seedIssue, seedLink, seedMarker, seedProject, type SeededProject } from './support/issues-seeds.js';
 
 describe('IssuesService#delete (real MySQL)', () => {
   let harness: IssuesDbHarness;
@@ -62,7 +62,7 @@ describe('IssuesService#delete (real MySQL)', () => {
   });
 
   it('answers 404 for the intruder\'s project and issue, leaving his rows untouched', async () => {
-    const intruder = await seedIntruder(harness.ds);
+    const { intruder } = harness;
     const mine = await seedIssue(harness.ds, project.id);
 
     await expect(service.delete(userId, intruder.projectUuid, intruder.issueUuid)).rejects.toBeInstanceOf(NotFoundException);

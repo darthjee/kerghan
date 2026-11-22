@@ -4,7 +4,7 @@ import { Issue } from '../entities/issue.entity.js';
 import { IssueSyncTrigger } from '../issue-sync-trigger.js';
 import { IssuesService } from '../issues.service.js';
 import { buildIssuesDbHarness, HARNESS_START, type IssuesDbHarness } from './support/issues-db-harness.js';
-import { seedIntruder, seedIssue, seedProject, type SeededProject } from './support/issues-seeds.js';
+import { seedIssue, seedProject, type SeededProject } from './support/issues-seeds.js';
 
 const CAP = 3;
 
@@ -98,7 +98,7 @@ describe('IssuesService#create (real MySQL)', () => {
   });
 
   it('answers 404 for another user\'s project and leaves the intruder untouched', async () => {
-    const intruder = await seedIntruder(harness.ds);
+    const { intruder } = harness;
 
     await expect(service.create(userId, intruder.projectUuid, { title: 'x', body: null, state: 'open' })).rejects.toBeInstanceOf(NotFoundException);
     expect(await harness.ds.getRepository(Issue).countBy({ projectId: intruder.projectId })).toBe(1);

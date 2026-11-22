@@ -67,8 +67,8 @@ describe('Link creation versus a repository change (real MySQL)', () => {
     seedSecondRepository(harness, world.userId);
 
     for (let run = 0; run < 5; run += 1) {
-      await harness.ds.query('DELETE FROM issues_github_links');
-      await harness.ds.query('DELETE FROM issues');
+      await harness.ds.query('DELETE FROM issues_github_links WHERE user_id = ?', [world.userId]);
+      await harness.ds.query('DELETE FROM issues WHERE project_id = ?', [world.project.id]);
       await harness.ds.getRepository(IssuesProject).update({ id: world.project.id }, { repositoryId: REPOSITORY_ID });
       harness.clock.advance(120_000);
       scriptIssue(harness, { id: 2 ** 31 + 8_000 + run });

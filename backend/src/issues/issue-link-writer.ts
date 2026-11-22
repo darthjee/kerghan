@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { Injectable } from '@nestjs/common';
 import { DataSource, type EntityManager } from 'typeorm';
-import { duplicateEntryIndex } from './duplicate-entry.js';
+import { duplicateEntryIndex, LINK_ISSUE_INDEX, LINK_USER_GITHUB_ISSUE_INDEX } from './duplicate-entry.js';
 import type { Issue } from './entities/issue.entity.js';
 import type { IssuesProject } from './entities/issues-project.entity.js';
 import { differencesOf, githubValues, type IssueValues } from './github-values.js';
@@ -20,8 +20,6 @@ import { stampOf } from './timestamps.js';
 import { Clock } from '../core/clock.js';
 import type { GithubIssue } from '../integrations/integrations-github.public.js';
 
-const USER_GITHUB_ISSUE_INDEX = 'idx_issues_github_links_user_id_github_issue_id';
-const ISSUE_INDEX = 'idx_issues_github_links_issue_id';
 
 /** What import and attach share: the project, the GitHub answer and the repository read before the transaction. */
 export interface LinkCreation {
@@ -242,8 +240,8 @@ export class IssueLinkWriter {
   async #raceError(error: unknown, creation: LinkCreation): Promise<Error | null> {
     const index = duplicateEntryIndex(error);
 
-    if (index === ISSUE_INDEX) return issueAlreadyLinked();
-    if (index !== USER_GITHUB_ISSUE_INDEX) return null;
+    if (index === LINK_ISSUE_INDEX) return issueAlreadyLinked();
+    if (index !== LINK_USER_GITHUB_ISSUE_INDEX) return null;
 
     const winner = await this.links.findByGithubIssue(this.dataSource.manager, creation.userId, creation.github.issue.id);
 

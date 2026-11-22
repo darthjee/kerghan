@@ -4,7 +4,7 @@ import { CACHE_CLASS_KEY } from '../../core/cache-policy.decorator.js';
 import { IssueLinksController } from '../issue-links.controller.js';
 import { expectNoForbiddenKeys, keysOf } from './support/build-issues-test-app.js';
 import { buildIssuesHttpDbHarness, post, type IssuesHttpDbHarness } from './support/issues-http-db-harness.js';
-import { seedIntruder, seedIssue, seedLink, seedMarker } from './support/issues-seeds.js';
+import { seedIssue, seedLink, seedMarker } from './support/issues-seeds.js';
 import { buildLinkWorld, linkApi, type LinkWorld, scriptIssue } from './support/link-fixture.js';
 
 // The link routes over the real service, and the link object they put on show, the listing and
@@ -92,7 +92,7 @@ describe('Issue link routes (real MySQL)', () => {
   });
 
   it('never reaches the intruder\'s project, issue or GitHub issue', async () => {
-    const intruder = await seedIntruder(harness.ds);
+    const { intruder } = harness;
     const other = { ...world, project: { id: intruder.projectId, uuid: intruder.projectUuid } };
 
     await linkApi(harness, other).importIssue().expect(404);

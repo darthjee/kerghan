@@ -7,10 +7,13 @@ import { IssueRateLimitPauses } from '../issue-rate-limit-pauses.js';
 import { IssueSyncCommit } from '../issue-sync-commit.js';
 import { IssueSyncReader } from '../issue-sync-reader.js';
 import { IssuesSyncService, type ReconcileOutcome } from '../issues-sync.service.js';
+import { IssuesService } from '../issues.service.js';
+import { ProjectsService } from '../projects.service.js';
 import { integrationRef } from './support/integration-refs.js';
+import { snapshotIntruder } from './support/intruder-baseline.js';
 import { buildIssuesDbHarness, type IssuesDbHarness } from './support/issues-db-harness.js';
 import {
-  buildSyncWorld, githubCase, readState, scriptGet, SYNC_INTEGRATION, SYNC_NUMBER, SYNC_REPOSITORY, SYNC_REPOSITORY_ID,
+  buildSyncWorld, githubCase, readState, scriptGet, SYNC_INTEGRATION, SYNC_NUMBER, SYNC_REPOSITORY, SYNC_REPOSITORY_ID, uuidsOf,
   type SyncWorld, type SyncWorldOptions,
 } from './support/sync-fixture.js';
 
@@ -39,6 +42,20 @@ describe('IssuesSyncService (real MySQL)', () => {
   const scriptPut = (updatedAt = PUT_AT) => harness.github.script(
     SYNC_INTEGRATION, 'updateIssue', SYNC_NUMBER, issueCase(githubIssue({ number: SYNC_NUMBER, updatedAt })),
   );
+
+  describe('the intruder', () => {
+    it('never touches another user\'s project, issue, link or marker, whatever a reconcile does', async () => {
+      const w = await world({ local: { title: 'L' }, base: {}, marker: { revision: 1 } });
+      const before = await snapshotIntruder(harness.ds, w.intruder);
+
+      scriptGet(harness, SYNC_INTEGRATION, githubCase({ title: 'G', updatedAt: LATER }));
+      scriptPut();
+
+      expect(await run(w)).toEqual({ kind: 'done' });
+      expect(await snapshotIntruder(harness.ds, w.intruder)).toEqual(before);
+      expect(calls().every((call) => call.userId === w.userId)).toBe(true);
+    });
+  });
 
   describe('the L/B/G table', () => {
     it('does nothing when neither side moved, and records the sync', async () => {
@@ -86,7 +103,7 @@ describe('IssuesSyncService (real MySQL)', () => {
       expect(marker).toBeNull();
     });
 
-    it('never sends state_reason or an unchanged field', async () => {
+    it('E55: never sends state_reason or an unchanged field (a GitHub state_reason is not stored)', async () => {
       const w = await world({ local: { body: 'new body' }, base: {}, marker: {} });
 
       scriptGet(harness, SYNC_INTEGRATION, githubCase());
@@ -274,7 +291,7 @@ describe('IssuesSyncService (real MySQL)', () => {
         await harness.ds.query('UPDATE issues_projects SET deleted_at = ?, deleted_token = id WHERE id = ?', [TM, w.projectId]);
         return w.linkId;
       }],
-    ])('is a silent no-op for %s: no call', async (_label, linkId) => {
+    ])('E40: is a silent no-op for %s: no call', async (_label, linkId) => {
       expect(await service.reconcile(await linkId(), { lastAttempt: false })).toEqual({ kind: 'stopped', reason: 'no_link' });
       expect(calls()).toEqual([]);
     });
@@ -697,6 +714,108 @@ describe('IssuesSyncService (real MySQL)', () => {
       await run(w);
 
       expect((await state(w)).link).toMatchObject({ status: 'sync_failed', statusReason: 'credential_invalid' });
+    });
+  });
+
+  describe('the edge cases of edge-cases.md that the tables above do not name', () => {
+    it('E5: a 403 on a push to an archived or read-only repository follows E19: the read worked, the job stops with no retry, the marker is kept', async () => {
+      const w = await world({ local: { title: 'L' }, base: {}, marker: {} });
+
+      scriptGet(harness, SYNC_INTEGRATION, githubCase({ body: 'G', updatedAt: LATER }));
+      harness.github.script(SYNC_INTEGRATION, 'updateIssue', SYNC_NUMBER, forbidden());
+
+      expect(await run(w)).toEqual({ kind: 'stopped', reason: 'credential' });
+      expect(calls().map((call) => call.operation)).toEqual(['getIssue', 'updateIssue']);
+      expect((await state(w)).link).toMatchObject({ status: 'sync_failed', statusReason: 'forbidden' });
+      expect((await state(w)).marker).not.toBeNull();
+    });
+
+    it('E5: reads still work once the unsent write is gone: a refresh pulls GitHub\'s change and leaves sync_failed', async () => {
+      const w = await world({ status: 'sync_failed', statusReason: 'forbidden', base: {} });
+
+      scriptGet(harness, SYNC_INTEGRATION, githubCase({ body: 'G', updatedAt: LATER }));
+
+      expect(await run(w)).toEqual({ kind: 'done' });
+      expect((await state(w)).issue.body).toBe('G');
+      expect((await state(w)).link).toMatchObject({ status: 'linked', statusReason: null });
+    });
+
+    it('E9: a refresh while a marker exists pulls the field GitHub changed and never overwrites a field with an unsent edit', async () => {
+      const w = await world({ local: { title: 'L' }, base: {}, marker: {} });
+
+      scriptGet(harness, SYNC_INTEGRATION, githubCase({ body: 'G', updatedAt: LATER }));
+      scriptPut();
+
+      expect(await run(w)).toEqual({ kind: 'done' });
+
+      const { issue, link } = await state(w);
+
+      expect(puts().map((call) => call.changes)).toEqual([{ title: 'L' }]);
+      expect(issue).toMatchObject({ title: 'L', body: 'G' });
+      expect(link).toMatchObject({ baseTitle: 'L', baseBody: 'G' });
+    });
+
+    it('E9: a push that fails keeps the unsent edit untouched', async () => {
+      const w = await world({ local: { title: 'L' }, base: {}, marker: {} });
+
+      scriptGet(harness, SYNC_INTEGRATION, githubCase({ body: 'G', updatedAt: LATER }));
+      harness.github.script(SYNC_INTEGRATION, 'updateIssue', SYNC_NUMBER, forbidden());
+      await run(w);
+
+      expect((await state(w)).issue.title).toBe('L');
+      expect((await state(w)).marker).not.toBeNull();
+    });
+
+    it('E23 and E30: after the last integration is deleted the next job follows E20, and the project still reads normally', async () => {
+      const w = await world({ marker: {} });
+      const { project, issue } = await uuidsOf(harness, w);
+
+      // The integration is gone, and so is its source on the repository (Repositories' own listener); no Issues hook ran.
+      harness.github.setUsable(w.userId, []);
+      harness.repositories.seed(w.userId, { repositoryId: SYNC_REPOSITORY_ID, ...SYNC_REPOSITORY, integrationSourceIds: [] });
+
+      expect(await run(w)).toEqual({ kind: 'stopped', reason: 'credential' });
+      expect(calls()).toEqual([]);
+      expect((await state(w)).link).toMatchObject({ status: 'sync_failed', statusReason: 'no_credential' });
+      expect((await state(w)).marker).not.toBeNull();
+      expect(await harness.get(ProjectsService).show(w.userId, project)).toMatchObject({ id: project });
+      expect(await harness.get(IssuesService).show(w.userId, project, issue)).toMatchObject({ id: issue });
+    });
+
+    it('E27: a repository that becomes Unavailable discards nothing: the link is not gone, no probe is sent, the marker is kept', async () => {
+      const w = await world({ local: { title: 'L' }, base: {}, marker: {} });
+
+      harness.repositories.seed(w.userId, { repositoryId: SYNC_REPOSITORY_ID, ...SYNC_REPOSITORY, status: 'unavailable', integrationSourceIds: [SYNC_INTEGRATION] });
+      scriptGet(harness, SYNC_INTEGRATION, notFound());
+
+      expect(await run(w)).toEqual({ kind: 'stopped', reason: 'repository_unavailable' });
+      expect(calls()).toEqual([]);
+
+      const { link, marker, issue } = await state(w);
+
+      expect(link).toMatchObject({ status: 'linked', statusReason: null });
+      expect(marker).not.toBeNull();
+      expect(issue.title).toBe('L');
+    });
+
+    it('E38: sync is refused only while the repository is Unavailable and resumes when it returns, the project untouched', async () => {
+      const w = await world({ local: { title: 'L' }, base: {}, marker: {} });
+      const project = () => harness.ds.query('SELECT * FROM issues_projects WHERE id = ?', [w.projectId]);
+      const before = await project();
+
+      harness.repositories.seed(w.userId, { repositoryId: SYNC_REPOSITORY_ID, ...SYNC_REPOSITORY, status: 'unavailable', integrationSourceIds: [SYNC_INTEGRATION] });
+
+      expect(await run(w)).toEqual({ kind: 'stopped', reason: 'repository_unavailable' });
+      expect(calls()).toEqual([]);
+
+      harness.repositories.seed(w.userId, { repositoryId: SYNC_REPOSITORY_ID, ...SYNC_REPOSITORY, status: 'added', integrationSourceIds: [SYNC_INTEGRATION] });
+      scriptGet(harness, SYNC_INTEGRATION, githubCase());
+      scriptPut();
+
+      expect(await run(w)).toEqual({ kind: 'done' });
+      expect(puts()).toHaveLength(1);
+      expect((await state(w)).marker).toBeNull();
+      expect(await project()).toEqual(before);
     });
   });
 });

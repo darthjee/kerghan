@@ -63,6 +63,25 @@ describe('Issues sync triggers and job (real MySQL)', () => {
       expect(marker).toBeNull();
     });
 
+    it('E43: an edit that reverts to the base values leaves a marker that sends nothing, and the job clears it', async () => {
+      const world = await linkedIssue();
+
+      await issues.edit(world.userId, projectUuid, issueUuid, { title: 'Edited' });
+      await issues.edit(world.userId, projectUuid, issueUuid, { title: 'T' });
+      expect((await readState(harness, world)).marker).toMatchObject({ revision: 2 });
+
+      scriptGet(harness, SYNC_INTEGRATION, githubCase());
+      await harness.workers.runAll();
+
+      const { issue, link, marker } = await readState(harness, world);
+
+      expect(harness.workers.errors).toEqual([]);
+      expect(harness.github.githubCalls().filter((call) => call.operation === 'updateIssue')).toEqual([]);
+      expect(issue.title).toBe('T');
+      expect(link.baseTitle).toBe('T');
+      expect(marker).toBeNull();
+    });
+
     it('is the real trigger: it enqueues only after the edit committed (the marker is already there)', async () => {
       const world = await linkedIssue();
 
@@ -149,11 +168,13 @@ describe('Issues sync triggers and job (real MySQL)', () => {
       await harness.ds.query("UPDATE auth_users SET status = 'pending' WHERE id = ?", [world.userId]);
       await harness.get(IssuesSyncBootstrap).onApplicationBootstrap();
 
-      expect(jobs()).toEqual([{ linkId: links[1] }, { linkId: links[2] }, { linkId: links[0] }]);
+      // The intruder's marker (12:00, seeded first) sorts before the tied marker of the same hour: no filtering by user.
+      expect(jobs()).toEqual([{ linkId: links[1] }, { linkId: links[2] }, { linkId: world.intruder.linkId }, { linkId: links[0] }]);
     });
 
     it('enqueues nothing when no marker exists', async () => {
       await buildSyncWorld(harness);
+      await harness.ds.query('DELETE FROM issues_pending_writes');
       await harness.get(IssuesSyncBootstrap).onApplicationBootstrap();
 
       expect(jobs()).toEqual([]);
@@ -163,7 +184,7 @@ describe('Issues sync triggers and job (real MySQL)', () => {
       const world = await buildSyncWorld(harness, { local: { title: 'L' }, marker: {} });
 
       await harness.get(IssuesSyncBootstrap).onApplicationBootstrap();
-      expect(jobs()).toEqual([{ linkId: world.linkId }]);
+      expect(jobs()).toEqual([{ linkId: world.intruder.linkId }, { linkId: world.linkId }]);
 
       scriptGet(harness, SYNC_INTEGRATION, githubCase());
       harness.github.script(SYNC_INTEGRATION, 'updateIssue', SYNC_NUMBER, issueCase(githubIssue({ number: SYNC_NUMBER, title: 'L' })));

@@ -5,7 +5,7 @@ import { IssuesProject } from '../entities/issues-project.entity.js';
 import { ProjectStore } from '../project-store.js';
 import { ProjectsService } from '../projects.service.js';
 import { buildIssuesDbHarness, HARNESS_START, type IssuesDbHarness } from './support/issues-db-harness.js';
-import { seedIntruder, seedIssue, seedLink, seedProject, SEED_TIME } from './support/issues-seeds.js';
+import { seedIssue, seedLink, seedProject, SEED_TIME } from './support/issues-seeds.js';
 
 const REPO_A = 801;
 const REPO_B = 802;
@@ -86,6 +86,20 @@ describe('ProjectsService#setRepository (real MySQL)', () => {
     });
   });
 
+  it('E28: a repository turning private or public changes nothing in Kerghan, and the project stays owner-only', async () => {
+    const project = await seedProject(harness.ds, userId, { repositoryId: REPO_A });
+    const stored0 = await stored(project.id);
+    const publicView = await service.show(userId, project.uuid);
+
+    harness.repositories.seed(userId, { repositoryId: REPO_A, githubId: 81, owner: 'o', name: 'a', private: true });
+
+    const privateView = await service.show(userId, project.uuid);
+
+    expect(await stored(project.id)).toEqual(stored0);
+    expect(privateView).toEqual({ ...publicView, repository: { ...publicView.repository, private: true } });
+    await expect(service.show(harness.intruder.userId, project.uuid)).rejects.toBeInstanceOf(NotFoundException);
+  });
+
   describe('with links (E62)', () => {
     it.each([
       ['change', { repository: { githubId: 82 } }],
@@ -150,7 +164,7 @@ describe('ProjectsService#setRepository (real MySQL)', () => {
 
   describe('the creation checks', () => {
     it('answers the Add 404 for a missing ref and another user\'s row', async () => {
-      const intruder = await seedIntruder(harness.ds);
+      const { intruder } = harness;
       harness.repositories.seed(intruder.userId, { repositoryId: 899, githubId: 89 });
       const project = await seedProject(harness.ds, userId);
 
@@ -195,7 +209,7 @@ describe('ProjectsService#setRepository (real MySQL)', () => {
     });
 
     it('answers the project 404 first, whatever the ref, for a foreign, deleted or missing project', async () => {
-      const intruder = await seedIntruder(harness.ds);
+      const { intruder } = harness;
       const deleted = await seedProject(harness.ds, userId, { deleted: true });
 
       for (const uuid of [intruder.projectUuid, deleted.uuid, '00000000-0000-4000-8000-000000000000']) {
@@ -209,7 +223,7 @@ describe('ProjectsService#setRepository (real MySQL)', () => {
   });
 
   describe('races', () => {
-    it('answers PROJECT_REPOSITORY_TAKEN with the winner when the unique index decides', async () => {
+    it('E48: answers PROJECT_REPOSITORY_TAKEN with the winner when the unique index decides', async () => {
       const winner = await seedProject(harness.ds, userId, { repositoryId: REPO_B });
       const project = await seedProject(harness.ds, userId);
       const spy = jest.spyOn(harness.get(ProjectStore), 'findLiveByRepository').mockResolvedValueOnce(null);

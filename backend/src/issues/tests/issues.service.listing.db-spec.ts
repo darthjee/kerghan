@@ -2,7 +2,7 @@ import { NotFoundException } from '@nestjs/common';
 import { seedUser } from '../../repositories/tests/support/two-user-baseline.js';
 import { IssuesService } from '../issues.service.js';
 import { buildIssuesDbHarness, type IssuesDbHarness } from './support/issues-db-harness.js';
-import { seedIntruder, seedIssue, seedProject, type SeededProject } from './support/issues-seeds.js';
+import { seedIssue, seedProject, type SeededProject } from './support/issues-seeds.js';
 
 const DEFAULTS = { page: 1, perPage: 50, state: 'open' as const, search: '' };
 
@@ -109,7 +109,7 @@ describe('IssuesService#list / #show (real MySQL)', () => {
   });
 
   it('is scoped to the project: another project and the intruder never appear', async () => {
-    const intruder = await seedIntruder(harness.ds);
+    const { intruder } = harness;
     const other = await seedProject(harness.ds, userId, { name: 'other' });
     await seedIssue(harness.ds, other.id, { title: 'in other project' });
     await seedIssue(harness.ds, project.id, { title: 'mine' });
@@ -134,7 +134,7 @@ describe('IssuesService#list / #show (real MySQL)', () => {
     });
 
     it('answers 404 for a missing issue, another project\'s issue and the intruder\'s project', async () => {
-      const intruder = await seedIntruder(harness.ds);
+      const { intruder } = harness;
       const other = await seedProject(harness.ds, userId, { name: 'other' });
       const foreign = await seedIssue(harness.ds, other.id);
 

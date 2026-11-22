@@ -1,6 +1,5 @@
 import { FakeProjectRepositories } from './support/fake-project-repositories.js';
 import { integrationRef } from './support/integration-refs.js';
-import type { LoggerService } from '../../core/logger.service.js';
 import { FakeClock } from '../../core/tests/support/fake-clock.js';
 import type { IntegrationsGithubService } from '../../integrations/integrations-github.public.js';
 import { FakeIntegrationsGithubService } from '../../integrations/tests/support/fake-integrations-github.service.js';
@@ -32,21 +31,17 @@ const NOW = new Date('2026-11-07T12:00:00Z');
 function build(sources: number[], usable = sources.map((id) => integrationRef(id))): {
   reader: IssueGithubReader;
   github: FakeIntegrationsGithubService;
-  logger: { debug: jest.Mock };
 } {
   const repositories = new FakeProjectRepositories().seed(USER, { repositoryId: REPOSITORY, githubId: 10, integrationSourceIds: sources });
   const github = new FakeIntegrationsGithubService().setUsable(USER, usable);
-  const logger = { debug: jest.fn() };
   const candidates = new IssueCandidates(repositories as unknown as RepositoriesService, github as unknown as IntegrationsGithubService);
 
   return {
     github,
-    logger,
     reader: new IssueGithubReader(
       candidates,
       github as unknown as IntegrationsGithubService,
       new FakeClock(NOW),
-      logger as unknown as LoggerService,
     ),
   };
 }
@@ -226,13 +221,11 @@ describe('IssueGithubReader', () => {
     });
   });
 
-  it('logs the integration id and the outcome kind only', async () => {
-    const { reader, github, logger } = build([1]);
+  it('has no logger to write to: a read never adds a line to the access line of its request (security.md, what may be logged)', async () => {
+    const { reader, github } = build([1]);
 
     github.script(1, 'getIssue', NUMBER, issue(githubIssue({ number: NUMBER, title: 'SECRET TITLE' })));
-    await read(reader);
 
-    expect(logger.debug).toHaveBeenCalledWith('issue link read', { integrationId: 1, result: 'ok' });
-    expect(JSON.stringify(logger.debug.mock.calls)).not.toContain('SECRET');
+    expect(await read(reader)).toMatchObject({ kind: 'ok' });
   });
 });

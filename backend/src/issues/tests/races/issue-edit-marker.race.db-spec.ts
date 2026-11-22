@@ -30,7 +30,8 @@ describe('Issue edit marker race (real MySQL)', () => {
     await Promise.all(['a', 'b'].map((title) => service.edit(userId, project.uuid, issue.uuid, { title })));
 
     const markers: Array<{ link_id: number; revision: number }> = await harness.ds.query(
-      'SELECT link_id, revision FROM issues_pending_writes',
+      'SELECT link_id, revision FROM issues_pending_writes WHERE link_id <> ?',
+      [harness.intruder.linkId],
     );
     const row = await harness.ds.getRepository(Issue).findOneByOrFail({ id: issue.id });
 

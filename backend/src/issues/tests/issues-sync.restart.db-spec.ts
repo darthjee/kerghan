@@ -32,7 +32,7 @@ describe('Issues sync restart (real MySQL)', () => {
 
   /** The process restarts: a new module over the same rows boots, and its boot sweep runs in `init()`. */
   async function restart(): Promise<IssuesDbHarness> {
-    restarted = await buildIssuesDbHarness();
+    restarted = await buildIssuesDbHarness({}, { intruder: false });
 
     return restarted;
   }
@@ -43,7 +43,9 @@ describe('Issues sync restart (real MySQL)', () => {
     after.github.setUsable(userId, [integrationRef(SYNC_INTEGRATION)]);
   }
 
-  const jobs = (harness: IssuesDbHarness) => harness.workers.paramsOf(ISSUES_RECONCILE_JOB);
+  /** The reconcile jobs of the restarted module, the intruder's own marker excluded (the sweep has no filtering: see `intruderJobs`). */
+  const jobs = (harness: IssuesDbHarness) => harness.workers.paramsOf(ISSUES_RECONCILE_JOB).filter((params) => params.linkId !== before.intruder.linkId);
+  const intruderJobs = (harness: IssuesDbHarness) => harness.workers.paramsOf(ISSUES_RECONCILE_JOB).filter((params) => params.linkId === before.intruder.linkId);
 
   /** Seeds a marker per entry (`marked_at` hour), on its own issue and link of the world's project. */
   async function seedMarkers(hours: number[]): Promise<number[]> {
@@ -70,6 +72,7 @@ describe('Issues sync restart (real MySQL)', () => {
     const after = await restart();
 
     expect(jobs(after)).toEqual([{ linkId: early }, { linkId: middle }, { linkId: late }]);
+    expect(intruderJobs(after)).toHaveLength(1);
   });
 
   it('a second job for the same link is a no-op: the boot hook run again enqueues nothing', async () => {
@@ -81,6 +84,7 @@ describe('Issues sync restart (real MySQL)', () => {
     await after.get(IssuesSyncBootstrap).onApplicationBootstrap();
 
     expect(jobs(after)).toHaveLength(2);
+    expect(intruderJobs(after)).toHaveLength(1);
   });
 
   it('E51: the old module\'s queue is gone with it: only the markers come back', async () => {

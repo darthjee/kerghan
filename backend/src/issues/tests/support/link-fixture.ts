@@ -1,8 +1,9 @@
 import type request from 'supertest';
 import { integrationRef } from './integration-refs.js';
+import { countOutsideIntruder } from './intruder-baseline.js';
 import type { IssuesHttpDbHarness } from './issues-http-db-harness.js';
 import { post } from './issues-http-db-harness.js';
-import { seedProject, type SeededProject } from './issues-seeds.js';
+import { type Intruder, seedProject, type SeededProject } from './issues-seeds.js';
 import { releaseQueuedLinks } from './sync-fixture.js';
 import type { GithubIssue } from '../../../integrations/integrations-github.public.js';
 import { issue as issueCase, githubIssue } from '../../../integrations/tests/support/github-builders.js';
@@ -22,13 +23,18 @@ export interface LinkWorld {
   userId: number;
   cookie: string;
   project: SeededProject;
+  /** The harness's intruder (own integration, project, issue, link and marker). */
+  intruder: Intruder;
+  /** A session cookie of the intruder. */
+  intruderCookie: string;
 }
 
 let run = 0;
 
 /**
  * Gives the next test a fresh link rate-limit window (user ids repeat after each truncate), clears
- * the in-memory Repositories and GitHub state, and seeds one user with a project.
+ * the in-memory Repositories and GitHub state, and seeds one user with a project (next to the
+ * harness's intruder).
  * @param harness - The harness.
  * @param username - The user to seed (default `owner`).
  * @returns The user, their session cookie and their project.
@@ -55,7 +61,13 @@ export async function addLinkUser(harness: IssuesHttpDbHarness, username: string
 
   linkRepository(harness, userId);
 
-  return { userId, cookie: harness.sessionFor(userId), project: await seedProject(harness.ds, userId, { repositoryId: REPOSITORY_ID }) };
+  return {
+    userId,
+    cookie: harness.sessionFor(userId),
+    project: await seedProject(harness.ds, userId, { repositoryId: REPOSITORY_ID }),
+    intruder: harness.intruder,
+    intruderCookie: harness.intruderCookie(),
+  };
 }
 
 /**
@@ -118,15 +130,13 @@ export function linkApi(harness: IssuesHttpDbHarness, world: LinkWorld, cookie =
 }
 
 /**
- * Counts the rows of a table.
+ * Counts the rows of an Issues table, the harness's intruder's own rows excluded.
  * @param harness - The harness.
  * @param table - The table name.
  * @returns The row count.
  */
-export async function rowCount(harness: IssuesHttpDbHarness, table: string): Promise<number> {
-  const rows: Array<{ total: string }> = await harness.ds.query(`SELECT COUNT(*) AS total FROM ${table}`);
-
-  return Number(rows[0].total);
+export function rowCount(harness: IssuesHttpDbHarness, table: string): Promise<number> {
+  return countOutsideIntruder(harness.ds, harness.intruder, table);
 }
 
 /**

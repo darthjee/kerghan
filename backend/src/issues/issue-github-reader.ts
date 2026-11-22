@@ -1,7 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { IssueCandidates } from './issue-candidates.js';
 import { Clock } from '../core/clock.js';
-import { LoggerService } from '../core/logger.service.js';
 import {
   IntegrationsGithubService,
   type GithubIssue,
@@ -32,7 +31,7 @@ type Step = { final: LinkReadOutcome } | { fallback: 'forbidden' | 'credential_i
  * to the next candidate; a rate limit, an unavailable GitHub, `not_found`, `gone` or `moved` ends
  * the walk at once. A `renamedTo` hint on an answer is ignored: the rename hand-off belongs to the
  * sync, not to link creation.
- * Logs carry the integration id and the outcome kind only.
+ * It logs nothing: a refusal after the read is recorded by the access line alone.
  */
 @Injectable()
 export class IssueGithubReader {
@@ -40,13 +39,11 @@ export class IssueGithubReader {
    * @param {IssueCandidates} candidates - The ordered integrations to try.
    * @param {IntegrationsGithubService} github - The GitHub issue client (read-only).
    * @param {Clock} clock - The time source (the rate-limit delay).
-   * @param {LoggerService} logger - Safe-field logs only.
    */
   constructor(
     private readonly candidates: IssueCandidates,
     private readonly github: IntegrationsGithubService,
     private readonly clock: Clock,
-    private readonly logger: LoggerService,
   ) {}
 
   /**
@@ -79,12 +76,10 @@ export class IssueGithubReader {
   /**
    * Classifies one candidate's answer.
    * @param {IssueResult} result - The client's typed result.
-   * @param {number} integrationId - The integration that answered (logged, never its content).
+   * @param {number} integrationId - The integration that answered.
    * @returns {Step} A final outcome, or the credential failure to fall back from.
    */
   #step(result: IssueResult, integrationId: number): Step {
-    this.logger.debug('issue link read', { integrationId, result: result.kind });
-
     switch (result.kind) {
       case 'ok':
         return { final: { kind: 'ok', issue: result.issue, etag: result.etag, integrationId } };

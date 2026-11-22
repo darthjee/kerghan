@@ -2,7 +2,7 @@ import { NotFoundException } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 import { IssuesAccess } from '../issues-access.js';
 import { buildIssuesDbHarness, type IssuesDbHarness } from './support/issues-db-harness.js';
-import { seedIntruder, seedIssue, seedProject } from './support/issues-seeds.js';
+import { seedIssue, seedProject } from './support/issues-seeds.js';
 import { seedUser } from '../../repositories/tests/support/two-user-baseline.js';
 
 describe('IssuesAccess (real MySQL)', () => {
@@ -32,7 +32,7 @@ describe('IssuesAccess (real MySQL)', () => {
 
   it('answers the identical 404 Project not found for a missing, a foreign and a soft-deleted project', async () => {
     const userId = await seedUser(harness.ds, 'owner');
-    const intruder = await seedIntruder(harness.ds);
+    const { intruder } = harness;
     const deleted = await seedProject(harness.ds, userId, { deleted: true });
 
     const missing = await caught(access.findLiveProject(userId, '00000000-0000-4000-8000-000000000000'));
@@ -49,7 +49,7 @@ describe('IssuesAccess (real MySQL)', () => {
 
   it('finds an issue of the project, and answers 404 Issue not found for another project\'s or the intruder\'s', async () => {
     const userId = await seedUser(harness.ds, 'owner');
-    const intruder = await seedIntruder(harness.ds);
+    const { intruder } = harness;
     const project = await seedProject(harness.ds, userId);
     const other = await seedProject(harness.ds, userId);
     const issue = await seedIssue(harness.ds, project.id);
