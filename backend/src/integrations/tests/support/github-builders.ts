@@ -1,17 +1,28 @@
+import type { GithubCase, GithubOperation } from './github-case.js';
 import { DEFAULT_RATE_LIMIT_REMAINING, DEFAULT_RATE_LIMIT_RESET, jsonResponse, rateLimitHeaders, rawRepo } from './github-raw.js';
 import type {
   GithubRepo,
   IntegrationUnusableReason,
   RateLimitFields,
-  RepoPageResult,
-  RepoResult,
 } from '../../github-repo-results.js';
 
+export type { GithubCase, GithubOperation, GithubResult, ListingShape } from './github-case.js';
+export {
+  githubIssue,
+  githubPullRequest,
+  issue,
+  issueGone,
+  issueMoved,
+  issuePage,
+  issueRedirectOffHost,
+  issueRenamed,
+} from './github-issue-builders.js';
 export {
   DEFAULT_RATE_LIMIT_REMAINING,
   DEFAULT_RATE_LIMIT_RESET,
   jsonResponse,
   rateLimitHeaders,
+  rawIssue,
   rawRepo,
   replyOnce,
 } from './github-raw.js';
@@ -26,34 +37,28 @@ export {
  *
  * Authenticated cases assume a `pat` / `oauth_app` integration (a
  * `github_app` call's `401` follows the installation-token retry rule).
+ *
+ * Issue cases (`githubIssue`, `githubPullRequest`, `issue`, `issuePage`,
+ * `issueGone`, `issueRenamed`, `issueMoved`, `issueRedirectOffHost`) are in
+ * `github-issue-builders.ts`. How to read them:
+ * - a deleted issue is `notFound` plus a passing `issuePage` probe (E1, E22);
+ * - a transferred issue is `issueMoved` (E2, E65);
+ * - a failing probe is `notFound` or `forbidden` on `probeIssues`.
  */
-
-/** The exported operations a case can answer. */
-export type GithubOperation = 'listRepositories' | 'listHandleRepositories' | 'getRepository';
-
-/** How a listing body is shaped: a plain array, or `GET /installation/repositories`' object. */
-export type ListingShape = 'array' | 'installation';
-
-/** One builder case. */
-export interface GithubCase {
-  readonly name: string;
-  /**
-   * The raw `fetch` answer: a `Response`, a thrown error (timeout), or
-   * `null` when the service answers without any GitHub call.
-   */
-  readonly raw: ((shape: ListingShape) => Response) | { throws: () => unknown } | null;
-  /**
-   * The typed result an operation answers for this case.
-   * @param operation - The operation.
-   * @returns The typed result.
-   */
-  resultFor(operation: GithubOperation): RepoPageResult | RepoResult;
-}
 
 // Default ids sit above 2³¹, so a 32-bit truncation anywhere shows up.
 const DEFAULT_ID_BASE = 2 ** 31 + 1000;
 
 let nextRepo = 0;
+
+/**
+ * Whether an operation is one of the issue operations.
+ * @param {GithubOperation} operation - The operation.
+ * @returns {boolean} `true` for `getIssue`, `probeIssues` and `updateIssue`.
+ */
+export function isIssueOperation(operation: GithubOperation): boolean {
+  return operation === 'getIssue' || operation === 'probeIssues' || operation === 'updateIssue';
+}
 
 /** The rate-limit fields matching `rateLimitHeaders()`. */
 export const DEFAULT_RATE_LIMIT: RateLimitFields = {
@@ -110,7 +115,7 @@ export function listingPage(
       });
     },
     resultFor: (operation) => {
-      if (operation === 'getRepository') {
+      if (operation !== 'listRepositories' && operation !== 'listHandleRepositories') {
         throw new Error('listingPage() is a listing case');
       }
 
@@ -146,9 +151,17 @@ export function notModified(): GithubCase {
   return {
     name: 'notModified()',
     raw: () => new Response(null, { status: 304, headers: rateLimitHeaders({ etag: 'W/"same"' }) }),
-    resultFor: (operation) => (operation === 'getRepository'
-      ? { kind: 'unavailable', reason: 'unexpected' }
-      : { kind: 'not_modified', rateLimit: DEFAULT_RATE_LIMIT }),
+    resultFor: (operation) => {
+      if (operation === 'getIssue') {
+        return { kind: 'not_modified' };
+      }
+
+      if (operation === 'getRepository' || operation === 'probeIssues' || operation === 'updateIssue') {
+        return { kind: 'unavailable', reason: 'unexpected' };
+      }
+
+      return { kind: 'not_modified', rateLimit: DEFAULT_RATE_LIMIT };
+    },
   };
 }
 
@@ -190,9 +203,13 @@ export function forbidden(): GithubCase {
   return {
     name: 'forbidden()',
     raw: () => jsonResponse(403, { message: 'Resource not accessible CANARYcanaryBODY' }),
-    resultFor: (operation) => (operation === 'getRepository'
-      ? { kind: 'not_found' }
-      : { kind: 'unavailable', reason: 'forbidden' }),
+    resultFor: (operation) => {
+      if (isIssueOperation(operation)) {
+        return { kind: 'forbidden' };
+      }
+
+      return operation === 'getRepository' ? { kind: 'not_found' } : { kind: 'unavailable', reason: 'forbidden' };
+    },
   };
 }
 
@@ -235,7 +252,9 @@ export function serverError(): GithubCase {
 }
 
 /**
- * A same-origin `301`, which is never followed.
+ * A same-origin `301` to `/repositories/1`, which is never followed. For the issue
+ * reads and the write it is another `api.github.com` target (`moved`); for the probe,
+ * a redirect.
  * @returns {GithubCase} The case.
  */
 export function redirect(): GithubCase {
@@ -245,7 +264,9 @@ export function redirect(): GithubCase {
       status: 301,
       headers: rateLimitHeaders({ location: 'https://api.github.com/repositories/1' }),
     }),
-    resultFor: () => ({ kind: 'unavailable', reason: 'redirect' }),
+    resultFor: (operation) => (operation === 'getIssue' || operation === 'updateIssue'
+      ? { kind: 'moved' }
+      : { kind: 'unavailable', reason: 'redirect' }),
   };
 }
 

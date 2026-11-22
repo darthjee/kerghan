@@ -2,8 +2,10 @@ import { inspect } from 'node:util';
 import type { EventEmitter2 } from '@nestjs/event-emitter';
 import type { LoggerService } from '../../core/logger.service.js';
 import type { Integration } from '../entities/integration.entity.js';
+import { ISSUE_READ_PERMISSIONS, ISSUE_WRITE_PERMISSIONS, REPO_LISTING_PERMISSIONS } from '../github-installation-permissions.js';
 import { GithubInstallationTokenCache, INSTALLATION_TOKEN_EXPIRY_MARGIN_MS } from '../github-installation-token-cache.js';
 import { IntegrationLifecycleService } from '../integration-lifecycle.service.js';
+import { Secret } from '../secret.js';
 import { githubRepo, jsonResponse, listingPage, replyOnce, unauthorized } from './support/github-builders.js';
 import {
   buildGithubServiceHarness,
@@ -283,5 +285,57 @@ describe('GitHub App installation tokens', () => {
     expect(JSON.stringify(result)).not.toContain(CANARY);
     expect(inspect(harness.tokens, { depth: 10 })).not.toContain(CANARY);
     expect(JSON.stringify(Object.values(harness.logger).map((mock) => mock.mock.calls))).not.toContain(CANARY);
+  });
+
+  describe('per permission set', () => {
+    /**
+     * Acquires a token for a permission set, minting `value` on a miss.
+     * @param {Integration} row - The integration.
+     * @param {typeof ISSUE_READ_PERMISSIONS} permissions - The permission set.
+     * @param {string} value - The token a mint answers.
+     * @param {jest.Mock} mint - Counts the mints.
+     * @returns {Promise<string | null>} The revealed token, or `null` when none.
+     */
+    async function acquire(
+      row: Integration,
+      permissions: typeof ISSUE_READ_PERMISSIONS,
+      value: string,
+      mint: jest.Mock,
+    ): Promise<string | null> {
+      mint.mockImplementation(() => Promise.resolve({
+        kind: 'ok', token: new Secret(value), expiresAt: new Date(START.getTime() + HOUR),
+      }));
+      const answer = await harness.tokens.acquire(
+        { integrationId: row.id, userId: USER, installationId: 4242, ivUsed: row.secretIv, permissions },
+        mint as never,
+      );
+
+      return answer.kind === 'token' ? answer.token.reveal() : null;
+    }
+
+    it('mints a read token and a write token for one installation separately, never reusing one for the other', async () => {
+      const row = await harness.seed({ type: 'github_app', userId: USER });
+      const mint = jest.fn();
+
+      expect(await acquire(row, ISSUE_READ_PERMISSIONS, 'read-token', mint)).toBe('read-token');
+      expect(await acquire(row, ISSUE_WRITE_PERMISSIONS, 'write-token', mint)).toBe('write-token');
+      expect(await acquire(row, ISSUE_READ_PERMISSIONS, 'other', mint)).toBe('read-token');
+      expect(await acquire(row, ISSUE_WRITE_PERMISSIONS, 'other', mint)).toBe('write-token');
+      expect(await acquire(row, REPO_LISTING_PERMISSIONS, 'listing-token', mint)).toBe('listing-token');
+      expect(mint).toHaveBeenCalledTimes(3);
+    });
+
+    it('evict drops every permission set of the integration', async () => {
+      const row = await harness.seed({ type: 'github_app', userId: USER });
+      const mint = jest.fn();
+
+      await acquire(row, ISSUE_READ_PERMISSIONS, 'read-1', mint);
+      await acquire(row, ISSUE_WRITE_PERMISSIONS, 'write-1', mint);
+      harness.tokens.evict(row.id);
+
+      expect(await acquire(row, ISSUE_READ_PERMISSIONS, 'read-2', mint)).toBe('read-2');
+      expect(await acquire(row, ISSUE_WRITE_PERMISSIONS, 'write-2', mint)).toBe('write-2');
+      expect(mint).toHaveBeenCalledTimes(4);
+    });
   });
 });

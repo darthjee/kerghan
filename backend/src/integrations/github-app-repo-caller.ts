@@ -2,7 +2,9 @@ import { Inject, Injectable } from '@nestjs/common';
 import { Clock } from '../core/clock.js';
 import { LoggerService } from '../core/logger.service.js';
 import type { Integration } from './entities/integration.entity.js';
+import type { InstallationPermissionSet } from './github-installation-permissions.js';
 import { GithubInstallationTokenCache, type InstallationTokenAnswer, type InstallationTokenKey } from './github-installation-token-cache.js';
+import type { IssueProbeResult, IssueResult, IssueUpdateResult } from './github-issue-results.js';
 import { GithubRepoClientService, type RepoCall } from './github-repo-client.service.js';
 import type { InstallationTokenMint } from './github-repo-response.js';
 import type { RepoFailure, RepoPageResult, RepoResult } from './github-repo-results.js';
@@ -27,7 +29,12 @@ export interface GithubAppCallTarget {
   installationId: number;
   ivUsed: Buffer;
   operation: string;
+  /** The permission set the installation token is minted with. */
+  permissions: InstallationPermissionSet;
 }
+
+/** What a call made through `GithubAppRepoCaller` may answer. */
+export type GithubAppCallResult = RepoPageResult | RepoResult | IssueResult | IssueUpdateResult | IssueProbeResult;
 
 /**
  * Makes a repo call for a `github_app` integration with an installation
@@ -67,7 +74,7 @@ export class GithubAppRepoCaller {
    * @param {TokenCall<T>} call - The repo call.
    * @returns {Promise<RepoCall<T> | MintFailureCall>} The call's outcome, or the mint failure.
    */
-  async call<T extends RepoPageResult | RepoResult>(
+  async call<T extends GithubAppCallResult>(
     target: GithubAppCallTarget,
     call: TokenCall<T>,
   ): Promise<RepoCall<T> | MintFailureCall> {
@@ -76,6 +83,7 @@ export class GithubAppRepoCaller {
       userId: target.row.userId,
       installationId: target.installationId,
       ivUsed: target.ivUsed,
+      permissions: target.permissions,
     };
     const first = await this.#token(key, target);
 
@@ -105,7 +113,7 @@ export class GithubAppRepoCaller {
    * @param {TokenCall<T>} call - The repo call.
    * @returns {Promise<RepoCall<T> | MintFailureCall>} The retry's outcome.
    */
-  async #retry<T extends RepoPageResult | RepoResult>(
+  async #retry<T extends GithubAppCallResult>(
     key: InstallationTokenKey,
     target: GithubAppCallTarget,
     call: TokenCall<T>,
@@ -131,7 +139,7 @@ export class GithubAppRepoCaller {
     key: InstallationTokenKey,
     target: GithubAppCallTarget,
   ): Promise<Extract<InstallationTokenAnswer, { kind: 'token' }> | RepoFailure> {
-    const answer = await this.tokens.acquire(key, () => this.#mint(key.installationId));
+    const answer = await this.tokens.acquire(key, () => this.#mint(key.installationId, key.permissions));
 
     switch (answer.kind) {
       case 'token':
@@ -154,16 +162,17 @@ export class GithubAppRepoCaller {
   /**
    * Mints an installation token with a fresh app JWT.
    * @param {number} installationId - The installation id.
+   * @param {InstallationPermissionSet} permissions - The permissions the token is minted with.
    * @returns {Promise<InstallationTokenMint>} The mint's outcome.
    */
-  #mint(installationId: number): Promise<InstallationTokenMint> {
+  #mint(installationId: number, permissions: InstallationPermissionSet): Promise<InstallationTokenMint> {
     if (!this.config.enabled) {
       return Promise.resolve({ kind: 'unavailable', reason: 'unexpected' });
     }
 
     const jwt = mintAppJwt(this.config.privateKey, this.config.clientId, this.clock.now().getTime());
 
-    return this.client.mintInstallationToken(jwt, installationId);
+    return this.client.mintInstallationToken(jwt, installationId, permissions);
   }
 
   /**

@@ -15,6 +15,10 @@ listIntegrations(userId): Promise<IntegrationRef[]>         // every one, usable
 listRepositories(userId, integrationId, page, etag?): Promise<RepoPageResult>
 listHandleRepositories(userId, integrationId | null, handle, page, etag?): Promise<RepoPageResult>
 getRepository(userId, integrationId | null, githubId): Promise<RepoResult>
+
+// Issues (see issues.md): reads only; the write is on IntegrationsGithubIssueWriter
+getIssue(userId, integrationId, repo, number, etag?): Promise<IssueGetResult>
+probeIssues(userId, integrationId, repo): Promise<IssueProbeResult>
 ```
 
 - **Entry point:** other modules import from `integrations/integrations-github.public.ts` only. It
@@ -124,17 +128,21 @@ would double the calls of a sync (up to 10 pages per source, plus the handle and
 and spend the app JWT's rate limit. So repo calls use an **in-memory cache inside the
 Integrations module**:
 
-- **Key and lifetime:** keyed by `integrations.id` (recording its `installationId`); a token is
+- **Key and lifetime:** keyed by `integrations.id` **and the permission set** (recording its
+  `installationId`), so a token is never reused across permission sets; a token is
   reused until **`expires_at` − 5 min** (GitHub's tokens last 1 h). Held in a `Secret`, in
   process memory only — never in the database, a log or a response. Expired entries are dropped
-  on read; at most one entry per `github_app` integration, so no LRU.
+  on read; at most one entry per `github_app` integration and permission set, so no LRU.
 - **Time:** the "`expires_at` − 5 min" check reads the injected `Clock` (`core/clock.ts`, shared
   with Repositories, [sync](../../repositories/sync/execution.md#time-source)), never `Date.now()` directly.
 - **Single-flight:** concurrent calls for one integration share one in-flight mint (the sync runs
   3 sources in parallel, and the handle may use the same integration).
-- **Least privilege:** minted with `{"permissions": {"metadata": "read"}}`, enough to list repos
-  and read one by id. A later feature (e.g. the issue proxy) widens it when it needs to.
+- **Least privilege, per operation:** the repository listings mint
+  `{"permissions": {"metadata": "read"}}`; `getIssue` and `probeIssues` mint
+  `{issues: read, metadata: read}`; `updateIssue` mints `{issues: write}`
+  ([issues](issues.md#github-app-token-permissions)).
 - **Eviction:** on a `401` from a call made with it, on integration delete, on replace credential.
+  `evict(integrationId)` drops every permission set of that integration.
 - **A mint across a Replace is not cached:** each entry records the `secret_iv` of the credential
   it was minted with; a mint that finishes after the stored `secret_iv` changed (a Replace or a
   key rotation in between) is used for its own call at most and never cached, so a token for the

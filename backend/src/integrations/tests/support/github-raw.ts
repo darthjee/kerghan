@@ -1,4 +1,5 @@
 import type { GithubCase, ListingShape } from './github-builders.js';
+import type { GithubIssue, GithubIssueRepo } from '../../github-issue-results.js';
 import type { GithubRepo } from '../../github-repo-results.js';
 
 /**
@@ -31,6 +32,29 @@ export function rawRepo(repo: GithubRepo): Record<string, unknown> {
 }
 
 /**
+ * The raw GitHub JSON of an issue (or a pull request, which carries a `pull_request`
+ * member), with fields the client must discard.
+ * @param {GithubIssue} issue - The issue.
+ * @param {Pick<GithubIssueRepo, 'owner' | 'name'>} [repo] - The repository, for `repository_url`.
+ * @returns {Record<string, unknown>} GitHub's object.
+ */
+export function rawIssue(issue: GithubIssue, repo: Pick<GithubIssueRepo, 'owner' | 'name'> = { owner: 'octo-org', name: 'repo' }): Record<string, unknown> {
+  return {
+    id: issue.id,
+    node_id: 'I_kwDOAAAAAA',
+    number: issue.number,
+    title: issue.title,
+    body: issue.body,
+    state: issue.state,
+    updated_at: issue.updatedAt.toISOString(),
+    repository_url: `https://api.github.com/repos/${repo.owner}/${repo.name}`,
+    user: { login: 'discarded', id: 1 },
+    labels: [],
+    ...(issue.isPullRequest ? { pull_request: { url: 'https://api.github.com/discarded' } } : {}),
+  };
+}
+
+/**
  * The default `X-RateLimit-*` headers.
  * @param {Record<string, string>} [extra] - More headers.
  * @returns {Record<string, string>} The headers.
@@ -59,7 +83,7 @@ export function jsonResponse(status: number, body: unknown, headers: Record<stri
 }
 
 /**
- * Scripts the next `fetch` call of a guarded spec with a case's raw answer.
+ * Scripts the next `fetch` call (or calls, for a sequence case) of a guarded spec with a case's raw answer.
  * @param {jest.Mock} fetch - The guarded `fetch` mock.
  * @param {GithubCase} githubCase - The case.
  * @param {ListingShape} [shape] - The listing body shape.
@@ -74,6 +98,10 @@ export function replyOnce(fetch: jest.Mock, githubCase: GithubCase, shape: Listi
 
   if (typeof raw === 'function') {
     fetch.mockImplementationOnce(async () => raw(shape));
+  } else if ('sequence' in raw) {
+    for (const reply of raw.sequence) {
+      fetch.mockImplementationOnce(async () => reply());
+    }
   } else {
     fetch.mockImplementationOnce(async () => {
       throw raw.throws();

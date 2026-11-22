@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { apiHeaders, GITHUB_API_URL, GITHUB_API_VERSION, GITHUB_USER_AGENT, GithubClientError, send } from './github-client.service.js';
 import { hasNextLink, parseJsonObject, rateLimitFields } from './github-http.js';
+import type { InstallationPermissionSet } from './github-installation-permissions.js';
 import {
   classifyRange,
   classifyRepoResponse,
@@ -23,8 +24,6 @@ export const GITHUB_REPO_LISTING_MAX_BODY_BYTES = 2 * 1024 * 1024;
 export const GITHUB_REPO_MAX_BODY_BYTES = 64 * 1024;
 // Repos per listing page.
 export const GITHUB_REPOS_PER_PAGE = 100;
-// The only permission repo calls mint an installation token with.
-export const INSTALLATION_TOKEN_PERMISSIONS = { metadata: 'read' } as const;
 
 // The fixed listing paths and their fixed parameters (the page is appended by the client).
 const USER_REPOS_PATH = '/user/repos?affiliation=owner,collaborator,organization_member&visibility=all&sort=created&direction=asc';
@@ -129,20 +128,25 @@ export class GithubRepoClientService {
 
   /**
    * `POST /app/installations/{id}/access_tokens` with the app JWT, asking for
-   * `metadata: read` only. The token is parsed into a `Secret` with its
+   * the given permission set only. The token is parsed into a `Secret` with its
    * `expires_at`; a missing or malformed one is `unexpected`.
    * @param {Secret<string>} jwt - The app JWT.
    * @param {number} installationId - The installation id.
+   * @param {InstallationPermissionSet} permissions - The permissions the token is minted with.
    * @returns {Promise<InstallationTokenMint>} The minted token, or why none was.
    */
-  async mintInstallationToken(jwt: Secret<string>, installationId: number): Promise<InstallationTokenMint> {
+  async mintInstallationToken(
+    jwt: Secret<string>,
+    installationId: number,
+    permissions: InstallationPermissionSet,
+  ): Promise<InstallationTokenMint> {
     try {
       const { response, body } = await send(
         `${GITHUB_API_URL}/app/installations/${installationId}/access_tokens`,
         {
           method: 'POST',
           headers: { ...apiHeaders(`Bearer ${jwt.reveal()}`), 'Content-Type': 'application/json' },
-          body: JSON.stringify({ permissions: INSTALLATION_TOKEN_PERMISSIONS }),
+          body: JSON.stringify({ permissions }),
         },
         GITHUB_REPO_MAX_BODY_BYTES,
         { redirect: 'manual' },

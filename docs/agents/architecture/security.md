@@ -155,8 +155,10 @@ Guarantees of the exported `IntegrationsGithubService`
   only, and logs carry safe fields (integration id, operation, HTTP status, result kind).
 - **Owner-scoped:** every call loads the integration with `WHERE id = ? AND user_id = ?`; a
   missing or foreign one answers `integration_unusable` without a GitHub call.
-- **Fixed operations:** `GET`-only, with fixed endpoints and parameters; no generic
-  `request(path)`, so no caller chooses a path.
+- **Fixed operations:** `GET`-only, except the single
+  `IntegrationsGithubIssueWriter.updateIssue` (a `PATCH` of `title`, `body` and `state` only,
+  [boundary](../specs/issues/security.md#the-integrations-boundary)), with fixed endpoints and
+  parameters; no generic `request(path)`, so no caller chooses a path.
 
 The boundary is enforced by tooling in the Repositories module, the first consumer of
 `IntegrationsGithubService` ([module boundaries](../modules/repositories/security.md#module-boundaries)).
