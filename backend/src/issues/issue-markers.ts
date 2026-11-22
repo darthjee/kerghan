@@ -1,16 +1,92 @@
 import { Injectable } from '@nestjs/common';
-import type { EntityManager } from 'typeorm';
+import { InjectRepository } from '@nestjs/typeorm';
+import type { EntityManager, Repository } from 'typeorm';
+import { IssuePendingWrite } from './entities/issue-pending-write.entity.js';
 
 /** The link statuses that keep syncing local edits (`gone` is edited locally only). */
 const SYNCING_STATUSES = new Set(['linked', 'sync_failed']);
 
+/** A pending marker as the reconcile reads it: the revision it compares and clears, and its timestamps. */
+export interface MarkerState {
+  revision: number;
+  /** When the marker was first created (the boot order). */
+  markedAt: Date;
+  /** The last local edit of a synced field (`Tm` of the E7 conflict rule). */
+  updatedAt: Date;
+}
+
 /**
- * The marker and link queries of the single Edit and the Delete (`docs/agents/specs/issues/sync.md#marker-lifecycle`).
- * Both run inside the caller's transaction, after the caller locked the issue row, and take the
- * next locks of the order (issues, links, markers).
+ * The marker and link queries of the single Edit, the Delete and the sync's reconcile
+ * (`docs/agents/specs/issues/sync.md#marker-lifecycle`). The write methods run inside the caller's
+ * transaction, after the caller locked the issue row, and take the next locks of the order (issues,
+ * links, markers).
  */
 @Injectable()
 export class IssueMarkers {
+  /**
+   * @param {Repository<IssuePendingWrite>} markers - The default-connection marker repository.
+   */
+  constructor(@InjectRepository(IssuePendingWrite) private readonly markers: Repository<IssuePendingWrite>) {}
+
+  /**
+   * The link ids that have a marker, oldest `marked_at` first (ties by marker id): the boot sweep
+   * re-enqueues each one (T5). No filtering: the sync's guards stop a marker that cannot run.
+   * @returns {Promise<number[]>} The link ids; empty when no marker exists.
+   */
+  async listForBoot(): Promise<number[]> {
+    const rows = await this.markers.find({
+      select: { id: true, linkId: true },
+      order: { markedAt: 'ASC', id: 'ASC' },
+    });
+
+    return rows.map((row) => row.linkId);
+  }
+
+  /**
+   * Reads the link's marker, or `null` when there is none. With `lock` it takes `FOR UPDATE`, the
+   * fourth step of the lock order, so a concurrent edit's bump waits for the caller's commit.
+   * @param {EntityManager} manager - The transaction's manager.
+   * @param {number} linkId - The link's internal id.
+   * @param {{ lock: boolean }} options - `lock` takes `FOR UPDATE` on the marker row.
+   * @returns {Promise<MarkerState | null>} The revision and timestamps, or `null`.
+   */
+  async findRevision(manager: EntityManager, linkId: number, options: { lock: boolean }): Promise<MarkerState | null> {
+    const row = await manager.getRepository(IssuePendingWrite).findOne({
+      where: { linkId },
+      ...(options.lock ? { lock: { mode: 'pessimistic_write' as const } } : {}),
+    });
+
+    return row === null ? null : { revision: row.revision, markedAt: row.markedAt, updatedAt: row.updatedAt };
+  }
+
+  /**
+   * The compare-and-clear: deletes the link's marker only while its revision is still the one the
+   * reconcile read. No row deleted means an edit bumped the revision meanwhile (or the marker is
+   * already gone).
+   * @param {EntityManager} manager - The reconcile's commit transaction.
+   * @param {number} linkId - The link's internal id.
+   * @param {number} revision - The revision the reconcile read.
+   * @returns {Promise<boolean>} `true` when the marker was deleted.
+   */
+  async compareAndClear(manager: EntityManager, linkId: number, revision: number): Promise<boolean> {
+    const result = await manager.getRepository(IssuePendingWrite).delete({ linkId, revision });
+
+    return (result.affected ?? 0) > 0;
+  }
+
+  /**
+   * Deletes the link's marker whatever its revision: the link turned `gone`, so its unsent write
+   * is discarded in the same transaction (E1).
+   * @param {EntityManager} manager - The `gone` transaction.
+   * @param {number} linkId - The link's internal id.
+   * @returns {Promise<boolean>} `true` when a marker existed.
+   */
+  async deleteForLink(manager: EntityManager, linkId: number): Promise<boolean> {
+    const result = await manager.getRepository(IssuePendingWrite).delete({ linkId });
+
+    return (result.affected ?? 0) > 0;
+  }
+
   /**
    * Bumps the pending marker of the issue's link after a value-changing edit. An unlinked issue
    * and a `gone` link get no marker (local edits only); a `linked` or `sync_failed` link gets one:

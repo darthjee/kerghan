@@ -1,5 +1,5 @@
 import { githubIssue } from '../../integrations/tests/support/github-builders.js';
-import { differencesOf, githubValues } from '../github-values.js';
+import { differencesOf, githubValues, sameField, SYNC_FIELDS } from '../github-values.js';
 
 describe('githubValues', () => {
   it('keeps the title verbatim, without trimming', () => {
@@ -43,5 +43,26 @@ describe('differencesOf', () => {
     expect(differencesOf({ ...base, title: 'Title' }, { ...base, title: 'title' })).toEqual(['title']);
     expect(differencesOf({ ...base, title: 'T ' }, { ...base, title: 'T' })).toEqual(['title']);
     expect(differencesOf({ ...base, body: 'B' }, { ...base, body: 'b' })).toEqual(['body']);
+  });
+});
+
+describe('sameField', () => {
+  const base = { title: 'T', body: 'B', state: 'open' as const };
+
+  it('lists the three synced fields in order', () => {
+    expect(SYNC_FIELDS).toEqual(['title', 'body', 'state']);
+  });
+
+  it('compares one field at a time', () => {
+    expect(sameField('title', base, { ...base, body: 'other', state: 'closed' })).toBe(true);
+    expect(sameField('title', base, { ...base, title: 't' })).toBe(false);
+    expect(sameField('state', base, { ...base, state: 'closed' })).toBe(false);
+  });
+
+  it('treats NULL and an empty body as equal, and nothing else', () => {
+    expect(sameField('body', { ...base, body: null }, { ...base, body: '' })).toBe(true);
+    expect(sameField('body', { ...base, body: '' }, { ...base, body: null })).toBe(true);
+    expect(sameField('body', { ...base, body: ' ' }, { ...base, body: null })).toBe(false);
+    expect(sameField('body', { ...base, body: 'a\r\nb' }, { ...base, body: 'a\nb' })).toBe(false);
   });
 });
