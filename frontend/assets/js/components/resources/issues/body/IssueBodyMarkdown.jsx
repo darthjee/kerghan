@@ -103,8 +103,8 @@ const REMARK_PLUGINS = [remarkGfm, remarkHtmlAsText];
  * spec: raw HTML shown as text, links limited to `http`/`https`/`mailto`, images never loaded,
  * task checkboxes disabled, and `@mention`, `#123` and SHAs left as plain text.
  *
- * @description Loaded lazily by {@link IssueBody}. No `rehype-raw` and no
- * `dangerouslySetInnerHTML`.
+ * @description Loaded lazily by {@link IssueBody}. No raw-HTML plugin is used, and no markup
+ * string is ever built from content.
  * @param {{body: string}} props - The body's Markdown source.
  * @returns {React.ReactElement} The rendered body.
  */
