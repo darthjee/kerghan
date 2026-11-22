@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import type { InstallationTokenMint } from './github-repo-response.js';
+import { type InstallationPermissionSet, permissionKey } from './github-repo-client.service.js';
 import { IntegrationStoreService } from './integration-store.service.js';
 import type { Secret } from './secret.js';
 import { Clock } from '../core/clock.js';
@@ -15,6 +16,8 @@ export interface InstallationTokenKey {
   installationId: number;
   /** The `secret_iv` of the credential the mint uses. Never leaves the module. */
   ivUsed: Buffer;
+  /** The permission set the token is minted with; a token is never reused across sets. */
+  permissions: InstallationPermissionSet;
 }
 
 /**
@@ -28,6 +31,7 @@ export type InstallationTokenAnswer =
 interface CachedToken {
   installationId: number;
   ivUsed: Buffer;
+  permissionKey: string;
   token: Secret<string>;
   expiresAt: Date;
 }
@@ -35,6 +39,7 @@ interface CachedToken {
 interface InFlightMint {
   installationId: number;
   ivUsed: Buffer;
+  permissionKey: string;
   promise: Promise<InstallationTokenMint>;
 }
 
@@ -44,17 +49,17 @@ interface InFlightMint {
  * Internal to the Integrations module and never exported; it has no getter
  * for a token outside `acquire`, and logs nothing.
  *
- * - Keyed by `integrations.id`; an entry is reused until `expires_at` − 5 min
+ * - Keyed by `integrations.id` and permission set; an entry is reused until `expires_at` − 5 min
  *   (read from the injected `Clock`), and dropped on read once past it.
- * - Single-flight: concurrent callers for one integration share one mint.
+ * - Single-flight: concurrent callers for one integration and permission set share one mint.
  * - Replace guard: a finished mint is cached only when the integration still
  *   holds the `secret_iv` it was minted with, and no eviction happened while
  *   it was in flight; otherwise it serves its own callers only.
  */
 @Injectable()
 export class GithubInstallationTokenCache {
-  readonly #entries = new Map<number, CachedToken>();
-  readonly #inFlight = new Map<number, InFlightMint>();
+  readonly #entries = new Map<string, CachedToken>();
+  readonly #inFlight = new Map<string, InFlightMint>();
   readonly #generations = new Map<number, number>();
 
   /**
@@ -86,14 +91,14 @@ export class GithubInstallationTokenCache {
   }
 
   /**
-   * Drops the integration's cached token, and keeps any mint in flight from
-   * being cached (on a `401`, on delete, on replace credential).
+   * Drops the integration's cached tokens (every permission set), and keeps
+   * any mint in flight from being cached (on a `401`, on delete, on replace credential).
    * @param {number} integrationId - The internal `integrations.id`.
    * @returns {void}
    */
   evict(integrationId: number): void {
-    this.#entries.delete(integrationId);
-    this.#inFlight.delete(integrationId);
+    deleteIntegration(this.#entries, integrationId);
+    deleteIntegration(this.#inFlight, integrationId);
     this.#generations.set(integrationId, this.#generation(integrationId) + 1);
   }
 
@@ -103,7 +108,8 @@ export class GithubInstallationTokenCache {
    * @returns {Secret<string> | null} The token, or `null` on a miss.
    */
   #cached(key: InstallationTokenKey): Secret<string> | null {
-    const entry = this.#entries.get(key.integrationId);
+    const entryKey = entryKeyOf(key);
+    const entry = this.#entries.get(entryKey);
 
     if (entry === undefined) {
       return null;
@@ -113,7 +119,7 @@ export class GithubInstallationTokenCache {
       && this.clock.now().getTime() < entry.expiresAt.getTime() - INSTALLATION_TOKEN_EXPIRY_MARGIN_MS;
 
     if (!usable) {
-      this.#entries.delete(key.integrationId);
+      this.#entries.delete(entryKey);
       return null;
     }
 
@@ -127,7 +133,8 @@ export class GithubInstallationTokenCache {
    * @returns {Promise<InstallationTokenMint>} The mint's outcome.
    */
   #joinOrMint(key: InstallationTokenKey, mint: () => Promise<InstallationTokenMint>): Promise<InstallationTokenMint> {
-    const inFlight = this.#inFlight.get(key.integrationId);
+    const entryKey = entryKeyOf(key);
+    const inFlight = this.#inFlight.get(entryKey);
 
     if (inFlight !== undefined && matchesKey(inFlight, key)) {
       return inFlight.promise;
@@ -141,12 +148,17 @@ export class GithubInstallationTokenCache {
 
       return minted;
     }).finally(() => {
-      if (this.#inFlight.get(key.integrationId)?.promise === promise) {
-        this.#inFlight.delete(key.integrationId);
+      if (this.#inFlight.get(entryKey)?.promise === promise) {
+        this.#inFlight.delete(entryKey);
       }
     });
 
-    this.#inFlight.set(key.integrationId, { installationId: key.installationId, ivUsed: key.ivUsed, promise });
+    this.#inFlight.set(entryKey, {
+      installationId: key.installationId,
+      ivUsed: key.ivUsed,
+      permissionKey: permissionKey(key.permissions),
+      promise,
+    });
 
     return promise;
   }
@@ -170,9 +182,10 @@ export class GithubInstallationTokenCache {
       return;
     }
 
-    this.#entries.set(key.integrationId, {
+    this.#entries.set(entryKeyOf(key), {
       installationId: key.installationId,
       ivUsed: key.ivUsed,
+      permissionKey: permissionKey(key.permissions),
       token: minted.token,
       expiresAt: minted.expiresAt,
     });
@@ -188,11 +201,36 @@ export class GithubInstallationTokenCache {
 }
 
 /**
- * Whether an entry was minted for the same installation and credential.
- * @param {{ installationId: number, ivUsed: Buffer }} entry - The cached or in-flight entry.
+ * The map key of an entry: the integration and its permission set.
+ * @param {InstallationTokenKey} key - The lookup.
+ * @returns {string} `{integrationId}|{permissionKey}`.
+ */
+function entryKeyOf(key: InstallationTokenKey): string {
+  return `${key.integrationId}|${permissionKey(key.permissions)}`;
+}
+
+/**
+ * Drops every entry of an integration, across all its permission sets.
+ * @param {Map<string, unknown>} map - An entry or in-flight map.
+ * @param {number} integrationId - The internal `integrations.id`.
+ * @returns {void}
+ */
+function deleteIntegration(map: Map<string, unknown>, integrationId: number): void {
+  for (const entryKey of [...map.keys()]) {
+    if (entryKey.startsWith(`${integrationId}|`)) {
+      map.delete(entryKey);
+    }
+  }
+}
+
+/**
+ * Whether an entry was minted for the same installation, permission set and credential.
+ * @param {{ installationId: number, ivUsed: Buffer, permissionKey: string }} entry - The cached or in-flight entry.
  * @param {InstallationTokenKey} key - The lookup.
  * @returns {boolean} `true` when it matches.
  */
-function matchesKey(entry: { installationId: number; ivUsed: Buffer }, key: InstallationTokenKey): boolean {
-  return entry.installationId === key.installationId && entry.ivUsed.equals(key.ivUsed);
+function matchesKey(entry: { installationId: number; ivUsed: Buffer; permissionKey: string }, key: InstallationTokenKey): boolean {
+  return entry.installationId === key.installationId
+    && entry.permissionKey === permissionKey(key.permissions)
+    && entry.ivUsed.equals(key.ivUsed);
 }

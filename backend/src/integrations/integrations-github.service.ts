@@ -3,7 +3,7 @@ import { Clock } from '../core/clock.js';
 import { LoggerService } from '../core/logger.service.js';
 import type { Integration } from './entities/integration.entity.js';
 import { GithubAppRepoCaller } from './github-app-repo-caller.js';
-import { GithubRepoClientService, type RepoCall } from './github-repo-client.service.js';
+import { GithubRepoClientService, type RepoCall, REPO_LISTING_PERMISSIONS } from './github-repo-client.service.js';
 import type {
   IntegrationRef,
   IntegrationUnusableReason,
@@ -220,7 +220,7 @@ export class IntegrationsGithubService {
     const type = row.type as IntegrationType;
 
     if (type === 'github_app') {
-      const target = { row, installationId: installationIdOf(secret), ivUsed, operation };
+      const target = { row, installationId: installationIdOf(secret), ivUsed, operation, permissions: REPO_LISTING_PERMISSIONS };
       const answer = await this.githubApp.call(target, (token) => call(token, type));
 
       this.#log(row.id, operation, answer.status, answer.result);
