@@ -42,12 +42,9 @@ describe('IssuePageHelper', () => {
     expect(body.props.body).toBe('# Hi');
   });
 
-  it('renders nothing in the link-panel slot', () => {
-    const plain = outputOf(buildIssue());
-    const linked = outputOf(buildIssue({ link: buildLink() }));
-
-    expect(plain.contains('Not linked to GitHub')).toBe(false);
-    expect(linked.contains('Synced')).toBe(false);
+  it('shows the link panel between the header and the body', () => {
+    expect(outputOf(buildIssue()).containsInOrder('Fix the login', 'Not linked to GitHub', 'Steps to reproduce')).toBe(true);
+    expect(outputOf(buildIssue({ link: buildLink() })).containsInOrder('Synced', 'Steps to reproduce')).toBe(true);
   });
 
   it('delegates the load states to IssueLoadViewHelper', () => {

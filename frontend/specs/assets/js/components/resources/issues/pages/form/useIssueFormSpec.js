@@ -89,4 +89,18 @@ describe('useIssueForm', () => {
 
     expect(storage.setItem).not.toHaveBeenCalled();
   });
+
+  it('U10: starts without the changed banner, on the edit form and the creation form', () => {
+    render(buildIssue());
+    expect(form.state.changed).toBe(false);
+
+    render(null);
+    expect(form.state.changed).toBe(false);
+  });
+
+  it('U10: offers discard-and-reload through its handlers', () => {
+    render(buildIssue());
+
+    expect(form.handlers.onDiscardAndReload).toEqual(jasmine.any(Function));
+  });
 });

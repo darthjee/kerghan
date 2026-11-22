@@ -29,14 +29,14 @@ function renderLoadError(error, handlers) {
  * @returns {React.ReactElement} The loaded content.
  */
 function renderContent(state, handlers) {
-  const { projectId, listing, query } = state;
+  const { projectId, listing, query, canImport } = state;
 
   return (
     <>
       {IssuesToolbarHelper.render(projectId, query, handlers)}
       {listing.issues.length > 0
         ? IssuesTableHelper.render(projectId, listing.issues)
-        : IssuesEmptyStateHelper.render(projectId, query)}
+        : IssuesEmptyStateHelper.render(projectId, query, { canImport, onImport: handlers.onImport })}
       {IssuesPaginationHelper.render(listing.pagination, handlers)}
     </>
   );
@@ -68,8 +68,9 @@ const IssuesHelper = {
   /**
    * Render the issue list.
    *
-   * @param {{projectId: string, listing: object, query: object, loadState: object}} state -
-   *   List state.
+   * @param {{projectId: string, listing: object, query: object, loadState: object,
+   *   canImport: (boolean|undefined)}} state - List state (`canImport`: the project has a
+   *   repository).
    * @param {object} handlers - Event handlers built by `IssuesHandlers`.
    * @returns {React.ReactElement} The rendered list.
    */

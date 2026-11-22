@@ -6,10 +6,13 @@ import IssueFieldsHelper from '../../../../../../assets/js/components/resources/
 import IssueHeaderHelper from '../../../../../../assets/js/components/resources/issues/pages/show/IssueHeaderHelper.jsx';
 import IssuesTableHelper from '../../../../../../assets/js/components/resources/issues/list/helpers/IssuesTableHelper.jsx';
 import IssueFormController from '../../../../../../assets/js/components/resources/issues/pages/form/IssueFormController.js';
+import LinkPanelHelper from '../../../../../../assets/js/components/resources/issues/link/LinkPanelHelper.jsx';
+import LinkStatePresenter from '../../../../../../assets/js/components/resources/issues/link/linkStatePresenter.js';
+import SavedIssueSignal from '../../../../../../assets/js/components/resources/issues/sync/savedIssueSignal.js';
 import IssueActionsController from '../../../../../../assets/js/components/resources/issues/pages/show/IssueActionsController.js';
 import { installFakeWindow, uninstallFakeWindow } from '../../../../../support/fakeWindow.js';
 import {
-  buildIssue, buildProject, ISSUE_ID, PROJECT_ID,
+  buildIssue, buildLink, buildProject, buildProjectRepository, ISSUE_ID, PROJECT_ID,
 } from '../../../../../support/issuesBuilders.js';
 import { renderedOutput } from '../../../../../support/renderedOutput.js';
 
@@ -35,12 +38,19 @@ function filesUnder(directory) {
 }
 
 const issueFiles = filesUnder(ISSUE_DIRECTORY);
+/** The only files that word the credential-unusable error (a code and a sentence; no data). */
+const CREDENTIAL_WORDING_FILES = ['failureReasons.js'];
 const checkedFiles = [...issueFiles, ...COUNTDOWN_FILES];
 const readAll = (files) => files.map((file) => [path.relative(SOURCE_ROOT, file), readFileSync(file, 'utf8')]);
 const offendersOf = (files, pattern) => readAll(files).filter(([, source]) => pattern.test(source)).map(([file]) => file);
 
 describe('Issues security (static)', () => {
-  it('finds the source files it checks', () => {
+  it('finds the source files it checks, the link and sync folders included (#562)', () => {
+    const relative = issueFiles.map((file) => path.relative(ISSUE_DIRECTORY, file));
+
+    expect(relative.some((file) => file.startsWith('link/'))).toBe(true);
+    expect(relative.some((file) => file.startsWith('link/modals/'))).toBe(true);
+    expect(relative.some((file) => file.startsWith('sync/'))).toBe(true);
     expect(issueFiles.length).toBeGreaterThan(20);
     expect(checkedFiles.length).toBe(issueFiles.length + 2);
   });
@@ -89,7 +99,43 @@ describe('Issues security (static)', () => {
     });
   });
 
+  describe('S1: link panel and sync messages are text, never markup (#562)', () => {
+    it('renders a hostile link url and message text as text only', () => {
+      const link = buildLink({ url: 'javascript:alert(1)', state: 'sync_failed', states: ['sync_failed'], reason: '<b>x</b>' });
+      const view = LinkStatePresenter.present(link, buildProjectRepository(), Date.now());
+      const output = renderedOutput(LinkPanelHelper.render({
+        view,
+        activity: null,
+        notice: null,
+        error: { message: '<b>x</b>' },
+        confirming: false,
+        attaching: false,
+        countdown: { active: false, secondsLeft: 0, label: null },
+      }, {}));
+
+      expect(output.contains('<b>')).toBe(false);
+      expect(output.contains('javascript:')).toBe(false);
+    });
+  });
+
   describe('S4: no draft is saved to localStorage or sessionStorage', () => {
+    it('S4: the saved-issue signal uses no storage API, in the file or at runtime', () => {
+      const signal = path.join(ISSUE_DIRECTORY, 'sync/savedIssueSignal.js');
+
+      expect(offendersOf([signal], /localStorage|sessionStorage|indexedDB|document\.cookie/)).toEqual([]);
+
+      const fakeWindow = installFakeWindow(new EventTarget());
+
+      fakeWindow.localStorage = jasmine.createSpyObj('localStorage', ['setItem']);
+      fakeWindow.sessionStorage = jasmine.createSpyObj('sessionStorage', ['setItem']);
+      SavedIssueSignal.record(ISSUE_ID, buildIssue());
+      SavedIssueSignal.consume(ISSUE_ID);
+
+      expect(fakeWindow.localStorage.setItem).not.toHaveBeenCalled();
+      expect(fakeWindow.sessionStorage.setItem).not.toHaveBeenCalled();
+      uninstallFakeWindow();
+    });
+
     it('never uses either storage in the issue components or the countdown', () => {
       expect(offendersOf(checkedFiles, /\b(localStorage|sessionStorage)\s*[.[]/)).toEqual([]);
     });
@@ -133,7 +179,7 @@ describe('Issues security (static)', () => {
 
   describe('S5: no integration or credential data on the issue screens', () => {
     it('names no integration, credential or secret in the issue components', () => {
-      expect(offendersOf(issueFiles, /integration|credential|secret|token/i)).toEqual([]);
+      expect(offendersOf(issueFiles.filter((file) => !CREDENTIAL_WORDING_FILES.includes(path.basename(file))), /integration|credential|secret|token/i)).toEqual([]);
     });
   });
 });

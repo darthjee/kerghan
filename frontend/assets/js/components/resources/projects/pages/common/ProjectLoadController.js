@@ -26,6 +26,8 @@ export default class ProjectLoadController {
 
   #disposed = false;
 
+  #loaded = false;
+
   /**
    * Create the controller.
    *
@@ -48,20 +50,51 @@ export default class ProjectLoadController {
    */
   async load(projectId) {
     this.#projectId = projectId;
+    return this.#run(false);
+  }
+
+  /**
+   * Re-read the project quietly: the view stays mounted, with no loading state.
+   *
+   * @description Used on window focus and after a refusal that means the project changed. A
+   * not-found answer shows "Project not found" (U1); any other failure is ignored. Does nothing
+   * until a load succeeded.
+   * @returns {Promise<void>} Resolves once the read finishes.
+   */
+  async reread() {
+    if (this.#loaded) {
+      await this.#run(true);
+    }
+  }
+
+  async #run(quiet) {
     this.#requestId += 1;
     const requestId = this.#requestId;
 
     try {
-      const project = await this.#client.show(projectId);
+      const project = await this.#client.show(this.#projectId);
 
       if (project && this.#isCurrent(requestId)) {
         this.#setProject(project);
-        this.#setLoadState({ loading: false, error: null, notFound: false });
+        this.#loaded = true;
+        this.#succeed(quiet);
       }
     } catch (error) {
-      if (this.#isCurrent(requestId)) {
-        this.#setLoadState(ProjectLoadController.#failure(error));
-      }
+      this.#fail(requestId, error, quiet);
+    }
+  }
+
+  #succeed(quiet) {
+    if (!quiet) {
+      this.#setLoadState({ loading: false, error: null, notFound: false });
+    }
+  }
+
+  #fail(requestId, error, quiet) {
+    const ignored = quiet && !NOT_FOUND_STATUSES.has(error?.status);
+
+    if (this.#isCurrent(requestId) && !ignored) {
+      this.#setLoadState(ProjectLoadController.#failure(error));
     }
   }
 

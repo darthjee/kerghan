@@ -88,6 +88,6 @@ They are also set as GitHub "blocked by" relationships.
 | #559 | Security verification (`backend`) | `security.md`, `testing.md`, `api.md`, `edge-cases.md` | #558 |
 | #560 | Frontend 1 (`frontend`) | `ui/screens-and-flows.md`, `ui/decisions.md`, `ui/states.md`, `testing.md#frontend-tests` | #555 |
 | #561 | Frontend 2 (`frontend`) | `ui/screens-and-flows.md`, `ui/decisions.md`, `security.md` | #556, #560 |
-| #562 | Frontend 3 (`frontend`) | `ui/linking-and-sync.md`, `ui/states.md` | #557, #558, #561 |
+| #562 | Frontend 3 (`frontend`) | `ui/linking-and-sync.md`, `ui/states.md`, `ui.md#required-tests`, `ui/screens-and-flows.md#lists`, `ui/decisions.md`, `api/github-link.md`, `edge-cases.md`, `security.md`, `testing.md` | #557, #558, #561 |
 | #563 | Open-issue counts and bulk close/reopen (`backend`, `frontend`) | `api.md` as amended by #507, `ui/states.md` | #507, #556, #561 |
 | #564 | Fold the specs into the permanent docs (`architect`), last | `model.md`, `specs.md` | all of the above and #507 |

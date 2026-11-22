@@ -1,5 +1,6 @@
 import React from 'react';
 import IssuesEmptyStateHelper from '../../../../../../../../assets/js/components/resources/issues/list/helpers/IssuesEmptyStateHelper.jsx';
+import { findButton } from '../../../../../../../support/elementTree.js';
 import { PROJECT_ID } from '../../../../../../../support/issuesBuilders.js';
 import { renderedOutput } from '../../../../../../../support/renderedOutput.js';
 
@@ -42,5 +43,29 @@ describe('IssuesEmptyStateHelper', () => {
 
     expect(output.contains('<script>')).toBe(false);
     expect(output.contains('&lt;script&gt;')).toBe(true);
+  });
+
+  describe('Import from GitHub', () => {
+    const treeOf = (state, importEntry) => IssuesEmptyStateHelper.render(PROJECT_ID, { state, search: '', page: 1 }, importEntry);
+
+    ['open', 'all'].forEach((state) => {
+      it(`is offered on the ${state} row of a project with a repository, opening the import modal`, () => {
+        const onImport = jasmine.createSpy('onImport');
+        const button = findButton(React.createElement('div', null, treeOf(state, { canImport: true, onImport })), 'Import from GitHub');
+
+        button.props.onClick();
+
+        expect(onImport).toHaveBeenCalledTimes(1);
+      });
+
+      it(`is not offered on the ${state} row of a project without a repository`, () => {
+        expect(findButton(React.createElement('div', null, treeOf(state, { canImport: false })), 'Import from GitHub')).toBeUndefined();
+        expect(findButton(React.createElement('div', null, treeOf(state)), 'Import from GitHub')).toBeUndefined();
+      });
+    });
+
+    it('is not offered on the closed row', () => {
+      expect(renderedOutput(React.createElement('div', null, treeOf('closed', { canImport: true }))).contains('Import from GitHub')).toBe(false);
+    });
   });
 });

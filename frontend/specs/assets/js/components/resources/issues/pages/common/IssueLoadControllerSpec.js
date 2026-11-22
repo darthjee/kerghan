@@ -131,6 +131,60 @@ describe('IssueLoadController', () => {
     expect(state.loadState).toBeNull();
   });
 
+  describe('#reread (focus)', () => {
+    it('does nothing before a load succeeded', async () => {
+      await controller.reread();
+
+      expect(projects.show).not.toHaveBeenCalled();
+    });
+
+    it('reads again with no loading state, replacing the project and the issue', async () => {
+      await controller.load(PROJECT_ID, ISSUE_ID);
+      state.loadState = 'untouched';
+      issues.show.and.resolveTo(buildIssue({ title: 'fresher' }));
+
+      await controller.reread();
+
+      expect(issues.show).toHaveBeenCalledTimes(2);
+      expect(state.issue.title).toBe('fresher');
+      expect(state.loadState).toBe('untouched');
+    });
+
+    [404, 400].forEach((status) => {
+      it(`U1: shows "Issue not found" for a ${status}`, async () => {
+        await controller.load(PROJECT_ID, ISSUE_ID);
+        issues.show.and.rejectWith(new ApiError(status, 'Issue not found', 'NOT_FOUND'));
+
+        await controller.reread();
+
+        expect(state.loadState).toEqual({ loading: false, error: null, notFound: 'issue' });
+      });
+    });
+
+    it('ignores any other failure, keeping what is shown', async () => {
+      await controller.load(PROJECT_ID, ISSUE_ID);
+      state.loadState = 'untouched';
+      issues.show.and.rejectWith(new ApiError(500, 'Boom', 'INTERNAL'));
+
+      await controller.reread();
+
+      expect(state.loadState).toBe('untouched');
+      expect(state.issue.id).toBe(ISSUE_ID);
+    });
+
+    it('ignores an answer after dispose', async () => {
+      await controller.load(PROJECT_ID, ISSUE_ID);
+      issues.show.and.resolveTo(buildIssue({ title: 'late' }));
+
+      const rereading = controller.reread();
+
+      controller.dispose();
+      await rereading;
+
+      expect(state.issue.title).not.toBe('late');
+    });
+  });
+
   describe('S3: a crafted issue id in the hash', () => {
     let originalFetch;
 

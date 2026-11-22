@@ -43,6 +43,14 @@ describe('IssuePage', () => {
     expect(IssueLoadController.prototype.retry).toHaveBeenCalled();
   });
 
+  it('hands over the quiet focus re-read of the load controller', () => {
+    spyOn(IssueLoadController.prototype, 'reread').and.resolveTo();
+    const { state } = render(`#/projects/${PROJECT_ID}/issues/${ISSUE_ID}`);
+
+    expect(state.loadState.loading).toBeTrue();
+    expect(IssueLoadController.prototype.reread).not.toHaveBeenCalled();
+  });
+
   it('hands over the issue setter and the not-found callback', () => {
     const { handlers } = render(`#/projects/${PROJECT_ID}/issues/${ISSUE_ID}`);
 

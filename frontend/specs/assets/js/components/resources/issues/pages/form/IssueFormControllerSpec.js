@@ -2,6 +2,7 @@ import ApiError from '../../../../../../../../assets/js/client/ApiError.js';
 import DirtyFormGuardController from '../../../../../../../../assets/js/components/common/forms/controllers/DirtyFormGuardController.js';
 import IssueFormController from '../../../../../../../../assets/js/components/resources/issues/pages/form/IssueFormController.js';
 import { MAX_ISSUE_BODY_LENGTH, MAX_ISSUE_TITLE_LENGTH } from '../../../../../../../../assets/js/utils/validation/issueValidators.js';
+import SavedIssueSignal from '../../../../../../../../assets/js/components/resources/issues/sync/savedIssueSignal.js';
 import { buildIssue, ISSUE_ID, PROJECT_ID } from '../../../../../../../support/issuesBuilders.js';
 
 describe('IssueFormController', () => {
@@ -16,7 +17,7 @@ describe('IssueFormController', () => {
 
   beforeEach(() => {
     state = { fieldErrors: {}, formError: undefined, submitting: [] };
-    client = jasmine.createSpyObj('client', ['create', 'edit']);
+    client = jasmine.createSpyObj('client', ['create', 'edit', 'show']);
     client.create.and.resolveTo(buildIssue());
     client.edit.and.resolveTo(buildIssue());
     forceLeave = jasmine.createSpy('forceLeave');
@@ -27,7 +28,12 @@ describe('IssueFormController', () => {
       },
       setFormError: (value) => { state.formError = value; },
       setSubmitting: (value) => state.submitting.push(value),
+      setChangedIssue: (value) => { state.changedIssue = value; },
     }, onNotFound, client);
+  });
+
+  afterEach(() => {
+    SavedIssueSignal.consume(ISSUE_ID);
   });
 
   describe('#create', () => {
@@ -119,6 +125,28 @@ describe('IssueFormController', () => {
       expect(forceLeave).toHaveBeenCalledOnceWith(`#/projects/${PROJECT_ID}/issues/${ISSUE_ID}`);
     });
 
+    it('S4: records the saved issue in the one-shot signal (memory only) before leaving', async () => {
+      const saved = buildIssue({ title: 'saved' });
+
+      client.edit.and.resolveTo(saved);
+      forceLeave.and.callFake(() => {
+        expect(SavedIssueSignal.consume(ISSUE_ID)).toBe(saved);
+        SavedIssueSignal.record(ISSUE_ID, saved);
+      });
+
+      await controller.save(PROJECT_ID, ISSUE_ID, fields(), forceLeave);
+
+      expect(SavedIssueSignal.consume(ISSUE_ID)).toBe(saved);
+    });
+
+    it('does not record the signal when the save is refused', async () => {
+      client.edit.and.rejectWith(new ApiError(500, 'Boom', 'INTERNAL'));
+
+      await controller.save(PROJECT_ID, ISSUE_ID, fields(), forceLeave);
+
+      expect(SavedIssueSignal.consume(ISSUE_ID)).toBeUndefined();
+    });
+
     it('validates before any call', async () => {
       await controller.save(PROJECT_ID, ISSUE_ID, fields({ title: '' }), forceLeave);
 
@@ -141,6 +169,86 @@ describe('IssueFormController', () => {
       await controller.save(PROJECT_ID, ISSUE_ID, fields(), forceLeave);
 
       expect(onNotFound).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('#create and the signal', () => {
+    it('does not record the saved-issue signal (a new issue is unlinked)', async () => {
+      await controller.create(PROJECT_ID, fields(), forceLeave);
+
+      expect(SavedIssueSignal.consume(ISSUE_ID)).toBeUndefined();
+    });
+  });
+
+  describe('U10: #checkChanged (the focus re-read)', () => {
+    const loadedAt = '2026-11-07T11:00:00.000Z';
+
+    it('U10: hands on an issue whose updatedAt is later, touching no field', async () => {
+      const fresh = buildIssue({ updatedAt: '2026-11-07T12:00:00.000Z' });
+
+      client.show.and.resolveTo(fresh);
+
+      await controller.checkChanged(PROJECT_ID, ISSUE_ID, loadedAt);
+
+      expect(client.show).toHaveBeenCalledOnceWith(PROJECT_ID, ISSUE_ID);
+      expect(state.changedIssue).toBe(fresh);
+      expect(state.fieldErrors).toEqual({});
+      expect(state.formError).toBeUndefined();
+    });
+
+    it('U10: stays quiet when updatedAt is unchanged', async () => {
+      client.show.and.resolveTo(buildIssue({ updatedAt: loadedAt }));
+
+      await controller.checkChanged(PROJECT_ID, ISSUE_ID, loadedAt);
+
+      expect(state.changedIssue).toBeUndefined();
+    });
+
+    it('U10: stays quiet when updatedAt is older', async () => {
+      client.show.and.resolveTo(buildIssue({ updatedAt: '2026-11-07T09:00:00.000Z' }));
+
+      await controller.checkChanged(PROJECT_ID, ISSUE_ID, loadedAt);
+
+      expect(state.changedIssue).toBeUndefined();
+    });
+
+    it('U1, U10: reports a 404 as a vanished issue', async () => {
+      client.show.and.rejectWith(new ApiError(404, 'Not found', 'NOT_FOUND'));
+
+      await controller.checkChanged(PROJECT_ID, ISSUE_ID, loadedAt);
+
+      expect(onNotFound).toHaveBeenCalledTimes(1);
+    });
+
+    it('U10: ignores any other error', async () => {
+      client.show.and.rejectWith(new ApiError(500, 'Boom', 'INTERNAL'));
+
+      await controller.checkChanged(PROJECT_ID, ISSUE_ID, loadedAt);
+
+      expect(onNotFound).not.toHaveBeenCalled();
+      expect(state.changedIssue).toBeUndefined();
+    });
+
+    it('U10: ignores an empty answer (the session expired)', async () => {
+      client.show.and.resolveTo(undefined);
+
+      await controller.checkChanged(PROJECT_ID, ISSUE_ID, loadedAt);
+
+      expect(state.changedIssue).toBeUndefined();
+    });
+  });
+
+  describe('U10: .reloaded (discard my changes and reload)', () => {
+    it('U10: takes the fresh fields and the new updatedAt, so the form is clean', () => {
+      const fresh = buildIssue({
+        title: 'Fresh', body: null, state: 'closed', updatedAt: '2026-11-07T12:00:00.000Z',
+      });
+      const reloaded = IssueFormController.reloaded(fresh);
+
+      expect(reloaded).toEqual({
+        fields: { title: 'Fresh', body: '', state: 'closed' }, updatedAt: '2026-11-07T12:00:00.000Z',
+      });
+      expect(IssueFormController.isDirty(reloaded.fields, reloaded.fields)).toBe(false);
     });
   });
 

@@ -1,7 +1,8 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import useDirtyFormGuard from '../../../../common/forms/hooks/useDirtyFormGuard.js';
 import useRateLimitCountdown from '../../../../common/forms/hooks/useRateLimitCountdown.js';
 import ProjectPaths from '../../../projects/paths.js';
+import useFocusReread from '../../sync/useFocusReread.js';
 import IssueFormController from './IssueFormController.js';
 
 const NEW_FIELDS = { title: '', body: '', state: 'open' };
@@ -25,6 +26,9 @@ function startFields(issue) {
  *
  * @description Holds the typed values, the selected Body tab, the errors, the in-flight flag,
  * the rate-limit countdown and the dirty-form guard (U11). Nothing is written to storage (S4).
+ * On the edit form, window focus (throttled to 30 s) re-reads the issue without touching the
+ * fields; a later `updatedAt` shows the U10 banner, whose action resets the form to the fresh
+ * issue.
  * @param {{project: object, issue: (object|null), onNotFound: Function}} options - The project,
  *   the issue being edited (`null` to create one) and the callback for a project or issue that
  *   turned out to be gone.
@@ -32,22 +36,46 @@ function startFields(issue) {
  *   handlers, and the dirty-form guard.
  */
 export default function useIssueForm({ project, issue, onNotFound }) {
-  const initial = useMemo(() => startFields(issue), []); // eslint-disable-line react-hooks/exhaustive-deps
+  const [initial, setInitial] = useState(() => startFields(issue));
   const [fields, setFields] = useState(initial);
+  const [loaded, setLoaded] = useState(issue);
+  const [changedIssue, setChangedIssue] = useState(null);
+  const loadedAt = useRef(issue?.updatedAt);
+  const issueId = issue?.id;
   const [tab, setTab] = useState('write');
   const [fieldErrors, setFieldErrors] = useState({});
   const [formError, setFormError] = useState(null);
   const [submitting, setSubmitting] = useState(false);
   const countdown = useRateLimitCountdown(formError?.retryAfterSeconds);
   const controller = useMemo(
-    () => new IssueFormController({ setFieldErrors, setFormError, setSubmitting }, onNotFound),
+    () => new IssueFormController({
+      setFieldErrors, setFormError, setSubmitting, setChangedIssue,
+    }, onNotFound),
     [onNotFound],
   );
   const guard = useDirtyFormGuard(IssueFormController.isDirty(fields, initial));
+  const onFocusReread = useCallback(() => {
+    if (issueId !== undefined) {
+      controller.checkChanged(project.id, issueId, loadedAt.current);
+    }
+  }, [controller, project.id, issueId]);
+  const discardAndReload = () => {
+    const reloaded = IssueFormController.reloaded(changedIssue);
+
+    setInitial(reloaded.fields);
+    setFields(reloaded.fields);
+    setLoaded(changedIssue);
+    setChangedIssue(null);
+    setFieldErrors({});
+    setFormError(null);
+    loadedAt.current = reloaded.updatedAt;
+  };
   const change = (field, value) => {
     setFields((current) => ({ ...current, [field]: value }));
     controller.fieldChanged(field);
   };
+
+  useFocusReread(onFocusReread);
 
   return {
     guard,
@@ -55,7 +83,8 @@ export default function useIssueForm({ project, issue, onNotFound }) {
       mode: issue === null ? 'new' : 'edit',
       ...fields,
       tab,
-      link: issue?.link ?? null,
+      link: loaded?.link ?? null,
+      changed: changedIssue !== null,
       fieldErrors,
       formError,
       submitting,
@@ -66,6 +95,7 @@ export default function useIssueForm({ project, issue, onNotFound }) {
       onBodyChange: (event) => change('body', event.target.value),
       onStateChange: (event) => change('state', event.target.value),
       onTabChange: setTab,
+      onDiscardAndReload: discardAndReload,
       onSubmit: (event) => {
         event.preventDefault();
         return issue === null

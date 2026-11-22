@@ -275,6 +275,43 @@ Under `components/resources/issues/`, built on `IssuesClient` and the pieces abo
   `localStorage`/`sessionStorage` use and integration or credential wording; a `<b>x</b>` title
   renders as escaped text in the list, the page and the forms.
 
+### Linking and sync (#562)
+
+Under `components/resources/issues/link/` and `issues/sync/`, filling the slot #561 left empty:
+
+- **Link panel** (`link/LinkPanel.jsx`, `LinkPanelController.js`, `LinkPanelHelper.jsx`):
+  `linkStatePresenter.js` turns the issue's `link` and `states` into the view (state label,
+  secondary lines, last synced, stale hint, rate-limit time, and which actions show), so the
+  components hold no state rules. The controller runs Refresh, Retry sync and Unlink (with the
+  discard confirmation), ignores a second click while busy (U2) and keeps the busy flag until the
+  bounded re-read ends. `relativeTime.js`, `LinkClockTicker.js` and `useLinkClock.js` keep the
+  relative times fresh. Credential failure wording lives only in `failureReasons.js` and
+  `errorMessages.js` (the S5 static specs allow-list those two files).
+- **Import and attach** (`link/modals/`): `IssueNumberModal` is shared by `ImportIssueModal` and
+  `AttachIssueModal` (each with its controller); `issueNumberInput.js` parses the number.
+  `attachWarning.js` names the fields that differ from fixed `title`/`body`/`state` labels only,
+  never GitHub content.
+- **Bounded re-reads** (`sync/BoundedRereadController.js`): after a trigger, re-reads the issue
+  or project at 2, 5 and 10 s, stopping early once the state settles, quietly on error, and on a
+  404; it is disposed on unmount (P4). Retry sync treats an issue whose link is still
+  `sync_failed` as the 200 no-op and skips the re-read.
+- **Focus re-read** (`sync/FocusRereadThrottle.js`, `useFocusReread.js`): re-reads when the tab
+  regains focus, at most once every 30 s; both the issue page and the project page use it, through
+  a quiet `reread()` on `IssueLoadController` and `ProjectLoadController`.
+- **Saved-issue signal** (`sync/savedIssueSignal.js`): an in-memory signal the edit form sets
+  after a save, so the issue page re-reads on return (`pages/show/useSavedIssueReread.js`); it
+  uses no storage API.
+- **Edit form (U10)**: `pages/form/IssueChangedBanner.jsx` and `checkChanged` on
+  `IssueFormController` warn that the issue changed while editing, with "Discard my changes and
+  reload".
+- **Project header**: `projects/pages/show/ProjectHeader.jsx` adds Refresh project (T3,
+  `ProjectRefreshController.js`) and an "Import from GitHub" entry, which the empty states repeat;
+  `projects/RepositoryHint.jsx` shows the repository status.
+- **Security**: `issues/securityStaticSpec.js` already scans `issues/**` recursively; it now also
+  asserts `link/`, `link/modals/` and `sync/` are covered, renders the panel with hostile text,
+  and checks `savedIssueSignal` uses no storage. The `#N` link renders only for
+  `https://github.com/` URLs (S2).
+
 ## No Vite proxy to the backend
 
 There is no Vite `server.proxy` config pointing at the backend — that's the Tent proxy's job

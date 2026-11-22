@@ -1,5 +1,6 @@
 import ApiError from '../../../../../../../../assets/js/client/ApiError.js';
 import IssueActionsController from '../../../../../../../../assets/js/components/resources/issues/pages/show/IssueActionsController.js';
+import { flushMicrotasks } from '../../../../../../../support/flushMicrotasks.js';
 import {
   buildIssue, buildLink, ISSUE_ID, PROJECT_ID,
 } from '../../../../../../../support/issuesBuilders.js';
@@ -97,6 +98,73 @@ describe('IssueActionsController', () => {
 
       expect(state.issue).toBeNull();
       expect(state.busy).toEqual([true, false]);
+    });
+  });
+
+  describe('the bounded re-read after Close or Reopen', () => {
+    const pending = () => buildLink({ state: 'pending', states: ['pending'] });
+
+    beforeEach(() => {
+      jasmine.clock().install();
+      client.show = jasmine.createSpy('show').and.callFake(async () => buildIssue({ title: 'reread', link: buildLink() }));
+    });
+
+    afterEach(() => {
+      controller.dispose();
+      jasmine.clock().uninstall();
+    });
+
+    it('re-reads a linked issue at 2 s and shows what it read', async () => {
+      client.edit.and.resolveTo(buildIssue({ state: 'closed', link: pending() }));
+
+      await controller.toggleState(PROJECT_ID, buildIssue({ link: buildLink() }));
+      expect(client.show).not.toHaveBeenCalled();
+
+      jasmine.clock().tick(2000);
+      await flushMicrotasks();
+
+      expect(client.show).toHaveBeenCalledOnceWith(PROJECT_ID, ISSUE_ID);
+      expect(state.issue.title).toBe('reread');
+    });
+
+    it('does not re-read an unlinked issue', async () => {
+      await controller.toggleState(PROJECT_ID, buildIssue());
+      jasmine.clock().tick(20000);
+      await flushMicrotasks();
+
+      expect(client.show).not.toHaveBeenCalled();
+    });
+
+    it('does not re-read a gone issue', async () => {
+      client.edit.and.resolveTo(buildIssue({ link: buildLink({ state: 'gone', states: ['gone'], reason: 'deleted' }) }));
+
+      await controller.toggleState(PROJECT_ID, buildIssue());
+      jasmine.clock().tick(20000);
+      await flushMicrotasks();
+
+      expect(client.show).not.toHaveBeenCalled();
+    });
+
+    it('calls onNotFound when the re-read answers 404', async () => {
+      client.edit.and.resolveTo(buildIssue({ link: pending() }));
+      client.show.and.rejectWith(new ApiError(404, 'Not found', 'NOT_FOUND'));
+
+      await controller.toggleState(PROJECT_ID, buildIssue({ link: buildLink() }));
+      jasmine.clock().tick(2000);
+      await flushMicrotasks();
+
+      expect(onNotFound).toHaveBeenCalledTimes(1);
+    });
+
+    it('clears the timers on dispose (navigation)', async () => {
+      client.edit.and.resolveTo(buildIssue({ link: pending() }));
+
+      await controller.toggleState(PROJECT_ID, buildIssue({ link: buildLink() }));
+      controller.dispose();
+      jasmine.clock().tick(20000);
+      await flushMicrotasks();
+
+      expect(client.show).not.toHaveBeenCalled();
     });
   });
 

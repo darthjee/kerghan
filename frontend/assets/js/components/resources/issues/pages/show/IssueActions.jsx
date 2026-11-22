@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import useRateLimitCountdown from '../../../../common/forms/hooks/useRateLimitCountdown.js';
 import IssueActionsController from './IssueActionsController.js';
 import IssueActionsHelper from './IssueActionsHelper.jsx';
@@ -28,6 +28,8 @@ export default function IssueActions({
     }),
     [onIssueChange, onNotFound],
   );
+
+  useEffect(() => () => controller.dispose(), [controller]);
 
   return IssueActionsHelper.render(
     {

@@ -31,6 +31,8 @@ export default class IssueLoadController {
 
   #disposed = false;
 
+  #loaded = false;
+
   /**
    * Create the controller.
    *
@@ -57,6 +59,25 @@ export default class IssueLoadController {
    * @returns {Promise<void>} Resolves once the load finishes.
    */
   async load(projectId, issueId) {
+    return this.#run(projectId, issueId, false);
+  }
+
+  /**
+   * Re-read the project and the issue quietly: the view stays mounted, with no loading state.
+   *
+   * @description Used on window focus. A not-found answer shows the matching not-found view
+   * (U1); any other failure is ignored, leaving what is shown. Does nothing until a load succeeded.
+   * @returns {Promise<void>} Resolves once the read finishes.
+   */
+  async reread() {
+    if (!this.#loaded) {
+      return;
+    }
+
+    await this.#run(this.#ids.projectId, this.#ids.issueId, true);
+  }
+
+  async #run(projectId, issueId, quiet) {
     this.#ids = { projectId, issueId };
     this.#requestId += 1;
     const requestId = this.#requestId;
@@ -75,12 +96,14 @@ export default class IssueLoadController {
       if (issue && this.#isCurrent(requestId)) {
         this.#setProject(project);
         this.#setIssue(issue);
-        this.#setLoadState({ loading: false, error: null, notFound: null });
+        if (!quiet) {
+          this.#setLoadState({ loading: false, error: null, notFound: null });
+        }
+
+        this.#loaded = true;
       }
     } catch (error) {
-      if (this.#isCurrent(requestId)) {
-        this.#setLoadState(IssueLoadController.#failure(error, stage));
-      }
+      this.#fail(requestId, error, stage, quiet);
     }
   }
 
@@ -101,6 +124,14 @@ export default class IssueLoadController {
    */
   dispose() {
     this.#disposed = true;
+  }
+
+  #fail(requestId, error, stage, quiet) {
+    const ignored = quiet && !NOT_FOUND_STATUSES.has(error?.status);
+
+    if (this.#isCurrent(requestId) && !ignored) {
+      this.#setLoadState(IssueLoadController.#failure(error, stage));
+    }
   }
 
   #isCurrent(requestId) {

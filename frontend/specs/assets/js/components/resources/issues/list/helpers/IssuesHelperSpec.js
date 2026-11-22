@@ -52,7 +52,15 @@ describe('IssuesHelper', () => {
     const state = stateWith({ issues: [], query: { state: 'closed' } });
 
     expect(outputOf(state).containsInOrder('toolbar', 'empty')).toBe(true);
-    expect(IssuesEmptyStateHelper.render).toHaveBeenCalledOnceWith(PROJECT_ID, state.query);
+    expect(IssuesEmptyStateHelper.render).toHaveBeenCalledOnceWith(PROJECT_ID, state.query, { canImport: undefined, onImport: handlers.onImport });
     expect(IssuesTableHelper.render).not.toHaveBeenCalled();
+  });
+
+  it('hands the empty state the import entry of a project with a repository', () => {
+    const state = { ...stateWith({ issues: [], query: { state: 'open' } }), canImport: true };
+
+    outputOf(state);
+
+    expect(IssuesEmptyStateHelper.render).toHaveBeenCalledOnceWith(PROJECT_ID, state.query, { canImport: true, onImport: handlers.onImport });
   });
 });

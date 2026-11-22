@@ -1,3 +1,4 @@
+import IssueChangedBanner from '../../../../../../../../assets/js/components/resources/issues/pages/form/IssueChangedBanner.jsx';
 import IssueFormHelper from '../../../../../../../../assets/js/components/resources/issues/pages/form/IssueFormHelper.jsx';
 import { findElements } from '../../../../../../../support/elementTree.js';
 import { buildLink } from '../../../../../../../support/issuesBuilders.js';
@@ -11,6 +12,7 @@ describe('IssueFormHelper', () => {
     onTabChange: () => undefined,
     onSubmit: jasmine.createSpy('onSubmit'),
     onCancel: jasmine.createSpy('onCancel'),
+    onDiscardAndReload: jasmine.createSpy('onDiscardAndReload'),
   };
   const state = (overrides) => ({
     mode: 'edit',
@@ -92,5 +94,30 @@ describe('IssueFormHelper', () => {
 
     expect(submit.props.disabled).toBe(true);
     expect(submit.props.children).toContain('Try again in 4 s');
+  });
+
+  describe('U10: the changed banner', () => {
+    const bannerOf = (overrides) => findElements(treeOf(overrides), (node) => node.type === IssueChangedBanner);
+
+    it('U10: is hidden while the issue is unchanged', () => {
+      expect(bannerOf({ changed: false })[0].props.visible).toBe(false);
+    });
+
+    it('U10: is shown once the issue changed, wired to discard-and-reload', () => {
+      const [banner] = bannerOf({ changed: true });
+
+      expect(banner.props.visible).toBe(true);
+      expect(banner.props.onDiscard).toBe(handlers.onDiscardAndReload);
+    });
+
+    it('U10: Save stays enabled while the banner shows (last-write-wins)', () => {
+      const submit = buttons(treeOf({ changed: true })).find((button) => button.props.type === 'submit');
+
+      expect(submit.props.disabled).toBe(false);
+    });
+
+    it('U10: the new-issue form has no banner', () => {
+      expect(bannerOf({ mode: 'new', changed: true })).toEqual([]);
+    });
   });
 });

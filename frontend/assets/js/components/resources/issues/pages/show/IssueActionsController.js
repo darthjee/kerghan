@@ -2,12 +2,14 @@ import IssuesClient from '../../../../../client/IssuesClient.js';
 import HashLocation from '../../../../../utils/routing/hashLocation.js';
 import ProjectErrorMessages from '../../../projects/errors/errorMessages.js';
 import ProjectPaths from '../../../projects/paths.js';
+import BoundedRereadController from '../../sync/BoundedRereadController.js';
 
 /**
  * Controller of the issue page's actions: Close or Reopen, and the confirmed Delete.
  *
  * @description Close and Reopen send only `state` and show the issue the API returns. They are
- * ignored while a call is in flight (U2). A `404` means the issue is gone. An `undefined` answer
+ * ignored while a call is in flight (U2). On a linked, non-`gone` issue the bounded re-read then
+ * runs, so Pending turns into Synced (or a failure). A `404` means the issue is gone. An `undefined` answer
  * (session expired, the login modal is open) changes nothing.
  */
 export default class IssueActionsController {
@@ -23,6 +25,10 @@ export default class IssueActionsController {
 
   #location;
 
+  #reread;
+
+  #ids = null;
+
   #busy = false;
 
   /**
@@ -33,16 +39,31 @@ export default class IssueActionsController {
    *   action error (`null` clears it), and the callback for a vanished issue.
    * @param {typeof IssuesClient} [client] - Issues HTTP client override, for testability.
    * @param {typeof HashLocation} [location] - Hash writer override, for testability.
+   * @param {Function} [rereadFactory] - Builds a `BoundedRereadController` from its options.
    */
   constructor({
     setIssue, setBusy, setError, onNotFound,
-  }, client = IssuesClient, location = HashLocation) {
+  }, client = IssuesClient, location = HashLocation, rereadFactory = (options) => new BoundedRereadController(options)) {
     this.#setIssue = setIssue;
     this.#setBusy = setBusy;
     this.#setError = setError;
     this.#onNotFound = onNotFound;
     this.#client = client;
     this.#location = location;
+    this.#reread = rereadFactory({
+      read: () => this.#client.show(this.#ids.projectId, this.#ids.issueId),
+      onIssue: (issue) => this.#setIssue(issue),
+      onNotFound: () => this.#onNotFound(),
+    });
+  }
+
+  /**
+   * Stop the re-read in progress (unmount).
+   *
+   * @returns {void} Nothing.
+   */
+  dispose() {
+    this.#reread.dispose();
   }
 
   /**
@@ -66,6 +87,8 @@ export default class IssueActionsController {
 
       if (updated) {
         this.#setIssue(updated);
+        this.#ids = { projectId, issueId: issue.id };
+        this.#reread.start(updated);
       }
     } catch (error) {
       this.#fail(error);

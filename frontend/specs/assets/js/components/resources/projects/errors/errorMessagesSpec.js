@@ -1,6 +1,6 @@
 import ApiError from '../../../../../../../assets/js/client/ApiError.js';
 import ProjectErrorMessages from '../../../../../../../assets/js/components/resources/projects/errors/errorMessages.js';
-import { PROJECT_ID } from '../../../../../../support/issuesBuilders.js';
+import { ISSUE_ID, PROJECT_ID } from '../../../../../../support/issuesBuilders.js';
 
 describe('ProjectErrorMessages', () => {
   const error = (status, code, message, meta, details) => new ApiError(status, message, code, details, undefined, undefined, meta);
@@ -145,6 +145,64 @@ describe('ProjectErrorMessages', () => {
     it('does not flag other codes as a rate limit', () => {
       expect(ProjectErrorMessages.isRateLimit(error(409, 'ISSUE_LINKED', 'x'))).toBeFalse();
       expect(ProjectErrorMessages.isRateLimit(undefined)).toBeFalse();
+    });
+  });
+
+  describe('GITHUB_ISSUE_ALREADY_LINKED', () => {
+    it('links to the existing issue (E4)', () => {
+      const described = ProjectErrorMessages.describe(
+        error(409, 'GITHUB_ISSUE_ALREADY_LINKED', 'api', { projectId: PROJECT_ID, issueId: ISSUE_ID }),
+      );
+
+      expect(described.message).toBe('This GitHub issue is already linked');
+      expect(described.link.href).toBe(`#/projects/${PROJECT_ID}/issues/${ISSUE_ID}`);
+    });
+
+    [{ projectId: '../x', issueId: ISSUE_ID }, { projectId: PROJECT_ID, issueId: 'x' }, undefined].forEach((meta) => {
+      it(`shows no link for ${JSON.stringify(meta)} (S3)`, () => {
+        expect(ProjectErrorMessages.describe(error(409, 'GITHUB_ISSUE_ALREADY_LINKED', 'api', meta)))
+          .toEqual({ message: 'This GitHub issue is already linked' });
+      });
+    });
+  });
+
+  describe('GITHUB_CREDENTIAL_UNUSABLE', () => {
+    [
+      ['no_credential', 'No GitHub credential can access this repository.'],
+      ['credential_invalid', 'The GitHub credential for this repository is no longer valid.'],
+      ['forbidden', 'The GitHub credential for this repository can\'t update issues.'],
+    ].forEach(([reason, sentence]) => {
+      it(`words ${reason} and links to Integrations (E59)`, () => {
+        const described = ProjectErrorMessages.describe(error(409, 'GITHUB_CREDENTIAL_UNUSABLE', 'api', { reason }));
+
+        expect(described).toEqual({
+          message: sentence,
+          link: { href: '#/account/integrations', text: 'Fix it in Integrations' },
+        });
+      });
+    });
+
+    it('falls back to the API message for an unknown reason', () => {
+      expect(ProjectErrorMessages.describe(error(409, 'GITHUB_CREDENTIAL_UNUSABLE', 'api')).message).toBe('api');
+    });
+  });
+
+  [
+    ['isAttachConfirmationRequired', 'ISSUE_ATTACH_CONFIRMATION_REQUIRED'],
+    ['isIssueAlreadyLinked', 'ISSUE_ALREADY_LINKED'],
+    ['isIssueNotLinked', 'ISSUE_NOT_LINKED'],
+    ['isUnlinkHasUnsentChanges', 'ISSUE_UNLINK_HAS_UNSENT_CHANGES'],
+    ['isIssueLinkGone', 'ISSUE_LINK_GONE'],
+  ].forEach(([predicate, code]) => {
+    describe(`.${predicate}`, () => {
+      it(`is true for ${code}`, () => {
+        expect(ProjectErrorMessages[predicate](error(409, code, 'x'))).toBeTrue();
+      });
+
+      it('is false for another code and no error', () => {
+        expect(ProjectErrorMessages[predicate](error(409, 'ISSUE_LINKED', 'x'))).toBeFalse();
+        expect(ProjectErrorMessages[predicate](undefined)).toBeFalse();
+      });
     });
   });
 
