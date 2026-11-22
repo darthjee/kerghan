@@ -62,6 +62,15 @@ describe('IssueList', () => {
       expect(controller.handleHashChange).toHaveBeenCalledTimes(1);
     });
 
+    it('hands the controller to the page through listRef while mounted, and clears it on cleanup', () => {
+      const listRef = { current: null };
+      const cleanup = buildStartEffect(controller, listRef)();
+
+      expect(listRef.current).toBe(controller);
+      cleanup();
+      expect(listRef.current).toBeNull();
+    });
+
     it('stops listening and disposes the controller on cleanup', () => {
       const cleanup = buildStartEffect(controller)();
 

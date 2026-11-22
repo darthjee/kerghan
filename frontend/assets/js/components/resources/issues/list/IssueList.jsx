@@ -13,18 +13,28 @@ const INITIAL_LOAD_STATE = { loading: true, error: null };
  * disposing the controller on unmount.
  *
  * @param {IssuesController} controller - The list's controller.
+ * @param {{current: (IssuesController|null)}} [listRef] - Ref the page uses to re-read the
+ *   list (T3 and window focus); it holds the controller while the list is mounted.
  * @returns {Function} Effect callback, returning its cleanup.
  */
-export function buildStartEffect(controller) {
+export function buildStartEffect(controller, listRef) {
   return () => {
     const onHashChange = () => controller.handleHashChange();
 
     controller.start();
     window.addEventListener('hashchange', onHashChange);
 
+    if (listRef) {
+      listRef.current = controller;
+    }
+
     return () => {
       window.removeEventListener('hashchange', onHashChange);
       controller.dispose();
+
+      if (listRef) {
+        listRef.current = null;
+      }
     };
   };
 }
@@ -33,10 +43,15 @@ export function buildStartEffect(controller) {
  * A project's issue list: a state filter and a title search, with paging held in the hash
  * query. It sits below the project page's header.
  *
- * @param {{projectId: string}} props - The project's uuid.
+ * @param {{projectId: string, canImport: (boolean|undefined), onImport: (Function|undefined),
+ *   listRef: (object|undefined)}} props - The project's uuid, whether the project has a
+ *   repository (the empty states then offer "Import from GitHub"), the callback opening the
+ *   import modal, and the ref receiving the list's controller so the page can re-read it.
  * @returns {React.ReactElement} The rendered list.
  */
-export default function IssueList({ projectId }) {
+export default function IssueList({
+  projectId, canImport = false, onImport, listRef,
+}) {
   const [listing, setListing] = useState(INITIAL_LISTING);
   const [query, setQuery] = useState(INITIAL_QUERY);
   const [loadState, setLoadState] = useState(INITIAL_LOAD_STATE);
@@ -46,12 +61,12 @@ export default function IssueList({ projectId }) {
     [projectId],
   );
 
-  useEffect(() => buildStartEffect(controller)(), [controller]);
+  useEffect(() => buildStartEffect(controller, listRef)(), [controller, listRef]);
 
   return IssuesHelper.render(
     {
-      projectId, listing, query, loadState,
+      projectId, listing, query, loadState, canImport,
     },
-    IssuesHandlers.build(controller),
+    { ...IssuesHandlers.build(controller), onImport },
   );
 }
