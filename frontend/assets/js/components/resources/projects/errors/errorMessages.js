@@ -1,5 +1,5 @@
 import { isUuid } from '../../../../utils/ids/uuid.js';
-import CREDENTIAL_REASON_SENTENCES from '../../issues/link/failureReasons.js';
+import CREDENTIAL_REASON_SENTENCES, { FIX_LINK } from '../../issues/link/failureReasons.js';
 import ProjectPaths from '../paths.js';
 
 const REPOSITORY_NOT_FOUND_MESSAGE = 'Repository not found';
@@ -79,7 +79,7 @@ function githubIssueAlreadyLinked(error) {
 function credentialUnusable(error) {
   const sentence = CREDENTIAL_REASON_SENTENCES.get(error.meta?.reason) ?? error.message;
 
-  return { message: sentence, link: { href: '#/account/integrations', text: 'Fix it in Integrations' } };
+  return { message: sentence, link: { ...FIX_LINK } };
 }
 
 /**
