@@ -9,6 +9,7 @@ import AuthorizationRequests from '../resources/accounts/pages/AuthorizationRequ
 import Integrations from '../resources/accounts/pages/Integrations.jsx';
 import MyAccount from '../resources/accounts/pages/MyAccount.jsx';
 import Repositories from '../resources/repositories/pages/Repositories.jsx';
+import ProjectEdit from '../resources/projects/pages/ProjectEdit.jsx';
 import ProjectNew from '../resources/projects/pages/ProjectNew.jsx';
 import ProjectPage from '../resources/projects/pages/ProjectPage.jsx';
 import Projects from '../resources/projects/pages/Projects.jsx';
@@ -29,6 +30,7 @@ const PAGES = new Map([
   ['projects', <Projects />],
   ['project-new', <ProjectNew />],
   ['project', <ProjectPage />],
+  ['project-edit', <ProjectEdit />],
   ['issue-new', <ProjectsPlaceholder />],
   ['issue', <ProjectsPlaceholder />],
   ['issue-edit', <ProjectsPlaceholder />],

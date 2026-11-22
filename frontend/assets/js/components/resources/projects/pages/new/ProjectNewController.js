@@ -3,18 +3,8 @@ import {
   validateProjectDescription, validateProjectName,
   MAX_PROJECT_NAME_LENGTH,
 } from '../../../../../utils/validation/projectValidators.js';
-import ProjectErrorMessages from '../../errors/errorMessages.js';
+import FormErrors from '../common/formErrors.js';
 import ProjectPaths from '../../paths.js';
-
-/**
- * Wrap validator messages as described errors, as the server's errors are.
- *
- * @param {object} errors - A validator's `{ field: message }` map.
- * @returns {object} The `{ field: {message} }` map.
- */
-function describeAll(errors) {
-  return Object.fromEntries(Object.entries(errors).map(([field, message]) => [field, { message }]));
-}
 
 /**
  * Controller of the explicit project creation form: validation, the create call and the
@@ -108,7 +98,7 @@ export default class ProjectNewController {
    * @returns {Promise<void>} Resolves once the call settled.
    */
   async submit(fields, forceLeave) {
-    const errors = describeAll({
+    const errors = FormErrors.describeAll({
       ...validateProjectName(fields.name),
       ...validateProjectDescription(fields.description),
     });
@@ -133,20 +123,9 @@ export default class ProjectNewController {
         forceLeave(ProjectPaths.show(project.id));
       }
     } catch (error) {
-      this.#showRefusal(error);
+      FormErrors.showRefusal(error, this.#setFieldErrors, this.#setFormError);
     } finally {
       this.#setSubmitting(false);
-    }
-  }
-
-  #showRefusal(error) {
-    const field = ProjectErrorMessages.fieldOf(error);
-    const described = ProjectErrorMessages.describe(error);
-
-    if (field === 'form') {
-      this.#setFormError(described);
-    } else {
-      this.#setFieldErrors({ [field]: described });
     }
   }
 }

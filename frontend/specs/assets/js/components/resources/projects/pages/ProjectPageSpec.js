@@ -1,7 +1,7 @@
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import ProjectLoadController from '../../../../../../../assets/js/components/resources/projects/pages/common/ProjectLoadController.js';
-import ProjectPage, { buildLoadEffect } from '../../../../../../../assets/js/components/resources/projects/pages/ProjectPage.jsx';
+import ProjectPage from '../../../../../../../assets/js/components/resources/projects/pages/ProjectPage.jsx';
 import ProjectPageHelper from '../../../../../../../assets/js/components/resources/projects/pages/show/ProjectPageHelper.jsx';
 import { installFakeWindow, uninstallFakeWindow } from '../../../../../../support/fakeWindow.js';
 import { PROJECT_ID } from '../../../../../../support/issuesBuilders.js';
@@ -36,17 +36,5 @@ describe('ProjectPage', () => {
     handlers.onRetry();
 
     expect(ProjectLoadController.prototype.retry).toHaveBeenCalled();
-  });
-
-  describe('buildLoadEffect', () => {
-    it('loads the project on mount and ignores late answers after cleanup', () => {
-      const controller = jasmine.createSpyObj('controller', ['load', 'dispose']);
-
-      const cleanup = buildLoadEffect(controller, PROJECT_ID)();
-
-      expect(controller.load).toHaveBeenCalledOnceWith(PROJECT_ID);
-      cleanup();
-      expect(controller.dispose).toHaveBeenCalledTimes(1);
-    });
   });
 });

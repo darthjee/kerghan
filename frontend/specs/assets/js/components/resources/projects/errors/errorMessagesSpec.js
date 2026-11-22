@@ -77,6 +77,18 @@ describe('ProjectErrorMessages', () => {
     });
   });
 
+  describe('.isProjectNotFound', () => {
+    it('is true for a project 404', () => {
+      expect(ProjectErrorMessages.isProjectNotFound(error(404, 'NOT_FOUND', 'Project not found'))).toBe(true);
+    });
+
+    it('is false for the repository 404 and for other statuses', () => {
+      expect(ProjectErrorMessages.isProjectNotFound(error(404, 'NOT_FOUND', 'Repository not found'))).toBe(false);
+      expect(ProjectErrorMessages.isProjectNotFound(error(409, 'PROJECT_HAS_LINKS', 'x'))).toBe(false);
+      expect(ProjectErrorMessages.isProjectNotFound(undefined)).toBe(false);
+    });
+  });
+
   describe('.fieldOf', () => {
     it('targets the Name field for PROJECT_NAME_TAKEN', () => {
       expect(ProjectErrorMessages.fieldOf(error(409, 'PROJECT_NAME_TAKEN', 'x'))).toBe('name');

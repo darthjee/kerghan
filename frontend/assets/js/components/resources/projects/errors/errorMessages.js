@@ -111,6 +111,17 @@ const ProjectErrorMessages = {
 
     return repositoryNotFound ? 'repository' : 'form';
   },
+
+  /**
+   * Tell whether an error means the project itself is gone (U1): a `404` that is not the
+   * repository's.
+   *
+   * @param {{status: (number|undefined), message: string}} error - The thrown error.
+   * @returns {boolean} `true` for a project `404`.
+   */
+  isProjectNotFound(error) {
+    return error?.status === 404 && ProjectErrorMessages.fieldOf(error) !== 'repository';
+  },
 };
 
 export default ProjectErrorMessages;

@@ -6,6 +6,7 @@ import ModalRedirect from '../../../../../assets/js/components/common/ModalRedir
 import Integrations from '../../../../../assets/js/components/resources/accounts/pages/Integrations.jsx';
 import Repositories from '../../../../../assets/js/components/resources/repositories/pages/Repositories.jsx';
 import Projects from '../../../../../assets/js/components/resources/projects/pages/Projects.jsx';
+import ProjectEdit from '../../../../../assets/js/components/resources/projects/pages/ProjectEdit.jsx';
 import ProjectNew from '../../../../../assets/js/components/resources/projects/pages/ProjectNew.jsx';
 import ProjectPage from '../../../../../assets/js/components/resources/projects/pages/ProjectPage.jsx';
 import ProjectsPlaceholder from '../../../../../assets/js/components/resources/projects/pages/ProjectsPlaceholder.jsx';
@@ -71,6 +72,10 @@ describe('AppHelper', () => {
 
   it('renders the creation form for the project-new key', () => {
     expect(partsOf('project-new').page.type).toBe(ProjectNew);
+  });
+
+  it('renders the management page for the project-edit key', () => {
+    expect(partsOf('project-edit').page.type).toBe(ProjectEdit);
   });
 
   it('renders the project page for the project key', () => {

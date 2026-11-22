@@ -1,6 +1,4 @@
-import LoadErrorHelper from '../common/LoadErrorHelper.jsx';
-import NotFoundHelper from '../common/NotFoundHelper.jsx';
-import ProjectPaths from '../../paths.js';
+import ProjectLoadViewHelper from '../common/ProjectLoadViewHelper.jsx';
 import ProjectHeaderHelper from './ProjectHeaderHelper.jsx';
 
 /**
@@ -18,25 +16,11 @@ const ProjectPageHelper = {
    *   error with Retry, or the header.
    */
   render(state, handlers) {
-    const { project, loadState } = state;
-
-    if (loadState.notFound) {
-      return NotFoundHelper.render('Project not found', { href: ProjectPaths.list, text: 'Back to projects' });
-    }
-
-    if (loadState.error) {
-      return LoadErrorHelper.render(loadState.error, handlers.onRetry);
-    }
-
-    if (loadState.loading || project === null) {
-      return <div className="container mt-4"><p>Loading project…</p></div>;
-    }
-
-    return (
+    return ProjectLoadViewHelper.render(state, handlers.onRetry, (project) => (
       <div className="container mt-4">
         {ProjectHeaderHelper.render(project)}
       </div>
-    );
+    ));
   },
 };
 

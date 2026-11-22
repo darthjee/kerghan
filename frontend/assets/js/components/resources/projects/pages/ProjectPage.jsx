@@ -2,24 +2,10 @@ import { useEffect, useMemo, useState } from 'react';
 import Router from '../../../../utils/routing/Router.js';
 import currentHash from '../../../../utils/routing/currentHash.js';
 import ProjectLoadController from './common/ProjectLoadController.js';
+import buildLoadEffect from './common/buildLoadEffect.js';
 import ProjectPageHelper from './show/ProjectPageHelper.jsx';
 
 const INITIAL_LOAD_STATE = { loading: true, error: null, notFound: false };
-
-/**
- * Build the mount-time effect: loads the project and returns a cleanup ignoring any answer
- * still in flight on unmount.
- *
- * @param {ProjectLoadController} controller - The page's controller.
- * @param {string} projectId - The id taken from the hash.
- * @returns {Function} Effect callback, returning its cleanup.
- */
-export function buildLoadEffect(controller, projectId) {
-  return () => {
-    controller.load(projectId);
-    return () => controller.dispose();
-  };
-}
 
 /**
  * Project page (`#/projects/:projectId`): the project's header (name, description,
