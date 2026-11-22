@@ -31,6 +31,22 @@ describe('DirtyFormGuardController', () => {
     fakeWindow.dispatchEvent(new Event('hashchange'));
   }
 
+  /**
+   * Build an event shaped like a browser `BeforeUnloadEvent`.
+   *
+   * Node's `Event` only has a getter for `returnValue`, so the guard's assignment would throw
+   * inside the listener (an asynchronous uncaught error that makes some Node versions exit
+   * Jasmine with code 4). A browser's `BeforeUnloadEvent` has a writable `returnValue`.
+   *
+   * @returns {Event} A cancelable `beforeunload` event with a writable `returnValue`.
+   */
+  function buildBeforeUnloadEvent() {
+    const event = new Event('beforeunload', { cancelable: true });
+
+    Object.defineProperty(event, 'returnValue', { value: undefined, writable: true });
+    return event;
+  }
+
   describe('#leave', () => {
     it('navigates at once from a clean form, with no prompt (U11)', () => {
       controller.leave('#/projects', false);
@@ -116,17 +132,18 @@ describe('DirtyFormGuardController', () => {
 
     it('cancels the browser unload to trigger its own prompt', () => {
       controller.attach(true);
-      const event = new Event('beforeunload', { cancelable: true });
+      const event = buildBeforeUnloadEvent();
 
       fakeWindow.dispatchEvent(event);
 
       expect(event.defaultPrevented).toBe(true);
+      expect(event.returnValue).toBe('');
     });
 
     it('detaches both listeners on cleanup', () => {
       const cleanup = controller.attach(true);
       cleanup();
-      const event = new Event('beforeunload', { cancelable: true });
+      const event = buildBeforeUnloadEvent();
 
       navigateTo('#/repositories');
       fakeWindow.dispatchEvent(event);
@@ -139,7 +156,7 @@ describe('DirtyFormGuardController', () => {
   describe('#attach on a clean form', () => {
     it('leaves silently: no hash interception and no unload prompt (U11)', () => {
       const cleanup = controller.attach(false);
-      const event = new Event('beforeunload', { cancelable: true });
+      const event = buildBeforeUnloadEvent();
 
       navigateTo('#/repositories');
       fakeWindow.dispatchEvent(event);
