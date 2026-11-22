@@ -1,4 +1,10 @@
-import { ConflictException, HttpException, HttpStatus, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  HttpException,
+  HttpStatus,
+  NotFoundException,
+  UnprocessableEntityException,
+} from '@nestjs/common';
 import { ErrorCodes } from '../core/error-codes.js';
 
 // One message for a missing, foreign or deleted project, so existence never leaks.
@@ -129,4 +135,155 @@ export function issueLinked(): ConflictException {
     code: ErrorCodes.ISSUE_LINKED,
     message: 'Unlink this issue before deleting it',
   });
+}
+
+/** The fields an attach may overwrite, in the order `meta.differences` lists them. */
+export type AttachDifference = 'title' | 'body' | 'state';
+
+/** Why the integration chosen for a repository cannot be used. */
+export type CredentialUnusableReason = 'no_credential' | 'credential_invalid' | 'forbidden';
+
+/**
+ * 404 `GITHUB_ISSUE_NOT_FOUND`: GitHub has no such issue (distinct from the Kerghan `404 NOT_FOUND`).
+ * @returns {NotFoundException} The exception.
+ */
+export function githubIssueNotFound(): NotFoundException {
+  return new NotFoundException({
+    code: ErrorCodes.GITHUB_ISSUE_NOT_FOUND,
+    message: 'GitHub issue not found',
+  });
+}
+
+/**
+ * 409 `PROJECT_HAS_NO_REPOSITORY`: a link operation on a project without a repository.
+ * @returns {ConflictException} The exception.
+ */
+export function projectHasNoRepository(): ConflictException {
+  return new ConflictException({
+    code: ErrorCodes.PROJECT_HAS_NO_REPOSITORY,
+    message: 'This project has no repository',
+  });
+}
+
+/**
+ * 409 `PROJECT_REPOSITORY_UNAVAILABLE`: the project's repository row is gone or no longer usable.
+ * @returns {ConflictException} The exception.
+ */
+export function projectRepositoryUnavailable(): ConflictException {
+  return new ConflictException({
+    code: ErrorCodes.PROJECT_REPOSITORY_UNAVAILABLE,
+    message: "The project's repository is unavailable",
+  });
+}
+
+/**
+ * 409 `PROJECT_REPOSITORY_CHANGED`: the project's repository changed while the link was being made.
+ * @returns {ConflictException} The exception.
+ */
+export function projectRepositoryChanged(): ConflictException {
+  return new ConflictException({
+    code: ErrorCodes.PROJECT_REPOSITORY_CHANGED,
+    message: "The project's repository changed; try again",
+  });
+}
+
+/**
+ * 409 `GITHUB_ISSUE_ALREADY_LINKED`: the GitHub issue is already linked by the caller.
+ * @param {string} projectUuid - The public id of the existing link's project, exposed as `meta.projectId`.
+ * @param {string} issueUuid - The public id of the existing link's issue, exposed as `meta.issueId`.
+ * @returns {ConflictException} The exception.
+ */
+export function githubIssueAlreadyLinked(projectUuid: string, issueUuid: string): ConflictException {
+  return new ConflictException({
+    code: ErrorCodes.GITHUB_ISSUE_ALREADY_LINKED,
+    message: 'This GitHub issue is already linked',
+    meta: { projectId: projectUuid, issueId: issueUuid },
+  });
+}
+
+/**
+ * 409 `ISSUE_ALREADY_LINKED`: an attach to an issue that already has a link.
+ * @returns {ConflictException} The exception.
+ */
+export function issueAlreadyLinked(): ConflictException {
+  return new ConflictException({
+    code: ErrorCodes.ISSUE_ALREADY_LINKED,
+    message: 'This issue is already linked',
+  });
+}
+
+/**
+ * 409 `ISSUE_ATTACH_CONFIRMATION_REQUIRED`: the attach would replace values and was not confirmed.
+ * @param {AttachDifference[]} differences - The fields that differ, in the order title, body, state.
+ * @param {string} updatedAt - The issue's `updatedAt` as an ISO string with milliseconds.
+ * @returns {ConflictException} The exception.
+ */
+export function issueAttachConfirmationRequired(differences: AttachDifference[], updatedAt: string): ConflictException {
+  return new ConflictException({
+    code: ErrorCodes.ISSUE_ATTACH_CONFIRMATION_REQUIRED,
+    message: "Attaching replaces this issue's values",
+    meta: { differences, updatedAt },
+  });
+}
+
+/**
+ * 409 `ISSUE_NOT_LINKED`: an unlink of an issue that has no link.
+ * @returns {ConflictException} The exception.
+ */
+export function issueNotLinked(): ConflictException {
+  return new ConflictException({
+    code: ErrorCodes.ISSUE_NOT_LINKED,
+    message: 'This issue is not linked',
+  });
+}
+
+/**
+ * 409 `ISSUE_UNLINK_HAS_UNSENT_CHANGES`: an unlink that would drop unsent changes without consent.
+ * @returns {ConflictException} The exception.
+ */
+export function issueUnlinkHasUnsentChanges(): ConflictException {
+  return new ConflictException({
+    code: ErrorCodes.ISSUE_UNLINK_HAS_UNSENT_CHANGES,
+    message: 'This issue has changes not yet sent to GitHub',
+  });
+}
+
+/**
+ * 409 `GITHUB_CREDENTIAL_UNUSABLE`: the integration for the repository needs attention.
+ * @param {CredentialUnusableReason} reason - Exposed as `meta.reason`.
+ * @returns {ConflictException} The exception.
+ */
+export function githubCredentialUnusable(reason: CredentialUnusableReason): ConflictException {
+  return new ConflictException({
+    code: ErrorCodes.GITHUB_CREDENTIAL_UNUSABLE,
+    message: 'The integration for this repository needs attention',
+    meta: { reason },
+  });
+}
+
+/**
+ * 422 `GITHUB_ISSUE_IS_PULL_REQUEST`: the GitHub number is a pull request.
+ * @returns {UnprocessableEntityException} The exception.
+ */
+export function githubIssueIsPullRequest(): UnprocessableEntityException {
+  return new UnprocessableEntityException({
+    code: ErrorCodes.GITHUB_ISSUE_IS_PULL_REQUEST,
+    message: 'This is a pull request, not an issue',
+  });
+}
+
+/**
+ * 429 `ISSUE_LINK_RATE_LIMITED`, with `Retry-After` and `error.retryAfterSeconds`.
+ * @param {number} retryAfterSeconds - Seconds until the user's link window resets.
+ * @returns {HttpException} The exception.
+ */
+export function issueLinkRateLimited(retryAfterSeconds: number): HttpException {
+  return new HttpException(
+    {
+      code: ErrorCodes.ISSUE_LINK_RATE_LIMITED,
+      message: 'Too many link requests; try again later',
+      retryAfterSeconds,
+    },
+    HttpStatus.TOO_MANY_REQUESTS,
+  );
 }

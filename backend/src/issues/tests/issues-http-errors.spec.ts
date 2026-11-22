@@ -1,7 +1,19 @@
 import { ErrorCodes } from '../../core/error-codes.js';
 import { repositoryNotFound as addRepositoryNotFound } from '../../repositories/repositories-http-errors.js';
 import {
+  githubCredentialUnusable,
+  githubIssueAlreadyLinked,
+  githubIssueIsPullRequest,
+  githubIssueNotFound,
+  issueAlreadyLinked,
+  issueAttachConfirmationRequired,
   issueEditRateLimited,
+  issueLinkRateLimited,
+  issueNotLinked,
+  issueUnlinkHasUnsentChanges,
+  projectHasNoRepository,
+  projectRepositoryChanged,
+  projectRepositoryUnavailable,
   issueLinked,
   issueNotFound,
   issuesLimitReached,
@@ -75,6 +87,93 @@ describe('issues-http-errors', () => {
       code: ErrorCodes.ISSUE_EDIT_RATE_LIMITED,
       message: 'Too many edits; try again later',
       retryAfterSeconds: 42,
+    });
+  });
+  it.each([
+    ['projectHasNoRepository', projectHasNoRepository(), ErrorCodes.PROJECT_HAS_NO_REPOSITORY, 'This project has no repository'],
+    [
+      'projectRepositoryUnavailable',
+      projectRepositoryUnavailable(),
+      ErrorCodes.PROJECT_REPOSITORY_UNAVAILABLE,
+      "The project's repository is unavailable",
+    ],
+    [
+      'projectRepositoryChanged',
+      projectRepositoryChanged(),
+      ErrorCodes.PROJECT_REPOSITORY_CHANGED,
+      "The project's repository changed; try again",
+    ],
+    ['issueAlreadyLinked', issueAlreadyLinked(), ErrorCodes.ISSUE_ALREADY_LINKED, 'This issue is already linked'],
+    ['issueNotLinked', issueNotLinked(), ErrorCodes.ISSUE_NOT_LINKED, 'This issue is not linked'],
+    [
+      'issueUnlinkHasUnsentChanges',
+      issueUnlinkHasUnsentChanges(),
+      ErrorCodes.ISSUE_UNLINK_HAS_UNSENT_CHANGES,
+      'This issue has changes not yet sent to GitHub',
+    ],
+  ])('%s is a 409 with its code and message and no meta', (_name, error, code, message) => {
+    expect(error.getStatus()).toBe(409);
+    expect(error.getResponse()).toEqual({ code, message });
+  });
+
+  it('githubIssueNotFound is a 404 with its own code', () => {
+    const error = githubIssueNotFound();
+
+    expect(error.getStatus()).toBe(404);
+    expect(error.getResponse()).toEqual({ code: ErrorCodes.GITHUB_ISSUE_NOT_FOUND, message: 'GitHub issue not found' });
+  });
+
+  it('githubIssueAlreadyLinked carries the existing link project and issue uuids', () => {
+    const error = githubIssueAlreadyLinked('project-uuid', 'issue-uuid');
+
+    expect(error.getStatus()).toBe(409);
+    expect(error.getResponse()).toEqual({
+      code: ErrorCodes.GITHUB_ISSUE_ALREADY_LINKED,
+      message: 'This GitHub issue is already linked',
+      meta: { projectId: 'project-uuid', issueId: 'issue-uuid' },
+    });
+  });
+
+  it('issueAttachConfirmationRequired carries differences and updatedAt', () => {
+    const error = issueAttachConfirmationRequired(['title', 'state'], '2026-01-01T00:00:00.123Z');
+
+    expect(error.getStatus()).toBe(409);
+    expect(error.getResponse()).toEqual({
+      code: ErrorCodes.ISSUE_ATTACH_CONFIRMATION_REQUIRED,
+      message: "Attaching replaces this issue's values",
+      meta: { differences: ['title', 'state'], updatedAt: '2026-01-01T00:00:00.123Z' },
+    });
+  });
+
+  it('githubCredentialUnusable carries the reason', () => {
+    const error = githubCredentialUnusable('credential_invalid');
+
+    expect(error.getStatus()).toBe(409);
+    expect(error.getResponse()).toEqual({
+      code: ErrorCodes.GITHUB_CREDENTIAL_UNUSABLE,
+      message: 'The integration for this repository needs attention',
+      meta: { reason: 'credential_invalid' },
+    });
+  });
+
+  it('githubIssueIsPullRequest is a 422', () => {
+    const error = githubIssueIsPullRequest();
+
+    expect(error.getStatus()).toBe(422);
+    expect(error.getResponse()).toEqual({
+      code: ErrorCodes.GITHUB_ISSUE_IS_PULL_REQUEST,
+      message: 'This is a pull request, not an issue',
+    });
+  });
+
+  it('issueLinkRateLimited is a 429 carrying retryAfterSeconds', () => {
+    const error = issueLinkRateLimited(7);
+
+    expect(error.getStatus()).toBe(429);
+    expect(error.getResponse()).toEqual({
+      code: ErrorCodes.ISSUE_LINK_RATE_LIMITED,
+      message: 'Too many link requests; try again later',
+      retryAfterSeconds: 7,
     });
   });
 });
