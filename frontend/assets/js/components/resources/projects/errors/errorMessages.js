@@ -1,4 +1,6 @@
 import { isUuid } from '../../../../utils/ids/uuid.js';
+import CREDENTIAL_REASON_SENTENCES from '../../issues/link/failureReasons.js';
+import ProjectPaths from '../paths.js';
 
 const REPOSITORY_NOT_FOUND_MESSAGE = 'Repository not found';
 
@@ -50,6 +52,37 @@ function rateLimited(error) {
 }
 
 /**
+ * Message of `GITHUB_ISSUE_ALREADY_LINKED`, with a link to the issue that holds the link.
+ *
+ * @param {{message: string, meta: (object|undefined)}} error - The error.
+ * @returns {{message: string, link: ({href: string, text: string}|undefined)}} The description;
+ *   the link only appears when `meta.projectId` and `meta.issueId` are uuids (S3).
+ */
+function githubIssueAlreadyLinked(error) {
+  const message = 'This GitHub issue is already linked';
+  const { projectId, issueId } = error.meta ?? {};
+
+  if (!isUuid(projectId) || !isUuid(issueId)) {
+    return { message };
+  }
+
+  return { message, link: { href: ProjectPaths.issue(projectId, issueId), text: 'Open the existing issue' } };
+}
+
+/**
+ * Message of `GITHUB_CREDENTIAL_UNUSABLE`, from `meta.reason`, with a link to Integrations.
+ *
+ * @param {{message: string, meta: (object|undefined)}} error - The error.
+ * @returns {{message: string, link: {href: string, text: string}}} The reason sentence (the
+ *   API's message for an unknown reason) and the "Fix it in Integrations" link.
+ */
+function credentialUnusable(error) {
+  const sentence = CREDENTIAL_REASON_SENTENCES.get(error.meta?.reason) ?? error.message;
+
+  return { message: sentence, link: { href: '#/account/integrations', text: 'Fix it in Integrations' } };
+}
+
+/**
  * Describers by error code; each receives the error and answers `{message, link?, details?}`.
  *
  * @type {Map<string, Function>}
@@ -59,6 +92,8 @@ const DESCRIBERS = new Map([
   ['PROJECT_HAS_LINKS', hasLinks],
   ['PROJECT_REPOSITORY_CHANGED', () => ({ message: 'The project\'s repository changed; try again.' })],
   ['GITHUB_UNAVAILABLE', () => ({ message: 'GitHub is unavailable right now; try again.' })],
+  ['GITHUB_ISSUE_ALREADY_LINKED', githubIssueAlreadyLinked],
+  ['GITHUB_CREDENTIAL_UNUSABLE', credentialUnusable],
   ['ISSUE_LINKED', () => ({ message: 'Unlink this issue before deleting it' })],
   ['ISSUES_LIMIT_REACHED', (error) => ({ message: error.message })],
   ['ISSUE_EDIT_RATE_LIMITED', rateLimited],
@@ -163,6 +198,56 @@ const ProjectErrorMessages = {
    */
   isRateLimit(error) {
     return RATE_LIMIT_CODES.has(error?.code);
+  },
+
+  /**
+   * Tell whether an attach was refused until the user confirms the differences (E61).
+   *
+   * @param {{code: (string|undefined)}} error - The thrown error.
+   * @returns {boolean} `true` for `ISSUE_ATTACH_CONFIRMATION_REQUIRED`.
+   */
+  isAttachConfirmationRequired(error) {
+    return error?.code === 'ISSUE_ATTACH_CONFIRMATION_REQUIRED';
+  },
+
+  /**
+   * Tell whether an attach found the Kerghan issue already linked (E64).
+   *
+   * @param {{code: (string|undefined)}} error - The thrown error.
+   * @returns {boolean} `true` for `ISSUE_ALREADY_LINKED`.
+   */
+  isIssueAlreadyLinked(error) {
+    return error?.code === 'ISSUE_ALREADY_LINKED';
+  },
+
+  /**
+   * Tell whether an unlink found the issue with no link (E64).
+   *
+   * @param {{code: (string|undefined)}} error - The thrown error.
+   * @returns {boolean} `true` for `ISSUE_NOT_LINKED`.
+   */
+  isIssueNotLinked(error) {
+    return error?.code === 'ISSUE_NOT_LINKED';
+  },
+
+  /**
+   * Tell whether an unlink was refused because of changes not yet sent to GitHub (E63).
+   *
+   * @param {{code: (string|undefined)}} error - The thrown error.
+   * @returns {boolean} `true` for `ISSUE_UNLINK_HAS_UNSENT_CHANGES`.
+   */
+  isUnlinkHasUnsentChanges(error) {
+    return error?.code === 'ISSUE_UNLINK_HAS_UNSENT_CHANGES';
+  },
+
+  /**
+   * Tell whether a link action found the GitHub issue gone.
+   *
+   * @param {{code: (string|undefined)}} error - The thrown error.
+   * @returns {boolean} `true` for `ISSUE_LINK_GONE`.
+   */
+  isIssueLinkGone(error) {
+    return error?.code === 'ISSUE_LINK_GONE';
   },
 };
 
