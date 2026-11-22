@@ -1,19 +1,15 @@
 import { Injectable } from '@nestjs/common';
-import { Clock } from '../core/clock.js';
 import { GithubAuthenticatedRunner } from './github-authenticated-runner.js';
+import { ISSUE_READ_PERMISSIONS, REPO_LISTING_PERMISSIONS } from './github-installation-permissions.js';
 import { GithubIssueClientService } from './github-issue-client.service.js';
 import type { GithubIssueRepo, IssueProbeResult, IssueResult } from './github-issue-results.js';
-import {
-  GithubRepoClientService,
-  ISSUE_READ_PERMISSIONS,
-  type RepoCall,
-  REPO_LISTING_PERMISSIONS,
-} from './github-repo-client.service.js';
+import { GithubRepoClientService, type RepoCall } from './github-repo-client.service.js';
 import type { IntegrationRef, RepoPageResult, RepoResult } from './github-repo-results.js';
 import { GithubUnauthenticatedBudget, type UnauthenticatedPurpose } from './github-unauthenticated-budget.js';
 import { integrationRef as toRef } from './integration-response.js';
 import { IntegrationStoreService } from './integration-store.service.js';
 import type { Secret } from './secret.js';
+import { Clock } from '../core/clock.js';
 
 /** A repo call made with a credential, or with none (`null`). */
 type Call<T> = (token: Secret<string> | null) => Promise<RepoCall<T>>;

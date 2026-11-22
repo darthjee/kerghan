@@ -1,8 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import { GithubAuthenticatedRunner } from './github-authenticated-runner.js';
+import { ISSUE_WRITE_PERMISSIONS } from './github-installation-permissions.js';
 import { GithubIssueClientService } from './github-issue-client.service.js';
 import type { GithubIssueChanges, GithubIssueRepo, IssueUpdateResult } from './github-issue-results.js';
-import { ISSUE_WRITE_PERMISSIONS } from './github-repo-client.service.js';
 
 // The only fields a write may send.
 const CHANGE_FIELDS: ReadonlySet<string> = new Set(['title', 'body', 'state']);
@@ -68,6 +68,19 @@ export function assertIssueChanges(changes: GithubIssueChanges): void {
     throw new TypeError('changes may only hold title, body and state');
   }
 
+  assertValues(changes);
+
+  if (fields.every((key) => changes[key as keyof GithubIssueChanges] === undefined)) {
+    throw new TypeError('changes must not be empty');
+  }
+}
+
+/**
+ * Validates the values of a diff's fields; the messages are fixed and never echo a value.
+ * @param {GithubIssueChanges} changes - The diff.
+ * @returns {void}
+ */
+function assertValues(changes: GithubIssueChanges): void {
   if (changes.title !== undefined && typeof changes.title !== 'string') {
     throw new TypeError('title must be a string');
   }
@@ -78,9 +91,5 @@ export function assertIssueChanges(changes: GithubIssueChanges): void {
 
   if (changes.state !== undefined && changes.state !== 'open' && changes.state !== 'closed') {
     throw new TypeError('state must be open or closed');
-  }
-
-  if (fields.every((key) => changes[key as keyof GithubIssueChanges] === undefined)) {
-    throw new TypeError('changes must not be empty');
   }
 }

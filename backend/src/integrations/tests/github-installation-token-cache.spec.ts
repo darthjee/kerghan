@@ -2,10 +2,10 @@ import { inspect } from 'node:util';
 import type { EventEmitter2 } from '@nestjs/event-emitter';
 import type { LoggerService } from '../../core/logger.service.js';
 import type { Integration } from '../entities/integration.entity.js';
+import { ISSUE_READ_PERMISSIONS, ISSUE_WRITE_PERMISSIONS, REPO_LISTING_PERMISSIONS } from '../github-installation-permissions.js';
 import { GithubInstallationTokenCache, INSTALLATION_TOKEN_EXPIRY_MARGIN_MS } from '../github-installation-token-cache.js';
-import { ISSUE_READ_PERMISSIONS, ISSUE_WRITE_PERMISSIONS, REPO_LISTING_PERMISSIONS } from '../github-repo-client.service.js';
-import { Secret } from '../secret.js';
 import { IntegrationLifecycleService } from '../integration-lifecycle.service.js';
+import { Secret } from '../secret.js';
 import { githubRepo, jsonResponse, listingPage, replyOnce, unauthorized } from './support/github-builders.js';
 import {
   buildGithubServiceHarness,

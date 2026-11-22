@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
+import { type InstallationPermissionSet, permissionKey } from './github-installation-permissions.js';
 import type { InstallationTokenMint } from './github-repo-response.js';
-import { type InstallationPermissionSet, permissionKey } from './github-repo-client.service.js';
 import { IntegrationStoreService } from './integration-store.service.js';
 import type { Secret } from './secret.js';
 import { Clock } from '../core/clock.js';

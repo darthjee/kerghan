@@ -4,6 +4,7 @@
  * `updateIssue`. Rate limits are read from headers only; no body is parsed for
  * a message. A `3xx` is handled by `github-issue-redirect.ts` before it gets here.
  */
+import type { GithubRateLimitFields } from './github-http.js';
 import type { GithubIssue, IssueFailure, RenamedTo } from './github-issue-results.js';
 import {
   asObject,
@@ -17,7 +18,6 @@ import {
   resetAtFor,
   unexpected,
 } from './github-repo-response.js';
-import type { GithubRateLimitFields } from './github-http.js';
 import type { RepoFailure } from './github-repo-results.js';
 import type { Clock } from '../core/clock.js';
 
@@ -79,11 +79,9 @@ export function parseIssue(raw: unknown): GithubIssue | null {
   const entry = asObject(raw);
   const { id, number, title, state } = entry;
   const body = parseBody(entry.body);
-  const updatedAt = typeof entry.updated_at === 'string' ? new Date(entry.updated_at) : null;
+  const updatedAt = parseDate(entry.updated_at);
 
-  if (!isGithubId(id) || !isGithubId(number) || typeof title !== 'string' || title.length > TITLE_MAX_LENGTH
-    || body === undefined || (state !== 'open' && state !== 'closed')
-    || updatedAt === null || Number.isNaN(updatedAt.getTime())) {
+  if (!isGithubId(id) || !isGithubId(number) || !isTitle(title) || body === undefined || !isState(state) || updatedAt === null) {
     return null;
   }
 
@@ -139,20 +137,46 @@ export function isIssueListing(body: string | null): boolean {
  */
 function classifyIssueStatus(operation: RepoOperation, status: number, authenticated: boolean): IssueClassification {
   switch (status) {
-  case 304:
-    return operation === 'issue' ? { kind: 'not_modified' } : unexpected();
-  case 401:
-    return authenticated ? { kind: 'invalid_credentials' } : unexpected();
-  case 403:
-    return { kind: 'forbidden' };
-  case 404:
-    return { kind: 'not_found' };
-  case 410:
-    return operation === 'issue_probe' ? unexpected() : { kind: 'gone' };
-  default:
+    case 304:
+      return operation === 'issue' ? { kind: 'not_modified' } : unexpected();
+    case 401:
+      return authenticated ? { kind: 'invalid_credentials' } : unexpected();
+    case 403:
+      return { kind: 'forbidden' };
+    case 404:
+      return { kind: 'not_found' };
+    case 410:
+      return operation === 'issue_probe' ? unexpected() : { kind: 'gone' };
+    default:
     // 422 on the write is unexpected too: the allowlisted body never triggers it.
-    return classifyRange(status);
+      return classifyRange(status);
   }
+}
+
+/**
+ * @param {unknown} value - The value.
+ * @returns {boolean} Whether it is an issue title: a string of at most 256 characters.
+ */
+function isTitle(value: unknown): value is string {
+  return typeof value === 'string' && value.length <= TITLE_MAX_LENGTH;
+}
+
+/**
+ * @param {unknown} value - The value.
+ * @returns {boolean} Whether it is an issue state.
+ */
+function isState(value: unknown): value is 'open' | 'closed' {
+  return value === 'open' || value === 'closed';
+}
+
+/**
+ * @param {unknown} value - The value.
+ * @returns {Date | null} The date, or `null` when it is not a valid ISO date string.
+ */
+function parseDate(value: unknown): Date | null {
+  const date = typeof value === 'string' ? new Date(value) : null;
+
+  return date === null || Number.isNaN(date.getTime()) ? null : date;
 }
 
 /**

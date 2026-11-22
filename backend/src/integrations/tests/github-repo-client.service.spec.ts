@@ -1,13 +1,11 @@
 import { FakeClock } from '../../core/tests/support/fake-clock.js';
 import { GITHUB_API_VERSION } from '../github-client.service.js';
 import { hasNextLink } from '../github-http.js';
+import { ISSUE_READ_PERMISSIONS, ISSUE_WRITE_PERMISSIONS, REPO_LISTING_PERMISSIONS } from '../github-installation-permissions.js';
 import {
   GITHUB_REPO_LISTING_MAX_BODY_BYTES,
   GITHUB_REPO_MAX_BODY_BYTES,
   GithubRepoClientService,
-  ISSUE_READ_PERMISSIONS,
-  ISSUE_WRITE_PERMISSIONS,
-  REPO_LISTING_PERMISSIONS,
 } from '../github-repo-client.service.js';
 import { classifyRepoResponse, parseMintedToken, type RepoOperation } from '../github-repo-response.js';
 import { Secret } from '../secret.js';

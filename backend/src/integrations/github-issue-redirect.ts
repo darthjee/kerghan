@@ -78,8 +78,17 @@ function parseGithubLocation(location: string | null): URL | null {
     return null;
   }
 
+  return isPlainGithubUrl(url) && !location.includes('?') && !location.includes('#') ? url : null;
+}
+
+/**
+ * Whether a URL is on `https://api.github.com` with no port, credentials, query or fragment.
+ * @param {URL} url - The parsed URL.
+ * @returns {boolean} `true` when it is.
+ */
+function isPlainGithubUrl(url: URL): boolean {
   const onGithub = url.protocol === 'https:' && url.hostname === 'api.github.com' && url.port === '';
   const plain = url.username === '' && url.password === '' && url.search === '' && url.hash === '';
 
-  return onGithub && plain && !location.includes('?') && !location.includes('#') ? url : null;
+  return onGithub && plain;
 }

@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { apiHeaders, GITHUB_API_URL, GITHUB_API_VERSION, GITHUB_USER_AGENT, GithubClientError, send } from './github-client.service.js';
 import { hasNextLink, parseJsonObject, rateLimitFields } from './github-http.js';
+import type { InstallationPermissionSet } from './github-installation-permissions.js';
 import {
   classifyRange,
   classifyRepoResponse,
@@ -23,16 +24,6 @@ export const GITHUB_REPO_LISTING_MAX_BODY_BYTES = 2 * 1024 * 1024;
 export const GITHUB_REPO_MAX_BODY_BYTES = 64 * 1024;
 // Repos per listing page.
 export const GITHUB_REPOS_PER_PAGE = 100;
-
-/** The permissions an installation token is minted with. */
-export type InstallationPermissionSet = Readonly<Record<string, 'read' | 'write'>>;
-
-/** The permission set of the repo listings. */
-export const REPO_LISTING_PERMISSIONS: InstallationPermissionSet = { metadata: 'read' };
-/** The permission set of `getIssue` and `probeIssues`. */
-export const ISSUE_READ_PERMISSIONS: InstallationPermissionSet = { issues: 'read', metadata: 'read' };
-/** The permission set of `updateIssue`. */
-export const ISSUE_WRITE_PERMISSIONS: InstallationPermissionSet = { issues: 'write' };
 
 // The fixed listing paths and their fixed parameters (the page is appended by the client).
 const USER_REPOS_PATH = '/user/repos?affiliation=owner,collaborator,organization_member&visibility=all&sort=created&direction=asc';
@@ -254,18 +245,6 @@ export class GithubRepoClientService {
 
     return MINT_FAILURES.get(response.status) ?? classifyRange(response.status);
   }
-}
-
-/**
- * A stable key of a permission set, such as `issues:read,metadata:read`.
- * @param {InstallationPermissionSet} permissions - The permission set.
- * @returns {string} The key, independent of the order the permissions were written in.
- */
-export function permissionKey(permissions: InstallationPermissionSet): string {
-  return Object.entries(permissions)
-    .map(([name, level]) => `${name}:${level}`)
-    .sort()
-    .join(',');
 }
 
 /**
