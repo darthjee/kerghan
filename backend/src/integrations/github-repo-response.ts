@@ -37,9 +37,9 @@ export type InstallationTokenMint =
   | { kind: 'unavailable'; reason: UnavailableReason };
 
 // Longest GitHub login.
-const OWNER_MAX_LENGTH = 39;
+export const OWNER_MAX_LENGTH = 39;
 // Longest GitHub repository name.
-const NAME_MAX_LENGTH = 100;
+export const NAME_MAX_LENGTH = 100;
 // Statuses GitHub uses for primary and secondary rate limits.
 const RATE_LIMIT_STATUSES = new Set([403, 429]);
 
@@ -217,7 +217,7 @@ function parseJsonArray(body: string | null): unknown {
  * @param {unknown} value - The value.
  * @returns {boolean} Whether it is one.
  */
-function isGithubId(value: unknown): value is number {
+export function isGithubId(value: unknown): value is number {
   return typeof value === 'number' && Number.isSafeInteger(value) && value > 0;
 }
 
@@ -227,7 +227,7 @@ function isGithubId(value: unknown): value is number {
  * @param {number} max - The longest accepted length.
  * @returns {boolean} Whether it is one.
  */
-function isBoundedString(value: unknown, max: number): value is string {
+export function isBoundedString(value: unknown, max: number): value is string {
   return typeof value === 'string' && value !== '' && value.length <= max;
 }
 
@@ -236,6 +236,6 @@ function isBoundedString(value: unknown, max: number): value is string {
  * @param {unknown} value - The value.
  * @returns {Record<string, unknown>} The object, or `{}`.
  */
-function asObject(value: unknown): Record<string, unknown> {
+export function asObject(value: unknown): Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value) ? value as Record<string, unknown> : {};
 }
