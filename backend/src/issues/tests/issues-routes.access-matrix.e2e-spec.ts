@@ -11,49 +11,11 @@ import {
 } from './support/build-issues-test-app.js';
 import { sampleIssue } from './support/fake-issues.service.js';
 import { sampleProject } from './support/fake-projects.service.js';
-import { ISSUE_ID, PROJECT_ID, registeredRoutes } from './support/registered-routes.js';
+import { ISSUE_ID, PROJECT_ID, registeredRoutes, ROUTE_ROWS, type RouteRow } from './support/registered-routes.js';
 
 const CROSS_SITE = { 'Sec-Fetch-Site': 'cross-site', Origin: 'https://evil.example' };
 
-type Service = 'projects' | 'issues' | 'links';
-
-/** One row of the route access matrix: every route of the Issues module (`testing.md#security-verification`). */
-interface MatrixRow {
-  /** The fake behind the route. */
-  service: Service;
-  path: string;
-  /** A body the route accepts. */
-  body: Record<string, unknown>;
-  /** A body the route's DTO rejects, or `null` for a route that reads none. */
-  invalidBody: Record<string, unknown> | null;
-  success: number;
-  /** The service method behind the route, to make it fail inside the handler. */
-  method: string;
-}
-
-const project = (path: string): string => `/projects/${PROJECT_ID}/${path}`;
-const issue = (path: string): string => `/projects/${PROJECT_ID}/issues/${ISSUE_ID}/${path}`;
-
-const MATRIX: MatrixRow[] = [
-  { service: 'projects', path: '/projects/mine.json', body: {}, invalidBody: { page: 'x' }, success: 200, method: 'list' },
-  { service: 'projects', path: '/projects/create.json', body: { name: 'Roadmap' }, invalidBody: { name: 5 }, success: 201, method: 'create' },
-  { service: 'projects', path: '/projects/from-repository.json', body: { repository: { githubId: 1 } }, invalidBody: { repository: 5 }, success: 201, method: 'create' },
-  { service: 'projects', path: project('show.json'), body: {}, invalidBody: null, success: 200, method: 'show' },
-  { service: 'projects', path: project('edit.json'), body: { name: 'New' }, invalidBody: { name: 5 }, success: 200, method: 'edit' },
-  { service: 'projects', path: project('repository.json'), body: { repository: null }, invalidBody: { repository: 5 }, success: 200, method: 'setRepository' },
-  { service: 'projects', path: project('delete.json'), body: {}, invalidBody: null, success: 200, method: 'delete' },
-  { service: 'issues', path: project('issues.json'), body: {}, invalidBody: { page: 'x' }, success: 200, method: 'list' },
-  { service: 'issues', path: project('issues/create.json'), body: { title: 'Fix it' }, invalidBody: { title: 5 }, success: 201, method: 'create' },
-  { service: 'issues', path: issue('show.json'), body: {}, invalidBody: null, success: 200, method: 'show' },
-  { service: 'issues', path: issue('edit.json'), body: { title: 'New' }, invalidBody: { title: 5 }, success: 200, method: 'edit' },
-  { service: 'issues', path: issue('delete.json'), body: {}, invalidBody: null, success: 200, method: 'delete' },
-  { service: 'links', path: project('issues/import.json'), body: { number: 12 }, invalidBody: { number: 'x' }, success: 201, method: 'import' },
-  { service: 'links', path: issue('attach.json'), body: { number: 12 }, invalidBody: { number: 'x' }, success: 200, method: 'attach' },
-  { service: 'links', path: issue('unlink.json'), body: {}, invalidBody: { discardUnsentChanges: 'x' }, success: 200, method: 'unlink' },
-  { service: 'links', path: issue('refresh.json'), body: {}, invalidBody: null, success: 202, method: 'refreshIssue' },
-  { service: 'links', path: project('refresh.json'), body: {}, invalidBody: null, success: 202, method: 'refreshProject' },
-  { service: 'links', path: issue('retry-sync.json'), body: {}, invalidBody: null, success: 202, method: 'retrySync' },
-];
+const MATRIX = ROUTE_ROWS;
 
 const withIssueId = MATRIX.filter((row) => row.path.includes(ISSUE_ID));
 const withProjectId = MATRIX.filter((row) => row.path.includes(PROJECT_ID));
@@ -67,11 +29,11 @@ interface RecordingFake {
 describe('Issues routes access matrix (e2e)', () => {
   const { ctx } = useIssuesTestApp();
 
-  const fake = (row: MatrixRow): RecordingFake => ctx[row.service] as unknown as RecordingFake;
-  const fail = (row: MatrixRow, error: Error): void => {
+  const fake = (row: RouteRow): RecordingFake => ctx[row.service] as unknown as RecordingFake;
+  const fail = (row: RouteRow, error: Error): void => {
     fake(row).failWith(row.method as never, error);
   };
-  const send = (row: MatrixRow, cookie?: string, body: Record<string, unknown> = row.body): request.Test => call(ctx.app, 'post', row.path, cookie).send(body);
+  const send = (row: RouteRow, cookie?: string, body: Record<string, unknown> = row.body): request.Test => call(ctx.app, 'post', row.path, cookie).send(body);
   const allCalls = () => [...ctx.projects.calls, ...ctx.issues.calls, ...ctx.links.calls];
 
   it('has a row for every route the Issues module registers (completeness)', () => {

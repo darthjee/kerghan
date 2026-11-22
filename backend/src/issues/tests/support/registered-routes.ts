@@ -47,3 +47,44 @@ function routesOf(controller: Type): string[] {
       return `${method} ${path}`;
     });
 }
+
+export type Service = 'projects' | 'issues' | 'links';
+
+/** One row of the route table: every route of the Issues module (`testing.md#security-verification`). */
+export interface RouteRow {
+  /** The fake behind the route. */
+  service: Service;
+  path: string;
+  /** A body the route accepts. */
+  body: Record<string, unknown>;
+  /** A body the route's DTO rejects, or `null` for a route that reads none. */
+  invalidBody: Record<string, unknown> | null;
+  success: number;
+  /** The service method behind the route, to make it fail inside the handler. */
+  method: string;
+}
+
+const project = (path: string): string => `/projects/${PROJECT_ID}/${path}`;
+const issue = (path: string): string => `/projects/${PROJECT_ID}/issues/${ISSUE_ID}/${path}`;
+
+export const ROUTE_ROWS: RouteRow[] = [
+  { service: 'projects', path: '/projects/mine.json', body: {}, invalidBody: { page: 'x' }, success: 200, method: 'list' },
+  { service: 'projects', path: '/projects/create.json', body: { name: 'Roadmap' }, invalidBody: { name: 5 }, success: 201, method: 'create' },
+  { service: 'projects', path: '/projects/from-repository.json', body: { repository: { githubId: 1 } }, invalidBody: { repository: 5 }, success: 201, method: 'create' },
+  { service: 'projects', path: project('show.json'), body: {}, invalidBody: null, success: 200, method: 'show' },
+  { service: 'projects', path: project('edit.json'), body: { name: 'New' }, invalidBody: { name: 5 }, success: 200, method: 'edit' },
+  { service: 'projects', path: project('repository.json'), body: { repository: null }, invalidBody: { repository: 5 }, success: 200, method: 'setRepository' },
+  { service: 'projects', path: project('delete.json'), body: {}, invalidBody: null, success: 200, method: 'delete' },
+  { service: 'issues', path: project('issues.json'), body: {}, invalidBody: { page: 'x' }, success: 200, method: 'list' },
+  { service: 'issues', path: project('issues/create.json'), body: { title: 'Fix it' }, invalidBody: { title: 5 }, success: 201, method: 'create' },
+  { service: 'issues', path: issue('show.json'), body: {}, invalidBody: null, success: 200, method: 'show' },
+  { service: 'issues', path: issue('edit.json'), body: { title: 'New' }, invalidBody: { title: 5 }, success: 200, method: 'edit' },
+  { service: 'issues', path: issue('delete.json'), body: {}, invalidBody: null, success: 200, method: 'delete' },
+  { service: 'links', path: project('issues/import.json'), body: { number: 12 }, invalidBody: { number: 'x' }, success: 201, method: 'import' },
+  { service: 'links', path: issue('attach.json'), body: { number: 12 }, invalidBody: { number: 'x' }, success: 200, method: 'attach' },
+  { service: 'links', path: issue('unlink.json'), body: {}, invalidBody: { discardUnsentChanges: 'x' }, success: 200, method: 'unlink' },
+  { service: 'links', path: issue('refresh.json'), body: {}, invalidBody: null, success: 202, method: 'refreshIssue' },
+  { service: 'links', path: project('refresh.json'), body: {}, invalidBody: null, success: 202, method: 'refreshProject' },
+  { service: 'links', path: issue('retry-sync.json'), body: {}, invalidBody: null, success: 202, method: 'retrySync' },
+];
+

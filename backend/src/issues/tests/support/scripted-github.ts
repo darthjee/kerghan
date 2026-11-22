@@ -81,6 +81,7 @@ export class ScriptedGithub {
   clear(): void {
     this.calls.length = 0;
     this.#taken.clear();
+    this.fetch.mockClear();
   }
 
   /** The recorded calls to the issue endpoints (the mint excluded). */
