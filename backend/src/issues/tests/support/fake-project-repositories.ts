@@ -3,6 +3,7 @@ import type { RowStatus } from '../../../repositories/row-status.js';
 import type {
   ProjectRepositoryLookup,
   RepoRef,
+  RepositoryRename,
   RepositorySummary,
 } from '../../../repositories/types/repositories-api.types.js';
 
@@ -21,7 +22,7 @@ export interface FakeProjectRepoSeed {
 }
 
 /** The `RepositoriesService` methods the Issues module uses. */
-export type ProjectRepositoriesSurface = Pick<RepositoriesService, 'resolveForProject' | 'projectSummaries' | 'integrationSourceIds'>;
+export type ProjectRepositoriesSurface = Pick<RepositoriesService, 'resolveForProject' | 'projectSummaries' | 'integrationSourceIds' | 'applyRename'>;
 
 /**
  * An in-memory stand-in for the `RepositoriesService` lookups the Issues module uses
@@ -94,6 +95,11 @@ export class FakeProjectRepositories implements ProjectRepositoriesSurface {
     this.calls.push({ method: 'integrationSourceIds', userId, args: [repositoryId] });
 
     return [...(this.#sources.get(`${userId}:${repositoryId}`) ?? [])];
+  }
+
+  async applyRename(userId: number, repositoryId: number, renamedTo: RepositoryRename): Promise<void> {
+    this.calls.push({ method: 'applyRename', userId, args: [repositoryId, renamedTo] });
+    this.rename(userId, repositoryId, renamedTo.owner, renamedTo.name);
   }
 
   callsOf(method: keyof ProjectRepositoriesSurface): number {

@@ -3,10 +3,10 @@ import { openEntityDataSource } from '../../database/tests/db-tier/db-tier.js';
 import { AccountHandleService } from '../account-handle.service.js';
 import { User } from '../entities/user.entity.js';
 
-async function insertUser(ds: DataSource, username: string): Promise<number> {
+async function insertUser(ds: DataSource, username: string, status = 'approved'): Promise<number> {
   const result: { insertId: number } = await ds.query(
     'INSERT INTO auth_users (username, email, password_digest, status) VALUES (?, ?, ?, ?)',
-    [username, `${username}@kerghan.test`, 'digest', 'approved'],
+    [username, `${username}@kerghan.test`, 'digest', status],
   );
 
   return result.insertId;
@@ -41,6 +41,17 @@ describe('AccountHandleService (real MySQL)', () => {
       await expect(service.lockExistingUser(id, manager)).resolves.toBe(true);
       await expect(service.lockExistingUser(id + 1000, manager)).resolves.toBe(false);
     });
+  });
+
+  it('isApproved is true only for an approved account', async () => {
+    const approved = await insertUser(ds, 'ok-user');
+    const pending = await insertUser(ds, 'waiting-user', 'pending');
+    const denied = await insertUser(ds, 'refused-user', 'denied');
+
+    await expect(service.isApproved(approved)).resolves.toBe(true);
+    await expect(service.isApproved(pending)).resolves.toBe(false);
+    await expect(service.isApproved(denied)).resolves.toBe(false);
+    await expect(service.isApproved(approved + 100_000)).resolves.toBe(false);
   });
 
   it('makes a concurrent user delete wait until the locking transaction commits', async () => {

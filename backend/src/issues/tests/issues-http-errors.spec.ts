@@ -8,6 +8,7 @@ import {
   issueAlreadyLinked,
   issueAttachConfirmationRequired,
   issueEditRateLimited,
+  issueLinkGone,
   issueLinkRateLimited,
   issueNotLinked,
   issueUnlinkHasUnsentChanges,
@@ -174,6 +175,16 @@ describe('issues-http-errors', () => {
       code: ErrorCodes.ISSUE_LINK_RATE_LIMITED,
       message: 'Too many link requests; try again later',
       retryAfterSeconds: 7,
+    });
+  });
+
+  it('issueLinkGone is a 409', () => {
+    const error = issueLinkGone();
+
+    expect(error.getStatus()).toBe(409);
+    expect(error.getResponse()).toEqual({
+      code: ErrorCodes.ISSUE_LINK_GONE,
+      message: 'The GitHub issue is no longer available',
     });
   });
 });

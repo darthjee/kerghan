@@ -28,11 +28,13 @@ import { ProjectsController } from './projects.controller.js';
 import { ProjectsService } from './projects.service.js';
 import { AuthModule } from '../auth/auth.module.js';
 import { Clock, SystemClock } from '../core/clock.js';
+import { Scheduler, SystemScheduler } from '../core/scheduler.js';
 import { IntegrationsModule } from '../integrations/integrations-github.public.js';
 import { RepositoriesModule } from '../repositories/repositories.module.js';
+import { WorkersModule } from '../workers/workers.module.js';
 
 /**
- * The Issues module's own providers (everything but the injected `Clock` and the cross-module
+ * The Issues module's own providers (everything but the injected `Clock` and `Scheduler` and the cross-module
  * services), shared with the DB-tier harness so specs wire the same graph.
  */
 export const ISSUES_PROVIDERS: Provider[] = [
@@ -69,13 +71,14 @@ export const ISSUES_PROVIDERS: Provider[] = [
  * `AccountHandleService` and Repositories through the exported `RepositoriesService`.
  * The GitHub link routes (`IssueLinksController`) are the only Issues code that calls GitHub, and
  * only through the exported, `GET`-only `IntegrationsGithubService` (the one read of a link
- * creation); it writes nothing to GitHub.
+ * creation); it writes nothing to GitHub. It imports `WorkersModule` for the sync job (#558).
  */
 @Module({
-  imports: [TypeOrmModule.forFeature(ISSUES_ENTITIES), AuthModule, RepositoriesModule, IntegrationsModule],
+  imports: [TypeOrmModule.forFeature(ISSUES_ENTITIES), AuthModule, RepositoriesModule, IntegrationsModule, WorkersModule],
   providers: [
     ...ISSUES_PROVIDERS,
     { provide: Clock, useClass: SystemClock },
+    { provide: Scheduler, useClass: SystemScheduler },
   ],
   controllers: [ProjectsController, IssuesController, IssueLinksController],
   exports: [IssuesAccess],

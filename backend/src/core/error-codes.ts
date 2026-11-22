@@ -59,6 +59,7 @@ export const ErrorCodes = {
   GITHUB_CREDENTIAL_UNUSABLE: 'GITHUB_CREDENTIAL_UNUSABLE',
   GITHUB_ISSUE_IS_PULL_REQUEST: 'GITHUB_ISSUE_IS_PULL_REQUEST',
   ISSUE_LINK_RATE_LIMITED: 'ISSUE_LINK_RATE_LIMITED',
+  ISSUE_LINK_GONE: 'ISSUE_LINK_GONE',
 } as const;
 
 // Message used for every unexpected (non-HTTP) error — the real message and

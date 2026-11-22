@@ -120,6 +120,12 @@ export interface RepositorySnapshot {
   private: boolean;
 }
 
+/** A repository's new `owner` and `name`, as reported by GitHub after a rename (E65). */
+export interface RepositoryRename {
+  owner: string;
+  name: string;
+}
+
 /** How `markAdded` ended; `gone`: the row was pruned meanwhile. */
 export type MarkAddedOutcome =
   | { kind: 'added'; repository: ListedRepository }

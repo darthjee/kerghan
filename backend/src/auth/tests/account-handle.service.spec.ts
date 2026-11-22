@@ -41,6 +41,25 @@ describe('AccountHandleService', () => {
     });
   });
 
+  describe('isApproved', () => {
+    it.each([
+      ['approved', true],
+      ['pending', false],
+      ['denied', false],
+    ])('is %s -> %s', async (status, expected) => {
+      userRepository.findOne.mockResolvedValue({ id: 1, status });
+
+      await expect(service.isApproved(1)).resolves.toBe(expected);
+      expect(userRepository.findOne).toHaveBeenCalledWith({ where: { id: 1 }, select: { id: true, status: true } });
+    });
+
+    it('is false for a user that does not exist', async () => {
+      userRepository.findOne.mockResolvedValue(null);
+
+      await expect(service.isApproved(999)).resolves.toBe(false);
+    });
+  });
+
   describe('lockExistingUser', () => {
     function managerReturning(row: unknown): { manager: never; qb: Record<string, jest.Mock> } {
       const qb: Record<string, jest.Mock> = {};

@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { EntityManager, Repository } from 'typeorm';
-import { User } from './entities/user.entity.js';
+import { User, UserStatus } from './entities/user.entity.js';
 
 /**
  * Auth's read-only export of the account's GitHub handle, for other modules
@@ -33,6 +33,22 @@ export class AccountHandleService {
     });
 
     return user?.githubHandle ?? null;
+  }
+
+  /**
+   * Whether an account is approved. The Issues sync reads it as its guard 2 (E24), because Issues
+   * may not query `auth_users` itself. Only Auth owns the query; nothing is written or locked.
+   * @param {number} userId - The id of the user.
+   * @returns {Promise<boolean>} `true` only for an `approved` account; `false` for a pending or
+   *   denied one and for a user that does not exist.
+   */
+  async isApproved(userId: number): Promise<boolean> {
+    const user = await this.userRepository.findOne({
+      where: { id: userId },
+      select: { id: true, status: true },
+    });
+
+    return user?.status === UserStatus.APPROVED;
   }
 
   /**
