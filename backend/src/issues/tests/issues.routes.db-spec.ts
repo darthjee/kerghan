@@ -1,6 +1,6 @@
 import { keysOf } from './support/build-issues-test-app.js';
 import { buildIssuesHttpDbHarness, post, type IssuesHttpDbHarness } from './support/issues-http-db-harness.js';
-import { seedIntruder, seedIssue, seedProject } from './support/issues-seeds.js';
+import { seedIssue, seedProject } from './support/issues-seeds.js';
 import { seedUser } from '../../repositories/tests/support/two-user-baseline.js';
 
 // The Issues routes over real MySQL: the real service behind the controller, so the wire bodies
@@ -69,7 +69,7 @@ describe('Issues routes (real MySQL)', () => {
 
   describe('access', () => {
     it('answers a missing, a foreign and a deleted project with the identical 404 on every route', async () => {
-      const intruder = await seedIntruder(harness.ds);
+      const { intruder } = harness;
       const deleted = await seedProject(harness.ds, userId, { deleted: true });
       const routes: Array<[string, Record<string, unknown>]> = [
         ['issues.json', {}],
@@ -92,7 +92,7 @@ describe('Issues routes (real MySQL)', () => {
     });
 
     it('answers an issue of another project with the identical 404 on show, edit and delete', async () => {
-      const intruder = await seedIntruder(harness.ds);
+      const { intruder } = harness;
       const other = await seedProject(harness.ds, userId, { name: 'other' });
       const foreign = await seedIssue(harness.ds, other.id, { title: 'in other' });
       const targets = [MISSING, intruder.issueUuid, foreign.uuid];
@@ -109,7 +109,7 @@ describe('Issues routes (real MySQL)', () => {
     });
 
     it('never lists another user\'s issues', async () => {
-      const intruder = await seedIntruder(harness.ds);
+      const { intruder } = harness;
       await seedIssue(harness.ds, projectId, { title: 'mine' });
 
       const listing = (await call(`/projects/${projectUuid}/issues.json`, { state: 'all' }).expect(200)).body;

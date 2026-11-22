@@ -4,6 +4,8 @@ import { Test, type TestingModule } from '@nestjs/testing';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
 import { FakeProjectRepositories } from './fake-project-repositories.js';
+import { seedIntruderEachTest } from './intruder-baseline.js';
+import { type Intruder } from './issues-seeds.js';
 import { AccountHandleService } from '../../../auth/account-handle.service.js';
 import { User } from '../../../auth/entities/user.entity.js';
 import { Clock } from '../../../core/clock.js';
@@ -45,6 +47,8 @@ export interface IssuesDbHarness {
   repositories: FakeProjectRepositories;
   /** The scripted `IntegrationsGithubService` the link routes read GitHub through. */
   github: FakeIntegrationsGithubService;
+  /** The intruder seeded before every test: a second approved user with an integration, a project, an issue, a link and a marker. */
+  readonly intruder: Intruder;
   get<T>(token: abstract new (...args: never[]) => T): T;
   close(): Promise<void>;
 }
@@ -53,10 +57,16 @@ export interface IssuesDbHarness {
  * Builds a Nest testing module on the DB tier's test database, wiring the Issues module's own
  * providers with Auth's real `AccountHandleService`, `FakeClock`, a fake logger and an
  * in-memory `RepositoriesService` lookup double, plus `EventEmitterModule`.
+ * Every test starts with the intruder already seeded (see `IssuesDbHarness#intruder`).
  * @param env - Extra config values (e.g. `KERGHAN_ISSUES_MAX_PROJECTS_PER_USER`).
+ * @param options - Harness options.
+ * @param options.intruder - `false` for a second harness over the rows a first one seeded (default `true`).
  * @returns The harness; call `close()` in `afterAll`.
  */
-export async function buildIssuesDbHarness(env: Record<string, string> = {}): Promise<IssuesDbHarness> {
+export async function buildIssuesDbHarness(
+  env: Record<string, string> = {},
+  options: { intruder?: boolean } = {},
+): Promise<IssuesDbHarness> {
   const clock = new FakeClock(HARNESS_START);
   const scheduler = new FakeScheduler(clock);
   const workers = new FakeWorkersService();
@@ -90,16 +100,26 @@ export async function buildIssuesDbHarness(env: Record<string, string> = {}): Pr
 
   await module.init();
 
+  const ds = module.get(DataSource);
+  const baseline = seedIntruderEachTest(() => ds, options.intruder ?? true);
+
   return {
     module,
-    ds: module.get(DataSource),
+    ds,
     clock,
     scheduler,
     workers,
     logger,
     repositories,
     github,
+    get intruder(): Intruder {
+      return baseline.intruder;
+    },
     get: (token) => module.get(token),
-    close: () => module.close(),
+    close: () => {
+      baseline.dispose();
+
+      return module.close();
+    },
   };
 }

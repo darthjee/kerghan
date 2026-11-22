@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { DataSource } from 'typeorm';
-import { seedUser } from '../../../repositories/tests/support/two-user-baseline.js';
+import { seedIntegration, seedUser } from '../../../repositories/tests/support/two-user-baseline.js';
 import { IssueGithubLink } from '../../entities/issue-github-link.entity.js';
 import { IssuePendingWrite } from '../../entities/issue-pending-write.entity.js';
 import { Issue, type IssueState } from '../../entities/issue.entity.js';
@@ -173,6 +173,8 @@ export async function seedMarker(
 /** The intruder's ids, so a spec can assert that every one of his rows is untouched. */
 export interface Intruder {
   userId: number;
+  /** The intruder's own integration (a `pat`, active). */
+  integrationId: number;
   projectId: number;
   projectUuid: string;
   issueId: number;
@@ -182,13 +184,14 @@ export interface Intruder {
 }
 
 /**
- * Seeds the intruder of `testing.md#fixtures`: a second user with a project, an issue, a link and
- * a marker of his own.
+ * Seeds the intruder of `testing.md#fixtures`: a second approved user with an integration, a
+ * project, an issue, a link and a marker of his own.
  * @param ds - The data source.
  * @returns The user's id and his rows' ids.
  */
 export async function seedIntruder(ds: DataSource): Promise<Intruder> {
   const userId = await seedUser(ds, 'intruder');
+  const integrationId = await seedIntegration(ds, userId);
   const project = await seedProject(ds, userId, { name: 'intruder project' });
   const issue = await seedIssue(ds, project.id, { title: 'intruder issue', body: 'intruder body' });
   const link = await seedLink(ds, { userId, issueId: issue.id });
@@ -196,6 +199,7 @@ export async function seedIntruder(ds: DataSource): Promise<Intruder> {
 
   return {
     userId,
+    integrationId,
     projectId: project.id,
     projectUuid: project.uuid,
     issueId: issue.id,

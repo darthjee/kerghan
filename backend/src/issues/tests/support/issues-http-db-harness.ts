@@ -10,7 +10,9 @@ import cookieParser from 'cookie-parser';
 import request from 'supertest';
 import { DataSource } from 'typeorm';
 import { FakeProjectRepositories } from './fake-project-repositories.js';
+import { seedIntruderEachTest } from './intruder-baseline.js';
 import { type FakeLogger, HARNESS_START } from './issues-db-harness.js';
+import { type Intruder } from './issues-seeds.js';
 import { AccountHandleService } from '../../../auth/account-handle.service.js';
 import { User } from '../../../auth/entities/user.entity.js';
 import { CachePolicyInterceptor } from '../../../core/cache-policy.interceptor.js';
@@ -62,6 +64,10 @@ export interface IssuesHttpDbHarness {
   github: FakeIntegrationsGithubService;
   /** Mints an access-token cookie for a user (a live session, as a login would issue). */
   sessionFor(userId: number): string;
+  /** The intruder seeded before every test: a second approved user with an integration, a project, an issue, a link and a marker. */
+  readonly intruder: Intruder;
+  /** A fresh session cookie of the intruder. */
+  intruderCookie(): string;
   get<T>(token: abstract new (...args: never[]) => T): T;
   close(): Promise<void>;
 }
@@ -122,25 +128,36 @@ export async function buildIssuesHttpDbHarness(env: Record<string, string> = {})
   await app.init();
 
   const jwt = app.get(JwtService);
+  const ds = module.get(DataSource);
+  const baseline = seedIntruderEachTest(() => ds);
+  const sessionFor = (userId: number): string => {
+    const sid = randomUUID();
+
+    sessions.sessions.set(sid, { id: userId, username: `user-${userId}`, isAdmin: false });
+    return `access_token=${jwt.sign({ sub: userId, sid })}`;
+  };
 
   return {
     module,
     app,
-    ds: module.get(DataSource),
+    ds,
     clock,
     scheduler,
     workers,
     logger,
     repositories,
     github,
-    sessionFor: (userId) => {
-      const sid = randomUUID();
-
-      sessions.sessions.set(sid, { id: userId, username: `user-${userId}`, isAdmin: false });
-      return `access_token=${jwt.sign({ sub: userId, sid })}`;
+    sessionFor,
+    get intruder(): Intruder {
+      return baseline.intruder;
     },
+    intruderCookie: () => sessionFor(baseline.intruder.userId),
     get: (token) => module.get(token),
-    close: () => app.close(),
+    close: () => {
+      baseline.dispose();
+
+      return app.close();
+    },
   };
 }
 

@@ -65,6 +65,34 @@ export async function truncateAll(ds: DataSource | Promise<DataSource>): Promise
   }
 }
 
+type TruncatedHook = () => Promise<void>;
+
+const truncatedHooks = new Set<TruncatedHook>();
+
+/**
+ * Registers a hook run after every per-test truncate (before the test's own `beforeEach`), so a
+ * harness can re-seed the rows it promises every test (e.g. the intruder user).
+ *
+ * @param hook - the async seeding callback.
+ * @returns a function that unregisters the hook (call it when the harness closes).
+ */
+export function onTruncated(hook: TruncatedHook): () => void {
+  truncatedHooks.add(hook);
+
+  return () => {
+    truncatedHooks.delete(hook);
+  };
+}
+
+/**
+ * Runs the registered post-truncate hooks, in registration order.
+ *
+ * @returns resolves once every hook has finished.
+ */
+export async function runTruncatedHooks(): Promise<void> {
+  for (const hook of truncatedHooks) await hook();
+}
+
 type EntityClass = NonNullable<DataSourceOptions['entities']> extends Array<infer T> ? T : never;
 
 /**

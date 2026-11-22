@@ -5,7 +5,7 @@ import { IssueMarkers } from '../issue-markers.js';
 import { IssueSyncTrigger } from '../issue-sync-trigger.js';
 import { IssuesService } from '../issues.service.js';
 import { buildIssuesDbHarness, HARNESS_START, type IssuesDbHarness } from './support/issues-db-harness.js';
-import { seedIntruder, seedIssue, seedLink, seedProject, SEED_TIME, type SeededIssue, type SeededProject } from './support/issues-seeds.js';
+import { seedIssue, seedLink, seedProject, SEED_TIME, type SeededIssue, type SeededProject } from './support/issues-seeds.js';
 
 interface MarkerRow {
   link_id: number;
@@ -42,7 +42,7 @@ describe('IssuesService#edit (real MySQL)', () => {
   });
 
   const stored = (): Promise<Issue> => harness.ds.getRepository(Issue).findOneByOrFail({ id: issue.id });
-  const markers = (): Promise<MarkerRow[]> => harness.ds.query('SELECT link_id, revision, marked_at, updated_at FROM issues_pending_writes');
+  const markers = (): Promise<MarkerRow[]> => harness.ds.query('SELECT link_id, revision, marked_at, updated_at FROM issues_pending_writes WHERE link_id <> ?', [harness.intruder.linkId]);
   const edit = (input: Parameters<IssuesService['edit']>[3]) => service.edit(userId, project.uuid, issue.uuid, input);
 
   it('changes only the given fields and bumps updated_at with milliseconds', async () => {
@@ -161,7 +161,7 @@ describe('IssuesService#edit (real MySQL)', () => {
   });
 
   it('answers 404 for the intruder\'s rows and leaves them untouched', async () => {
-    const intruder = await seedIntruder(harness.ds);
+    const { intruder } = harness;
 
     await expect(service.edit(userId, intruder.projectUuid, intruder.issueUuid, { title: 'x' })).rejects.toBeInstanceOf(NotFoundException);
     await expect(service.edit(userId, project.uuid, intruder.issueUuid, { title: 'x' })).rejects.toBeInstanceOf(NotFoundException);
@@ -169,7 +169,8 @@ describe('IssuesService#edit (real MySQL)', () => {
     const row = await harness.ds.getRepository(Issue).findOneByOrFail({ id: intruder.issueId });
 
     expect(row.title).toBe('intruder issue');
-    expect(await markers()).toHaveLength(1);
+    await expect(harness.ds.query('SELECT id FROM issues_pending_writes WHERE id = ?', [intruder.markerId])).resolves.toHaveLength(1);
+    expect(await markers()).toEqual([]);
     expect(trigger).not.toHaveBeenCalled();
   });
 });

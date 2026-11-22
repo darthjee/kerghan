@@ -2,7 +2,7 @@ import { NotFoundException } from '@nestjs/common';
 import { seedUser } from '../../repositories/tests/support/two-user-baseline.js';
 import { ProjectsService } from '../projects.service.js';
 import { buildIssuesDbHarness, type IssuesDbHarness } from './support/issues-db-harness.js';
-import { seedIntruder, seedIssue, seedProject } from './support/issues-seeds.js';
+import { seedIssue, seedProject } from './support/issues-seeds.js';
 
 const DEFAULTS = { page: 1, perPage: 50, search: '' };
 
@@ -43,7 +43,6 @@ describe('ProjectsService#list / #show (real MySQL)', () => {
     it('lists live projects only, never a tombstone or another user\'s project', async () => {
       await seedProject(harness.ds, userId, { name: 'mine' });
       await seedProject(harness.ds, userId, { name: 'gone', deleted: true });
-      await seedIntruder(harness.ds);
 
       expect(await names({})).toEqual(['mine']);
       expect((await service.list(userId, DEFAULTS)).pagination.total).toBe(1);
@@ -139,7 +138,7 @@ describe('ProjectsService#list / #show (real MySQL)', () => {
     });
 
     it('answers the same 404 for a missing, a foreign and a deleted project', async () => {
-      const intruder = await seedIntruder(harness.ds);
+      const { intruder } = harness;
       const deleted = await seedProject(harness.ds, userId, { deleted: true });
       const bodies: unknown[] = [];
 

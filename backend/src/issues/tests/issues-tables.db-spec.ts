@@ -1,7 +1,7 @@
 import { Issue } from '../entities/issue.entity.js';
 import { IssuesProject } from '../entities/issues-project.entity.js';
 import { buildIssuesDbHarness, type IssuesDbHarness } from './support/issues-db-harness.js';
-import { seedIntruder, seedIssue, seedLink, seedMarker, seedProject, SEED_TIME } from './support/issues-seeds.js';
+import { seedIssue, seedLink, seedMarker, seedProject, SEED_TIME } from './support/issues-seeds.js';
 import { seedUser } from '../../repositories/tests/support/two-user-baseline.js';
 
 const DUPLICATE = { code: 'ER_DUP_ENTRY' };
@@ -17,7 +17,7 @@ describe('Issues tables (real MySQL)', () => {
 
   async function setup(): Promise<{ userId: number; intruderId: number }> {
     const userId = await seedUser(harness.ds, 'owner');
-    const intruder = await seedIntruder(harness.ds);
+    const { intruder } = harness;
 
     return { userId, intruderId: intruder.userId };
   }

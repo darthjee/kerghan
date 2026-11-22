@@ -1,4 +1,3 @@
-import { IssueGithubLink } from '../entities/issue-github-link.entity.js';
 import { Issue } from '../entities/issue.entity.js';
 import { buildIssuesHttpDbHarness, post, type IssuesHttpDbHarness } from './support/issues-http-db-harness.js';
 import { seedIssue, seedLink, seedMarker, seedProject } from './support/issues-seeds.js';
@@ -26,7 +25,7 @@ describe('Issue unlink (real MySQL)', () => {
 
     return { issue, link };
   };
-  const linkCount = () => harness.ds.getRepository(IssueGithubLink).count();
+  const linkCount = () => rowCount(harness, 'issues_github_links');
 
   it('deletes the link, keeps the issue unchanged, makes no GitHub call and answers link: null', async () => {
     const { issue } = await linked();

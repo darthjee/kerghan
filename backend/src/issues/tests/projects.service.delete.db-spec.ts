@@ -7,7 +7,7 @@ import { IssuesProject } from '../entities/issues-project.entity.js';
 import { ProjectStore } from '../project-store.js';
 import { ProjectsService } from '../projects.service.js';
 import { buildIssuesDbHarness, HARNESS_START, type IssuesDbHarness } from './support/issues-db-harness.js';
-import { seedIntruder, seedIssue, seedLink, seedMarker, seedProject } from './support/issues-seeds.js';
+import { seedIssue, seedLink, seedMarker, seedProject } from './support/issues-seeds.js';
 
 describe('ProjectsService#delete (real MySQL)', () => {
   let harness: IssuesDbHarness;
@@ -109,7 +109,7 @@ describe('ProjectsService#delete (real MySQL)', () => {
   });
 
   it('leaves every other project, issue, link and marker of the user and of others untouched', async () => {
-    const intruder = await seedIntruder(harness.ds);
+    const { intruder } = harness;
     const survivor = await fullProject();
     const target = await seedProject(harness.ds, userId, { name: 'Target' });
     await seedIssue(harness.ds, target.id);
@@ -126,7 +126,7 @@ describe('ProjectsService#delete (real MySQL)', () => {
   });
 
   it('answers the same 404 for a foreign project and touches none of its rows', async () => {
-    const intruder = await seedIntruder(harness.ds);
+    const { intruder } = harness;
 
     await expect(service.delete(userId, intruder.projectUuid)).rejects.toBeInstanceOf(NotFoundException);
 
@@ -141,7 +141,7 @@ describe('ProjectsService#delete (real MySQL)', () => {
     await expect(service.delete(userId, project.uuid)).rejects.toBeInstanceOf(NotFoundException);
 
     expect(await count(Issue, { projectId: project.id })).toBe(4);
-    expect(await count(IssuePendingWrite, {})).toBe(2);
+    expect(await count(IssuePendingWrite, {})).toBe(3); // the project's two markers and the intruder's
     spy.mockRestore();
   });
 });

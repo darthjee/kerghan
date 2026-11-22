@@ -4,7 +4,7 @@ import { USER_DELETED, UserDeletedEvent } from '../../auth/events/user-deleted.e
 import { seedUser } from '../../repositories/tests/support/two-user-baseline.js';
 import { IssuesEventsListener } from '../issues-events.listener.js';
 import { buildIssuesDbHarness, type IssuesDbHarness } from './support/issues-db-harness.js';
-import { seedIntruder, seedIssue, seedLink, seedMarker, seedProject, type Intruder } from './support/issues-seeds.js';
+import { seedIssue, seedLink, seedMarker, seedProject, type Intruder } from './support/issues-seeds.js';
 
 const TABLES = ['issues_projects', 'issues', 'issues_github_links', 'issues_pending_writes'];
 
@@ -53,7 +53,7 @@ describe('user.deleted listener (real MySQL)', () => {
 
   it('removes the user\'s markers, links, issues and projects (soft-deleted included), leaving the intruder\'s rows', async () => {
     const userId = await seedUser(harness.ds, 'owner');
-    const intruder = await seedIntruder(harness.ds);
+    const { intruder } = harness;
 
     await seedOwnerRows(userId);
     expect(await counts()).toEqual([3, 4, 3, 3]);
@@ -65,7 +65,7 @@ describe('user.deleted listener (real MySQL)', () => {
 
   it('is idempotent for a user with no rows', async () => {
     const userId = await seedUser(harness.ds, 'owner');
-    const intruder = await seedIntruder(harness.ds);
+    const { intruder } = harness;
 
     await harness.get(IssuesEventsListener).onUserDeleted(new UserDeletedEvent(userId));
     await harness.get(IssuesEventsListener).onUserDeleted(new UserDeletedEvent(userId));
@@ -75,7 +75,7 @@ describe('user.deleted listener (real MySQL)', () => {
 
   it('is reached by the user.deleted event fired through EventEmitter2', async () => {
     const userId = await seedUser(harness.ds, 'owner');
-    const intruder = await seedIntruder(harness.ds);
+    const { intruder } = harness;
 
     await seedOwnerRows(userId);
     await harness.get(EventEmitter2).emitAsync(USER_DELETED, new UserDeletedEvent(userId));
@@ -85,7 +85,7 @@ describe('user.deleted listener (real MySQL)', () => {
 
   it('logs a failure at error level with safe fields only and does not throw (E53)', async () => {
     const userId = await seedUser(harness.ds, 'owner');
-    const intruder = await seedIntruder(harness.ds);
+    const { intruder } = harness;
     const spy = jest.spyOn(harness.get(DataSource), 'transaction').mockRejectedValueOnce(new RangeError('boom secret'));
 
     await seedOwnerRows(userId);

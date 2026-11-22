@@ -8,6 +8,7 @@ import { IssueSyncCommit } from '../issue-sync-commit.js';
 import { IssueSyncReader } from '../issue-sync-reader.js';
 import { IssuesSyncService, type ReconcileOutcome } from '../issues-sync.service.js';
 import { integrationRef } from './support/integration-refs.js';
+import { snapshotIntruder } from './support/intruder-baseline.js';
 import { buildIssuesDbHarness, type IssuesDbHarness } from './support/issues-db-harness.js';
 import {
   buildSyncWorld, githubCase, readState, scriptGet, SYNC_INTEGRATION, SYNC_NUMBER, SYNC_REPOSITORY, SYNC_REPOSITORY_ID,
@@ -39,6 +40,20 @@ describe('IssuesSyncService (real MySQL)', () => {
   const scriptPut = (updatedAt = PUT_AT) => harness.github.script(
     SYNC_INTEGRATION, 'updateIssue', SYNC_NUMBER, issueCase(githubIssue({ number: SYNC_NUMBER, updatedAt })),
   );
+
+  describe('the intruder', () => {
+    it('never touches another user\'s project, issue, link or marker, whatever a reconcile does', async () => {
+      const w = await world({ local: { title: 'L' }, base: {}, marker: { revision: 1 } });
+      const before = await snapshotIntruder(harness.ds, w.intruder);
+
+      scriptGet(harness, SYNC_INTEGRATION, githubCase({ title: 'G', updatedAt: LATER }));
+      scriptPut();
+
+      expect(await run(w)).toEqual({ kind: 'done' });
+      expect(await snapshotIntruder(harness.ds, w.intruder)).toEqual(before);
+      expect(calls().every((call) => call.userId === w.userId)).toBe(true);
+    });
+  });
 
   describe('the L/B/G table', () => {
     it('does nothing when neither side moved, and records the sync', async () => {

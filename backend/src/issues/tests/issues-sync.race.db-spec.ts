@@ -10,6 +10,7 @@ import { IssueSyncQueue } from '../issue-sync-queue.js';
 import { IssuesService } from '../issues.service.js';
 import { ISSUES_RECONCILE_JOB } from '../jobs/issues-reconcile.job.js';
 import { ProjectsService } from '../projects.service.js';
+import { countOutsideIntruder } from './support/intruder-baseline.js';
 import { buildIssuesDbHarness, type IssuesDbHarness } from './support/issues-db-harness.js';
 import {
   buildSyncWorld, githubCase, readState, scriptGet, SYNC_INTEGRATION, SYNC_NUMBER, uuidsOf, type SyncWorld, type SyncWorldOptions,
@@ -41,9 +42,7 @@ describe('Issues sync races (real MySQL)', () => {
     const result: Record<string, number> = {};
 
     for (const table of ['issues', 'issues_github_links', 'issues_pending_writes']) {
-      const rows: Array<{ total: string }> = await harness.ds.query(`SELECT COUNT(*) AS total FROM ${table}`);
-
-      result[table] = Number(rows[0].total);
+      result[table] = await countOutsideIntruder(harness.ds, harness.intruder, table);
     }
 
     return result;

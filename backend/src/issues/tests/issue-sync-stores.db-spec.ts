@@ -54,7 +54,7 @@ describe('Issue sync stores (real MySQL)', () => {
       await seedMarker(harness.ds, c.link.id, { markedAt: T2 });
       await seedMarker(harness.ds, d.link.id, { markedAt: T2 });
 
-      expect(await markers.listForBoot()).toEqual([b.link.id, c.link.id, d.link.id, a.link.id]);
+      expect(await markers.listForBoot()).toEqual([b.link.id, c.link.id, d.link.id, harness.intruder.linkId, a.link.id]);
     });
 
     it('markedAtFor answers marked_at by link, leaving out a link without a marker', async () => {
@@ -71,6 +71,7 @@ describe('Issue sync stores (real MySQL)', () => {
 
     it('lists nothing when no marker exists', async () => {
       await linked();
+      await harness.ds.query('DELETE FROM issues_pending_writes');
 
       expect(await markers.listForBoot()).toEqual([]);
     });
