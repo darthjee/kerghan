@@ -1,6 +1,9 @@
+import ProjectsClient from '../../../../../client/ProjectsClient.js';
 import RepositoriesClient from '../../../../../client/RepositoriesClient.js';
+import HashLocation from '../../../../../utils/routing/hashLocation.js';
 import AddErrorMessages from '../repositories/addErrorMessages.js';
 import AddStateStore from '../repositories/AddStateStore.js';
+import ProjectShortcutStore from '../repositories/ProjectShortcutStore.js';
 import RefreshCountdown from '../repositories/RefreshCountdown.js';
 import RepositoriesPoller from '../repositories/RepositoriesPoller.js';
 import SourceKeys from '../repositories/sourceKeys.js';
@@ -35,16 +38,20 @@ export default class RepositoriesController {
    * Create a Repositories controller.
    *
    * @param {{setListing: Function, setSync: Function, setQuery: Function,
-   *   setLoadState: Function, setAddState: Function, setDismissed: Function,
-   *   setRefreshNotice: Function, setNow: Function, setCooldownUntil: Function}} setters -
-   *   React state setters: the `{repositories, pagination}` listing, the sync-state object,
-   *   the `{page, filter, search}` query, the `{loading, error}` load state, the Add state
-   *   `Map`, the dismissed banner keys `Set`, the Refresh notice, the current time and the
-   *   cooldown end (epoch milliseconds).
+   *   setLoadState: Function, setAddState: Function, setProjectState: Function,
+   *   setDismissed: Function, setRefreshNotice: Function, setNow: Function,
+   *   setCooldownUntil: Function}} setters - React state setters: the
+   *   `{repositories, pagination}` listing, the sync-state object, the `{page, filter, search}`
+   *   query, the `{loading, error}` load state, the Add state `Map`, the "Project" shortcut
+   *   state `Map`, the dismissed banner keys `Set`, the Refresh notice, the current time and
+   *   the cooldown end (epoch milliseconds).
    * @param {typeof RepositoriesClient} [client] - Repositories HTTP client override, for
    *   testability.
+   * @param {typeof ProjectsClient} [projectsClient] - Projects HTTP client override, for
+   *   testability.
+   * @param {typeof HashLocation} [location] - Hash writer override, for testability.
    */
-  constructor(setters, client = RepositoriesClient) {
+  constructor(setters, client = RepositoriesClient, projectsClient = ProjectsClient, location = HashLocation) {
     Object.assign(this, setters);
     this.client = client;
     this.query = { ...INITIAL_QUERY };
@@ -53,6 +60,7 @@ export default class RepositoriesController {
     this.syncing = false;
     this.searchTimer = null;
     this.addStore = new AddStateStore(setters.setAddState);
+    this.projectShortcut = new ProjectShortcutStore(setters.setProjectState, projectsClient, location);
     this.countdown = new RefreshCountdown(setters.setNow);
     this.poller = new RepositoriesPoller(() => this.pollOnce());
   }
@@ -194,6 +202,16 @@ export default class RepositoriesController {
   }
 
   /**
+   * Open the project of an added repository (the "Project" shortcut).
+   *
+   * @param {{githubId: number, fullName: string}} repository - The row's repository.
+   * @returns {Promise<void>} Resolves once the request finishes.
+   */
+  async openProject(repository) {
+    return this.projectShortcut.open(repository);
+  }
+
+  /**
    * Dismiss a source's banner, in memory only, until its next run.
    *
    * @param {object} source - The sync-state source entry.
@@ -215,6 +233,7 @@ export default class RepositoriesController {
     this.countdown.stop();
     clearTimeout(this.searchTimer);
     this.addStore.clearAll();
+    this.projectShortcut.clearAll();
   }
 
   async #reloadWith(changes) {

@@ -67,6 +67,45 @@ describe('HashRouteResolver', () => {
     expect(resolver.getPage()).toBe('sessions');
   });
 
+  describe('Issues and Projects routes', () => {
+    const ID = '11111111-1111-4111-8111-111111111111';
+    const ISSUE = '22222222-2222-4222-8222-222222222222';
+    const pageAt = (hash) => new HashRouteResolver(() => hash).getPage();
+
+    it('resolves the seven routes to their page keys', () => {
+      expect(pageAt('#/projects')).toBe('projects');
+      expect(pageAt('#/projects/new')).toBe('project-new');
+      expect(pageAt(`#/projects/${ID}`)).toBe('project');
+      expect(pageAt(`#/projects/${ID}/edit`)).toBe('project-edit');
+      expect(pageAt(`#/projects/${ID}/issues/new`)).toBe('issue-new');
+      expect(pageAt(`#/projects/${ID}/issues/${ISSUE}`)).toBe('issue');
+      expect(pageAt(`#/projects/${ID}/issues/${ISSUE}/edit`)).toBe('issue-edit');
+    });
+
+    it('resolves /projects/new to project-new, not project', () => {
+      expect(pageAt('#/projects/new')).not.toBe('project');
+    });
+
+    it('resolves …/issues/new to issue-new, not issue', () => {
+      expect(pageAt(`#/projects/${ID}/issues/new`)).not.toBe('issue');
+    });
+
+    it('strips the query string before matching', () => {
+      expect(pageAt('#/projects?search=foo&page=2')).toBe('projects');
+      expect(pageAt(`#/projects/${ID}?state=closed&search=x`)).toBe('project');
+      expect(pageAt('#/projects/new?repository=5&repositoryName=a%2Fb&name=a%2Fb')).toBe('project-new');
+    });
+
+    it('accepts a trailing slash', () => {
+      expect(pageAt('#/projects/')).toBe('projects');
+    });
+
+    it('keeps resolving the existing routes', () => {
+      expect(pageAt('#/repositories')).toBe('repositories');
+      expect(pageAt('#/')).toBe('home');
+    });
+  });
+
   it('resolves the home route', () => {
     const resolver = new HashRouteResolver(() => '#/');
 

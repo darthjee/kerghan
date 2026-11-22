@@ -86,7 +86,7 @@ They are also set as GitHub "blocked by" relationships.
 | #557 | GitHub link (`backend`) | `github-link.md`, `api/github-link.md`, `edge-cases.md` | #554, #556 |
 | #558 | Sync workers (`backend`) | `sync.md`, `model.md` | #554, #557, #479 (closed) |
 | #559 | Security verification (`backend`) | `security.md`, `testing.md`, `api.md`, `edge-cases.md` | #558 |
-| #560 | Frontend 1 (`frontend`) | `ui/screens-and-flows.md`, `ui/decisions.md` | #555 |
+| #560 | Frontend 1 (`frontend`) | `ui/screens-and-flows.md`, `ui/decisions.md`, `ui/states.md`, `testing.md#frontend-tests` | #555 |
 | #561 | Frontend 2 (`frontend`) | `ui/screens-and-flows.md`, `ui/decisions.md`, `security.md` | #556, #560 |
 | #562 | Frontend 3 (`frontend`) | `ui/linking-and-sync.md`, `ui/states.md` | #557, #558, #561 |
 | #563 | Open-issue counts and bulk close/reopen (`backend`, `frontend`) | `api.md` as amended by #507, `ui/states.md` | #507, #556, #561 |

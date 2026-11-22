@@ -36,13 +36,17 @@ frontend/assets/js/
       home/pages/Home.jsx
       accounts/pages/          # AuthorizationRequests ("My account"), ResetPasswordLanding
       admin/pages/AdminUsers.jsx
+      projects/                # Issues and Projects screens — see "Projects module" below
   client/                      # AccountsClient, AdminClient, ApiClient, ApiError,
                                 #   AuthSession, AuthEvents, LoginModalEvents,
+                                #   ProjectsClient, IssuesClient, pathId.js,
                                 #   pickDefined.js (drops undefined keys from request bodies)
   utils/
-    routing/                   # Router, Route, HashRouteResolver
+    ids/uuid.js                # isUuid — the uuid guard for ids taken from the hash (S3)
+    routing/                   # Router, Route, HashRouteResolver, currentHash, hashLocation
     polling/AuthorizationRequestPoller.js
-    validation/                # fieldValidators, formValidators (shared client-side form rules)
+    validation/                # fieldValidators, formValidators, projectValidators
+                                #   (shared client-side form rules)
 
 frontend/specs/                # mirrors assets/js/ above, one spec per source file
   support/jsx-loader.mjs
@@ -168,6 +172,72 @@ status-to-code mapping):
   prefer branching on it over matching `message` text. `undefined` when the body carries none.
 - `details` — `error.details`, the full list of validation messages; only present on validation
   failures, `undefined` otherwise.
+- `meta` — `error.meta`, the code-specific data object (e.g. `projectId` for
+  `PROJECT_REPOSITORY_TAKEN`, `linkCount` for `PROJECT_HAS_LINKS`); `undefined` when the body
+  carries none, or carries something other than an object. Ids read from `meta` are checked
+  with `isUuid` before any link is built.
+- `retryAfter` / `retryAfterSeconds` — the `Retry-After` header, and the body's
+  `retryAfterSeconds` (preferred) when valid.
+
+## Projects module (Issues and Projects)
+
+The UI of the [Issues and Projects specs](../specs/issues/ui.md), built by #560 (the shared
+pieces and the project screens); #561 and #562 add the issue screens and the linking.
+
+**Client.** `client/ProjectsClient.js` and `client/IssuesClient.js` cover every route the
+backend exposes (all `POST`, user-scoped). Every id in a path goes through `client/pathId.js`:
+it must be a uuid (`utils/ids/uuid.js`) and is `encodeURIComponent`-ed, and a malformed id
+rejects with a 404-shaped `ApiError` **before any request** (S3), so a crafted hash such as
+`#/projects/..%2Fadmin` can never change the request path.
+
+**Routes** (`utils/routing/HashRouteResolver.js`, literal segments before parameters):
+
+| Route | Page key | Screen |
+|---|---|---|
+| `#/projects` | `projects` | Project list (`pages/Projects.jsx`) |
+| `#/projects/new` | `project-new` | Creation form (`pages/ProjectNew.jsx`) |
+| `#/projects/:projectId` | `project` | Project header (`pages/ProjectPage.jsx`) |
+| `#/projects/:projectId/edit` | `project-edit` | Management (`pages/ProjectEdit.jsx`) |
+| `#/projects/:projectId/issues/new` | `issue-new` | **Placeholder** (`ProjectsPlaceholder.jsx`) |
+| `#/projects/:projectId/issues/:issueId` | `issue` | **Placeholder** |
+| `#/projects/:projectId/issues/:issueId/edit` | `issue-edit` | **Placeholder** |
+
+The three issue routes resolve to "Coming soon" until #561 and #562 replace them; the project
+page shows the header only (the issue list, "Refresh project" and "Import" come with them). The
+header's "Projects" link shows for logged-in users only.
+
+**Layout** (`components/resources/projects/`): `pages/` holds one page component per screen,
+with `list/`, `new/`, `show/` and `edit/` for the controllers and helpers of each (the usual
+Controller / Helper split) and `common/` for what pages share (`ProjectLoadController`,
+`ProjectLoadViewHelper`, `NotFoundHelper`, `LoadErrorHelper`, `ProjectFieldsHelper`,
+`formErrors`). Shared pieces sit next to `pages/`: `repositoryPicker/` (the debounced search
+over added repositories, reused by creation and management), `errors/errorMessages.js` (the
+code-to-renderer map: it shows `ApiError.message` and overrides only the codes where the screen
+adds something, and maps each code to its field), `listQuery.js` (hash-query parsing and
+normalization of `search`, `page` and `state`, U6, reused by #561), `ProjectNoticeStore.js` (the
+one-time "Project deleted." notice, in memory), `paths.js` and `RepositoryLabel.jsx`. List state
+(`search`, `page`) lives in the hash query: typing replaces the hash in place, a page change
+pushes an entry, and a `hashchange` re-reads it. The Repositories page gains a "Project"
+shortcut on added rows (`repositories/pages/repositories/ProjectShortcutStore.js`).
+
+**`ConfirmModal`** (`components/common/confirmModal/`): the one confirmation of the Issues
+screens (`window.confirm` is not used; the admin users page keeps its own). Props: `title`,
+`message`, `confirmLabel`, `danger`, `typeToConfirm`, `onConfirm` (may return a promise) and
+`onCancel`. Cancel takes the initial focus, Confirm is on the right (red when `danger`), the
+typed text is compared trimmed and case-sensitively (U9), both buttons are disabled with a
+spinner while `onConfirm` is pending, and a rejection's message shows inside the modal.
+
+**Dirty-form guard** (`components/common/forms/`, U11): `useDirtyFormGuard(isDirty)` plus
+`DirtyFormPrompt`. While a form is dirty the browser warns on close or reload
+(`beforeunload`); Cancel and a `hashchange` away from the form restore the previous hash and ask
+"Discard unsaved changes?" through `ConfirmModal`; `forceLeave(hash)` leaves without asking
+after a successful save or delete. A clean form leaves silently. Nothing is written to
+`localStorage` or `sessionStorage` (S4).
+
+**Security** (`specs/assets/js/components/resources/projects/securityStaticSpec.js`): a static
+spec fails on `dangerouslySetInnerHTML` (S1) or any storage use (S4) in the project screens,
+`ConfirmModal` and the form guard, and on integration or credential wording on the project
+screens (S5); names, descriptions and error messages render as React text.
 
 ## No Vite proxy to the backend
 

@@ -9,11 +9,15 @@ import {
 const noop = Function.prototype;
 
 describe('RepositoriesTableHelper', () => {
-  const handlers = { onAdd: jasmine.createSpy('onAdd').and.returnValue(noop) };
+  const handlers = {
+    onAdd: jasmine.createSpy('onAdd').and.returnValue(noop),
+    onProject: jasmine.createSpy('onProject').and.returnValue(noop),
+  };
   const stateWith = (repository, overrides = {}) => ({
     listing: { repositories: [repository], pagination: null },
     sync: buildSyncState(),
     addState: new Map(),
+    projectState: new Map(),
     ...overrides,
   });
   const tree = (repository, overrides) => RepositoriesTableHelper.render(
@@ -145,6 +149,58 @@ describe('RepositoriesTableHelper', () => {
 
       expect(output.containsAttribute('href', '#/account/integrations')).toBeTrue();
       expect(output.containsElement('a', 'Integrations')).toBeTrue();
+    });
+  });
+
+  describe('Project shortcut', () => {
+    const added = (overrides) => buildRepository({ status: 'added', ...overrides });
+    const projectButtons = (tree) => findElements(tree, (node) => node.type === 'button');
+
+    it('shows a Project button on an added row, handing the row to the handler', () => {
+      const repository = added({ githubId: 7 });
+
+      expect(projectButtons(tree(repository)).length).toBe(1);
+      expect(page(repository).containsElement('button', 'Project')).toBeTrue();
+      expect(handlers.onProject).toHaveBeenCalledWith(repository);
+    });
+
+    it('shows no Project button on other rows', () => {
+      ['not_added', 'unavailable', 'unknown'].forEach((status) => {
+        expect(page(buildRepository({ status })).contains('>Project<')).toBeFalse();
+      });
+    });
+
+    it('keeps the Add button on a not-added row only', () => {
+      expect(page(added()).containsElement('button', 'Add')).toBeFalse();
+      expect(page(buildRepository()).containsElement('button', 'Add')).toBeTrue();
+    });
+
+    it('shows a spinner and disables the button while pending', () => {
+      const projectState = new Map([[123456, { status: 'pending' }]]);
+      const output = page(added(), { projectState });
+
+      expect(output.contains('spinner-border')).toBeTrue();
+      expect(output.contains('disabled')).toBeTrue();
+    });
+
+    it('shows no spinner when idle', () => {
+      expect(page(added()).contains('spinner-border')).toBeFalse();
+    });
+
+    it('shows the inline refusal, as text', () => {
+      const projectState = new Map([[123456, { status: 'error', message: 'You reached the maximum number of projects' }]]);
+      const output = page(added(), { projectState });
+
+      expect(output.contains('You reached the maximum number of projects')).toBeTrue();
+      expect(output.contains('role="alert"')).toBeTrue();
+    });
+
+    it('shows a link in the refusal when it has one', () => {
+      const projectState = new Map([[123456, {
+        status: 'error', message: 'Taken', link: { href: '#/projects/abc', text: 'Open the existing project' },
+      }]]);
+
+      expect(page(added(), { projectState }).containsAttribute('href', '#/projects/abc')).toBeTrue();
     });
   });
 

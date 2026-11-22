@@ -51,7 +51,7 @@ describe('HeaderHelper', () => {
     it('renders no logged-in menu and no login links', () => {
       const markup = pendingMarkup();
 
-      ['Repositories', 'My account', 'Logout', 'Admin Users', 'Login', 'Register', 'Recover'].forEach((label) => {
+      ['Repositories', 'Projects', 'My account', 'Logout', 'Admin Users', 'Login', 'Register', 'Recover'].forEach((label) => {
         expect(markup).not.toContain(label);
       });
     });
@@ -101,6 +101,10 @@ describe('HeaderHelper', () => {
       expect(markupOf(false, false)).not.toContain('href="#/repositories"');
     });
 
+    it('does not render the Projects link', () => {
+      expect(markupOf(false, false)).not.toContain('href="#/projects"');
+    });
+
     it('does not render the My account dropdown', () => {
       expect(markupOf(false, false)).not.toContain('My account');
     });
@@ -132,6 +136,16 @@ describe('HeaderHelper', () => {
 
         expect(markup).toContain('href="#/repositories"');
         expect(markup).toContain('>Repositories<');
+      });
+    });
+
+    it('renders the Projects link next to Repositories for a non-admin and an admin', () => {
+      [false, true].forEach((isAdmin) => {
+        const markup = markupOf(true, isAdmin);
+
+        expect(markup).toContain('href="#/projects"');
+        expect(markup).toContain('>Projects<');
+        expect(markup.indexOf('>Repositories<')).toBeLessThan(markup.indexOf('>Projects<'));
       });
     });
 

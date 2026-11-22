@@ -6,7 +6,7 @@ const RepositoriesHandlers = {
    * Build the page's handlers.
    *
    * @param {object} controller - The page's `RepositoriesController`.
-   * @returns {object} The handlers: filter, search, page, refresh, add, dismiss and retry.
+   * @returns {object} The handlers: filter, search, page, refresh, add, the project shortcut, dismiss and retry.
    */
   build(controller) {
     return {
@@ -15,6 +15,7 @@ const RepositoriesHandlers = {
       onPageChange: (page) => () => controller.changePage(page),
       onRefresh: () => controller.refresh(),
       onAdd: (githubId) => () => controller.add(githubId),
+      onProject: (repository) => () => controller.openProject(repository),
       onDismiss: (source) => () => controller.dismiss(source),
       onRetry: () => controller.retry(),
     };

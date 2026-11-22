@@ -6,7 +6,7 @@ describe('RepositoriesHandlers', () => {
 
   beforeEach(() => {
     controller = jasmine.createSpyObj('controller', [
-      'changeFilter', 'changeSearch', 'changePage', 'refresh', 'add', 'dismiss', 'retry',
+      'changeFilter', 'changeSearch', 'changePage', 'refresh', 'add', 'openProject', 'dismiss', 'retry',
     ]);
     handlers = RepositoriesHandlers.build(controller);
   });
@@ -33,6 +33,14 @@ describe('RepositoriesHandlers', () => {
     handlers.onRefresh();
 
     expect(controller.refresh).toHaveBeenCalled();
+  });
+
+  it('opens the project of a repository', () => {
+    const repository = { githubId: 7, fullName: 'a/b' };
+
+    handlers.onProject(repository)();
+
+    expect(controller.openProject).toHaveBeenCalledWith(repository);
   });
 
   it('adds a repository', () => {

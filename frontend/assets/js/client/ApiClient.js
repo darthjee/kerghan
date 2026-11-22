@@ -59,6 +59,19 @@ function parseRetryAfter(response) {
 }
 
 /**
+ * Read the error body's `meta` object.
+ *
+ * @param {object} error - The error body's `error` object.
+ * @returns {object|undefined} `error.meta` when it is a plain object, `undefined` otherwise.
+ */
+function parseMeta(error) {
+  const { meta } = error;
+  const isObject = typeof meta === 'object' && meta !== null && !Array.isArray(meta);
+
+  return isObject ? meta : undefined;
+}
+
+/**
  * Build the {@link ApiError} for a failed response.
  *
  * @description Reads the backend's standard error body
@@ -67,7 +80,8 @@ function parseRetryAfter(response) {
  * `error.message` (e.g. a proxy-generated or empty error response), so the resulting error's
  * `message` is never `undefined`. Carries the `Retry-After` header (integer seconds), when
  * present and valid, as the error's `retryAfter`; `retryAfterSeconds` prefers the body's
- * `error.retryAfterSeconds` (a non-negative integer) over that header.
+ * `error.retryAfterSeconds` (a non-negative integer) over that header. Carries the body's
+ * `error.meta` object (`undefined` when absent).
  * @param {Response} response - The raw `fetch` response.
  * @param {object} data - The parsed response body.
  * @returns {ApiError} The error to throw.
@@ -83,6 +97,7 @@ function buildApiError(response, data) {
 
   return new ApiError(
     response.status, message, error.code, error.details, retryAfter, bodySeconds ?? retryAfter,
+    parseMeta(error),
   );
 }
 

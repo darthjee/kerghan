@@ -5,6 +5,11 @@ import LoginModal from '../../../../../assets/js/components/common/loginModal/Lo
 import ModalRedirect from '../../../../../assets/js/components/common/ModalRedirect.jsx';
 import Integrations from '../../../../../assets/js/components/resources/accounts/pages/Integrations.jsx';
 import Repositories from '../../../../../assets/js/components/resources/repositories/pages/Repositories.jsx';
+import Projects from '../../../../../assets/js/components/resources/projects/pages/Projects.jsx';
+import ProjectEdit from '../../../../../assets/js/components/resources/projects/pages/ProjectEdit.jsx';
+import ProjectNew from '../../../../../assets/js/components/resources/projects/pages/ProjectNew.jsx';
+import ProjectPage from '../../../../../assets/js/components/resources/projects/pages/ProjectPage.jsx';
+import ProjectsPlaceholder from '../../../../../assets/js/components/resources/projects/pages/ProjectsPlaceholder.jsx';
 import Sessions from '../../../../../assets/js/components/resources/accounts/pages/Sessions.jsx';
 import ResetPasswordLanding from '../../../../../assets/js/components/resources/accounts/pages/ResetPasswordLanding.jsx';
 
@@ -59,6 +64,28 @@ describe('AppHelper', () => {
 
   it('renders the repositories page for the repositories key', () => {
     expect(partsOf('repositories').page.type).toBe(Repositories);
+  });
+
+  it('renders the project list for the projects key', () => {
+    expect(partsOf('projects').page.type).toBe(Projects);
+  });
+
+  it('renders the creation form for the project-new key', () => {
+    expect(partsOf('project-new').page.type).toBe(ProjectNew);
+  });
+
+  it('renders the management page for the project-edit key', () => {
+    expect(partsOf('project-edit').page.type).toBe(ProjectEdit);
+  });
+
+  it('renders the project page for the project key', () => {
+    expect(partsOf('project').page.type).toBe(ProjectPage);
+  });
+
+  ['issue-new', 'issue', 'issue-edit'].forEach((key) => {
+    it(`renders the placeholder page for the ${key} key`, () => {
+      expect(partsOf(key).page.type).toBe(ProjectsPlaceholder);
+    });
   });
 
   it('renders the sessions page for the sessions key', () => {
