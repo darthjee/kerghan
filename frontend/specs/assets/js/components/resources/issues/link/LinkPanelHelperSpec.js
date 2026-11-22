@@ -1,5 +1,6 @@
 import React from 'react';
 import ConfirmModal from '../../../../../../../assets/js/components/common/confirmModal/ConfirmModal.jsx';
+import AttachIssueModal from '../../../../../../../assets/js/components/resources/issues/link/modals/AttachIssueModal.jsx';
 import LinkPanelHelper from '../../../../../../../assets/js/components/resources/issues/link/LinkPanelHelper.jsx';
 import LinkStatePresenter from '../../../../../../../assets/js/components/resources/issues/link/linkStatePresenter.js';
 import { buildLink, buildProjectRepository } from '../../../../../../support/issuesBuilders.js';
@@ -174,6 +175,30 @@ describe('LinkPanelHelper', () => {
 
     it('shows no confirmation by default', () => {
       expect(findElements(render(buildLink()), (node) => node.type === ConfirmModal)).toEqual([]);
+    });
+  });
+
+  describe('attach modal', () => {
+    const attachHandlers = () => ({
+      ...handlers, onIssueChange: () => undefined, onReread: () => undefined, onNotFound: () => undefined, onCloseAttach: () => undefined,
+    });
+    const attachState = (attaching) => ({
+      ...stateOf(null), attaching, projectId: 'p', issue: { id: 'i' }, repository: buildProjectRepository(),
+    });
+
+    it('is shown, with what it needs, while attaching', () => {
+      const tree = LinkPanelHelper.render(attachState(true), attachHandlers());
+      const [modal] = findElements(tree, (node) => node.type === AttachIssueModal);
+
+      expect(modal.props.projectId).toBe('p');
+      expect(modal.props.issue).toEqual({ id: 'i' });
+      expect(modal.props.repository).toEqual(buildProjectRepository());
+    });
+
+    it('is not shown otherwise', () => {
+      const tree = LinkPanelHelper.render(attachState(false), attachHandlers());
+
+      expect(findElements(tree, (node) => node.type === AttachIssueModal)).toEqual([]);
     });
   });
 

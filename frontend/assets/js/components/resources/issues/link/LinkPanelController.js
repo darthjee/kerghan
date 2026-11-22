@@ -5,8 +5,7 @@ import BoundedRereadController from '../sync/BoundedRereadController.js';
 /** Codes of a refused action that mean the issue changed under the panel: re-read it once. */
 const REREAD_CODES = new Set(['ISSUE_LINK_GONE', 'ISSUE_NOT_LINKED', 'PROJECT_REPOSITORY_UNAVAILABLE']);
 
-/** The text of the notice after a refresh that found the issue fresh. */
-export const ALREADY_FRESH_NOTICE = 'Already up to date';
+const ALREADY_FRESH_NOTICE = 'Already up to date';
 
 /**
  * Controller of the link panel's actions: Refresh (T2), Retry sync (T4) and Unlink.
@@ -41,14 +40,11 @@ export default class LinkPanelController {
   /**
    * Create the controller.
    *
-   * @param {object} handlers - React state setters and callbacks.
-   * @param {Function} handlers.setIssue - Shows an issue.
-   * @param {Function} handlers.setActivity - Sets the active action (`'refresh'`, `'retrySync'`,
-   *   `'unlink'`) or `null`.
-   * @param {Function} handlers.setNotice - Sets the notice text (`null` clears it).
-   * @param {Function} handlers.setError - Sets the described error (`null` clears it).
-   * @param {Function} handlers.setConfirming - Opens or closes the discard confirmation.
-   * @param {Function} handlers.onNotFound - Called when the issue vanished (`404`).
+   * @param {{setIssue: Function, setActivity: Function, setNotice: Function, setError: Function,
+   *   setConfirming: Function, onNotFound: Function}} handlers - Setters of the issue, of the
+   *   active action (`'refresh'`, `'retrySync'`, `'unlink'` or `null`), of the notice text, of
+   *   the described error and of the discard confirmation, and the callback for a vanished
+   *   issue (`404`).
    * @param {typeof IssuesClient} [client] - Issues client override.
    * @param {Function} [rereadFactory] - Builds a `BoundedRereadController` from its options.
    */
@@ -157,6 +153,17 @@ export default class LinkPanelController {
   }
 
   /**
+   * Re-read the issue once and show it (the link changed under an open modal, U3).
+   *
+   * @param {string} projectId - The project's uuid.
+   * @param {string} issueId - The issue's uuid.
+   * @returns {Promise<void>} Resolves once the read settled.
+   */
+  async reread(projectId, issueId) {
+    await this.#readOnce(projectId, issueId);
+  }
+
+  /**
    * Close the discard confirmation.
    *
    * @returns {void} Nothing.
@@ -201,9 +208,8 @@ export default class LinkPanelController {
 
   #start(action) {
     this.#busy = true;
+    [this.#setNotice, this.#setError].forEach((clear) => clear(null));
     this.#setActivity(action);
-    this.#setNotice(null);
-    this.#setError(null);
   }
 
   #finish() {
@@ -211,7 +217,7 @@ export default class LinkPanelController {
     this.#setActivity(null);
   }
 
-  async #read() {
+  #read() {
     return this.#client.show(this.#ids.projectId, this.#ids.issueId);
   }
 

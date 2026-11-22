@@ -2,6 +2,7 @@ import ConfirmModal from '../../../common/confirmModal/ConfirmModal.jsx';
 import DescribedError from '../../projects/DescribedError.jsx';
 import GithubLink from './GithubLink.jsx';
 import LinkStateBadge from './LinkStateBadge.jsx';
+import AttachIssueModal from './modals/AttachIssueModal.jsx';
 
 const DISCARD_MESSAGE = 'This issue has changes not yet sent to GitHub. Unlinking discards them.';
 
@@ -150,6 +151,33 @@ function renderConfirm(confirming, handlers) {
 }
 
 /**
+ * Render the attach modal, shown only while it is open.
+ *
+ * @param {{attaching: boolean, projectId: string, issue: object, repository: object}} state -
+ *   Panel state.
+ * @param {{onIssueChange: Function, onReread: Function, onNotFound: Function,
+ *   onCloseAttach: Function}} handlers - Event handlers.
+ * @returns {React.ReactElement|null} The modal, or `null` while closed.
+ */
+function renderAttach(state, handlers) {
+  if (!state.attaching) {
+    return null;
+  }
+
+  return (
+    <AttachIssueModal
+      projectId={state.projectId}
+      issue={state.issue}
+      repository={state.repository}
+      onIssueChange={handlers.onIssueChange}
+      onReread={handlers.onReread}
+      onNotFound={handlers.onNotFound}
+      onClose={handlers.onCloseAttach}
+    />
+  );
+}
+
+/**
  * Render the view of an unlinked issue: the text, and either the attach button or the hint.
  *
  * @param {{text: string, canAttach: boolean, hint: (string|null)}} view - The presenter's view.
@@ -201,12 +229,15 @@ const LinkPanelHelper = {
    * Render the panel.
    *
    * @param {{view: object, activity: (string|null), notice: (string|null), error: (object|null),
-   *   confirming: boolean, countdown: {active: boolean, label: (string|null)}}} state - Panel
-   *   state: the presenter's view, the active action, the notice, the described error, whether
-   *   the discard confirmation is open, and the rate-limit countdown.
+   *   confirming: boolean, attaching: boolean, countdown: {active: boolean, label: (string|null)},
+   *   projectId: string, issue: object, repository: (object|null)}} state - Panel state: the
+   *   presenter's view, the active action, the notice, the described error, whether the discard
+   *   confirmation and the attach modal are open, the rate-limit countdown, and what the attach
+   *   modal needs (the project's uuid, the issue and the repository).
    * @param {{onRefresh: Function, onRetrySync: Function, onUnlink: Function,
-   *   onConfirmDiscard: Function, onCancelDiscard: Function, onAttach: Function}} handlers -
-   *   Event handlers.
+   *   onConfirmDiscard: Function, onCancelDiscard: Function, onAttach: Function,
+   *   onCloseAttach: Function, onIssueChange: Function, onReread: Function,
+   *   onNotFound: Function}} handlers - Event handlers.
    * @returns {React.ReactElement} The panel.
    */
   render(state, handlers) {
@@ -216,6 +247,7 @@ const LinkPanelHelper = {
         {renderNotice(state.notice)}
         {renderError(state.error)}
         {renderConfirm(state.confirming, handlers)}
+        {renderAttach(state, handlers)}
       </section>
     );
   },

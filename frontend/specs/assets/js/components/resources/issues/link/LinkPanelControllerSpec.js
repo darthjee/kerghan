@@ -191,6 +191,15 @@ describe('LinkPanelController', () => {
     });
   });
 
+  describe('#reread (U3)', () => {
+    it('reads the issue once and shows it', async () => {
+      await controller.reread(PROJECT_ID, ISSUE_ID);
+
+      expect(client.show).toHaveBeenCalledOnceWith(PROJECT_ID, ISSUE_ID);
+      expect(state.issue.title).toBe('reread');
+    });
+  });
+
   describe('#cancelDiscard', () => {
     it('closes the confirmation', () => {
       controller.cancelDiscard();

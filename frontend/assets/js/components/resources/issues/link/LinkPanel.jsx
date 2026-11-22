@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import useRateLimitCountdown from '../../../common/forms/hooks/useRateLimitCountdown.js';
 import LinkPanelController from './LinkPanelController.js';
 import LinkPanelHelper from './LinkPanelHelper.jsx';
@@ -36,10 +36,15 @@ export default function LinkPanel({
 
   useEffect(() => () => controller.dispose(), [controller]);
 
+  const issueId = issue.id;
+  const onCloseAttach = useCallback(() => setAttaching(false), []);
+  const onReread = useCallback(() => controller.reread(projectId, issueId), [controller, projectId, issueId]);
+
   return LinkPanelHelper.render(
     {
       view: LinkStatePresenter.present(issue.link, project.repository, now),
       activity, notice, error, confirming, attaching, countdown,
+      projectId, issue, repository: project.repository,
     },
     {
       onRefresh: () => controller.refresh(projectId, issue.id),
@@ -48,7 +53,10 @@ export default function LinkPanel({
       onConfirmDiscard: () => controller.confirmDiscard(projectId, issue),
       onCancelDiscard: () => controller.cancelDiscard(),
       onAttach: () => setAttaching(true),
-      onCloseAttach: () => setAttaching(false),
+      onCloseAttach,
+      onIssueChange,
+      onReread,
+      onNotFound,
     },
   );
 }
