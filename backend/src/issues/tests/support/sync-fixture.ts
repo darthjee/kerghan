@@ -146,3 +146,18 @@ export async function readState(harness: IssuesDbHarness, world: SyncWorld): Pro
     marker: await harness.ds.getRepository(IssuePendingWrite).findOneBy({ linkId: world.linkId }),
   };
 }
+
+/**
+ * The public ids of the world's project and issue, for the service calls that take them.
+ * @param harness - The harness.
+ * @param world - The ids.
+ * @returns The project and issue uuids.
+ */
+export async function uuidsOf(harness: IssuesDbHarness, world: SyncWorld): Promise<{ project: string; issue: string }> {
+  const rows: Array<{ project: string; issue: string }> = await harness.ds.query(
+    'SELECT p.uuid AS project, i.uuid AS issue FROM issues i JOIN issues_projects p ON p.id = i.project_id WHERE i.id = ?',
+    [world.issueId],
+  );
+
+  return rows[0];
+}
