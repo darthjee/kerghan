@@ -163,7 +163,7 @@ Complements the marker rules of [model.md](model.md#issues_pending_writes-the-pe
 
 - `changes` holds only the fields to push (`title?`, `body?`, `state?`); never `state_reason`. The writer rejects any other field before a call.
 - **Token permissions per operation** (GitHub App): `getIssue` and `probeIssues` mint `{ issues: read, metadata: read }`, `updateIssue` mints `{ issues: write }`; the token cache is keyed by installation and permission set ([security.md](security.md#the-github-app-gains-issues-write)).
-- **Redirect host check.** No client follows a redirect automatically. A rename is followed once only when the `Location` is `https://api.github.com/` in the rename form; any other scheme, host, port or path shape is unclassifiable: not followed, no credential sent, outcome `transient` (E65). This applies to `updateIssue` too.
+- **Redirect host check.** No client follows a redirect automatically. A rename is followed once only when the `Location` is `https://api.github.com/` in the rename form; any other scheme, host, port or path shape is unclassifiable: not followed, no credential sent; the client answers `unavailable{reason:'redirect'}`, which the sync treats as `transient` (E65). This applies to `updateIssue` too.
 - `renamed` stays adapter-internal: the client retries once at the `Location` and returns the result with a `renamedTo: { owner, name }` hint, which the caller hands to Repositories (E65).
 - **`forbidden` is its own kind** (a non-rate-limit `403`) for issue operations, rather than `unavailable{reason:'forbidden'}`, so the sync tells E5 and E21 apart from transient failures without inspecting reasons.
 - Listing for import is not part of this spec (link creation, #487 and [api.md](api.md)).
