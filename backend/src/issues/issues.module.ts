@@ -11,7 +11,9 @@ import { IssueLinkWriter } from './issue-link-writer.js';
 import { IssueLinksController } from './issue-links.controller.js';
 import { IssueLinksService } from './issue-links.service.js';
 import { IssueMarkers } from './issue-markers.js';
-import { EmptyIssueRateLimitWaits, IssueRateLimitWaits } from './issue-rate-limit-waits.js';
+import { IssueRateLimitPauses } from './issue-rate-limit-pauses.js';
+import { IssueRateLimitWaits } from './issue-rate-limit-waits.js';
+import { IssueReconcileQueue, NoopIssueReconcileQueue } from './issue-reconcile-queue.js';
 import { IssueStore } from './issue-store.js';
 import { IssueSyncTrigger, NoopIssueSyncTrigger } from './issue-sync-trigger.js';
 import { IssuesAccess } from './issues-access.js';
@@ -49,7 +51,9 @@ export const ISSUES_PROVIDERS: Provider[] = [
   IssueLinkWriter,
   IssueLinksService,
   IssueLinkPresenter,
-  { provide: IssueRateLimitWaits, useClass: EmptyIssueRateLimitWaits },
+  IssueRateLimitPauses,
+  { provide: IssueRateLimitWaits, useExisting: IssueRateLimitPauses },
+  { provide: IssueReconcileQueue, useClass: NoopIssueReconcileQueue },
   IssueMarkers,
   IssueStore,
   IssuesService,

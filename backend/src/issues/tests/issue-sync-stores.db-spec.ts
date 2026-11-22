@@ -57,6 +57,18 @@ describe('Issue sync stores (real MySQL)', () => {
       expect(await markers.listForBoot()).toEqual([b.link.id, c.link.id, d.link.id, a.link.id]);
     });
 
+    it('markedAtFor answers marked_at by link, leaving out a link without a marker', async () => {
+      const a = await linked();
+      const b = await linked();
+      const none = await linked();
+
+      await seedMarker(harness.ds, a.link.id, { markedAt: T2 });
+      await seedMarker(harness.ds, b.link.id, { markedAt: T1 });
+
+      expect(await markers.markedAtFor([a.link.id, b.link.id, none.link.id])).toEqual(new Map([[a.link.id, T2], [b.link.id, T1]]));
+      expect(await markers.markedAtFor([])).toEqual(new Map());
+    });
+
     it('lists nothing when no marker exists', async () => {
       await linked();
 

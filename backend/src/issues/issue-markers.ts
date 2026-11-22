@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import type { EntityManager, Repository } from 'typeorm';
+import { In, type EntityManager, type Repository } from 'typeorm';
 import { IssuePendingWrite } from './entities/issue-pending-write.entity.js';
 
 /** The link statuses that keep syncing local edits (`gone` is edited locally only). */
@@ -40,6 +40,20 @@ export class IssueMarkers {
     });
 
     return rows.map((row) => row.linkId);
+  }
+
+  /**
+   * When each of the links' markers was first created, for ordering the links of a rate-limit
+   * waiting set oldest first. A link without a marker has no entry.
+   * @param {number[]} linkIds - The internal ids of the links.
+   * @returns {Promise<Map<number, Date>>} `marked_at` by link id.
+   */
+  async markedAtFor(linkIds: number[]): Promise<Map<number, Date>> {
+    if (linkIds.length === 0) return new Map();
+
+    const rows = await this.markers.find({ select: { id: true, linkId: true, markedAt: true }, where: { linkId: In(linkIds) } });
+
+    return new Map(rows.map((row) => [row.linkId, row.markedAt]));
   }
 
   /**
