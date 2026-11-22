@@ -69,7 +69,12 @@ describe('GET-only GitHub access (static)', () => {
     const callers = sources.filter((file) => /\.updateIssue\(/.test(readFileSync(file, 'utf8')));
 
     expect(patchers.map((file) => path.relative(INTEGRATIONS_ROOT, file))).toEqual(['github-issue-client.service.ts']);
-    expect(callers.map((file) => path.relative(INTEGRATIONS_ROOT, file))).toEqual(['integrations-github-issue-writer.service.ts']);
+    // Inside Integrations only the writer calls the client; outside it, only the issues sync service
+    // calls the writer (its allowlist is pinned by `integrations-writer-boundary.spec.ts`).
+    expect(callers.map((file) => path.relative(INTEGRATIONS_ROOT, file))).toEqual([
+      'integrations-github-issue-writer.service.ts',
+      path.join('..', 'issues', 'issues-sync.service.ts'),
+    ]);
   });
 
   it('only the writer and the read service inject the issue client', () => {
