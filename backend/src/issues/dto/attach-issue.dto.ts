@@ -1,4 +1,4 @@
-import { IsISO8601, IsOptional, Matches } from 'class-validator';
+import { IsISO8601, Matches, ValidateIf } from 'class-validator';
 import { IsGithubIssueNumber } from './github-issue-number.js';
 import type { AttachIssueInput } from '../types/issues-api.types.js';
 
@@ -8,13 +8,13 @@ const ISO_UTC_WITH_MILLISECONDS = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$
 /**
  * Request body for `POST /projects/:projectId/issues/:issueId/attach.json`: `number` is the GitHub
  * issue number; `confirmUpdatedAt` is optional, an ISO 8601 UTC string with milliseconds, as the
- * issue's `updatedAt` is returned.
+ * issue's `updatedAt` is returned. `null` is not accepted: the member is either absent or a valid string.
  */
 export class AttachIssueDto {
   @IsGithubIssueNumber()
     number!: number;
 
-  @IsOptional()
+  @ValidateIf((_dto: AttachIssueDto, value: unknown) => value !== undefined)
   @Matches(ISO_UTC_WITH_MILLISECONDS)
   @IsISO8601({ strict: true, strictSeparator: true })
     confirmUpdatedAt?: string;
