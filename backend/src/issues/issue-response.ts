@@ -1,6 +1,7 @@
-import type { Issue } from './entities/issue.entity.js';
+import type { Issue, IssueState } from './entities/issue.entity.js';
 import type { IssueLinkResponse } from './issue-link-presenter.js';
 import type { IssueListRecord } from './issue-store.js';
+import type { BulkIssueStateResponse } from './types/issues-api.types.js';
 
 /**
  * The wire shapes of the Issues API (`docs/agents/specs/issues/api/issues.md`). These pure
@@ -105,4 +106,24 @@ export function issueListingResponse(
  */
 export function issueDeleteResponse(): IssueDeleteResponse {
   return {};
+}
+
+/**
+ * The bulk state body: every requested id in exactly one list, ids only (lowercased, in request order).
+ * @param {IssueState} state - The target state, echoed.
+ * @param {string[]} requested - The requested ids, lowercased, in request order.
+ * @param {{ changed: Set<string>, unchanged: Set<string> }} outcomes - The ids found, split by whether this call flipped them.
+ * @returns {BulkIssueStateResponse} `{ state, changed, unchanged, notFound }`.
+ */
+export function bulkStateResponse(
+  state: IssueState,
+  requested: string[],
+  outcomes: { changed: Set<string>; unchanged: Set<string> },
+): BulkIssueStateResponse {
+  return {
+    state,
+    changed: requested.filter((id) => outcomes.changed.has(id)),
+    unchanged: requested.filter((id) => outcomes.unchanged.has(id)),
+    notFound: requested.filter((id) => !outcomes.changed.has(id) && !outcomes.unchanged.has(id)),
+  };
 }
