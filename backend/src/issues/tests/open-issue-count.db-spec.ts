@@ -20,7 +20,7 @@ describe('ProjectOpenIssueCounts (real MySQL)', () => {
   });
 
   describe('forProject', () => {
-    it('is 0 for a project without issues or without open issues', async () => {
+    it('E73: is 0 for a project without issues or without open issues', async () => {
       const empty = await seedProject(harness.ds, userId);
       const closedOnly = await seedProject(harness.ds, userId);
 

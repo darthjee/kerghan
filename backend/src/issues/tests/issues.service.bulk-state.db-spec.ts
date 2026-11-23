@@ -1,14 +1,19 @@
 import { HttpException, NotFoundException } from '@nestjs/common';
+import { ErrorCodes } from '../../core/error-codes.js';
 import { seedUser } from '../../repositories/tests/support/two-user-baseline.js';
 import { Issue, type IssueState } from '../entities/issue.entity.js';
 import { IssueEditRateLimiter } from '../issue-edit-rate-limiter.js';
 import { IssueMarkers } from '../issue-markers.js';
+import { IssueRateLimitPauses } from '../issue-rate-limit-pauses.js';
 import { IssueStore } from '../issue-store.js';
 import { IssueSyncTrigger } from '../issue-sync-trigger.js';
 import { IssuesAccess } from '../issues-access.js';
+import { ISSUES_RECONCILE_JOB } from '../jobs/issues-reconcile.job.js';
 import { IssuesService } from '../issues.service.js';
+import { integrationRef } from './support/integration-refs.js';
 import { buildIssuesDbHarness, HARNESS_START, type IssuesDbHarness } from './support/issues-db-harness.js';
 import { seedIssue, seedLink, seedMarker, seedProject, SEED_TIME, type SeededProject } from './support/issues-seeds.js';
+import { releaseQueuedLinks } from './support/sync-fixture.js';
 
 interface MarkerRow {
   link_id: number;
@@ -16,6 +21,8 @@ interface MarkerRow {
   marked_at: Date;
   updated_at: Date;
 }
+
+const INTEGRATION = 41;
 
 describe('IssuesService#bulkState (real MySQL)', () => {
   let harness: IssuesDbHarness;
@@ -34,6 +41,7 @@ describe('IssuesService#bulkState (real MySQL)', () => {
 
   beforeEach(async () => {
     jest.restoreAllMocks();
+    releaseQueuedLinks(harness);
     trigger = jest.spyOn(harness.get(IssueSyncTrigger), 'afterCommit');
     userId = await seedUser(harness.ds, 'owner');
     project = await seedProject(harness.ds, userId);
@@ -83,7 +91,7 @@ describe('IssuesService#bulkState (real MySQL)', () => {
     }
   });
 
-  it('writes nothing and enqueues nothing when every id is unchanged or not found (E70), but still answers', async () => {
+  it('E70: writes nothing and enqueues nothing when every id is unchanged or not found, but still answers 200', async () => {
     const closed = await issueIn('closed');
     await seedLink(harness.ds, { userId, issueId: closed.id });
     const upsert = jest.spyOn(harness.get(IssueMarkers), 'upsertForBulk');
@@ -99,7 +107,7 @@ describe('IssuesService#bulkState (real MySQL)', () => {
     expect(trigger).not.toHaveBeenCalled();
   });
 
-  it('creates markers only for linked and sync_failed links, and runs one trigger after the commit', async () => {
+  it('E72: creates markers only for linked and sync_failed links, none for a gone link (still counted as changed), and runs one trigger after the commit', async () => {
     const [unlinked, linked, failed, gone] = [await issueIn('open'), await issueIn('open'), await issueIn('open'), await issueIn('open')];
     const linkedLink = await seedLink(harness.ds, { userId, issueId: linked.id });
     const failedLink = await seedLink(harness.ds, { userId, issueId: failed.id, status: 'sync_failed' });
@@ -130,7 +138,7 @@ describe('IssuesService#bulkState (real MySQL)', () => {
     expect(row.updated_at).toEqual(new Date(Math.floor(harness.clock.now().getTime() / 1000) * 1000));
   });
 
-  it('bumps no marker for an unchanged linked issue (E12)', async () => {
+  it('E12: bumps no marker for an unchanged linked issue', async () => {
     const issue = await issueIn('closed');
 
     await seedLink(harness.ds, { userId, issueId: issue.id });
@@ -219,7 +227,7 @@ describe('IssuesService#bulkState (real MySQL)', () => {
     expect(consume).toHaveBeenCalledWith(userId, 3);
   });
 
-  it('answers 429 before any database work when the limiter refuses (E74)', async () => {
+  it('E74: answers 429 before any database work when the limiter refuses', async () => {
     const issue = await issueIn('open');
 
     jest.spyOn(harness.get(IssueEditRateLimiter), 'consume').mockReturnValueOnce({ allowed: false, retryAfterMs: 2_500 });
@@ -232,5 +240,48 @@ describe('IssuesService#bulkState (real MySQL)', () => {
     expect(((refused as HttpException).getResponse() as { retryAfterSeconds: number }).retryAfterSeconds).toBe(3);
     expect(access).not.toHaveBeenCalled();
     expect((await stored(issue.id)).state).toBe('open');
+  });
+
+  it('E70: still consumes the weight when every id is unchanged', async () => {
+    const closed = await issueIn('closed');
+    const consume = jest.spyOn(harness.get(IssueEditRateLimiter), 'consume');
+
+    await bulk([closed.uuid], 'closed');
+
+    expect(consume).toHaveBeenCalledWith(userId, 1);
+  });
+
+  it.each([
+    ['a paused integration', () => harness.get(IssueRateLimitPauses).pause(INTEGRATION, new Date(harness.clock.now().getTime() + 600_000))],
+    ['a missing credential', () => harness.github.setUsable(userId, [])],
+    ['an Unavailable repository', () => harness.repositories.seed(userId, { repositoryId: 7001, githubId: 700, owner: 'darthjee', name: 'kerghan', status: 'unavailable', integrationSourceIds: [INTEGRATION] })],
+  ])('E71: writes the marker and enqueues one T1 for a linked issue with %s, as a single Edit does', async (_label, arrange) => {
+    const issue = await issueIn('open');
+    const link = await seedLink(harness.ds, { userId, issueId: issue.id });
+
+    harness.github.setUsable(userId, [integrationRef(INTEGRATION)]);
+    arrange();
+
+    expect((await bulk([issue.uuid], 'closed')).changed).toEqual([issue.uuid]);
+    expect((await markers()).map((row) => row.link_id)).toEqual([link.id]);
+    expect(harness.workers.paramsOf(ISSUES_RECONCILE_JOB)).toEqual([{ linkId: link.id }]);
+  });
+
+  it('E74: applies nothing and consumes nothing on a refusal, and a retry after Retry-After succeeds', async () => {
+    const issue = await issueIn('open');
+    const limiter = harness.get(IssueEditRateLimiter);
+
+    expect(limiter.consume(userId, 120).allowed).toBe(true);
+
+    const refused = await bulk([issue.uuid], 'closed').catch((error: unknown) => error as HttpException);
+    const retryAfter = (refused as HttpException).getResponse() as { code: string; retryAfterSeconds: number };
+
+    expect((refused as HttpException).getStatus()).toBe(429);
+    expect(retryAfter.code).toBe(ErrorCodes.ISSUE_EDIT_RATE_LIMITED);
+    expect((await stored(issue.id)).state).toBe('open');
+
+    harness.clock.advance(retryAfter.retryAfterSeconds * 1000);
+
+    expect(await bulk([issue.uuid], 'closed')).toMatchObject({ changed: [issue.uuid] });
   });
 });

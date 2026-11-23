@@ -16,14 +16,11 @@ const FRONTEND_SPECS = path.join(REPOSITORY_ROOT, 'frontend', 'specs');
 
 /**
  * The ids no spec cites yet, each with why. An entry is removed by the issue that covers it (the
- * second test fails on an entry that is already cited). No row is frontend-tier today: a row that
- * #560 to #562 will cover from the frontend goes here with its issue number.
+ * second test fails on an entry that is already cited). Only E25 is left: it waits for the
+ * "remove repository" feature, which has no issue yet.
  */
 const ALLOWLIST: Record<string, string> = {
   E25: 'the future "remove repository" feature (no issue yet)',
-  ...Object.fromEntries(
-    [66, 67, 68, 69, 70, 71, 72, 73, 74].map((number) => [`E${number}`, '#563: bulk close and reopen']),
-  ),
 };
 
 const SPEC_FILE = /\.(spec|e2e-spec|db-spec)\.ts$|[sS]pec\.jsx?$/;
