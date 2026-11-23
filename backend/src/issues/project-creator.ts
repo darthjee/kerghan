@@ -22,12 +22,12 @@ import type { ProjectRepositoryLookup, RepoRef } from '../repositories/repositor
 import { RepositoriesService } from '../repositories/repositories.service.js';
 import type { CreationMode, CreationResult, ProjectCreationInput } from './types/projects-api.types.js';
 
-// The unique indexes a creation race can hit (`model.md#issues_projects`).
+// The unique indexes a creation race can hit (`docs/agents/modules/issues/data-model.md#issues_projects`).
 // The longest project name, in code points: a longer `owner/name` default is cut to it.
 const MAX_NAME_CODE_POINTS = 100;
 
 /**
- * Project creation, shared by both routes (`docs/agents/specs/issues/projects.md#creation-paths`),
+ * Project creation, shared by both routes (`docs/agents/modules/issues/projects.md#creation-paths`),
  * behind `ProjectsService#create`. Nothing here calls GitHub or enqueues a job: the constructor
  * has no GitHub or queue dependency.
  */
@@ -53,7 +53,7 @@ export class ProjectCreator {
   ) {}
 
   /**
-   * The one creation method of both routes (`docs/agents/specs/issues/api/projects.md#project-creation`),
+   * The one creation method of both routes (`docs/agents/backend/routes/issues/projects.md#project-creation`),
    * in the order of its checks: the repository ref (`404`, not added), the repository's existing
    * project (`409`, or the shortcut's `200`), the name, then, in one transaction under the
    * exclusive user-row lock, the cap and the insert. Simultaneous creations are decided by the

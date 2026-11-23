@@ -52,7 +52,7 @@ interface SubjectRow {
 
 /**
  * Guard 1 of the reconcile and the read of its marker, the local values and the base
- * (`docs/agents/specs/issues/sync.md#reconcile`, step 1). Both reads run in one transaction, so the
+ * (`docs/agents/modules/issues/sync.md#reconcile`, step 1). Both reads run in one transaction, so the
  * marker's revision and the issue's values are one snapshot: an edit commits the issue and its
  * marker together, and the revision this reads always matches the values it read.
  */

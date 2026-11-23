@@ -23,7 +23,7 @@ export const DEFAULT_EDIT_WINDOW_MS = 60_000;
 
 /**
  * The Issues values, read once from the nine `KERGHAN_ISSUES_*` env vars of
- * `docs/agents/specs/issues/sync.md#configuration`. Each is a positive integer; any other
+ * `docs/agents/modules/issues/sync.md#configuration`. Each is a positive integer; any other
  * value (unset, non-numeric, `0`, negative, fractional) falls back to its default.
  */
 @Injectable()

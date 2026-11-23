@@ -20,7 +20,7 @@ export interface RemoteValues {
   now: Date;
 }
 
-/** One sync outcome of `testing.md#security-verification`: how the world is arranged and what GitHub answers. */
+/** One sync outcome of `docs/agents/modules/issues/testing.md#security-verification`: how the world is arranged and what GitHub answers. */
 export interface SyncOutcome {
   /** The title of the test, with its edge-case id. */
   title: string;

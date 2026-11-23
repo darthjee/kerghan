@@ -2,7 +2,7 @@ import type { RepositorySummary } from '../repositories/repositories.public.js';
 import type { IssuesProject } from './entities/issues-project.entity.js';
 
 /**
- * The wire shapes of the Projects API (`docs/agents/specs/issues/api/projects.md#project-object`).
+ * The wire shapes of the Projects API (`docs/agents/backend/routes/issues/projects.md#project-object`).
  * These pure functions are the only path from a project row to a response: every field is copied
  * explicitly (never spread), so no internal field (the project `id`, `user_id`, `repository_id`,
  * the deletion columns) can leak. Dates become ISO strings.

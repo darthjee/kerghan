@@ -13,7 +13,7 @@ import {
 } from '../../integrations/tests/support/github-builders.js';
 import { canaryAppKey, CANARY, CANARY_ERROR_BODY } from '../../integrations/tests/support/integrations-github-harness.js';
 
-// The credential canary sweep of `docs/agents/specs/issues/testing.md#security-verification`: the real
+// The credential canary sweep of `docs/agents/modules/issues/testing.md#security-verification`: the real
 // Integrations services carry a PAT, an OAuth token, a GitHub App installation (private key and minted
 // installation token) and GitHub answers embed a canary error body; every route, refusals included,
 // and every sync outcome runs, and no response body or header (`error.meta` included), no captured log
@@ -100,7 +100,7 @@ describe('Issues credential canary sweep (real MySQL)', () => {
   );
   const linkIssue = (w: CanaryWorld, marker = false) => linkIssueOf(harness, w, marker);
 
-  describe('every route (testing.md#security-verification: the credential canary)', () => {
+  describe('every route (docs/agents/modules/issues/testing.md#security-verification: the credential canary)', () => {
     it('covers every route the Issues module registers', () => {
       expect(registeredRoutes()).toEqual(ROUTE_ROWS.map((row) => `POST ${row.path}`).sort());
     });
@@ -163,7 +163,7 @@ describe('Issues credential canary sweep (real MySQL)', () => {
     });
   });
 
-  describe('the rate limits answer 429 without leaking (testing.md#security-verification)', () => {
+  describe('the rate limits answer 429 without leaking (docs/agents/modules/issues/testing.md#security-verification)', () => {
     it('answers 429 ISSUE_LINK_RATE_LIMITED past the link window on import.json', async () => {
       const row = ROUTE_ROWS.find((candidate) => candidate.path.endsWith('import.json')) as RouteRow;
       const w = await world(['oauth_app']);
@@ -187,7 +187,7 @@ describe('Issues credential canary sweep (real MySQL)', () => {
     });
   });
 
-  describe('every sync outcome (testing.md#security-verification: E17, E19 to E22, E24, exhausted retries)', () => {
+  describe('every sync outcome (docs/agents/modules/issues/testing.md#security-verification: E17, E19 to E22, E24, exhausted retries)', () => {
     /** Reads the link and issue back through the routes, as the owner and as the intruder. */
     async function readBack(w: CanaryWorld): Promise<void> {
       const base = `/projects/${w.project.uuid}`;
@@ -222,7 +222,7 @@ describe('Issues credential canary sweep (real MySQL)', () => {
     );
   });
 
-  describe('the whole sweep (testing.md#security-verification)', () => {
+  describe('the whole sweep (docs/agents/modules/issues/testing.md#security-verification)', () => {
     it('ran a body of requests with real failures and successes (the sweep is not vacuous)', () => {
       const statuses = new Set(responses.map((response) => response.status));
 

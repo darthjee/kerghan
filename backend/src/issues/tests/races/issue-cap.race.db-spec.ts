@@ -5,7 +5,7 @@ import { buildIssuesDbHarness, type IssuesDbHarness } from '../support/issues-db
 import { seedIssue, seedProject } from '../support/issues-seeds.js';
 
 // The cap is checked under the exclusive project row lock; with a shared lock two creations at
-// `max - 1` would both pass (`security.md#per-project-caps-on-stored-data`).
+// `max - 1` would both pass (`docs/agents/modules/issues/security.md#per-project-caps-on-stored-data`).
 const CAP = 3;
 
 describe('Issue cap race (real MySQL)', () => {

@@ -34,7 +34,7 @@ export const ISSUES_GITHUB_LINKS_INDEXES: TableIndex[] = [
 /**
  * Creates `issues_github_links`: the optional one to one link of a Kerghan issue to a GitHub
  * issue, with the base snapshot the sync reconciles against (see
- * `docs/agents/specs/issues/model.md#issues_github_links`). `user_id` and `issue_id` are logical
+ * `docs/agents/modules/issues/data-model.md#issues_github_links`). `user_id` and `issue_id` are logical
  * FKs only; `user_id` serves the uniqueness rule, never authorization. `down` drops the table.
  */
 export class IssuesCreateIssuesGithubLinks20261120120029 implements MigrationInterface {

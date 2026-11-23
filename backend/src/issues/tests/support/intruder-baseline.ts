@@ -11,7 +11,7 @@ export interface IntruderBaseline {
 }
 
 /**
- * Seeds the intruder of `testing.md#security-verification` (a second approved user with an
+ * Seeds the intruder of `docs/agents/modules/issues/testing.md#security-verification` (a second approved user with an
  * integration, a project, an issue, a link and a marker of his own) after every per-test
  * truncate, so every DB-backed test starts with two users.
  * @param ds - The harness's data source.

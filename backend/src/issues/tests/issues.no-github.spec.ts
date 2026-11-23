@@ -3,7 +3,7 @@ import * as path from 'path';
 import { ISSUES_ROOT, moduleSources } from './support/module-sources.js';
 
 // The issues API (list, create, show, edit, delete) never calls GitHub and enqueues work only
-// through the `IssueSyncTrigger` port (`api/issues.md`): none of its files imports the
+// through the `IssueSyncTrigger` port (`docs/agents/backend/routes/issues/issues.md`): none of its files imports the
 // Integrations entry point, a launcher, a queue or a job, so the service has no such dependency
 // at all. The GitHub link routes (#557) are the one exception: they make the single GitHub read of
 // a link creation, so the claim is narrowed to the files below and the files that do import

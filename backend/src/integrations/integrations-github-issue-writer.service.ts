@@ -11,7 +11,7 @@ const CHANGE_FIELDS: ReadonlySet<string> = new Set(['title', 'body', 'state']);
  * The one write the Integrations module makes to GitHub with a user's
  * credential: `PATCH /repos/{owner}/{name}/issues/{number}` with a
  * `title`/`body`/`state` diff (see
- * `docs/agents/specs/issues/security.md#write-access-to-github`).
+ * `docs/agents/modules/issues/security.md#write-access-to-github`).
  *
  * This is the only non-`GET` GitHub call made with a user's credential, and
  * only the issues sync service may inject it (#558); a static spec fails when

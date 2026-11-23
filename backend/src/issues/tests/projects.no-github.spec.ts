@@ -2,7 +2,7 @@ import { readFileSync } from 'fs';
 import * as path from 'path';
 import { ISSUES_ROOT } from './support/module-sources.js';
 
-// The Projects code never calls GitHub and never enqueues a job (`api/projects.md#project-creation`,
+// The Projects code never calls GitHub and never enqueues a job (`docs/agents/backend/routes/issues/projects.md#project-creation`,
 // "No GitHub call and no job"): none of its files imports the Integrations entry point or anything
 // that launches work, so the constructors have no such dependency at all.
 const PROJECT_FILES = [

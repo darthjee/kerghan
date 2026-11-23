@@ -8,7 +8,7 @@ import {
   forbidden, githubIssue, issue as issueCase, notFound, rateLimited, serverError, timeout, unauthorized, type GithubCase,
 } from '../../integrations/tests/support/github-builders.js';
 
-// The content canary of `docs/agents/specs/issues/testing.md#security-verification` (security.md, "What may
+// The content canary of `docs/agents/modules/issues/testing.md#security-verification` (docs/agents/modules/issues/security.md, "What may
 // be logged"): a project name and description, an issue title and body, GitHub's title and body and a
 // repository owner and name each carry a distinct canary; every route, refusals included, and the reconcile
 // job run, and no log line holds any of them. A 4xx refusal produces only the access line.
@@ -201,7 +201,7 @@ describe('Issues content canary sweep (real MySQL)', () => {
     });
   });
 
-  describe('the whole sweep (testing.md#security-verification)', () => {
+  describe('the whole sweep (docs/agents/modules/issues/testing.md#security-verification)', () => {
     it('ran many requests, with refusals among them (the sweep is not vacuous)', () => {
       expect(requests).toBeGreaterThan(100);
       [400, 404, 409, 429].forEach((status) => expect(refusals.map((refusal) => refusal.status)).toContain(status));
@@ -220,7 +220,7 @@ describe('Issues content canary sweep (real MySQL)', () => {
 
     it('produces only the access line for every 4xx refusal, bar the Integrations module\'s own allowlisted line of a failed GitHub call', () => {
       const isAccessLine = (line: unknown[]): boolean => line[0] === 'info' && line[1] === 'request';
-      // `docs/agents/specs/issues/security.md#what-may-be-logged`: "Integrations (existing)": the integration id, the operation, the status and the result kind.
+      // `docs/agents/modules/issues/security.md#what-may-be-logged`: "Integrations (existing)": the integration id, the operation, the status and the result kind.
       const isIntegrationsLine = (line: unknown[]): boolean => line[0] === 'warn' && line[1] === 'github repo call failed'
         && Object.keys(line[2] as object).sort().join() === 'integrationId,operation,requestId,result,status';
       const extra = refusals.filter((refusal) => !refusal.lines.every((line) => isAccessLine(line) || isIntegrationsLine(line)) || !refusal.lines.some(isAccessLine));

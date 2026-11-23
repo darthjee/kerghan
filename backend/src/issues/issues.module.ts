@@ -86,7 +86,7 @@ export const ISSUES_PROVIDERS: Provider[] = [
 /**
  * The Issues module — always-on (imported directly into `AppModule`, so its `user.deleted`
  * listener exists at boot): projects and the Kerghan issues that belong to them, each issue
- * optionally linked to one GitHub issue (see `docs/agents/specs/issues.md`). Owns tables
+ * optionally linked to one GitHub issue (see `docs/agents/modules/issues.md`). Owns tables
  * `issues_projects`, `issues`, `issues_github_links` and `issues_pending_writes`; every
  * `*_id` is a logical FK only. Its controllers are `ProjectsController` (the Projects API) and `IssuesController` (the Issues API). It reads Auth through
  * `AccountHandleService` and Repositories through the exported `RepositoriesService`.

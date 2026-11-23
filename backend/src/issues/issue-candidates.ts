@@ -14,7 +14,7 @@ export type CandidateResolution =
 const WRITE_ORDER: Record<IssuesWriteCapability, number> = { writable: 0, unknown: 1, read_only: 2 };
 
 /**
- * The integration selection of `docs/agents/specs/issues/sync.md#integration-selection`: which of
+ * The integration selection of `docs/agents/modules/issues/sync.md#integration-selection`: which of
  * the user's integrations may call GitHub for a repository, in the order to try them. A candidate
  * is a usable integration whose source lists the repository (a GitHub handle alone is never one,
  * E20), ordered by known write capability (writable, then unknown, then read-only) and oldest

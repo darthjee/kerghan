@@ -6,10 +6,10 @@ import { Clock } from '../core/clock.js';
 import type { RepositorySummary } from '../repositories/repositories.public.js';
 import { RepositoriesService } from '../repositories/repositories.service.js';
 
-/** The states a link can read as, in precedence order (`docs/agents/specs/issues/github-link.md#link-states`). */
+/** The states a link can read as, in precedence order (`docs/agents/modules/issues/github-link.md#link-states`). */
 export type IssueLinkState = 'gone' | 'sync_failed' | 'repository_unavailable' | 'rate_limited' | 'pending' | 'linked';
 
-/** The link object of an issue (`docs/agents/specs/issues/api/github-link.md#link-object`). */
+/** The link object of an issue (`docs/agents/backend/routes/issues/github-link.md#link-object`). */
 export interface IssueLinkResponse {
   number: number;
   /** Built from the repository's stored `owner`/`name`; `null` when the repository reference dangles. */

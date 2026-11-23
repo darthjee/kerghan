@@ -23,7 +23,7 @@ export interface EarliestPause {
 }
 
 /**
- * The in-memory rate-limit state of the sync (`docs/agents/specs/issues/sync.md#rate-limits`): a
+ * The in-memory rate-limit state of the sync (`docs/agents/modules/issues/sync.md#rate-limits`): a
  * pause per integration id holding the reset time, a waiting set of link ids per integration, and
  * one timer per integration. At the reset the timer clears the pause and enqueues one reconcile
  * per waiting link, oldest marker first (links without a marker last), through the per-link

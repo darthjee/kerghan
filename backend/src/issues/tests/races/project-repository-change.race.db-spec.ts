@@ -4,7 +4,7 @@ import { ProjectsService } from '../../projects.service.js';
 import { buildIssuesDbHarness, type IssuesDbHarness } from '../support/issues-db-harness.js';
 import { seedIssue, seedLink, seedProject } from '../support/issues-seeds.js';
 
-// The change side of E62 (`github-link.md#same-repository-rule-and-repository-changes`): a
+// The change side of E62 (`docs/agents/modules/issues/github-link.md#same-repository-rule-and-repository-changes`): a
 // repository change takes the project row lock first, so while another transaction holds it the
 // change waits, and a link committed meanwhile makes it answer PROJECT_HAS_LINKS. The full race
 // against the real link creation belongs to the link routes (#557).

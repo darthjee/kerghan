@@ -1,6 +1,6 @@
 /**
  * The redirect and `Location` contract of the issue client
- * (`docs/agents/specs/issues/testing.md#fixtures`, E65).
+ * (`docs/agents/modules/issues/testing.md#fixtures`, E65).
  *
  * - **Recorded mode (always runs, in CI).** Replays the shapes of GitHub's
  *   `200`, `404`, `410` and `301` answers for `/repos/{owner}/{name}/issues/{number}`

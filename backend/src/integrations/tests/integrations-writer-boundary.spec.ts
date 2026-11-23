@@ -2,7 +2,7 @@ import { readFileSync } from 'fs';
 import * as path from 'path';
 import { INTEGRATIONS_ROOT, SRC_ROOT, sourcesUnder } from './support/source-files.js';
 
-// Static boundary check (`docs/agents/specs/issues/security.md#the-integrations-boundary`):
+// Static boundary check (`docs/agents/modules/issues/security.md#the-integrations-boundary`):
 // `IntegrationsGithubIssueWriter` is the only non-GET GitHub call made with a user's credential,
 // and only the issues sync service may inject it. No app boot, no DB.
 

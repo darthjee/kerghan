@@ -22,7 +22,7 @@ const TM = new Date('2026-06-01T12:00:00Z');
 const LATER = new Date('2026-06-01T13:00:00Z');
 const PUT_AT = new Date('2026-06-01T14:00:00Z');
 
-// The reconcile of `sync.md#reconcile` on real MySQL, with a scripted GitHub.
+// The reconcile of `docs/agents/modules/issues/sync.md#reconcile` on real MySQL, with a scripted GitHub.
 describe('IssuesSyncService (real MySQL)', () => {
   let harness: IssuesDbHarness;
   let service: IssuesSyncService;
@@ -717,7 +717,7 @@ describe('IssuesSyncService (real MySQL)', () => {
     });
   });
 
-  describe('the edge cases of edge-cases.md that the tables above do not name', () => {
+  describe('the edge cases of docs/agents/modules/issues/edge-cases.md that the tables above do not name', () => {
     it('E5: a 403 on a push to an archived or read-only repository follows E19: the read worked, the job stops with no retry, the marker is kept', async () => {
       const w = await world({ local: { title: 'L' }, base: {}, marker: {} });
 

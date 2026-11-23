@@ -1,7 +1,7 @@
 /**
  * The typed, normalised results of the issue operations of the exported
  * `IntegrationsGithubService` and `IntegrationsGithubIssueWriter`
- * (see `docs/agents/specs/issues/sync.md#github-issue-client-operations`). They are
+ * (see `docs/agents/modules/issues/sync.md#github-issue-client-operations`). They are
  * part of the module's export surface: no credential, minted token, `secret_iv`,
  * URL or GitHub body ever appears in them.
  */

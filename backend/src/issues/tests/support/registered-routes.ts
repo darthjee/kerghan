@@ -50,7 +50,7 @@ function routesOf(controller: Type): string[] {
 
 export type Service = 'projects' | 'issues' | 'links';
 
-/** One row of the route table: every route of the Issues module (`testing.md#security-verification`). */
+/** One row of the route table: every route of the Issues module (`docs/agents/modules/issues/testing.md#security-verification`). */
 export interface RouteRow {
   /** The fake behind the route. */
   service: Service;

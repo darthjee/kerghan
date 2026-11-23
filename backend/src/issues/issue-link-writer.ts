@@ -34,7 +34,7 @@ export interface LinkCreation {
 export type LinkTarget = { kind: 'import' } | { kind: 'attach'; issueUuid: string; confirmUpdatedAt?: Date };
 
 /**
- * The write half of link creation (`docs/agents/specs/issues/api/github-link.md`): one
+ * The write half of link creation (`docs/agents/backend/routes/issues/github-link.md`): one
  * transaction in the lock order projects, issues, links, markers that re-checks what was read
  * before the GitHub call, then writes the issue (import, or an attach that needs it) and the link.
  * It creates no marker, writes nothing to GitHub and enqueues nothing. A unique-index race is

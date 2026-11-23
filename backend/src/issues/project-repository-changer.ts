@@ -17,11 +17,11 @@ import { Clock } from '../core/clock.js';
 import type { ProjectRepositoryLookup, RepoRef } from '../repositories/repositories.public.js';
 import { RepositoriesService } from '../repositories/repositories.service.js';
 
-// The unique index a repository change race can hit (`model.md#issues_projects`).
+// The unique index a repository change race can hit (`docs/agents/modules/issues/data-model.md#issues_projects`).
 
 /**
  * Connects, changes or detaches a project's repository
- * (`docs/agents/specs/issues/api/projects.md#project-repository`), behind
+ * (`docs/agents/backend/routes/issues/projects.md#project-repository`), behind
  * `ProjectsService#setRepository`. It never syncs, enqueues a job or calls GitHub. The project
  * row lock is taken first, so a link creation (which takes the same lock first) cannot leave a
  * link against a changed repository (E62).

@@ -6,7 +6,7 @@ import { buildCanaryWorld, CANARY_NUMBER, type CanaryContent, type CanaryWorld }
 import { buildIssuesCanaryHarness, postAs, type IssuesCanaryHarness } from './support/issues-canary-harness.js';
 import { linkIssue } from './support/sync-outcomes.js';
 
-// A unique-index duplicate never reaches the logs (security.md, "Exception messages never reach the logs"):
+// A unique-index duplicate never reaches the logs (docs/agents/modules/issues/security.md, "Exception messages never reach the logs"):
 // MySQL's `ER_DUP_ENTRY` message carries the duplicated value, which can be a project name. Every unique
 // index of the Issues tables has a row below: the duplicate is provoked through its route, one call after
 // the other and both at once, answers the mapped 409 (or the shortcut's 200), and its value is in no log line.

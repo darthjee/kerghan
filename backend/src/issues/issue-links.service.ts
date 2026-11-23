@@ -40,7 +40,7 @@ interface Prepared {
 type ReadIssue = Extract<LinkReadOutcome, { kind: 'ok' }>;
 
 /**
- * The GitHub link of an issue (`docs/agents/specs/issues/api/github-link.md`): import, attach and
+ * The GitHub link of an issue (`docs/agents/backend/routes/issues/github-link.md`): import, attach and
  * unlink. Creating a link follows the documented order of checks: the rate limit, the access
  * checks, the cheap `409` pre-checks that make no GitHub call, then the single GitHub read
  * outside any transaction (no lock is held across the network call), then one transaction that
@@ -83,7 +83,7 @@ export class IssueLinksService {
    * @param {string} projectUuid - The project's public id.
    * @param {ImportIssueInput} input - The validated GitHub issue number.
    * @returns {Promise<IssueResponse>} The new issue object, with its link (`201`).
-   * @throws {HttpException} The link failures of `api/github-link.md`, in its order of checks.
+   * @throws {HttpException} The link failures of `docs/agents/backend/routes/issues/github-link.md`, in its order of checks.
    */
   import(userId: number, projectUuid: string, input: ImportIssueInput): Promise<IssueResponse> {
     return this.#link(userId, projectUuid, input.number, { kind: 'import' });
@@ -97,7 +97,7 @@ export class IssueLinksService {
    * @param {string} issueUuid - The issue's public id.
    * @param {AttachIssueInput} input - The validated number and optional confirmation.
    * @returns {Promise<IssueResponse>} The issue object, with its link (`200`).
-   * @throws {HttpException} The link failures of `api/github-link.md`, in its order of checks.
+   * @throws {HttpException} The link failures of `docs/agents/backend/routes/issues/github-link.md`, in its order of checks.
    */
   attach(userId: number, projectUuid: string, issueUuid: string, input: AttachIssueInput): Promise<IssueResponse> {
     return this.#link(userId, projectUuid, input.number, {

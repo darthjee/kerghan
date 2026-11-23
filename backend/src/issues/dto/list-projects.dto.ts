@@ -9,7 +9,7 @@ export const MAX_PER_PAGE = 100;
 export const MAX_SEARCH_CODE_POINTS = 100;
 
 /**
- * Request body for `POST /projects.json` (`docs/agents/specs/issues/api/projects.md`). Every field
+ * Request body for `POST /projects.json` (`docs/agents/backend/routes/issues/projects.md`). Every field
  * is optional; an absent field takes its default, while an explicit `null` or any invalid value
  * answers `400`. Types are strict (`"1"` is not a number).
  */

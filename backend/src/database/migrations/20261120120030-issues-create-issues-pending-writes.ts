@@ -18,7 +18,7 @@ export const ISSUES_PENDING_WRITES_INDEXES: TableIndex[] = [
 
 /**
  * Creates `issues_pending_writes`: the pending marker, one row per link with unsent local edits
- * and no payload (see `docs/agents/specs/issues/model.md#issues_pending_writes-the-pending-marker`).
+ * and no payload (see `docs/agents/modules/issues/data-model.md#issues_pending_writes-the-pending-marker`).
  * `link_id` is a logical FK only. `down` drops the table.
  */
 export class IssuesCreateIssuesPendingWrites20261120120030 implements MigrationInterface {

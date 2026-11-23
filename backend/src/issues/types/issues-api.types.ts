@@ -2,7 +2,7 @@ import type { IssueState } from '../entities/issue.entity.js';
 import type { IssueResponse } from '../issue-response.js';
 
 /**
- * The typed inputs of the IssuesService (`docs/agents/specs/issues/api/issues.md`): plain values,
+ * The typed inputs of the IssuesService (`docs/agents/backend/routes/issues/issues.md`): plain values,
  * no DTO classes and no HTTP types. The controller owns validation and response shaping.
  */
 

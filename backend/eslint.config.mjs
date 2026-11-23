@@ -194,7 +194,7 @@ export default [
       }],
     },
   },
-  // Issues module boundary (`docs/agents/specs/issues/security.md#the-integrations-boundary`):
+  // Issues module boundary (`docs/agents/modules/issues/security.md#the-integrations-boundary`):
   // deny by default every Auth / Integrations / Repositories path, except the allowlisted
   // entry points, and never call `fetch` directly. Tests are exempt.
   {
@@ -205,7 +205,7 @@ export default [
         patterns: [
           {
             group: ['**/integrations/**', '!**/integrations/integrations-github.public*'],
-            message: 'Issues reaches Integrations only through integrations-github.public (security.md#the-integrations-boundary).',
+            message: 'Issues reaches Integrations only through integrations-github.public (docs/agents/modules/issues/security.md#the-integrations-boundary).',
           },
           {
             group: [
@@ -216,7 +216,7 @@ export default [
               '**/auth/events/*',
               '!**/auth/events/user-deleted.event*',
             ],
-            message: 'Issues reaches Auth only through AccountHandleService and the user.deleted event (security.md#the-integrations-boundary).',
+            message: 'Issues reaches Auth only through AccountHandleService and the user.deleted event (docs/agents/modules/issues/security.md#the-integrations-boundary).',
           },
           {
             group: ['**/repositories/**', '!**/repositories/repositories.service*', '!**/repositories/repositories.module*', '!**/repositories/repositories.public*'],

@@ -1,6 +1,6 @@
 /**
  * The read port of the per-integration rate-limit waiting sets
- * (`docs/agents/specs/issues/sync.md`): for the links that are waiting on a rate limit, when the
+ * (`docs/agents/modules/issues/sync.md`): for the links that are waiting on a rate limit, when the
  * wait ends. The link object reads it to show `rate_limited` and `rateLimitedUntil`. The waiting
  * sets are in memory, so they disappear on restart.
  *

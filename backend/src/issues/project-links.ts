@@ -6,7 +6,7 @@ const PROJECT_LINK_IDS = `SELECT id FROM issues_github_links WHERE issue_id IN (
 
 /**
  * The queries over a project's issues, links and markers that its repository change and its
- * deletion need (`docs/agents/specs/issues/model.md#cleanup`). Every one is scoped by the
+ * deletion need (`docs/agents/modules/issues/data-model.md#cleanup`). Every one is scoped by the
  * project's internal id and runs inside the caller's transaction, after the caller took the
  * project row lock (the first lock of the order: projects, issues, links, markers).
  */

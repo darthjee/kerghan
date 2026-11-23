@@ -21,7 +21,7 @@ interface BulkOutcome {
 
 /**
  * The bulk close/reopen flow of `IssuesService#bulkState`
- * (`docs/agents/specs/issues/api/issues.md#bulk-close-and-reopen`): the weighted rate limit, the
+ * (`docs/agents/backend/routes/issues/issues.md#bulk-close-and-reopen`): the weighted rate limit, the
  * access check, then one transaction in the module's lock order (project, issues, links,
  * markers), and the sync trigger after the commit. Kept apart so the service stays small.
  */

@@ -4,7 +4,7 @@ import type { IssueListRecord } from './issue-store.js';
 import type { BulkIssueStateResponse } from './types/issues-api.types.js';
 
 /**
- * The wire shapes of the Issues API (`docs/agents/specs/issues/api/issues.md`). These pure
+ * The wire shapes of the Issues API (`docs/agents/backend/routes/issues/issues.md`). These pure
  * functions are the only path from an issue row to a response: every field is copied explicitly
  * (never spread), so no internal field (the issue `id`, `project_id`) can leak. Dates become ISO
  * strings: `createdAt` keeps second precision (a `datetime` column), `updatedAt` keeps its

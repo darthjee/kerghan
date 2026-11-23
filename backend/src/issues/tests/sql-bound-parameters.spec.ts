@@ -2,7 +2,7 @@ import { readFileSync } from 'fs';
 import * as path from 'path';
 import { ISSUES_ROOT, moduleSources } from './support/module-sources.js';
 
-// Static check (`docs/agents/specs/issues/security.md#review-checklist`, `security` item 7): request
+// Static check (`docs/agents/modules/issues/security.md#review-checklist`, `security` item 7): request
 // values reach SQL only as bound parameters. A template literal that reads as SQL may interpolate
 // nothing but a named constant (a fixed sub-select such as `USER_PROJECT_IDS`); a value, a call or an
 // expression in `${}` fails. The `LIKE` pattern is built outside the SQL text (`escapeLike`, bound).

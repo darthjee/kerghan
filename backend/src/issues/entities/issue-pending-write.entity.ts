@@ -3,7 +3,7 @@ import { Column, Entity, Index, PrimaryGeneratedColumn } from 'typeorm';
 /**
  * The pending marker: one row per link with unsent local edits, and no payload (the job diffs
  * the issue against the base snapshot). Owns table `issues_pending_writes` (see
- * `docs/agents/specs/issues/model.md#issues_pending_writes-the-pending-marker`). `linkId` is a
+ * `docs/agents/modules/issues/data-model.md#issues_pending_writes-the-pending-marker`). `linkId` is a
  * logical FK only.
  */
 @Entity('issues_pending_writes')

@@ -184,7 +184,7 @@ export interface Intruder {
 }
 
 /**
- * Seeds the intruder of `testing.md#fixtures`: a second approved user with an integration, a
+ * Seeds the intruder of `docs/agents/modules/issues/testing.md#fixtures`: a second approved user with an integration, a
  * project, an issue, a link and a marker of his own.
  * @param ds - The data source.
  * @returns The user's id and his rows' ids.

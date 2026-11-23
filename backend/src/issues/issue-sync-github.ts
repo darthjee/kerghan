@@ -116,7 +116,7 @@ export class IssueSyncGithub {
   }
 
   /**
-   * Classifies a failed `GET` or `PATCH` (`docs/agents/specs/issues/sync.md#retries-and-sync_failed`).
+   * Classifies a failed `GET` or `PATCH` (`docs/agents/modules/issues/sync.md#retries-and-sync_failed`).
    * @param {IssueFailure | RepoFailure} result - The failure.
    * @param {Target} target - The attempt's target.
    * @returns {Promise<FailedAttempt>} What the walk does next.

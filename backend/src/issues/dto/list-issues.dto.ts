@@ -5,7 +5,7 @@ import { MaxCodePoints, trimString } from '../../core/code-points.validator.js';
 import type { IssueStateFilter, ListIssuesInput } from '../types/issues-api.types.js';
 
 /**
- * Request body for `POST /projects/:projectId/issues.json` (`docs/agents/specs/issues/api/issues.md`).
+ * Request body for `POST /projects/:projectId/issues.json` (`docs/agents/backend/routes/issues/issues.md`).
  * Every field is optional; an absent field takes its default, while an explicit `null` or any
  * invalid value answers `400`. Types are strict (`"1"` is not a number).
  */

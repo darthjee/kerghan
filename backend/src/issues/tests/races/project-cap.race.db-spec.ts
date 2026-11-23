@@ -6,7 +6,7 @@ import { seedProject } from '../support/issues-seeds.js';
 
 // The cap is checked under the exclusive user-row lock (`lockExistingUserForUpdate`); with a shared
 // lock two creations at `max - 1` would both pass. Proves the exclusive lock of the creating
-// transaction (`security.md#per-user-caps-on-stored-data`).
+// transaction (`docs/agents/modules/issues/security.md#per-user-caps-on-stored-data`).
 const CAP = 3;
 
 describe('Live-project cap race (real MySQL)', () => {

@@ -22,7 +22,7 @@ export const ISSUES_INDEXES: TableIndex[] = [
 
 /**
  * Creates the Issues module's `issues` table: the Kerghan issues of a project (see
- * `docs/agents/specs/issues/model.md#issues-kerghan-issues`). `project_id` is a logical FK
+ * `docs/agents/modules/issues/data-model.md#issues-kerghan-issues`). `project_id` is a logical FK
  * only; `updated_at` is `datetime(3)` so edits within one second still change it. `down`
  * drops the table.
  */

@@ -14,7 +14,7 @@ import type { ProjectDeleteResponse, ProjectListingResponse, ProjectResponse } f
 import { ProjectsService } from './projects.service.js';
 
 /**
- * Projects routes (`docs/agents/specs/issues/api/projects.md`) — thin: each validates through its
+ * Projects routes (`docs/agents/backend/routes/issues/projects.md`) — thin: each validates through its
  * DTO, makes one `ProjectsService` call and answers with its result. Every route is `POST`,
  * behind the global `JwtGuard` and `OriginGuard` (no `@Public()`, no `@AdminOnly()`), scoped to
  * the caller from `@CurrentUser()`, cache class `user-scoped`, and never warmed by Navi. Paths are

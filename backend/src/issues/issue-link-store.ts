@@ -25,13 +25,13 @@ export interface ExistingLink {
   issueUuid: string;
 }
 
-/** The reasons of a `sync_failed` link (`docs/agents/specs/issues/sync.md#retries-and-sync_failed`). */
+/** The reasons of a `sync_failed` link (`docs/agents/modules/issues/sync.md#retries-and-sync_failed`). */
 export type SyncFailureReason = 'retries_exhausted' | 'no_credential' | 'credential_invalid' | 'forbidden';
 
 /** The reasons of a `gone` link. */
 export type GoneReason = 'deleted' | 'moved';
 
-/** What a reconcile's commit writes on the link (`docs/agents/specs/issues/sync.md#reconcile`, step 5). */
+/** What a reconcile's commit writes on the link (`docs/agents/modules/issues/sync.md#reconcile`, step 5). */
 export interface SyncWrite {
   /** The fields whose base snapshot takes a value (the pushed ones and, when applied, the pulled ones). */
   base: Partial<IssueValues>;

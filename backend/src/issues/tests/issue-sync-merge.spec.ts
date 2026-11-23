@@ -18,7 +18,7 @@ function input(overrides: Partial<MergeInput> & { local?: Partial<IssueValues>; 
   };
 }
 
-// The L/B/G table of `sync.md#reconcile`, one row per case, on the title.
+// The L/B/G table of `docs/agents/modules/issues/sync.md#reconcile`, one row per case, on the title.
 describe('mergeFields', () => {
   it('does nothing when neither side moved', () => {
     expect(mergeFields(input())).toEqual({ push: {}, pull: {}, adopt: {} });

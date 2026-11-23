@@ -5,7 +5,7 @@ import { seedIssue } from './support/issues-seeds.js';
 import { buildLinkWorld, INTEGRATION_ID, linkApi, type LinkWorld, REPOSITORY, rowCount, scriptIssue } from './support/link-fixture.js';
 
 // POST import.json over real MySQL: the issue and its link are created together from the single
-// GitHub read (`docs/agents/specs/issues/api/github-link.md`).
+// GitHub read (`docs/agents/backend/routes/issues/github-link.md`).
 const CAP = 3;
 
 describe('Issue import (real MySQL)', () => {
