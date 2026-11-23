@@ -156,6 +156,19 @@ const IssuesClient = {
   async retrySync(projectId, issueId) {
     return ApiClient.postJson(issuePath(projectId, issueId, 'retry-sync'), {});
   },
+
+  /**
+   * Close or reopen several issues of a project in one call.
+   *
+   * @param {string} projectId - The project's uuid.
+   * @param {{issueIds: Array<string>, state: string}} fields - The 1 to 100 issue ids and the
+   *   target state (`open` or `closed`).
+   * @returns {Promise<{state: string, changed: Array<string>, unchanged: Array<string>,
+   *   notFound: Array<string>}>} The ids of each outcome.
+   */
+  async bulkState(projectId, { issueIds, state }) {
+    return ApiClient.postJson(collectionPath(projectId, '/bulk-state'), { issueIds, state });
+  },
 };
 
 export default IssuesClient;
