@@ -5,16 +5,11 @@ _Last updated: 2026-10-02_
 Kerghan is a GitHub issue monitoring/dashboard app. Users log into a lightweight Kerghan account
 (username/password, a JWT `access_token` cookie, and a rotating refresh token — not GitHub OAuth;
 users can store GitHub credentials as integrations — see [Specs](docs/agents/specs.md) — used by
-the backend to list their repositories, not for issue fetching), either directly or by approving
+the backend to list their repositories and to sync linked issues, not for fetching issues live), either directly or by approving
 the login from an already-logged-in device via the device-authorization flow, and
 choose which of their repos/orgs to monitor; the backend persists a per-user snapshot of the
 repositories it lists (through an integration's credential or the public repositories of an
-optional GitHub handle) and which of them the user added. Issue
-data itself is fetched live, on demand, by the frontend calling GitHub's public API directly —
-each user's own browser IP (Internet Protocol) address absorbs GitHub's unauthenticated rate
-limit instead of the backend's shared one. Nothing about issues is persisted to MySQL by
-default; opt-in persistence (for history/trends) is a future addition, not the current
-behavior. The driving use case is label-based attention triage — surfacing which of a user's
+optional GitHub handle) and which of them the user added. Fetched GitHub issue data is read live, on demand, by the frontend calling GitHub's public API directly. Each user's own browser IP (Internet Protocol) address absorbs GitHub's unauthenticated rate limit instead of the backend's shared one, and that data is not persisted by default. Users can also create projects, each optionally connected to one added repository, holding Kerghan's own issues, which may be linked one to one to a GitHub issue. Kerghan persists those projects, issues and links and, for a linked issue only, a snapshot of its GitHub data. Background workers sync each linked pair both ways through the backend, with the project owner's integration credential (see [Specs](docs/agents/specs.md)). Opt-in persistence of fetched issues (for history/trends) is a future addition. The driving use case is label-based attention triage — surfacing which of a user's
 many tracked repos "need my attention". See [Flow](docs/agents/flow.md) for the full
 request/data flow and [Product Definitions](docs/agents/product.md) for what's decided vs. still
 open.
@@ -109,7 +104,7 @@ docker-compose run --rm kerghan_tests yarn test
 - Kerghan has a lightweight per-user account/login (not GitHub OAuth) — see
   [Flow](docs/agents/flow.md). Repository listing is read by the backend, inside the
   Integrations module, with an integration's credential or the GitHub handle's public listing;
-  issue data is still read by the browser, unauthenticated (public-repo only). Per-user GitHub
+  fetched issue data is still read by the browser, unauthenticated (public-repo only); a linked Kerghan issue is read and written by the backend, inside the Integrations module, with the project owner's credential. Per-user GitHub
   credentials may be stored only as integrations, exactly as
   defined by the integrations entry in [Specs](docs/agents/specs.md) (#295 is the product
   decision); any other GitHub credential storage still needs an explicit product decision

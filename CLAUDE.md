@@ -9,11 +9,11 @@ See [AGENTS.md](AGENTS.md) for project instructions.
 - Store GitHub credentials only as integrations, exactly as defined by the integrations entry in
   `docs/agents/specs.md` (encrypted at rest as defined there; #295 is the product decision). Any
   other GitHub credential storage still needs an explicit product decision backing it. Issue
-  fetching itself still reads GitHub unauthenticated (public-repo only), in the browser.
+  fetching itself still reads GitHub unauthenticated (public-repo only), in the browser. The one exception is a linked Kerghan issue, which the backend reads and writes inside the Integrations module with the project owner's credential, as defined by the Issues and Projects entry in `docs/agents/specs.md`.
 - GitHub credentials stay in the backend: every GitHub call that uses a user's credential is made
   by the backend inside the Integrations module, and no endpoint returns a credential or anything
   derived from it beyond the masked `secretHint`. The backend lists repositories with an
-  integration's credential or a GitHub handle's public listing; the frontend never calls GitHub
+  integration's credential or a GitHub handle's public listing, and syncs linked issues with the project owner's credential; the frontend never calls GitHub
   with a credential.
 - Keep backend controllers thin — business logic belongs in each module's service, not the
   controller, unless a change explicitly documents why an exception is warranted.

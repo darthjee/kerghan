@@ -32,7 +32,7 @@ probeIssues(userId, integrationId, repo): Promise<IssueProbeResult>
 
 - **`issuesWrite`** (added by #557) is the integration's *known write capability*, derived inside
   the module from its type and metadata and used only to order the issue candidates
-  ([integration selection](../../../specs/issues/sync.md#integration-selection)), never as a gate:
+  ([integration selection](../../issues/sync.md#integration-selection)), never as a gate:
   `writable` for an OAuth app and a classic PAT; `unknown` for a fine-grained PAT (GitHub does not
   expose its permissions); for a GitHub App, `writable` when the recorded installation
   `permissions.issues` is `write` and `read_only` otherwise. It carries no metadata.

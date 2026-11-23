@@ -8,8 +8,9 @@ full file before loading it. For a bare link-only table of contents instead, see
 
 - **[Folder Structure](folder-structure.md)** — Top-level directory layout: what each top-level
   folder (`backend/`, `frontend/`, `proxy/`, `dockerfiles/`, `docs/`, etc.) is for.
-- **[Flow](flow.md)** — Target end-to-end flow (not yet implemented): login, repo selection
-  persisted by the backend, issues fetched live client-side against GitHub, manual refresh.
+- **[Flow](flow.md)** — Target end-to-end flow: login, repo selection persisted by the backend,
+  issues fetched live client-side against GitHub, manual refresh, and the backend-stored projects
+  and issues linked to GitHub issues.
 - **[Architecture](architecture.md)** — Hub page splitting the architecture by concern (proxy,
   frontend, backend, modular pattern, infra) to keep agent contexts small. Read the linked area
   page relevant to your task instead of loading everything.
@@ -39,8 +40,13 @@ full file before loading it. For a bare link-only table of contents instead, see
     (Added / Not added / Unavailable / Unknown), security, the Repositories page, testing and
     the edge-case matrix (`modules/repositories/edge-cases.md`). The optional GitHub handle on
     the account is `modules/auth/github-handle.md`.
+  - **[Issues and Projects](modules/issues.md)** — Per-user projects (optionally tied to one added
+    repository) and the Kerghan issues inside them, optionally linked one to one to a GitHub
+    issue and synced both ways by background workers: the four tables, the GitHub link, sync,
+    security, the edge-case matrix, the frontend screens and the required-tests index, one page
+    each under `modules/issues/`. Routes are in `backend/routes/issues.md`.
 - **[Routes](backend/routes.md)** — Per-endpoint backend route reference, one file per domain
-  under `backend/routes/` (`auth.md`, `integrations.md` and `repositories.md` today), complementing the
+  under `backend/routes/` (`auth.md`, `integrations.md`, `repositories.md` and `issues.md` today), complementing the
   entity/event-focused `modules/` pages.
 - **[Standalone Distribution](standalone.md)** — Running all of Kerghan in one Vault
   (Docker-in-Docker) container, `darthjee/kerghan-standalone` (online and offline variants): the
@@ -53,7 +59,7 @@ full file before loading it. For a bare link-only table of contents instead, see
   separate refactors) and PR standards (descriptive summary, description files when needed).
 - **[Product Definitions](product.md)** — What's decided (login/session, persisted repo
   selection, integrations as the only GitHub credential storage, issues fetched live
-  client-side, no issue persistence by default) vs. still open (the tracked-repo/label-rule data
+  client-side with no persistence of fetched issues by default, Kerghan's own projects and issues) vs. still open (the tracked-repo/label-rule data
   model) and deferred (opt-in issue persistence, history/trends, using integration credentials
   for private repos). Read it before planning any issue that introduces new entities.
 - **[Issue Enhancement](issue-enhancement.md)** — Checklist of concerns (`/enhance-issue` uses

@@ -1,8 +1,8 @@
 # Product Definitions
 
 **Status: partial.** The high-level flow (login, repo selection, on-demand issue fetching) is
-decided — see [Flow](flow.md), and so are [integrations](#integrations) and
-[repositories](#repositories). Entity definitions, an ownership chain, and role definitions for
+decided — see [Flow](flow.md), and so are [integrations](#integrations),
+[repositories](#repositories) and [issues and projects](#issues-and-projects). Entity definitions, an ownership chain, and role definitions for
 the label-rule data model still don't exist, because that model is still open. This file
 is the canonical place for the `product-owner`, `data-access`, and `security` agents to check
 "is this decided yet?".
@@ -23,18 +23,25 @@ is the canonical place for the `product-owner`, `data-access`, and `security` ag
   [repositories](#repositories): a per-user snapshot of **every** GitHub repository seen in a
   sync, with a mark for the ones the user added. The snapshot includes the metadata of private
   repositories the user never added; its lifetime is bounded (see
-  [Repositories](#repositories)). Issue data itself is **not** persisted by default — see
+  [Repositories](#repositories)), and each user's own [projects and issues](#issues-and-projects)
+  with their links to GitHub issues and, for a linked issue only, a snapshot of its GitHub data.
+  Fetched GitHub issue data (what the frontend reads live) is **not** persisted by default — see
   "Issue fetching model" below.
 - **Issue fetching model**: on demand, live, fetched **client-side** by the frontend directly
   against GitHub's public REST API — not by the backend. This is what lets the backend stay idle
   between visits and moves GitHub's unauthenticated rate limit (60 requests/hour per source IP)
   from being shared across every Kerghan user (if the backend fetched) to being scoped to each
-  user's own browser IP instead. Refresh is manual (user-triggered), not automatic/polled.
-- **GitHub access**: issue data is still fetched unauthenticated and client-side, public-repo
-  data only. Users can store GitHub credentials (Personal Access Token, OAuth App
+  user's own browser IP instead. Refresh is manual (user-triggered), not automatic/polled. The
+  one exception is a *linked* Kerghan issue ([Issues and Projects](#issues-and-projects)): the
+  backend reads and writes its GitHub issue with the owner's credential, inside the Integrations
+  module.
+- **GitHub access**: fetched issue data is still read unauthenticated and client-side,
+  public-repo data only. Users can store GitHub credentials (Personal Access Token, OAuth App
   authorization, GitHub App installation) as [integrations](#integrations), which are the
   **only** allowed GitHub credential storage. The backend uses them to list repositories (see
-  [Repositories](#repositories)); nothing uses them for issue fetching yet (see "Deferred").
+  [Repositories](#repositories)) and to sync linked issues (see
+  [Issues and Projects](#issues-and-projects)); nothing uses them to fetch issues for the
+  dashboard yet (see "Deferred").
 - **Frontend surface**: a dashboard/analytics view (issue volume, age, label breakdowns, "needs
   attention" lists), not just CRUD forms — API design should be aggregation-friendly.
 - **No file uploads, no GitHub webhooks.** An admin-role-gated UI is allowed (see #40's admin
@@ -86,6 +93,28 @@ Decided by epic #444; the full definition is in the [Repositories module](module
 - **Not included**: removing an added repo, adding a repo by `owner/name`, issues, label rules,
   org-wide tracking, scheduled sync.
 
+## Issues and Projects
+
+Decided by epic #483; the full definition is in the [Issues and Projects module](modules/issues.md)
+and its [routes](backend/routes/issues.md).
+
+- **Entities**: a **project** is the home of issues, owned by one user and private, optionally
+  connected to one of the user's added repositories (no repository means a non-code project). A
+  Kerghan **issue** belongs to exactly one project and may be linked one to one to a GitHub issue
+  of the project's repository.
+- **Persistence**: Kerghan persists its own projects, issues, links and sync markers and, for a
+  linked issue only, a snapshot of its GitHub data. Fetched GitHub issue data stays "not
+  persisted by default"; "Opt-in issue persistence" (see "Deferred") is a different, still
+  deferred feature.
+- **GitHub access**: the backend reads and writes GitHub for linked issues with the project
+  owner's integration credential, inside the Integrations module, as a narrow exception to
+  "read by the browser". Background workers keep each linked pair in sync both ways, on demand
+  only (no polling).
+- **Access rules**: user-scoped. Another user's project or issue answers 404, like a missing
+  one; admins get no access.
+- **Not included**: labels on Kerghan issues, sharing and members, a per-project issue number,
+  and removing an added repository (which must refuse with `409` while a live project uses it).
+
 ## Default user
 
 Decided by epic #366; the full definition is in
@@ -129,14 +158,16 @@ Decided by epic #389; the full definition is in
   frontend sees a normal logged-in user.
 
 - **Opt-in issue persistence**: persisting fetched issues to MySQL, only when a user opts in
-  (e.g. for history/trend views). Not built.
+  (e.g. for history/trend views). Not built, and distinct from the issues Kerghan stores for
+  [Issues and Projects](#issues-and-projects).
 - **Historical/trend collection**: volume-over-time or similar views, which depend on the
   opt-in persistence above. Not built.
-- **Using integration credentials for issues**: credentials are used by the backend to test a
-  connection, list GitHub App installations and list repositories (see
-  [Repositories](#repositories)), but nothing uses them for issue fetching yet. Backend proxying
-  of issue calls with a user's integration, and reading the issues of private repositories with
-  it, are not built.
+- **Using integration credentials for fetched issues**: credentials are used by the backend to test
+  a connection, list GitHub App installations, list repositories (see
+  [Repositories](#repositories)) and sync linked issues (see
+  [Issues and Projects](#issues-and-projects)), but nothing uses them to fetch the issues the
+  dashboard shows. Backend proxying of those calls with a user's integration, and reading the
+  issues of private repositories with it, are not built.
 
 ## What's still open
 
