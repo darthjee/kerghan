@@ -116,7 +116,7 @@ describe('cache-class coverage', () => {
   it('declares user-scoped on every Issues route (never warmed by Navi)', () => {
     const issueRoutes = routes.filter((route) => route.controller === 'IssuesController');
 
-    expect(issueRoutes.map((route) => route.method).sort()).toEqual(['create', 'delete', 'edit', 'list', 'show']);
+    expect(issueRoutes.map((route) => route.method).sort()).toEqual(['bulkState', 'create', 'delete', 'edit', 'list', 'show']);
     issueRoutes.forEach((route) => expect(route.cacheClass).toBe(CacheClass.UserScoped));
   });
 
