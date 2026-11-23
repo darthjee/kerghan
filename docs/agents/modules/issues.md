@@ -47,6 +47,8 @@ a snapshot of its GitHub data. That is a narrow carve-out from
   a non-deleted project of the user uses the repository (the rule is also recorded in
   [Repositories](repositories.md#not-built)). How that feature learns that a live project uses a
   repository has no owner issue yet.
+- **Per-field timestamps.** Conflicts use one per-issue timestamp (E7), an accepted limitation with no
+  owner issue ([Sync](issues/sync.md#open-questions), [Edge cases](issues/edge-cases.md#open-questions)).
 
 ## Product decisions
 
