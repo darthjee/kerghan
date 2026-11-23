@@ -4,11 +4,13 @@ import { CacheClass } from '../core/cache-class.js';
 import { CachePolicy } from '../core/cache-policy.decorator.js';
 import { CurrentUser } from '../core/current-user.decorator.js';
 import { uuidParamPipe } from '../core/uuid-param.pipe.js';
+import { BulkIssueStateDto, toBulkIssueStateInput } from './dto/bulk-issue-state.dto.js';
 import { CreateIssueDto, toCreateIssueInput } from './dto/create-issue.dto.js';
 import { EditIssueDto, toEditIssueInput } from './dto/edit-issue.dto.js';
 import { ListIssuesDto, toListIssuesInput } from './dto/list-issues.dto.js';
 import type { IssueDeleteResponse, IssueListingResponse, IssueResponse } from './issue-response.js';
 import { IssuesService } from './issues.service.js';
+import type { BulkIssueStateResponse } from './types/issues-api.types.js';
 
 /**
  * Issues routes (`docs/agents/specs/issues/api/issues.md`) — thin: each validates through its
@@ -93,6 +95,23 @@ export class IssuesController {
     @CurrentUser() user: AccessTokenPayload,
   ): Promise<IssueResponse> {
     return this.issues.edit(user.sub, projectId, issueId, toEditIssueInput(dto));
+  }
+
+  /**
+   * `POST /projects/:projectId/issues/bulk-state.json`. Closes or reopens many issues at once.
+   * @param {string} projectId - The project's public id.
+   * @param {BulkIssueStateDto} dto - The issue ids and the target state.
+   * @param {AccessTokenPayload} user - The caller.
+   * @returns {Promise<BulkIssueStateResponse>} `{ state, changed, unchanged, notFound }`.
+   */
+  @Post('projects/:projectId/issues/bulk-state.json')
+  @HttpCode(HttpStatus.OK)
+  bulkState(
+    @Param('projectId', uuidParamPipe()) projectId: string,
+    @Body() dto: BulkIssueStateDto,
+    @CurrentUser() user: AccessTokenPayload,
+  ): Promise<BulkIssueStateResponse> {
+    return this.issues.bulkState(user.sub, projectId, toBulkIssueStateInput(dto));
   }
 
   /**

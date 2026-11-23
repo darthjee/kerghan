@@ -1,12 +1,11 @@
 import { HttpException, NotFoundException } from '@nestjs/common';
 import { seedUser } from '../../repositories/tests/support/two-user-baseline.js';
 import { Issue, type IssueState } from '../entities/issue.entity.js';
-import { IssueBulkState } from '../issue-bulk-state.js';
 import { IssueEditRateLimiter } from '../issue-edit-rate-limiter.js';
-import { IssuesAccess } from '../issues-access.js';
 import { IssueMarkers } from '../issue-markers.js';
 import { IssueStore } from '../issue-store.js';
 import { IssueSyncTrigger } from '../issue-sync-trigger.js';
+import { IssuesAccess } from '../issues-access.js';
 import { IssuesService } from '../issues.service.js';
 import { buildIssuesDbHarness, HARNESS_START, type IssuesDbHarness } from './support/issues-db-harness.js';
 import { seedIssue, seedLink, seedMarker, seedProject, SEED_TIME, type SeededProject } from './support/issues-seeds.js';

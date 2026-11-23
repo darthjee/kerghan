@@ -9,6 +9,7 @@ const EMOJI_256 = '😀'.repeat(256);
 const EMOJI_257 = '😀'.repeat(257);
 const LIST = `/projects/${PROJECT_ID}/issues.json`;
 const CREATE = `/projects/${PROJECT_ID}/issues/create.json`;
+const BULK = `/projects/${PROJECT_ID}/issues/bulk-state.json`;
 const EDIT = `/projects/${PROJECT_ID}/issues/${ISSUE_ID}/edit.json`;
 
 describe('IssuesController validation (e2e)', () => {
@@ -115,6 +116,45 @@ describe('IssuesController validation (e2e)', () => {
 
     it('accepts a 65536 code point body', async () => {
       await post(EDIT, { body: 'a'.repeat(65536) }).expect(200);
+    });
+  });
+
+  describe('POST /projects/:projectId/issues/bulk-state.json', () => {
+    const uuid = (n: number): string => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
+    const ids = (count: number): string[] => Array.from({ length: count }, (_value, index) => uuid(index + 1));
+
+    it.each([
+      ['a missing issueIds', { state: 'open' }],
+      ['a null issueIds', { issueIds: null, state: 'open' }],
+      ['a string issueIds', { issueIds: uuid(1), state: 'open' }],
+      ['an empty issueIds', { issueIds: [], state: 'open' }],
+      ['101 ids', { issueIds: ids(101), state: 'open' }],
+      ['a numeric item', { issueIds: [1], state: 'open' }],
+      ['a non-uuid item', { issueIds: ['nope'], state: 'open' }],
+      ['an exact duplicate', { issueIds: [uuid(1), uuid(1)], state: 'open' }],
+      ['a duplicate differing by case', { issueIds: ['abcdefab-0000-4000-8000-000000000001', 'ABCDEFAB-0000-4000-8000-000000000001'], state: 'open' }],
+      ['a missing state', { issueIds: ids(1) }],
+      ['a null state', { issueIds: ids(1), state: null }],
+      ['a bad state', { issueIds: ids(1), state: 'all' }],
+    ])('rejects %s', async (_label, body) => {
+      await expectInvalid(BULK, body);
+    });
+
+    it('accepts 100 ids and answers 200, passing the ids lowercased in request order', async () => {
+      const upper = 'ABCDEFAB-0000-4000-8000-000000000001';
+      const response = await post(BULK, { issueIds: [upper, ...ids(99)], state: 'closed' }).expect(200);
+
+      expect(response.body.state).toBe('closed');
+      expect(ctx.issues.callsOf('bulkState')[0].args).toEqual([
+        PROJECT_ID,
+        { issueIds: [upper.toLowerCase(), ...ids(99)], state: 'closed' },
+      ]);
+    });
+
+    it('strips unknown properties', async () => {
+      await post(BULK, { issueIds: ids(1), state: 'open', userId: 99 }).expect(200);
+
+      expect(ctx.issues.callsOf('bulkState')[0].args).toEqual([PROJECT_ID, { issueIds: ids(1), state: 'open' }]);
     });
   });
 });
