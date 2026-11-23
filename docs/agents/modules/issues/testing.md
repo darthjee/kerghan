@@ -3,7 +3,7 @@
 Purpose: the test strategy of the feature (tiers, fixtures, how workers and security rules are tested).
 Part of the [Issues and Projects module](../issues.md). Same shape as the Repositories [testing section](../repositories/testing.md) (#451).
 
-What to test lives in the "Required tests" section of each rule's owning file ([data-model.md](data-model.md#required-tests), [projects.md](projects.md#required-tests), [github-link.md](github-link.md#required-tests), [sync.md](sync.md#required-tests), [routes/issues.md](../../backend/routes/issues.md#required-tests), [security.md](security.md#required-tests), [frontend.md](frontend.md#required-tests), [edge-cases.md](edge-cases.md#required-tests)); this page says **how**, and is never a second source of truth for **what**. No test of the feature calls the real GitHub, reads the wall clock or loops to catch a race.
+What to test lives in the "Required tests" section of each rule's owning file ([data-model.md](data-model.md#required-tests), [projects.md](projects.md#required-tests), [github-link.md](github-link.md#required-tests), [sync.md](sync.md#required-tests), [routes/issues.md](../../backend/routes/issues.md#required-tests), [security.md](security.md#required-tests), [frontend.md](frontend.md#required-tests), [edge-cases.md](edge-cases.md#required-tests)); this page says **how**, and is never a second source of truth for **what**. The spec that implements each Required test is indexed in [required-tests.md](required-tests.md). No test of the feature calls the real GitHub, reads the wall clock or loops to catch a race.
 
 ## Tiers
 
