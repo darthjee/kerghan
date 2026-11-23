@@ -5,7 +5,7 @@ export const PROJECT_ID = '11111111-1111-4111-8111-111111111111';
 export const ISSUE_ID = '22222222-2222-4222-8222-222222222222';
 
 /**
- * Build a project's repository summary (`docs/agents/specs/issues/api/projects.md`), defaulting
+ * Build a project's repository summary (`docs/agents/backend/routes/issues/projects.md`), defaulting
  * to the added `darthjee/kerghan` repository.
  *
  * @param {object} [overrides] - Fields replacing the defaults.
@@ -44,7 +44,7 @@ export function buildProject(overrides = {}) {
 }
 
 /**
- * Build an issue's GitHub link (`docs/agents/specs/issues/api/github-link.md`), defaulting to a
+ * Build an issue's GitHub link (`docs/agents/backend/routes/issues/github-link.md`), defaulting to a
  * healthy link to issue #12.
  *
  * @param {object} [overrides] - Fields replacing the defaults.

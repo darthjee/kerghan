@@ -27,7 +27,7 @@ function issuePath(projectId, issueId, action) {
 
 /**
  * HTTP client for a project's issues and their GitHub links
- * (`docs/agents/specs/issues/api/issues.md`, `api/github-link.md`).
+ * (`docs/agents/backend/routes/issues/issues.md`, `github-link.md` in the same folder).
  *
  * @description Every route is a `POST` scoped to the logged-in user. Each method resolves
  * `undefined` when the session turned out to be expired, and rejects with an `ApiError` on any
