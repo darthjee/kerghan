@@ -49,7 +49,7 @@ Empty, loading and error states, confirmations, the scope of v1 and the UI edge 
 
 **Brought into v1**, against the decided API ([open-issue count](../api/projects.md#open-issue-count), [bulk close and reopen](../api/issues.md#bulk-close-and-reopen)), built by #563:
 
-- **Open-issue count** on each project-list row ("12 open"), read from `openIssueCount` on every project object, shown on list rows only. It may lag, so it is never compared with the issue list's total.
+- **Open-issue count** on each project-list row ("12 open"), read from `openIssueCount` on every project object, shown on list rows only, in an "Open issues" column after Repository. It may lag, so it is never compared with the issue list's total.
 - **Bulk close/reopen** on the issue list: a checkbox column, a "select all on this page" checkbox, and a bar with "Close selected" / "Reopen selected" when at least one row is selected. Selection is limited to the current page and cleared on page, filter or search change. The call sends `{ issueIds, state }`. After it, a summary notice: "Closed N issues" from `changed.length` ("Reopened N issues" for reopen), "M were already closed" from `unchanged.length` when above 0, and "K were no longer found" when `notFound` is non-empty; then one re-read of the page. Linked issues then follow the bounded re-read rule only on their own issue page; the list just re-reads once. A `429 ISSUE_EDIT_RATE_LIMITED` means nothing was applied: the bar's buttons show the "Try again in N s" countdown and the selection is kept.
 
 **Out of scope in v1:**
