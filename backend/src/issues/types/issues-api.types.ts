@@ -44,6 +44,20 @@ export interface AttachIssueInput {
   confirmUpdatedAt?: Date;
 }
 
+/** Bulk close/reopen's input: the lowercased issue uuids, in request order, and the target state. */
+export interface BulkIssueStateInput {
+  issueIds: string[];
+  state: IssueState;
+}
+
+/** Bulk close/reopen's wire shape: each requested id lands in exactly one of the three lists. */
+export interface BulkIssueStateResponse {
+  state: IssueState;
+  changed: string[];
+  unchanged: string[];
+  notFound: string[];
+}
+
 /** Unlink's input. */
 export interface UnlinkIssueInput {
   discardUnsentChanges: boolean;

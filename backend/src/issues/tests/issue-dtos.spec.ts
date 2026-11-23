@@ -2,6 +2,7 @@ import 'reflect-metadata';
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
 import { AttachIssueDto, toAttachIssueInput } from '../dto/attach-issue.dto.js';
+import { BulkIssueStateDto, toBulkIssueStateInput } from '../dto/bulk-issue-state.dto.js';
 import { CreateIssueDto, toCreateIssueInput } from '../dto/create-issue.dto.js';
 import { EditIssueDto, toEditIssueInput } from '../dto/edit-issue.dto.js';
 import { ImportIssueDto, toImportIssueInput } from '../dto/import-issue.dto.js';
@@ -224,5 +225,55 @@ describe('UnlinkIssueDto', () => {
 
   it.each([['"true"', 'true'], ['1', 1], ['null', null]])('rejects discardUnsentChanges %s', async (_label, value) => {
     expect((await check(UnlinkIssueDto, { discardUnsentChanges: value })).errors).toEqual(['discardUnsentChanges']);
+  });
+});
+
+describe('BulkIssueStateDto', () => {
+  const uuid = (n: number): string => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
+  const ids = (count: number): string[] => Array.from({ length: count }, (_value, index) => uuid(index + 1));
+
+  it('accepts one id and lowercases the ids keeping their order', async () => {
+    const upper = 'AAAAAAAA-0000-4000-8000-00000000000A';
+    const { dto, errors } = await check(BulkIssueStateDto, { issueIds: [uuid(2), upper, uuid(1)], state: 'closed' });
+
+    expect(errors).toEqual([]);
+    expect(toBulkIssueStateInput(dto)).toEqual({
+      issueIds: [uuid(2), upper.toLowerCase(), uuid(1)],
+      state: 'closed',
+    });
+  });
+
+  it.each([1, 100])('accepts %j ids', async (count) => {
+    expect((await check(BulkIssueStateDto, { issueIds: ids(count), state: 'open' })).errors).toEqual([]);
+  });
+
+  it.each(['open', 'closed'])('accepts the state %j', async (state) => {
+    expect((await check(BulkIssueStateDto, { issueIds: ids(1), state })).errors).toEqual([]);
+  });
+
+  it.each([
+    ['missing issueIds', { state: 'open' }, 'issueIds'],
+    ['null issueIds', { issueIds: null, state: 'open' }, 'issueIds'],
+    ['a string issueIds', { issueIds: uuid(1), state: 'open' }, 'issueIds'],
+    ['an object issueIds', { issueIds: {}, state: 'open' }, 'issueIds'],
+    ['an empty issueIds', { issueIds: [], state: 'open' }, 'issueIds'],
+    ['101 ids', { issueIds: ids(101), state: 'open' }, 'issueIds'],
+    ['a non-string item', { issueIds: [1], state: 'open' }, 'issueIds'],
+    ['a null item', { issueIds: [null], state: 'open' }, 'issueIds'],
+    ['a non-uuid item', { issueIds: ['not-a-uuid'], state: 'open' }, 'issueIds'],
+    ['an exact duplicate', { issueIds: [uuid(1), uuid(1)], state: 'open' }, 'issueIds'],
+    ['a missing state', { issueIds: ids(1) }, 'state'],
+    ['a null state', { issueIds: ids(1), state: null }, 'state'],
+    ['a numeric state', { issueIds: ids(1), state: 1 }, 'state'],
+    ['an unknown state', { issueIds: ids(1), state: 'all' }, 'state'],
+  ])('rejects %s', async (_label, body, property) => {
+    expect((await check(BulkIssueStateDto, body)).errors).toEqual([property]);
+  });
+
+  it('rejects a duplicate that differs only by case', async () => {
+    const lower = 'abcdefab-0000-4000-8000-000000000001';
+    const { errors } = await check(BulkIssueStateDto, { issueIds: [lower, lower.toUpperCase()], state: 'open' });
+
+    expect(errors).toEqual(['issueIds']);
   });
 });
