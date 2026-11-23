@@ -3,6 +3,7 @@ import { Injectable } from '@nestjs/common';
 import { DataSource, type EntityManager } from 'typeorm';
 import { normalizeBody } from './dto/issue-fields.js';
 import type { Issue } from './entities/issue.entity.js';
+import { IssueBulkState } from './issue-bulk-state.js';
 import { IssueEditRateLimiter } from './issue-edit-rate-limiter.js';
 import { IssueLinkPresenter } from './issue-link-presenter.js';
 import { IssueMarkers } from './issue-markers.js';
@@ -22,7 +23,13 @@ import { issueEditRateLimited, issueLinked, issuesLimitReached } from './issues-
 import { stampOf } from './timestamps.js';
 import { Clock } from '../core/clock.js';
 import { LoggerService } from '../core/logger.service.js';
-import type { CreateIssueInput, EditIssueInput, ListIssuesInput } from './types/issues-api.types.js';
+import type {
+  BulkIssueStateInput,
+  BulkIssueStateResponse,
+  CreateIssueInput,
+  EditIssueInput,
+  ListIssuesInput,
+} from './types/issues-api.types.js';
 
 /** What the edit transaction hands back: the stored issue and the link whose marker was bumped. */
 interface EditOutcome {
@@ -49,6 +56,7 @@ export class IssuesService {
    * @param {DataSource} dataSource - Opens the transactions.
    * @param {Clock} clock - The time source of `created_at` and `updated_at`.
    * @param {LoggerService} logger - Safe-field logs only (link ids, never content).
+   * @param {IssueBulkState} bulk - The bulk close/reopen flow.
    */
   constructor(
     private readonly access: IssuesAccess,
@@ -61,6 +69,7 @@ export class IssuesService {
     private readonly dataSource: DataSource,
     private readonly clock: Clock,
     private readonly logger: LoggerService,
+    private readonly bulk: IssueBulkState,
   ) {}
 
   /**
@@ -155,6 +164,21 @@ export class IssuesService {
     if (linkId !== null) this.#afterCommit(linkId);
 
     return this.#respond(issue);
+  }
+
+  /**
+   * Closes or reopens many issues of the project at once (`api/issues.md#bulk-close-and-reopen`),
+   * delegating to `IssueBulkState`: per-issue outcomes, one transaction, and one T1 per changed
+   * syncing link after the commit.
+   * @param {number} userId - The session's user.
+   * @param {string} projectUuid - The project's public id.
+   * @param {BulkIssueStateInput} input - The validated, lowercased ids and the target state.
+   * @returns {Promise<BulkIssueStateResponse>} `{ state, changed, unchanged, notFound }`.
+   * @throws {HttpException} `ISSUE_EDIT_RATE_LIMITED` (429) when the user's window cannot take the weight.
+   * @throws {NotFoundException} `NOT_FOUND` for a missing, foreign or deleted project.
+   */
+  bulkState(userId: number, projectUuid: string, input: BulkIssueStateInput): Promise<BulkIssueStateResponse> {
+    return this.bulk.run(userId, projectUuid, input);
   }
 
   /**

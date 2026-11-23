@@ -1,6 +1,7 @@
 import { Module, type Provider } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ISSUES_ENTITIES } from './entities/index.js';
+import { IssueBulkState } from './issue-bulk-state.js';
 import { IssueCandidates } from './issue-candidates.js';
 import { IssueEditRateLimiter } from './issue-edit-rate-limiter.js';
 import { IssueGithubReader } from './issue-github-reader.js';
@@ -63,6 +64,7 @@ export const ISSUES_PROVIDERS: Provider[] = [
   { provide: IssueRateLimitWaits, useExisting: IssueRateLimitPauses },
   IssueSyncQueue,
   { provide: IssueReconcileQueue, useExisting: IssueSyncQueue },
+  IssueBulkState,
   IssueMarkers,
   IssueStore,
   IssueSyncReader,

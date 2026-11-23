@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { EntityManager, Repository } from 'typeorm';
+import { EntityManager, In, Repository } from 'typeorm';
 import { escapeLike } from '../core/escape-like.js';
 import { Issue, type IssueState } from './entities/issue.entity.js';
 import type { ListIssuesInput } from './types/issues-api.types.js';
@@ -113,6 +113,39 @@ export class IssueStore {
    */
   lockById(manager: EntityManager, issueId: number): Promise<Issue | null> {
     return manager.getRepository(Issue).findOne({ where: { id: issueId }, lock: { mode: 'pessimistic_write' } });
+  }
+
+  /**
+   * Resolves and locks the project's issues among the given public ids in one query
+   * (`WHERE project_id = ? AND uuid IN (?) ORDER BY id FOR UPDATE`). The internal-id order keeps
+   * two overlapping calls from deadlocking. Ids that are missing, or belong to another project,
+   * are simply not returned.
+   * @param {EntityManager} manager - The bulk transaction's manager.
+   * @param {number} projectId - The project's internal id.
+   * @param {string[]} uuids - The issues' public ids.
+   * @returns {Promise<Issue[]>} The locked issues, by ascending internal id.
+   */
+  lockManyInProject(manager: EntityManager, projectId: number, uuids: string[]): Promise<Issue[]> {
+    return manager.getRepository(Issue).createQueryBuilder('issue')
+      .setLock('pessimistic_write')
+      .where('issue.project_id = :projectId', { projectId })
+      .andWhere('issue.uuid IN (:...uuids)', { uuids })
+      .orderBy('issue.id', 'ASC')
+      .getMany();
+  }
+
+  /**
+   * Writes one `state` (and `updated_at`) on many issues in a single statement.
+   * @param {EntityManager} manager - The bulk transaction's manager.
+   * @param {number[]} issueIds - The internal ids of the issues to flip.
+   * @param {IssueState} state - The target state.
+   * @param {Date} updatedAt - The new `updated_at` (full millisecond precision).
+   * @returns {Promise<void>}
+   */
+  async updateStateMany(manager: EntityManager, issueIds: number[], state: IssueState, updatedAt: Date): Promise<void> {
+    if (issueIds.length === 0) return;
+
+    await manager.getRepository(Issue).update({ id: In(issueIds) }, { state, updatedAt });
   }
 
   /**

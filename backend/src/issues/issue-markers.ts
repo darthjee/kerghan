@@ -131,6 +131,36 @@ export class IssueMarkers {
   }
 
   /**
+   * Bumps the pending markers of the given issues' links after a bulk state change. Loads the
+   * links in one query, locked in id order; each `linked` or `sync_failed` link gets its marker
+   * upserted (same SQL as `upsertForEdit`), and a `gone` link gets none (local only).
+   * @param {EntityManager} manager - The bulk transaction's manager, after it locked the issue rows.
+   * @param {number[]} issueIds - The internal ids of the issues that changed.
+   * @param {Date} now - The call's instant, in whole seconds.
+   * @returns {Promise<number[]>} The ids of the links whose marker was bumped, by ascending id.
+   */
+  async upsertForBulk(manager: EntityManager, issueIds: number[], now: Date): Promise<number[]> {
+    if (issueIds.length === 0) return [];
+
+    const rows: Array<{ id: number; status: string }> = await manager.query(
+      'SELECT id, status FROM issues_github_links WHERE issue_id IN (?) ORDER BY id FOR UPDATE',
+      [issueIds],
+    );
+    const linkIds = rows.filter((row) => SYNCING_STATUSES.has(row.status)).map((row) => row.id);
+
+    if (linkIds.length === 0) return [];
+
+    await manager.query(
+      'INSERT INTO issues_pending_writes (link_id, revision, marked_at, updated_at) VALUES '
+      + `${linkIds.map(() => '(?, 1, ?, ?)').join(', ')} `
+      + 'AS new ON DUPLICATE KEY UPDATE revision = issues_pending_writes.revision + 1, updated_at = new.updated_at',
+      linkIds.flatMap((linkId) => [linkId, now, now]),
+    );
+
+    return linkIds;
+  }
+
+  /**
    * Whether the issue has a link, in any status. The row is locked (`FOR UPDATE`), which keeps
    * the lock order and guards against a concurrent attach.
    * @param {EntityManager} manager - The deleting transaction's manager.

@@ -79,6 +79,7 @@ export const ROUTE_ROWS: RouteRow[] = [
   { service: 'issues', path: project('issues/create.json'), body: { title: 'Fix it' }, invalidBody: { title: 5 }, success: 201, method: 'create' },
   { service: 'issues', path: issue('show.json'), body: {}, invalidBody: null, success: 200, method: 'show' },
   { service: 'issues', path: issue('edit.json'), body: { title: 'New' }, invalidBody: { title: 5 }, success: 200, method: 'edit' },
+  { service: 'issues', path: project('issues/bulk-state.json'), body: { issueIds: [ISSUE_ID], state: 'closed' }, invalidBody: { issueIds: [] }, success: 200, method: 'bulkState' },
   { service: 'issues', path: issue('delete.json'), body: {}, invalidBody: null, success: 200, method: 'delete' },
   { service: 'links', path: project('issues/import.json'), body: { number: 12 }, invalidBody: { number: 'x' }, success: 201, method: 'import' },
   { service: 'links', path: issue('attach.json'), body: { number: 12 }, invalidBody: { number: 'x' }, success: 200, method: 'attach' },

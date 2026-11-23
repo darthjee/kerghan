@@ -57,6 +57,15 @@ describe('IssueEditRateLimiter', () => {
     expect(limiter.consume(OWNER, 1)).toEqual({ allowed: false, retryAfterMs: 60_000 });
   });
 
+  it('passes a bulk call that lands exactly on the maximum, refuses one more, and consumes nothing on the refusal', () => {
+    const { limiter } = build({ KERGHAN_ISSUES_EDIT_MAX_PER_WINDOW: 10 });
+
+    expect(limiter.consume(OWNER, 4)).toEqual({ allowed: true });
+    expect(limiter.consume(OWNER, 7)).toEqual({ allowed: false, retryAfterMs: 60_000 });
+    expect(limiter.consume(OWNER, 6)).toEqual({ allowed: true });
+    expect(limiter.consume(OWNER)).toEqual({ allowed: false, retryAfterMs: 60_000 });
+  });
+
   it('always refuses a weight above the maximum, even on a fresh window, consuming nothing', () => {
     const { limiter } = build({ KERGHAN_ISSUES_EDIT_MAX_PER_WINDOW: 10 });
 

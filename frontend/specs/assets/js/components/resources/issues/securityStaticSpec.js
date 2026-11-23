@@ -72,7 +72,8 @@ describe('Issues security (static)', () => {
       const title = '<b>x</b>';
 
       it('shows as escaped text in the list', () => {
-        const output = renderedOutput(IssuesTableHelper.render(PROJECT_ID, [buildIssue({ title })]));
+        const selection = { selected: [], onToggle: () => undefined, onToggleAll: () => undefined };
+        const output = renderedOutput(IssuesTableHelper.render(PROJECT_ID, [buildIssue({ title })], selection));
 
         expect(output.contains('<b>')).toBe(false);
         expect(output.contains('&lt;b&gt;x&lt;/b&gt;')).toBe(true);

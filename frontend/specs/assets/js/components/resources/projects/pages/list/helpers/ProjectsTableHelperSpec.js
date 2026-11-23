@@ -7,14 +7,31 @@ import { renderedOutput } from '../../../../../../../../support/renderedOutput.j
 describe('ProjectsTableHelper', () => {
   const outputOf = (projects) => renderedOutput(React.createElement('div', null, ProjectsTableHelper.render(projects)));
 
-  it('renders the Name and Repository columns, and no description or open-issue count', () => {
+  it('renders the Name, Repository and Open issues columns, and no description', () => {
     const output = outputOf([buildProject({ description: 'Secret description', openIssueCount: 7 })]);
 
     expect(output.containsElement('th', 'Name')).toBe(true);
     expect(output.containsElement('th', 'Repository')).toBe(true);
     expect(output.contains('Secret description')).toBe(false);
-    expect(output.contains('7 open')).toBe(false);
-    expect(output.contains('>7<')).toBe(false);
+    expect(output.containsElement('th', 'Open issues')).toBe(true);
+    expect(output.containsElement('td', '7 open')).toBe(true);
+  });
+
+  it('shows 0 open for a project without open issues', () => {
+    expect(outputOf([buildProject({ openIssueCount: 0 })]).containsElement('td', '0 open')).toBe(true);
+  });
+
+  it('reads a missing count as 0 open', () => {
+    expect(outputOf([buildProject({ openIssueCount: undefined })]).containsElement('td', '0 open')).toBe(true);
+  });
+
+  it('renders the count as muted text', () => {
+    const [cell] = findElements(
+      ProjectsTableHelper.render([buildProject({ openIssueCount: 3 })]),
+      (node) => node.type === 'td' && node.props.children === '3 open',
+    );
+
+    expect(cell.props.className).toBe('text-muted');
   });
 
   it('links the name to the project page, with the full name in title (U8)', () => {
@@ -58,7 +75,7 @@ describe('ProjectsTableHelper', () => {
   it('renders one row per project', () => {
     const rows = findElements(
       ProjectsTableHelper.render([buildProject(), buildProject({ id: 'other' })]),
-      (node) => node.type === 'tr' && node.props.children.length === 2 && node.key !== null,
+      (node) => node.type === 'tr' && node.props.children.length === 3 && node.key !== null,
     );
 
     expect(rows.length).toBe(2);

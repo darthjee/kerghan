@@ -23,6 +23,8 @@ const CROSS_SITE = { 'Sec-Fetch-Site': 'cross-site', Origin: 'https://evil.examp
 
 const MATRIX = ROUTE_ROWS;
 
+const rowAt = (suffix: string): (typeof ROUTE_ROWS)[number] => MATRIX.find((row) => row.path.endsWith(suffix))!;
+
 const withIssueId = MATRIX.filter((row) => row.path.includes(ISSUE_ID));
 const withProjectId = MATRIX.filter((row) => row.path.includes(PROJECT_ID));
 
@@ -194,8 +196,8 @@ describe('Issues routes access matrix (e2e)', () => {
     });
 
     it('routes the static create and import paths to their own handlers, never to a show or edit handler', async () => {
-      await send(MATRIX[8], ctx.owner).expect(201);
-      await send(MATRIX[12], ctx.owner).expect(201);
+      await send(rowAt('issues/create.json'), ctx.owner).expect(201);
+      await send(rowAt('issues/import.json'), ctx.owner).expect(201);
 
       expect(ctx.issues.calls.map((entry) => entry.method)).toEqual(['create']);
       expect(ctx.links.calls.map((entry) => entry.method)).toEqual(['import']);

@@ -26,9 +26,10 @@ export default class IssuesController {
   /**
    * Create an issue-list controller.
    *
-   * @param {{setListing: Function, setQuery: Function, setLoadState: Function}} setters -
-   *   React state setters: the `{issues, pagination}` listing, the `{state, page, search}`
-   *   query and the `{loading, error}` load state.
+   * @param {{setListing: Function, setQuery: Function, setLoadState: Function,
+   *   clearSelection: (Function|undefined)}} setters - React state setters: the
+   *   `{issues, pagination}` listing, the `{state, page, search}` query and the
+   *   `{loading, error}` load state; and the optional callback forgetting the bulk selection.
    * @param {string} projectId - The project's uuid.
    * @param {typeof IssuesClient} [client] - Issues HTTP client override, for testability.
    * @param {typeof HashLocation} [location] - Hash reader/writer override, for testability.
@@ -160,6 +161,7 @@ export default class IssuesController {
 
     this.query = ListQuery.parse(hash, OPTIONS);
     this.setQuery(this.query);
+    this.clearSelection?.();
 
     const normalized = ProjectPaths.issues(this.projectId, this.query);
 
@@ -194,6 +196,7 @@ export default class IssuesController {
   #moveTo(changes, mode) {
     this.query = { ...this.query, ...changes };
     this.setQuery(this.query);
+    this.clearSelection?.();
     this.location[mode](ProjectPaths.issues(this.projectId, this.query));
   }
 

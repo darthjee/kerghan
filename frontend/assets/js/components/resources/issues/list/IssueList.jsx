@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import BulkSelectionController, { INITIAL_BULK } from './controllers/BulkSelectionController.js';
 import IssuesController from './controllers/IssuesController.js';
 import IssuesHandlers from './helpers/IssuesHandlers.js';
 import IssuesHelper from './helpers/IssuesHelper.jsx';
@@ -56,17 +57,29 @@ export default function IssueList({
   const [query, setQuery] = useState(INITIAL_QUERY);
   const [loadState, setLoadState] = useState(INITIAL_LOAD_STATE);
 
-  const controller = useMemo(
-    () => new IssuesController({ setListing, setQuery, setLoadState }, projectId),
-    [projectId],
-  );
+  const [bulk, setBulk] = useState(INITIAL_BULK);
+
+  const { controller, bulkController } = useMemo(() => {
+    const bulkSelection = new BulkSelectionController(
+      { setBulk }, projectId, { reload: () => list.load() },
+    );
+    const list = new IssuesController(
+      {
+        setListing, setQuery, setLoadState, clearSelection: () => bulkSelection.clear(),
+      },
+      projectId,
+    );
+
+    return { controller: list, bulkController: bulkSelection };
+  }, [projectId]);
 
   useEffect(() => buildStartEffect(controller, listRef)(), [controller, listRef]);
+  useEffect(() => () => bulkController.dispose(), [bulkController]);
 
   return IssuesHelper.render(
     {
-      projectId, listing, query, loadState, canImport,
+      projectId, listing, query, loadState, canImport, bulk,
     },
-    { ...IssuesHandlers.build(controller), onImport },
+    { ...IssuesHandlers.build(controller, bulkController), onImport },
   );
 }

@@ -1,9 +1,9 @@
 import type { IssueDeleteResponse, IssueListingResponse, IssueResponse } from '../../issue-response.js';
 import type { IssuesService } from '../../issues.service.js';
-import type { CreateIssueInput, EditIssueInput, ListIssuesInput } from '../../types/issues-api.types.js';
+import type { BulkIssueStateInput, BulkIssueStateResponse, CreateIssueInput, EditIssueInput, ListIssuesInput } from '../../types/issues-api.types.js';
 
 /** The `IssuesService` methods the controller uses. */
-export type IssuesServiceSurface = Pick<IssuesService, 'list' | 'create' | 'show' | 'edit' | 'delete'>;
+export type IssuesServiceSurface = Pick<IssuesService, 'list' | 'create' | 'show' | 'edit' | 'bulkState' | 'delete'>;
 
 /** One logged call. */
 export interface FakeIssuesCall {
@@ -70,6 +70,12 @@ export class FakeIssuesService implements IssuesServiceSurface {
     this.#record('edit', userId, projectUuid, issueUuid, input);
 
     return this.issue;
+  }
+
+  async bulkState(userId: number, projectUuid: string, input: BulkIssueStateInput): Promise<BulkIssueStateResponse> {
+    this.#record('bulkState', userId, projectUuid, input);
+
+    return { state: input.state, changed: input.issueIds, unchanged: [], notFound: [] };
   }
 
   async delete(userId: number, projectUuid: string, issueUuid: string): Promise<IssueDeleteResponse> {

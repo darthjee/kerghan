@@ -194,7 +194,7 @@ rejects with a 404-shaped `ApiError` **before any request** (S3), so a crafted h
 
 | Route | Page key | Screen |
 |---|---|---|
-| `#/projects` | `projects` | Project list (`pages/Projects.jsx`) |
+| `#/projects` | `projects` | Project list (`pages/Projects.jsx`); an "Open issues" column after Repository shows `openIssueCount` as "N open" (#563) |
 | `#/projects/new` | `project-new` | Creation form (`pages/ProjectNew.jsx`) |
 | `#/projects/:projectId` | `project` | Project header (`pages/ProjectPage.jsx`) |
 | `#/projects/:projectId/edit` | `project-edit` | Management (`pages/ProjectEdit.jsx`) |
@@ -248,6 +248,18 @@ Under `components/resources/issues/`, built on `IssuesClient` and the pieces abo
   requested one is past the end (U5). The link column is `link/LinkStateBadge` and
   `link/GithubLink` (rendered only for `https://github.com/` URLs); `IssueStateBadge` is shared
   with the issue page.
+- **Bulk close and reopen** (#563, in `list/`): the table has a checkbox column and a "select all
+  on this page" checkbox (indeterminate when only some rows are checked). `BulkSelectionController`
+  holds the selection, a set of issue ids of the current page, in memory only (S4). It is cleared
+  by `IssuesController` on every page, state or search change and when the hash brings a new
+  query, never by a plain re-read. `IssuesBulkBarHelper` shows "N selected", "Close selected" and
+  "Reopen selected" while at least one row is selected. `apply(state)` sends
+  `IssuesClient.bulkState` once (both buttons disabled meanwhile, U2), shows a dismissible summary
+  notice ("Closed N issues", "M were already closed", "K were no longer found"), clears the
+  selection and re-reads the list exactly once; it does not start the bounded re-read. A
+  `429 ISSUE_EDIT_RATE_LIMITED` keeps the selection and counts down with the shared
+  `RateLimitCountdownController` on both buttons ("Try again in N s"), resubmitting nothing; a
+  `404` falls through to the list's own error handling.
 - **Issue page** (`pages/IssuePage.jsx`, `pages/show/`, `pages/common/`): `IssueLoadController`
   loads the project, then the issue, and shows "Project not found" or "Issue not found" for a
   400 or 404 (a malformed id makes no call). Close and Reopen send only `{ state }` and ignore a

@@ -12,7 +12,11 @@ import { buildProject, PROJECT_ID } from '../../../../../support/issuesBuilders.
 
 const SOURCE_ROOT = fileURLToPath(new URL('../../../../../../assets/js/components/', import.meta.url));
 const SCREEN_DIRECTORIES = ['resources/projects', 'common/confirmModal', 'common/forms'];
-const SCREEN_FILES = ['resources/repositories/pages/repositories/ProjectShortcutStore.js'];
+const SCREEN_FILES = [
+  'resources/repositories/pages/repositories/ProjectShortcutStore.js',
+  'resources/issues/list/helpers/IssuesBulkBarHelper.jsx',
+  'resources/issues/list/controllers/BulkSelectionController.js',
+];
 
 /**
  * List every source file under a directory, recursively.
@@ -41,8 +45,15 @@ describe('Issues and Projects security (static)', () => {
     expect(screenFiles.length).toBeGreaterThan(projectFiles.length);
   });
 
+  it('checks the bulk bar and its controller (#563)', () => {
+    const checked = screenFiles.map((file) => path.basename(file));
+
+    expect(checked).toContain('IssuesBulkBarHelper.jsx');
+    expect(checked).toContain('BulkSelectionController.js');
+  });
+
   describe('S1: names, descriptions and errors are text, never markup', () => {
-    it('uses no dangerouslySetInnerHTML in the project screens, ConfirmModal or the form guard', () => {
+    it('uses no dangerouslySetInnerHTML in the project screens, ConfirmModal, the form guard or the bulk selection', () => {
       const offenders = readAll(screenFiles).filter(([, source]) => source.includes('dangerouslySetInnerHTML'));
 
       expect(offenders.map(([file]) => file)).toEqual([]);
@@ -56,7 +67,7 @@ describe('Issues and Projects security (static)', () => {
   });
 
   describe('S4: no draft is saved to localStorage or sessionStorage', () => {
-    it('never uses either storage in the project screens, ConfirmModal or the form guard', () => {
+    it('never uses either storage in the project screens, ConfirmModal, the form guard or the bulk selection', () => {
       const offenders = readAll(screenFiles).filter(([, source]) => /\b(localStorage|sessionStorage)\s*[.[]/.test(source));
 
       expect(offenders.map(([file]) => file)).toEqual([]);

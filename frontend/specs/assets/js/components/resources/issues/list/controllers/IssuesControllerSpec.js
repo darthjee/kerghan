@@ -1,4 +1,4 @@
-import { SEARCH_DEBOUNCE_MS } from '../../../../../../../../assets/js/components/resources/issues/list/controllers/IssuesController.js';
+import IssuesController, { SEARCH_DEBOUNCE_MS } from '../../../../../../../../assets/js/components/resources/issues/list/controllers/IssuesController.js';
 import { flushMicrotasks } from '../../../../../../../support/flushMicrotasks.js';
 import {
   buildIssue, buildIssueListing, PROJECT_ID,
@@ -230,6 +230,56 @@ describe('IssuesController', () => {
       await flushMicrotasks();
 
       expect(context.client.list).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('bulk selection clearing', () => {
+    let clearSelection;
+    let controller;
+
+    beforeEach(async () => {
+      clearSelection = jasmine.createSpy('clearSelection');
+      controller = new IssuesController(
+        { ...context.setters, clearSelection }, PROJECT_ID, context.client, context.location,
+      );
+      await controller.start();
+      clearSelection.calls.reset();
+    });
+
+    it('clears on a state change', async () => {
+      await controller.changeState('closed');
+
+      expect(clearSelection).toHaveBeenCalled();
+    });
+
+    it('clears on a page change', async () => {
+      await controller.changePage(2);
+
+      expect(clearSelection).toHaveBeenCalled();
+    });
+
+    it('clears on a search change', () => {
+      controller.changeSearch('x');
+
+      expect(clearSelection).toHaveBeenCalled();
+    });
+
+    it('clears when the hash brings a new query (Back and Forward)', async () => {
+      context.hash = `${LIST_HASH}?page=2`;
+
+      await controller.handleHashChange();
+
+      expect(clearSelection).toHaveBeenCalled();
+    });
+
+    it('does not clear on a plain re-read of the same page', async () => {
+      await controller.load();
+
+      expect(clearSelection).not.toHaveBeenCalled();
+    });
+
+    it('works without a clearSelection callback', async () => {
+      await expectAsync(context.buildController().changePage(2)).toBeResolved();
     });
   });
 });

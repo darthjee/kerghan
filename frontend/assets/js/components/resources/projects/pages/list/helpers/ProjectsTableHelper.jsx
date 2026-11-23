@@ -4,10 +4,10 @@ import RepositoryLabel from '../../../RepositoryLabel.jsx';
 const NAME_STYLE = { overflowWrap: 'anywhere', maxWidth: '32rem' };
 
 /**
- * Render one project row: the name as a link to the project, and its repository.
+ * Render one project row: the name as a link to the project, its repository and its open-issue count.
  *
  * @description The name is one truncated line with the full text in `title` (U8).
- * @param {{id: string, name: string, repository: (object|null)}} project - The project.
+ * @param {{id: string, name: string, repository: (object|null), openIssueCount: number}} project - The project.
  * @returns {React.ReactElement} The table row.
  */
 function renderRow(project) {
@@ -24,6 +24,7 @@ function renderRow(project) {
         </a>
       </td>
       <td><RepositoryLabel repository={project.repository} /></td>
+      <td className="text-muted">{`${project.openIssueCount ?? 0} open`}</td>
     </tr>
   );
 }
@@ -36,7 +37,7 @@ const ProjectsTableHelper = {
    * Render the table.
    *
    * @param {Array<object>} projects - The page's projects.
-   * @returns {React.ReactElement} The table, with the Name and Repository columns.
+   * @returns {React.ReactElement} The table, with the Name, Repository and Open issues columns.
    */
   render(projects) {
     return (
@@ -45,6 +46,7 @@ const ProjectsTableHelper = {
           <tr>
             <th>Name</th>
             <th>Repository</th>
+            <th>Open issues</th>
           </tr>
         </thead>
         <tbody>
