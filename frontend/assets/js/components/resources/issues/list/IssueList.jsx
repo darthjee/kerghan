@@ -80,6 +80,6 @@ export default function IssueList({
     {
       projectId, listing, query, loadState, canImport, bulk,
     },
-    { ...IssuesHandlers.build(controller), onImport },
+    { ...IssuesHandlers.build(controller, bulkController), onImport },
   );
 }

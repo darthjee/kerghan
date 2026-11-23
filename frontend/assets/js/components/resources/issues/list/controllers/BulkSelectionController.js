@@ -4,9 +4,12 @@ import ProjectErrorMessages from '../../../projects/errors/errorMessages.js';
 
 const IDLE_COUNTDOWN = { active: false, secondsLeft: 0, label: null };
 
-/** The initial bulk state: nothing selected, nothing in flight, no notice or error. */
+/**
+ * The initial bulk state: nothing selected, nothing in flight (`target` is the state being
+ * applied while one is), no notice or error.
+ */
 export const INITIAL_BULK = {
-  selected: [], inFlight: false, notice: null, error: null, countdown: IDLE_COUNTDOWN,
+  selected: [], inFlight: false, target: null, notice: null, error: null, countdown: IDLE_COUNTDOWN,
 };
 
 /**
@@ -118,6 +121,15 @@ export default class BulkSelectionController {
   }
 
   /**
+   * Dismiss the summary notice.
+   *
+   * @returns {void} Nothing.
+   */
+  dismissNotice() {
+    this.#update({ notice: null });
+  }
+
+  /**
    * Close or reopen the selected issues in one call.
    *
    * @param {string} state - `closed` (Close selected) or `open` (Reopen selected).
@@ -131,7 +143,9 @@ export default class BulkSelectionController {
       return;
     }
 
-    this.#update({ inFlight: true, notice: null, error: null });
+    this.#update({
+      inFlight: true, target: state, notice: null, error: null,
+    });
 
     try {
       const result = await this.#client.bulkState(this.#projectId, { issueIds: [...selected], state });
@@ -154,16 +168,18 @@ export default class BulkSelectionController {
 
   async #succeed(result) {
     if (result === undefined) {
-      this.#update({ inFlight: false });
+      this.#update({ inFlight: false, target: null });
       return;
     }
 
-    this.#update({ inFlight: false, selected: [], notice: buildNotice(result) });
+    this.#update({
+      inFlight: false, target: null, selected: [], notice: buildNotice(result),
+    });
     await this.#reload();
   }
 
   async #fail(error) {
-    this.#update({ inFlight: false });
+    this.#update({ inFlight: false, target: null });
 
     if (ProjectErrorMessages.isIssueNotFound(error)) {
       await this.#reload();

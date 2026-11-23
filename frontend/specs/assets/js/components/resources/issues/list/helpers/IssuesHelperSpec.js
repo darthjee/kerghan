@@ -1,4 +1,6 @@
 import React from 'react';
+import { INITIAL_BULK } from '../../../../../../../../assets/js/components/resources/issues/list/controllers/BulkSelectionController.js';
+import IssuesBulkBarHelper from '../../../../../../../../assets/js/components/resources/issues/list/helpers/IssuesBulkBarHelper.jsx';
 import IssuesEmptyStateHelper from '../../../../../../../../assets/js/components/resources/issues/list/helpers/IssuesEmptyStateHelper.jsx';
 import IssuesHelper from '../../../../../../../../assets/js/components/resources/issues/list/helpers/IssuesHelper.jsx';
 import IssuesPaginationHelper from '../../../../../../../../assets/js/components/resources/issues/list/helpers/IssuesPaginationHelper.jsx';
@@ -10,7 +12,10 @@ import { renderedOutput } from '../../../../../../../support/renderedOutput.js';
 
 describe('IssuesHelper', () => {
   const handlers = { onRetry: jasmine.createSpy('onRetry') };
-  const stateWith = ({ loadState, issues = [buildIssue()], query } = {}) => ({
+  const stateWith = ({
+    loadState, issues = [buildIssue()], query, bulk,
+  } = {}) => ({
+    bulk: { ...INITIAL_BULK, ...bulk },
     projectId: PROJECT_ID,
     listing: { issues, pagination: buildPagination() },
     query: { state: 'open', page: 1, search: '', ...query },
@@ -19,6 +24,7 @@ describe('IssuesHelper', () => {
   const outputOf = (state) => renderedOutput(IssuesHelper.render(state, handlers));
 
   beforeEach(() => {
+    spyOn(IssuesBulkBarHelper, 'render').and.returnValue(React.createElement('div', null, 'bulkbar'));
     spyOn(IssuesToolbarHelper, 'render').and.returnValue(React.createElement('div', null, 'toolbar'));
     spyOn(IssuesTableHelper, 'render').and.returnValue(React.createElement('div', null, 'table'));
     spyOn(IssuesEmptyStateHelper, 'render').and.returnValue(React.createElement('div', null, 'empty'));
@@ -62,5 +68,67 @@ describe('IssuesHelper', () => {
     outputOf(state);
 
     expect(IssuesEmptyStateHelper.render).toHaveBeenCalledOnceWith(PROJECT_ID, state.query, { canImport: true, onImport: handlers.onImport });
+  });
+
+  describe('bulk selection', () => {
+    it('renders the bar above the table, and hands the table the selection', () => {
+      const bulkHandlers = { onToggle: jasmine.createSpy('onToggle'), onToggleAll: jasmine.createSpy('onToggleAll') };
+      const state = stateWith({ bulk: { selected: ['x'] } });
+
+      renderedOutput(IssuesHelper.render(state, { ...handlers, ...bulkHandlers }));
+
+      expect(IssuesBulkBarHelper.render).toHaveBeenCalledWith(state.bulk, jasmine.any(Object));
+      expect(IssuesTableHelper.render).toHaveBeenCalledOnceWith(PROJECT_ID, state.listing.issues, {
+        selected: ['x'], ...bulkHandlers,
+      });
+      expect(outputOf(state).containsInOrder('toolbar', 'bulkbar', 'table')).toBe(true);
+    });
+
+    it('renders neither the bar nor the table for an empty list', () => {
+      outputOf(stateWith({ issues: [] }));
+
+      expect(IssuesBulkBarHelper.render).not.toHaveBeenCalled();
+    });
+
+    it('renders without a bulk state', () => {
+      const { bulk, ...state } = stateWith();
+
+      expect(bulk).toBeDefined();
+      expect(outputOf(state).containsInOrder('toolbar', 'table')).toBe(true);
+    });
+
+    it('shows no notice by default', () => {
+      expect(outputOf(stateWith()).containsAttribute('class', 'alert alert-success alert-dismissible')).toBe(false);
+    });
+
+    it('shows the notice as a dismissible success alert above the table', () => {
+      const output = outputOf(stateWith({ bulk: { notice: 'Closed 2 issues.' } }));
+
+      expect(output.containsInOrder('toolbar', 'Closed 2 issues.', 'table')).toBe(true);
+      expect(output.contains('alert-success')).toBe(true);
+      expect(output.contains('alert-dismissible')).toBe(true);
+    });
+
+    it('shows the notice over an empty list too', () => {
+      const output = outputOf(stateWith({ issues: [], bulk: { notice: 'Closed 2 issues.' } }));
+
+      expect(output.containsInOrder('toolbar', 'Closed 2 issues.', 'empty')).toBe(true);
+    });
+
+    it('dismisses the notice through the close button', () => {
+      const onDismissNotice = jasmine.createSpy('onDismissNotice');
+      const tree = IssuesHelper.render(stateWith({ bulk: { notice: 'Done.' } }), { ...handlers, onDismissNotice });
+      const [alert] = findElements(tree, (node) => node.props?.onClose !== undefined);
+
+      alert.props.onClose();
+
+      expect(onDismissNotice).toHaveBeenCalled();
+    });
+
+    it('renders the notice as text, never as markup (S1)', () => {
+      const output = outputOf(stateWith({ bulk: { notice: '<img src=x onerror=alert(1)>' } }));
+
+      expect(output.contains('<img')).toBe(false);
+    });
   });
 });

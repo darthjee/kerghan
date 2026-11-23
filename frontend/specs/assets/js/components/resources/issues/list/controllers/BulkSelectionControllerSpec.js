@@ -82,16 +82,26 @@ describe('BulkSelectionController', () => {
       expect(client.bulkState).toHaveBeenCalledOnceWith(PROJECT_ID, { issueIds: ['a', 'b'], state: 'closed' });
     });
 
-    it('is in flight meanwhile', async () => {
+    it('dismisses the notice', async () => {
+      await controller.apply('closed');
+
+      controller.dismissNotice();
+
+      expect(state.notice).toBeNull();
+    });
+
+    it('is in flight meanwhile, remembering the state being applied', async () => {
       let resolve;
 
       client.bulkState.and.returnValue(new Promise((done) => { resolve = done; }));
       const applying = controller.apply('closed');
 
       expect(state.inFlight).toBe(true);
+      expect(state.target).toBe('closed');
       resolve(result());
       await applying;
       expect(state.inFlight).toBe(false);
+      expect(state.target).toBeNull();
     });
 
     it('ignores a second call while one is in flight', async () => {
