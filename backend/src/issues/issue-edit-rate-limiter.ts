@@ -7,7 +7,7 @@ import { Clock } from '../core/clock.js';
 export type EditRateLimitDecision = RateLimitDecision;
 
 /**
- * The per-user issue-edit rate limit (`docs/agents/specs/issues/security.md#request-rate-limits`):
+ * The per-user issue-edit rate limit (`docs/agents/modules/issues/security.md#request-rate-limits`):
  * a `FixedWindowRateLimiter` of `editMaxPerWindow` edits per `editWindowMs`.
  *
  * Two callers share it: the single edit (#556) consumes weight 1, and bulk state (#563) consumes

@@ -21,7 +21,7 @@ Whether a route needs a session at all, secrets and transport belong to the `sec
 Owner-scoping rules are documented where each feature lives. For each area the diff touches, read
 only the applicable docs, never the whole `docs/agents/` tree:
 
-1. The matching feature rows of [`docs/agents/specs.md`](../../docs/agents/specs.md) and their security docs (e.g. [Issues and Projects security](../../docs/agents/specs/issues/security.md)), applying any `## Review checklist` section found there.
+1. The matching feature rows of [`docs/agents/specs.md`](../../docs/agents/specs.md) and their security docs (an active feature keeps its security doc in its spec folder; a folded one, such as [Issues and Projects security](../../docs/agents/modules/issues/security.md), keeps it in the module docs its *Completed specs* row points at), applying any `## Review checklist` section found there.
 2. The touched module's security page (`docs/agents/modules/<module>/security.md`, today [repositories](../../docs/agents/modules/repositories/security.md) and [integrations](../../docs/agents/modules/integrations/security.md)) or `## Security` section.
 3. Always [`docs/agents/architecture/security.md`](../../docs/agents/architecture/security.md).
 

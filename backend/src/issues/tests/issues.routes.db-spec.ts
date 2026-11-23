@@ -4,7 +4,7 @@ import { seedIssue, seedProject } from './support/issues-seeds.js';
 import { seedUser } from '../../repositories/tests/support/two-user-baseline.js';
 
 // The Issues routes over real MySQL: the real service behind the controller, so the wire bodies
-// are the ones a client sees (`docs/agents/specs/issues/api/issues.md`).
+// are the ones a client sees (`docs/agents/backend/routes/issues/issues.md`).
 const FORBIDDEN_KEYS = ['id_', 'projectId', 'project_id', 'userId', 'user_id'];
 const MISSING = '00000000-0000-4000-8000-000000000000';
 const EDIT_MAX = 3;

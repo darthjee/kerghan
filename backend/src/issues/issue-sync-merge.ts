@@ -28,7 +28,7 @@ export interface MergePlan {
 type Decision = 'none' | 'pull' | 'push' | 'adopt';
 
 /**
- * The table of `docs/agents/specs/issues/sync.md#reconcile` for one field.
+ * The table of `docs/agents/modules/issues/sync.md#reconcile` for one field.
  * @param {AttachDifference} field - The field.
  * @param {MergeInput} input - The three value sets and the two timestamps.
  * @returns {Decision} What to do with the field.

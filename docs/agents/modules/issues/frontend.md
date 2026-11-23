@@ -1,8 +1,8 @@
 # Issues and Projects — UI
 
-Decided. Part of the [Issues and Projects specs](../issues.md).
+Decided. Part of the [Issues and Projects module](../issues.md).
 
-This file defines the screens, flows and states of the Issues and Projects interface. The implementation issues #560, #561 and #562 (and #563 for the open-issue count and bulk close/reopen) build against it without making its own product decisions. The API contract is [api.md](api.md); the link states are [github-link.md](github-link.md#link-states); the sync behaviour is [sync.md](sync.md). The open-issue count and bulk close/reopen are specified here against the decided API of [api/projects.md](api/projects.md#open-issue-count) and [api/issues.md](api/issues.md#bulk-close-and-reopen). The detail is split into the focused pages listed under [Pages](#pages).
+This file defines the screens, flows and states of the Issues and Projects interface. The implementation issues #560, #561 and #562 (and #563 for the open-issue count and bulk close/reopen) build against it without making its own product decisions. The API contract is [routes/issues.md](../../backend/routes/issues.md); the link states are [github-link.md](github-link.md#link-states); the sync behaviour is [sync.md](sync.md). The open-issue count and bulk close/reopen are specified here against the decided API of [routes/issues/projects.md](../../backend/routes/issues/projects.md#open-issue-count) and [routes/issues/issues.md](../../backend/routes/issues/issues.md#bulk-close-and-reopen). The detail is split into the focused pages listed under [Pages](#pages).
 
 ## Open questions
 
@@ -28,7 +28,7 @@ Frontend tier ([testing.md](testing.md#frontend-tests)), in the three layers (cl
 
 ## Pages
 
-- [Screens and flows](ui/screens-and-flows.md): read when changing routes, the creation flows, project management, the lists, or the issue page and its forms.
-- [Linking and sync](ui/linking-and-sync.md): read when changing the import, attach or unlink flows, the link panel and its state table, or the bounded re-reads after a trigger.
-- [States](ui/states.md): read when changing empty, loading or error states, the error-message map, confirmations, the v1 scope (including bulk actions) or the U-numbered edge cases.
-- [Decisions](ui/decisions.md): read for rejected alternatives, backward compatibility with the existing UI, and the performance and security rules (S1 to S5, P1 to P5).
+- [Screens and flows](frontend/screens-and-flows.md): read when changing routes, the creation flows, project management, the lists, or the issue page and its forms.
+- [Linking and sync](frontend/linking-and-sync.md): read when changing the import, attach or unlink flows, the link panel and its state table, or the bounded re-reads after a trigger.
+- [States](frontend/states.md): read when changing empty, loading or error states, the error-message map, confirmations, the v1 scope (including bulk actions) or the U-numbered edge cases.
+- [Decisions](frontend/decisions.md): read for rejected alternatives, backward compatibility with the existing UI, and the performance and security rules (S1 to S5, P1 to P5).

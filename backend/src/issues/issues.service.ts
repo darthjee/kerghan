@@ -38,7 +38,7 @@ interface EditOutcome {
 }
 
 /**
- * The Issues business logic (`docs/agents/specs/issues/api/issues.md`): the one surface of the
+ * The Issues business logic (`docs/agents/backend/routes/issues/issues.md`): the one surface of the
  * issues controller, with typed inputs and the wire shapes as outputs. Every method starts from
  * `IssuesAccess` (the project first, then the issue inside it). It has no GitHub dependency and
  * enqueues nothing itself, only through the `IssueSyncTrigger` port.
@@ -167,7 +167,7 @@ export class IssuesService {
   }
 
   /**
-   * Closes or reopens many issues of the project at once (`api/issues.md#bulk-close-and-reopen`),
+   * Closes or reopens many issues of the project at once (`docs/agents/backend/routes/issues/issues.md#bulk-close-and-reopen`),
    * delegating to `IssueBulkState`: per-issue outcomes, one transaction, and one T1 per changed
    * syncing link after the commit.
    * @param {number} userId - The session's user.

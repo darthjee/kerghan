@@ -25,7 +25,10 @@ are not built yet.
 
 ### Not built
 
-- Removing a repo from Kerghan once added.
+- Removing a repo from Kerghan once added. A future "remove an added repository" feature must
+  refuse with `409` while a non-deleted project of the user uses the repository
+  ([linked repository removed](issues/projects.md#linked-repository-unavailable-or-removed)). How
+  that feature learns that a live project uses a repository is not decided.
 - Adding a repo by `owner/name` that is not in the user's own listing.
 - Listing or fetching issues, label rules, "needs attention" triage.
 - Org-wide tracking (one entry following every repo of an org).
@@ -53,7 +56,7 @@ and every query is scoped by `user_id`:
   the row, from the `integration:<id>` rows of `repositories_sources` (one indexed query, ascending).
   A `handle` source is never returned, because a handle alone is not a credential candidate (E20).
   Issues intersects it with the usable integrations and orders the result
-  ([integration selection](../specs/issues/sync.md#integration-selection)).
+  ([integration selection](issues/sync.md#integration-selection)).
 
 ## Index
 

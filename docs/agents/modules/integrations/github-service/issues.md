@@ -2,8 +2,8 @@
 
 Part of the [GitHub service](../github-service.md) of the [Integrations module](../../integrations.md).
 The only code that calls GitHub with a user's credential for issues (#554). The product rules are
-in [sync.md](../../../specs/issues/sync.md#github-issue-client-operations) and
-[security.md](../../../specs/issues/security.md#the-integrations-boundary).
+in [sync.md](../../issues/sync.md#github-issue-client-operations) and
+[security.md](../../issues/security.md#the-integrations-boundary).
 
 ## Operations
 

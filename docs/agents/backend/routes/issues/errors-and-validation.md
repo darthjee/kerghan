@@ -1,6 +1,6 @@
 # Issues and Projects API — Errors and validation
 
-The error catalogue and the input validation rules. Back to the [Issues and Projects API](../api.md) hub.
+The error catalogue and the input validation rules. Back to the [Issues and Projects API](../issues.md) hub.
 
 ## Error catalogue
 
@@ -41,23 +41,23 @@ Standard error shape ([backend.md](../../../architecture/backend/error-responses
 - 21 new codes; none is used outside this module.
 - **Not-found messages:** project first, then issue, so a foreign project never reveals its issues. The issue lookup is always inside the resolved project.
 - `meta` values are public ids (uuids), counts, field names, timestamps or the sync reason vocabulary; never internal ids, GitHub content or credential material.
-- Messages are final English strings; the UI may map codes to its own wording ([ui.md](../ui/states.md#empty-loading-and-error-states)).
+- Messages are final English strings; the UI may map codes to its own wording ([frontend.md](../../../modules/issues/frontend/states.md#empty-loading-and-error-states)).
 - Sync failures in jobs never become HTTP errors: they show only in the [link object](github-link.md#link-object).
 
 ## Input validation
 
 Every failure answers `400 VALIDATION_FAILED` (with `error.details`) before any lookup, write or GitHub call. Unknown properties are stripped. **Types are strict:** a value of the wrong JSON type (`"1"` for a number, `"true"` for a boolean) is rejected, never coerced.
 
-**Lengths count Unicode code points,** matching MySQL's `varchar` under utf8mb4. class-validator's `MaxLength` counts UTF-16 units (an emoji counts twice), so the DTOs use a code-point validator; a 4-byte character counts once (E14 of [edge-cases.md](../edge-cases.md)).
+**Lengths count Unicode code points,** matching MySQL's `varchar` under utf8mb4. class-validator's `MaxLength` counts UTF-16 units (an emoji counts twice), so the DTOs use a code-point validator; a 4-byte character counts once (E14 of [edge-cases.md](../../../modules/issues/edge-cases.md)).
 
 | Field | Routes | Rule |
 |---|---|---|
 | Path `:projectId`, `:issueId` | all nested routes | A uuid (`ParseUUIDPipe`). |
 | `name` | project create, shortcut, edit | String, trimmed, 1 to 100 code points after trimming; blank rejected. Required on explicit create, optional on the shortcut (default `owner/name`) and edit; `null` rejected. |
 | `description` | project create, shortcut, edit | String or `null`, trimmed, at most 2000 code points; blank or `null` is stored as none. |
-| `repository` | create, shortcut, repository | A [repo ref](../../../backend/routes/repositories/identity-and-sync.md#repo-ref) object with its own rules. Optional on explicit create (absent or `null` is a non-code project); required and non-null on the shortcut; required on the repository route, where `null` detaches. |
+| `repository` | create, shortcut, repository | A [repo ref](../repositories/identity-and-sync.md#repo-ref) object with its own rules. Optional on explicit create (absent or `null` is a non-code project); required and non-null on the shortcut; required on the repository route, where `null` detaches. |
 | `title` | issue create, edit | String, trimmed, 1 to 256 code points after trimming; blank rejected. Required on create; optional on edit, where `null` is rejected. |
-| `body` | issue create, edit | String or `null`, at most 65536 code points, **not trimmed** (Markdown whitespace is content). Exactly `''` or `null` is stored as `NULL`; whitespace-only bodies are kept as they are. The same normalization function as for GitHub values ([sync.md](../sync.md#fields-and-ownership)). |
+| `body` | issue create, edit | String or `null`, at most 65536 code points, **not trimmed** (Markdown whitespace is content). Exactly `''` or `null` is stored as `NULL`; whitespace-only bodies are kept as they are. The same normalization function as for GitHub values ([sync.md](../../../modules/issues/sync.md#fields-and-ownership)). |
 | `state` | issue create, edit | `open` or `closed`; default `open` on create. |
 | `number` | import, attach | Integer, 1 to 2147483647 (the `int` `github_number` column). |
 | `confirmUpdatedAt` | attach | Optional ISO 8601 UTC timestamp with milliseconds, as returned in `updatedAt`; compared as an instant. |
@@ -71,5 +71,5 @@ Every failure answers `400 VALIDATION_FAILED` (with `error.details`) before any 
 
 - **Uuid case in bulk:** ids are matched lowercased (stored uuids are lowercase, from `randomUUID()`) and echoed lowercased. 100 uuids are about 4 KB, well under the global body limit; no new limit. Per-issue problems are never errors: they are the `notFound` and `unchanged` outcomes. No new codes and no new `error.meta`.
 - **Output timestamps** are ISO 8601 UTC strings. An issue's `updatedAt` carries milliseconds (`datetime(3)`); other timestamps carry the second precision of their columns.
-- No content rules beyond these (no markup stripping or control-character filtering): titles and bodies may hold Markdown, and how they are rendered is decided in [security.md](../security.md#bodies-restricted-markdown).
+- No content rules beyond these (no markup stripping or control-character filtering): titles and bodies may hold Markdown, and how they are rendered is decided in [security.md](../../../modules/issues/security.md#bodies-restricted-markdown).
 - Validation runs on input only. Values pulled from GitHub are stored as GitHub returns them, and an edit sends only the fields it changes, so an inbound value outside these rules (an untrimmed title, for instance) never blocks an unrelated edit.

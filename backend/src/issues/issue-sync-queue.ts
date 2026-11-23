@@ -5,7 +5,7 @@ import { LoggerService } from '../core/logger.service.js';
 import { WorkersService } from '../workers/workers.service.js';
 
 /**
- * The mandatory per-link dedupe (`docs/agents/specs/issues/sync.md#queued-jobs-are-deduplicated-per-link`)
+ * The mandatory per-link dedupe (`docs/agents/modules/issues/sync.md#queued-jobs-are-deduplicated-per-link`)
  * in front of `WorkersService`: while a reconcile for a link is queued and not yet started,
  * enqueuing the same link again is a no-op. The link leaves the queued set when its job starts
  * (`started`), so an edit during a running job still enqueues the next one. Every trigger (T1 to

@@ -33,7 +33,7 @@ export const ISSUES_PROJECTS_INDEXES: TableIndex[] = [
 
 /**
  * Creates the Issues module's `issues_projects` table: one row per project, soft-deleted through
- * `deleted_at` + `deleted_token` (see `docs/agents/specs/issues/model.md#issues_projects`).
+ * `deleted_at` + `deleted_token` (see `docs/agents/modules/issues/data-model.md#issues_projects`).
  * `user_id` and `repository_id` are logical FKs only (no physical constraint), and the
  * timestamps carry no database default: they come from the injected `Clock`. `down` drops
  * the table.

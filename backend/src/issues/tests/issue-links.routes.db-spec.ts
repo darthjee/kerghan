@@ -8,7 +8,7 @@ import { seedIssue, seedLink, seedMarker } from './support/issues-seeds.js';
 import { buildLinkWorld, linkApi, type LinkWorld, scriptIssue } from './support/link-fixture.js';
 
 // The link routes over the real service, and the link object they put on show, the listing and
-// delete (`api/github-link.md`, `api/issues.md`).
+// delete (`docs/agents/backend/routes/issues/github-link.md`, `docs/agents/backend/routes/issues/issues.md`).
 describe('Issue link routes (real MySQL)', () => {
   let harness: IssuesHttpDbHarness;
   let world: LinkWorld;

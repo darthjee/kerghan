@@ -20,7 +20,7 @@ Always, before answering:
 2. The "Active specs" list in `docs/agents/specs.md`. That list, not the map below, is the
    authority on which specs are active.
 3. For a question touching an active spec's feature: that spec's index (e.g.
-   `docs/agents/specs/issues.md`) and only the concern files the question is about
+   `docs/agents/specs/<feature>.md`) and only the concern files the question is about
    (`model.md`, `api.md`, ...), never the whole folder.
 
 ## Precedence
@@ -47,9 +47,9 @@ the only sources of content. Paths are from the repo root.
 | User approval (#389) | `docs/agents/modules/auth/user-approval.md` |
 | Integrations (#295) | `docs/agents/modules/integrations.md` |
 | Repositories (#444) | `docs/agents/modules/repositories.md` |
-| Issues and Projects (active spec, #483) | `docs/agents/specs/issues.md` |
+| Issues and Projects (#483) | `docs/agents/modules/issues.md`, `docs/agents/backend/routes/issues.md`, `docs/agents/product.md#issues-and-projects` |
 | Standalone distribution | `docs/agents/standalone.md` |
-| Deferred (opt-in issue persistence, trend views, using integration credentials for issues) | `docs/agents/product.md`, "Deferred" section |
+| Deferred (opt-in issue persistence, trend views, using integration credentials for fetched issues) | `docs/agents/product.md`, "Deferred" section |
 | Still open (label rules, org-wide tracking, and everything downstream) | `docs/agents/product.md`, "What's still open" section |
 
 If a row's target doc was moved or split, fall back to the links in `product.md`, answer
@@ -87,9 +87,9 @@ lowercase and in quotes. The two shared with `data-access` use the same wording.
    changing a decided rule needs a product decision. It is a note on the verdict, not a new
    verdict.
 4. **Stale map row**: see [Map of decided areas](#map-of-decided-areas).
-5. **A carve-out between Deferred and an active spec** (e.g. opt-in issue persistence stays
-   deferred while Issues and Projects persists Kerghan's own issues): the spec's explicit
-   carve-out decides.
+5. **A carve-out between Deferred and a decided area or an active spec** (e.g. opt-in issue
+   persistence stays deferred while Issues and Projects persists Kerghan's own issues): the
+   decided area's explicit carve-out decides.
 6. **Two active specs that disagree**: "doc conflict", sent to the architect.
 7. **Not a product question** (which library to use, how to structure a migration): give no
    verdict. Answer "not a product question" and send it back to the architect.

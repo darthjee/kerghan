@@ -1,7 +1,7 @@
 # Issues and Projects — Security
 
 Security rules and decisions of the feature (decided in #490).
-Part of the [Issues and Projects specs](../issues.md).
+Part of the [Issues and Projects module](../issues.md).
 
 ## Principles
 
@@ -11,7 +11,7 @@ Part of the [Issues and Projects specs](../issues.md).
 - The frontend never calls GitHub with a credential.
 - Rate-limit pauses and waiting sets are keyed by integration id only. Credentials are resolved at job time inside the Integrations module and never stored by Issues ([sync.md](sync.md#rate-limits)).
 - Another user's or a deleted project answers 404 ([projects.md](projects.md#deletion)). The not-found order is project first, then issue, so a foreign project never reveals its issues; an issue of another project answers the same `404`.
-- Path ids are uuids (a malformed one answers `400`); responses never expose internal ids, `user_id` or integration fields, and `error.meta` carries only uuids, counts, field names, timestamps or reasons, never internal ids, GitHub content or credentials ([api.md](api.md#exposed-identifiers)).
+- Path ids are uuids (a malformed one answers `400`); responses never expose internal ids, `user_id` or integration fields, and `error.meta` carries only uuids, counts, field names, timestamps or reasons, never internal ids, GitHub content or credentials ([routes/issues.md](../../backend/routes/issues.md#exposed-identifiers)).
 - Sharing guardrails ([projects.md](projects.md#room-for-sharing-members-and-roles)): one access check for every project and issue read or write, with no scattered `user_id` filters; issues derive access from their project; the owner's credentials do all GitHub work and link uniqueness stays per owner; the actor is not assumed to equal the owner.
 - A revoked, invalid, missing or read-only credential never retries and never leaks: the job stops, the marker is kept and the link shows a credential reason (E19 to E21 of [edge-cases.md](edge-cases.md)). Only a `401` invalidates an integration.
 - A not-found answer on link creation never reveals more than the owner's credential can read, the owner's credentials do the read, and no GitHub content reaches logs or job params ([github-link.md](github-link.md#compatibility-performance-and-security)).
@@ -35,7 +35,7 @@ Part of the [Issues and Projects specs](../issues.md).
 
 - The app is registered with **Issues: write** and **Metadata: read**, nothing else. Installations are still accepted with `issues` set to `read` or `write` (unchanged rule), so an installation whose owner has not accepted the updated permissions on GitHub keeps working for reads; its pushes get a `403` and end `sync_failed` with reason `forbidden`.
 - **Installation tokens are minted per operation with the least permission it needs:** `getIssue` and `probeIssues` with `{ issues: read, metadata: read }`, `updateIssue` with `{ issues: write }`. The existing listing tokens keep `{ metadata: read }`. The in-memory token cache is keyed by installation **and** permission set, so a write token is never reused for a read path or the other way round. Tokens stay in process memory inside the Integrations module ([architecture/security.md](../../architecture/security.md#github-credentials-stay-in-the-backend)).
-- `modules/integrations/github-app/credentials.md` ("Required permissions") and `github-service.md` (token minting) describe today's code, so the implementation updates them in the change that builds it; this spec records the decision.
+- `modules/integrations/github-app/credentials.md` ("Required permissions") and `github-service.md` (token minting) describe today's code, so the implementation issues updated them; this page records the decision.
 
 ### Candidate order
 
@@ -44,7 +44,7 @@ Candidates for a reconcile are ordered by known write capability, oldest first w
 ### Reactive only, no up-front warning
 
 - Link creation does not warn about a read-only credential and no `writeAccess` field is exposed: capability is unknowable for fine-grained PATs and can be stale for the App.
-- The failure is shown when it happens: a push that gets a `403` sets `sync_failed` with reason `forbidden` (E5, E21), the UI points to Integrations ([ui.md](ui/linking-and-sync.md#link-and-sync-states)), and the marker is kept until a push succeeds or the user unlinks with confirmation.
+- The failure is shown when it happens: a push that gets a `403` sets `sync_failed` with reason `forbidden` (E5, E21), the UI points to Integrations ([frontend.md](frontend/linking-and-sync.md#link-and-sync-states)), and the marker is kept until a push succeeds or the user unlinks with confirmation.
 
 ### What works without a write-capable credential
 
@@ -64,7 +64,7 @@ The "Fixed operations: `GET`-only" guarantee of [architecture/security.md](../..
 
 - **`IntegrationsGithubService` stays `GET`-only**: the existing listings plus `getIssue` and `probeIssues`.
 - **`updateIssue` lives on a separate exported `IntegrationsGithubIssueWriter`**, the only service in the codebase that sends a non-`GET` request to GitHub with a user's credential. Importing the read service never grants a write.
-- **Only the issues sync service injects the writer**, enforced by a `(static)` spec next to the Repositories module-boundary tooling ([repositories.md](../../modules/repositories/security.md#module-boundaries)).
+- **Only the issues sync service injects the writer**, enforced by a `(static)` spec next to the Repositories module-boundary tooling ([repositories.md](../repositories/security.md#module-boundaries)).
 
 ### What the write may send
 
@@ -118,8 +118,8 @@ The link object's `url` is built by the backend from the stored repository `owne
 
 ### No encryption of issue content
 
-- `issues.title`, `issues.body` and the link's base snapshot (`base_title`, `base_body`, `base_state`) are stored in clear, as Repositories stores private repository metadata ([model.md](model.md#performance-and-security)). They are protected by the API's single access check and by database access control.
-- **Covered:** every access through the API (owner only, `404` otherwise). **Not covered:** someone with direct database or backup access, the same accepted exposure as Repositories. Encrypting content needs its own product decision and threat model; it would also break the title search of [api.md](api.md) and the sync's byte-for-byte comparisons.
+- `issues.title`, `issues.body` and the link's base snapshot (`base_title`, `base_body`, `base_state`) are stored in clear, as Repositories stores private repository metadata ([data-model.md](data-model.md#performance-and-security)). They are protected by the API's single access check and by database access control.
+- **Covered:** every access through the API (owner only, `404` otherwise). **Not covered:** someone with direct database or backup access, the same accepted exposure as Repositories. Encrypting content needs its own product decision and threat model; it would also break the title search of [routes/issues.md](../../backend/routes/issues.md) and the sync's byte-for-byte comparisons.
 - No secret column exists in the module, and credentials stay encrypted in Integrations (unchanged).
 
 ### Project deletion removes the issues at once
@@ -151,14 +151,14 @@ The link object's `url` is built by the backend from the stored repository `owne
 | Limit | Env vars (defaults) | Refusal |
 |---|---|---|
 | Link creation (import and attach share one window) | `KERGHAN_ISSUES_LINK_MAX_PER_WINDOW` (30), `KERGHAN_ISSUES_LINK_WINDOW_MS` (60000) | `429 ISSUE_LINK_RATE_LIMITED` |
-| Issue edits, single and [bulk state](api/issues.md#bulk-close-and-reopen) | `KERGHAN_ISSUES_EDIT_MAX_PER_WINDOW` (120), `KERGHAN_ISSUES_EDIT_WINDOW_MS` (60000) | `429 ISSUE_EDIT_RATE_LIMITED` |
+| Issue edits, single and [bulk state](../../backend/routes/issues/issues.md#bulk-close-and-reopen) | `KERGHAN_ISSUES_EDIT_MAX_PER_WINDOW` (120), `KERGHAN_ISSUES_EDIT_WINDOW_MS` (60000) | `429 ISSUE_EDIT_RATE_LIMITED` |
 
 - In-memory, per-process fixed windows per user through the shared `Clock`, like `RepositoryAddRateLimiter`: no table, reset on restart, counted per backend instance, expired windows swept.
 - **Checked after DTO validation and before the access check**, as Repositories Add does, so every attempt counts and the limit also bounds probing. Both `429`s carry `Retry-After` and `error.retryAfterSeconds`.
 - Link creation is limited because each attempt makes one GitHub request with the owner's credential. Edits, bulk included, are limited because each one on a linked issue writes the marker and enqueues a job.
 - **A bulk call weighs its id count** (`issueIds.length`, 1 to 100), against the same window and checked at the same place, so `notFound` and `unchanged` ids count too. It is all-or-nothing: if `used + weight > max` the call answers `429` and nothing is applied. No separate bulk limit and no new env var.
 - **A refused (`429`) call consumes nothing**, for the single edit and bulk alike, so retrying a refused call cannot keep the window full.
-- Refresh (T2, T3) and retry sync (T4) stay unlimited, as decided in [api.md](api.md): the 60-second fresh skip, the per-link dedupe below and the per-integration pause bound their GitHub calls.
+- Refresh (T2, T3) and retry sync (T4) stay unlimited, as decided in [routes/issues.md](../../backend/routes/issues.md): the 60-second fresh skip, the per-link dedupe below and the per-integration pause bound their GitHub calls.
 
 ### Queued jobs are deduplicated per link
 
@@ -190,7 +190,7 @@ The link object's `url` is built by the backend from the stored repository `owne
 
 ## Review checklist
 
-The feature-specific checks the `security` and `data-access` agents apply when the implementation issues spawned by #492 (#553 to #563; the final check is #559) are reviewed. The agents find this section through the feature index in [specs.md](../../specs.md) and apply it.
+The feature-specific checks the `security` and `data-access` agents apply when the implementation issues of the feature (#553 to #563; the final check was #559) are reviewed. The agents find this section through the [module index](../issues.md#index) and apply it.
 
 ### `security` agent
 
@@ -200,7 +200,7 @@ The feature-specific checks the `security` and `data-access` agents apply when t
 4. Installation tokens are minted per operation with the least permission (`issues: read` for reads, `issues: write` only for `updateIssue`), cached by installation and permission set, never persisted.
 5. No credential, title, body, owner/name, URL, ETag or exception message in logs, job params, errors or `error.meta`; duplicate keys are mapped, never re-thrown.
 6. Bodies render only through the shared component under the restricted-Markdown rules; no `dangerouslySetInnerHTML`, no raw-HTML plugin, no image loaded; titles and descriptions are text.
-7. Input: DTO rules of [api.md](api.md) (strict types, code-point lengths), `ParseUUIDPipe` on path ids, `LIKE` metacharacters escaped in searches, values only as bound parameters.
+7. Input: DTO rules of [routes/issues.md](../../backend/routes/issues.md) (strict types, code-point lengths), `ParseUUIDPipe` on path ids, `LIKE` metacharacters escaped in searches, values only as bound parameters.
 8. Caps checked under the creation lock; both rate limiters before the access check; the per-link job dedupe in place.
 
 ### `data-access` agent
@@ -219,7 +219,7 @@ Deferred, with no owner issue: encryption of issue content; a restore or purge o
 
 ## Open questions
 
-None owned by #490. Wording and placement of warnings and the "Fix it in Integrations" pointer are decided in [ui.md](ui/linking-and-sync.md#link-and-sync-states).
+None. Wording and placement of warnings and the "Fix it in Integrations" pointer are decided in [frontend.md](frontend/linking-and-sync.md#link-and-sync-states).
 
 ## Required tests
 
@@ -227,7 +227,7 @@ Credentials and access:
 
 - No credential appears in any response, job param or log (the canary sweep of [testing.md](testing.md#security-verification)); logs carry only the allowlisted fields and job params only `{ linkId }`.
 - A revoked, missing or read-only credential stops the job without retry and keeps the marker (E19 to E21); a `404` with a failing issues probe discards no marker (E22); a non-approved user's job makes no call (E24).
-- No response, including `error.meta`, contains an internal id, `user_id`, an integration field or credential material (canary sweep and the route matrix of [api.md](api.md#required-tests)).
+- No response, including `error.meta`, contains an internal id, `user_id`, an integration field or credential material (canary sweep and the route matrix of [routes/issues.md](../../backend/routes/issues.md#required-tests)).
 - A project and its issues go through the single access check, and a non-owner gets 404 for both (the route access matrix and the two-user baseline of [testing.md](testing.md#security-verification)).
 - No `fetch`, `secret_iv` or `NOW(` in the Issues sources, no Integrations or Auth mapping, and no secret or payload column `(static)`.
 - A not-found answer on link creation reveals nothing beyond what the owner's credential can read, and the read uses the owner's credentials (E57, E59).

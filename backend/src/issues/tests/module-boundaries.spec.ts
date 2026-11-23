@@ -5,7 +5,7 @@ import { getMetadataArgsStorage } from 'typeorm';
 import { ISSUES_ENTITIES } from '../entities/index.js';
 import { ISSUES_ROOT, moduleSources } from './support/module-sources.js';
 
-// Static boundary checks (`docs/agents/specs/issues/testing.md#security-verification`): no app
+// Static boundary checks (`docs/agents/modules/issues/testing.md#security-verification`): no app
 // boot, no DB. The lint override in `eslint.config.mjs` refuses the imports;
 // `eslint-boundary.spec.ts` proves it.
 

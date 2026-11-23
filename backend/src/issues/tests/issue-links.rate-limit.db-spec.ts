@@ -2,7 +2,7 @@ import { buildIssuesHttpDbHarness, type IssuesHttpDbHarness } from './support/is
 import { seedIssue } from './support/issues-seeds.js';
 import { addLinkUser, buildLinkWorld, linkApi, type LinkWorld, scriptIssue } from './support/link-fixture.js';
 
-// The per-user link-creation window (`security.md#request-rate-limits`): import and attach share
+// The per-user link-creation window (`docs/agents/modules/issues/security.md#request-rate-limits`): import and attach share
 // it, it answers before the access check, and a refused call consumes nothing.
 const MAX = 3;
 const MISSING = '00000000-0000-4000-8000-000000000000';

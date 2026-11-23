@@ -1,6 +1,6 @@
 # Issues and Projects API — Issues
 
-The issue routes: object, listing, create and edit, bulk close and reopen, and delete. Back to the [Issues and Projects API](../api.md) hub.
+The issue routes: object, listing, create and edit, bulk close and reopen, and delete. Back to the [Issues and Projects API](../issues.md) hub.
 
 ## Issues
 
@@ -36,16 +36,16 @@ Field rules are in [Input validation](errors-and-validation.md#input-validation)
 ### Issues listing
 
 - `page` and `perPage` as in the project listing (default 50, maximum 100). `state`: `open` (default), `closed` or `all`. `search`: trimmed, at most 100 characters, case-insensitive literal substring of the title, LIKE-escaped as in Repositories. Invalid values answer `400`.
-- No filter by link or link state in v1 (a "links by status" index was rejected in [model.md](../model.md#indexes), and derived states mix stored and in-memory data).
+- No filter by link or link state in v1 (a "links by status" index was rejected in [data-model.md](../../../modules/issues/data-model.md#indexes), and derived states mix stored and in-memory data).
 - **Sort:** newest created first, `created_at` desc then `id` desc, so edits and sync pulls never reorder pages. No sort parameter.
-- **Index:** (`project_id`, `state`, `created_at`) (`idx_issues_project_id_state_created_at`, in [model.md](../model.md#indexes)) serves the `open` and `closed` listings in order. `all` uses the `project_id` prefix and sorts in memory, acceptable at per-project scale.
+- **Index:** (`project_id`, `state`, `created_at`) (`idx_issues_project_id_state_created_at`, in [data-model.md](../../../modules/issues/data-model.md#indexes)) serves the `open` and `closed` listings in order. `all` uses the `project_id` prefix and sorts in memory, acceptable at per-project scale.
 - The rows' link objects are loaded for the page only (one query for links and marker existence by issue ids, the repository status once per project, the rate-limit waiting sets from memory). A read never enqueues a job.
 
 ### Issue create and edit
 
 - Create makes an unlinked issue (`state` defaults to `open`); it never calls GitHub and enqueues nothing. It answers `409 ISSUES_LIMIT_REACHED` when the project is full (checked under the project row lock). Linking is a separate step (import creates an issue from GitHub directly).
-- Edit: the edit rate limit applies first (`429 ISSUE_EDIT_RATE_LIMITED`, after DTO validation and before the access check, [security.md](../security.md#request-rate-limits)). An omitted field is unchanged; `body: null` or `''` clears it. Values equal to the stored ones make no write, no marker and no revision bump (E12).
-- Editing a synced field of a `linked` or `sync_failed` link upserts the marker in the same transaction and enqueues T1 after the commit; a `gone` link's edits are local only ([sync.md](../sync.md#triggers)). The response's link object reflects the derived *pending* state.
+- Edit: the edit rate limit applies first (`429 ISSUE_EDIT_RATE_LIMITED`, after DTO validation and before the access check, [security.md](../../../modules/issues/security.md#request-rate-limits)). An omitted field is unchanged; `body: null` or `''` clears it. Values equal to the stored ones make no write, no marker and no revision bump (E12).
+- Editing a synced field of a `linked` or `sync_failed` link upserts the marker in the same transaction and enqueues T1 after the commit; a `gone` link's edits are local only ([sync.md](../../../modules/issues/sync.md#triggers)). The response's link object reflects the derived *pending* state.
 
 ### Bulk close and reopen
 
@@ -66,7 +66,7 @@ Field rules are in [Input validation](errors-and-validation.md#input-validation)
   - `notFound`: no issue with that id in **this** project (missing, another project's or user's, or deleted concurrently), all indistinguishable.
 - **Ids only, no issue objects**: the UI re-reads the page after the call. `state` is echoed so the response is self-contained; ids are matched and echoed lowercased.
 - **Always `200`** once the project resolves, even when every id is `notFound` or `unchanged` (E70). A missing, foreign or deleted project answers `404`; `400` and `429` happen before any work.
-- **Order of checks**, as the single Edit: DTO validation (`400`, [rules](errors-and-validation.md#input-validation)) → edit rate limit weighted by the id count (`429 ISSUE_EDIT_RATE_LIMITED`, [security.md](../security.md#request-rate-limits)) → project access check (`404`) → transaction. A refused call applies nothing and consumes nothing (E74).
+- **Order of checks**, as the single Edit: DTO validation (`400`, [rules](errors-and-validation.md#input-validation)) → edit rate limit weighted by the id count (`429 ISSUE_EDIT_RATE_LIMITED`, [security.md](../../../modules/issues/security.md#request-rate-limits)) → project access check (`404`) → transaction. A refused call applies nothing and consumes nothing (E74).
 
 **One transaction for the whole call** (at most 100 rows, no chunking), in the module's lock order (projects, issues, links, markers):
 
@@ -75,7 +75,7 @@ Field rules are in [Input validation](errors-and-validation.md#input-validation)
 3. **Flip `state`** on each issue whose state differs from the target, with `updated_at` from one `Clock` read for the whole call. The others are `unchanged` and get no write.
 4. **Links and markers** of the changed issues: load their links in one query, lock them in id order, and upsert the marker of each `linked`/`sync_failed` link (`marked_at` on insert, `updated_at` and `revision` on every change). `gone` links get no marker (local only, E72).
 5. **Commit.**
-6. **After the commit**, enqueue one T1 per changed `linked`/`sync_failed` link ([sync.md](../sync.md#triggers)). An enqueue failure is handled as in the single Edit (the marker is the durable record; the boot sweep re-enqueues). Nothing is enqueued on rollback.
+6. **After the commit**, enqueue one T1 per changed `linked`/`sync_failed` link ([sync.md](../../../modules/issues/sync.md#triggers)). An enqueue failure is handled as in the single Edit (the marker is the durable record; the boot sweep re-enqueues). Nothing is enqueued on rollback.
 
 **Concurrency:**
 

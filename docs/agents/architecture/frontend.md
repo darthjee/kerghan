@@ -181,7 +181,7 @@ status-to-code mapping):
 
 ## Projects module (Issues and Projects)
 
-The UI of the [Issues and Projects specs](../specs/issues/ui.md), built by #560 (the shared
+The UI of the [Issues and Projects module](../modules/issues/frontend.md), built by #560 (the shared
 pieces and the project screens); #561 and #562 add the issue screens and the linking.
 
 **Client.** `client/ProjectsClient.js` and `client/IssuesClient.js` cover every route the

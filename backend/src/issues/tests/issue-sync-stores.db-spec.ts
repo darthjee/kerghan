@@ -11,7 +11,7 @@ const T2 = new Date('2026-06-01T11:00:00Z');
 const T3 = new Date('2026-06-01T12:00:00Z');
 const NOW = new Date('2026-06-02T08:00:00Z');
 
-// The guarded writes the reconcile commits through (`sync.md#marker-lifecycle`).
+// The guarded writes the reconcile commits through (`docs/agents/modules/issues/sync.md#marker-lifecycle`).
 describe('Issue sync stores (real MySQL)', () => {
   let harness: IssuesDbHarness;
   let markers: IssueMarkers;

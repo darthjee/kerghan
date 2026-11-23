@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 
 /**
  * The after-commit hook of local edits that bumped a pending marker (trigger T1,
- * `docs/agents/specs/issues/sync.md#triggers`). The service calls it only after the edit's
+ * `docs/agents/modules/issues/sync.md#triggers`). The service calls it only after the edit's
  * transaction resolved and only with the link ids whose marker was bumped.
  */
 export abstract class IssueSyncTrigger {

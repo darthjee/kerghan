@@ -1,6 +1,6 @@
 # Issues and Projects UI — Screens and flows
 
-Screens, navigation, the creation flows, project management, the two lists, and the issue page and forms. Back to the [Issues and Projects UI](../ui.md) hub.
+Screens, navigation, the creation flows, project management, the two lists, and the issue page and forms. Back to the [Issues and Projects UI](../frontend.md) hub.
 
 ## Screens and navigation
 

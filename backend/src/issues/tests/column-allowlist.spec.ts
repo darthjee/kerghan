@@ -5,8 +5,8 @@ import { IssuePendingWrite } from '../entities/issue-pending-write.entity.js';
 import { Issue } from '../entities/issue.entity.js';
 import { IssuesProject } from '../entities/issues-project.entity.js';
 
-// The column allowlist of `docs/agents/specs/issues/model.md`: a column added to an entity must
-// be added here (and to model.md) in the same PR. The marker has no payload column.
+// The column allowlist of `docs/agents/modules/issues/data-model.md`: a column added to an entity must
+// be added here (and to docs/agents/modules/issues/data-model.md) in the same PR. The marker has no payload column.
 const ALLOWLIST: Array<[string, new () => object, string[]]> = [
   ['issues_projects', IssuesProject, [
     'id', 'uuid', 'user_id', 'name', 'description', 'repository_id', 'deleted_at', 'deleted_token', 'created_at', 'updated_at',

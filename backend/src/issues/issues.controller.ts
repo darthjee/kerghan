@@ -13,7 +13,7 @@ import { IssuesService } from './issues.service.js';
 import type { BulkIssueStateResponse } from './types/issues-api.types.js';
 
 /**
- * Issues routes (`docs/agents/specs/issues/api/issues.md`) — thin: each validates through its
+ * Issues routes (`docs/agents/backend/routes/issues/issues.md`) — thin: each validates through its
  * DTO, makes one `IssuesService` call and answers with its result. Every route is `POST`, behind
  * the global `JwtGuard` and `OriginGuard` (no `@Public()`, no `@AdminOnly()`), scoped to the
  * caller from `@CurrentUser()`, cache class `user-scoped`, and never warmed by Navi. Paths are

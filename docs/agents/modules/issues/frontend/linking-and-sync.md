@@ -1,6 +1,6 @@
 # Issues and Projects UI — Linking and sync
 
-The import, attach and unlink flows, the link panel and every link and sync state, and the bounded re-reads after a trigger. Back to the [Issues and Projects UI](../ui.md) hub.
+The import, attach and unlink flows, the link panel and every link and sync state, and the bounded re-reads after a trigger. Back to the [Issues and Projects UI](../frontend.md) hub.
 
 ## Linking flows
 

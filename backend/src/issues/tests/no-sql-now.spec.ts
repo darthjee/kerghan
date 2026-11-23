@@ -2,7 +2,7 @@ import { readFileSync } from 'fs';
 import * as path from 'path';
 import { ISSUES_ROOT, moduleSources } from './support/module-sources.js';
 
-// Static check (`docs/agents/specs/issues/model.md`, conventions): no SQL time condition of the
+// Static check (`docs/agents/modules/issues/data-model.md`, conventions): no SQL time condition of the
 // Issues module uses the database clock; every time value comes from the injected `Clock`.
 // `.now(` (the injected `clock.now()`) is not SQL; the lookbehind skips it.
 const FORBIDDEN = [/(?<!\.)\bNOW\s*\(/i, /\bCURRENT_TIMESTAMP\b/i, /\bSYSDATE\s*\(/i, /\bUTC_TIMESTAMP\b/i];

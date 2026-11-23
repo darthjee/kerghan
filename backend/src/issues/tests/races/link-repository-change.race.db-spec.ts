@@ -5,7 +5,7 @@ import { buildIssuesHttpDbHarness, type IssuesHttpDbHarness } from '../support/i
 import { buildLinkWorld, INTEGRATION_ID, linkApi, type LinkWorld, REPOSITORY_ID, rowCount, scriptIssue, seedSecondRepository } from '../support/link-fixture.js';
 import { until } from '../support/race-helpers.js';
 
-// The full E62 (`github-link.md#same-repository-rule-and-repository-changes`): the link creation
+// The full E62 (`docs/agents/modules/issues/github-link.md#same-repository-rule-and-repository-changes`): the link creation
 // re-checks the repository under the project lock that `ProjectRepositoryChanger` takes first, so
 // the project never ends with a link against a changed repository.
 describe('Link creation versus a repository change (real MySQL)', () => {

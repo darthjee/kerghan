@@ -4,7 +4,7 @@ import { seedIssue, seedLink, seedMarker, seedProject } from './support/issues-s
 import { seedUser } from '../../repositories/tests/support/two-user-baseline.js';
 
 // The Projects routes over real MySQL: the real service behind the controller, so the wire bodies
-// are the ones a client sees (`docs/agents/specs/issues/api/projects.md`).
+// are the ones a client sees (`docs/agents/backend/routes/issues/projects.md`).
 const FORBIDDEN_KEYS = ['userId', 'user_id', 'repositoryId', 'repository_id', 'deletedAt', 'deletedToken', 'integrationId', 'secretHint'];
 const MISSING = '00000000-0000-4000-8000-000000000000';
 

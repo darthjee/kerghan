@@ -2,7 +2,7 @@ import { readFileSync } from 'fs';
 import * as path from 'path';
 import { INTEGRATIONS_ROOT, SRC_ROOT, sourcesUnder } from './support/source-files.js';
 
-// Static check (`docs/agents/specs/issues/security.md#write-access-to-github`): the read service
+// Static check (`docs/agents/modules/issues/security.md#write-access-to-github`): the read service
 // and the repo client make GET calls only; the one PATCH lives in the issue client's `updateIssue`
 // and is reached only from the writer. No app boot, no DB.
 

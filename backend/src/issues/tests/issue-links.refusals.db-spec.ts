@@ -18,7 +18,7 @@ import {
 } from '../../integrations/tests/support/github-builders.js';
 
 // Every refusal of a link creation leaves the issue, link and marker tables as they were
-// (`api/github-link.md#order-of-checks-import-and-attach`, E3, E57 to E60).
+// (`docs/agents/backend/routes/issues/github-link.md#order-of-checks-import-and-attach`, E3, E57 to E60).
 describe('Issue link refusals (real MySQL)', () => {
   let harness: IssuesHttpDbHarness;
   let world: LinkWorld;

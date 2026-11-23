@@ -27,7 +27,7 @@ export type StopReason =
   | 'gone'
   | 'retries_exhausted';
 
-/** What one reconcile came to (`docs/agents/specs/issues/sync.md#job`): the job maps it. */
+/** What one reconcile came to (`docs/agents/modules/issues/sync.md#job`): the job maps it. */
 export type ReconcileOutcome =
   | { kind: 'done' }
   | { kind: 'requeue' }
@@ -48,7 +48,7 @@ interface Ready {
 }
 
 /**
- * The two-way sync of one link (`docs/agents/specs/issues/sync.md`): the guards, the candidate
+ * The two-way sync of one link (`docs/agents/modules/issues/sync.md`): the guards, the candidate
  * walk with its credential fallback, the read of GitHub first, the per-field merge, the push and
  * the commit. It is the only injector of `IntegrationsGithubIssueWriter` (a static spec enforces
  * it). It never receives or returns a credential: GitHub is reached through integration ids.

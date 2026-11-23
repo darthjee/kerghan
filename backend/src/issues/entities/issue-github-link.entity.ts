@@ -9,7 +9,7 @@ export const BIGINT_TO_NUMBER = {
 /**
  * The optional one to one link of an issue to a GitHub issue, with the base snapshot the sync
  * reconciles against. Owns table `issues_github_links` (see
- * `docs/agents/specs/issues/model.md#issues_github_links`). `userId` serves the uniqueness rule
+ * `docs/agents/modules/issues/data-model.md#issues_github_links`). `userId` serves the uniqueness rule
  * and user cleanup, never authorization. `issueId` is a logical FK only.
  */
 @Entity('issues_github_links')

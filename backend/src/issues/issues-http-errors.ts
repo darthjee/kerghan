@@ -17,7 +17,7 @@ export const ISSUE_NOT_FOUND_MESSAGE = 'Issue not found';
 
 /**
  * 404 `NOT_FOUND`: the single answer for a project that is missing, another user's or deleted,
- * so every body is byte-identical (`docs/agents/specs/issues/api/errors-and-validation.md`).
+ * so every body is byte-identical (`docs/agents/backend/routes/issues/errors-and-validation.md`).
  * @returns {NotFoundException} The exception.
  */
 export function projectNotFound(): NotFoundException {

@@ -18,7 +18,7 @@ function gate(): { opened: Promise<void>; open: () => void } {
   return { opened, open };
 }
 
-// Bulk close/reopen against concurrent writers (`api/issues.md#bulk-close-and-reopen`): the project
+// Bulk close/reopen against concurrent writers (`docs/agents/backend/routes/issues/issues.md#bulk-close-and-reopen`): the project
 // row lock serializes it with attach and deletion, and the issue locks in id order keep two bulk
 // calls from deadlocking.
 describe('Bulk state races (real MySQL)', () => {

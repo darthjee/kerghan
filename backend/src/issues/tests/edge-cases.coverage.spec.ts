@@ -1,16 +1,16 @@
 import { existsSync, readdirSync, readFileSync, statSync } from 'fs';
 import * as path from 'path';
 
-// The coverage check of `docs/agents/specs/issues/testing.md` ("one test per row, citing its id"): every
-// `E<n>` row of `edge-cases.md` is cited in the title or a comment of some spec under `backend/src/` or
+// The coverage check of `docs/agents/modules/issues/testing.md` ("one test per row, citing its id"): every
+// `E<n>` row of `docs/agents/modules/issues/edge-cases.md` is cited in the title or a comment of some spec under `backend/src/` or
 // `frontend/specs/`, except the allowlist below. A new row without a test fails here.
 //
-// The check reads the spec document and the frontend specs, which sit outside `backend/`: it runs in CI
+// The check reads the edge-case document and the frontend specs, which sit outside `backend/`: it runs in CI
 // (the whole checkout) and wherever the repository root is mounted next to `backend/`. A container that
 // mounts only `backend/` skips it, with a note, rather than failing on files it cannot see.
 
 const REPOSITORY_ROOT = path.resolve(__dirname, '..', '..', '..', '..');
-const EDGE_CASES = path.join(REPOSITORY_ROOT, 'docs', 'agents', 'specs', 'issues', 'edge-cases.md');
+const EDGE_CASES = path.join(REPOSITORY_ROOT, 'docs', 'agents', 'modules', 'issues', 'edge-cases.md');
 const BACKEND_SOURCES = path.resolve(__dirname, '..', '..');
 const FRONTEND_SPECS = path.join(REPOSITORY_ROOT, 'frontend', 'specs');
 

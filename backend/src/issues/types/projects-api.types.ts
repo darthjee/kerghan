@@ -2,7 +2,7 @@ import type { RepoRef } from '../../repositories/repositories.public.js';
 import type { ProjectResponse } from '../project-response.js';
 
 /**
- * The typed inputs of the Projects services (`docs/agents/specs/issues/api/projects.md`): plain
+ * The typed inputs of the Projects services (`docs/agents/backend/routes/issues/projects.md`): plain
  * values, no DTO classes and no HTTP types. The controller owns validation and response shaping.
  */
 

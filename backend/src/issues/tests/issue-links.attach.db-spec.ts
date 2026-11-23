@@ -5,7 +5,7 @@ import { seedIssue, seedLink, seedProject } from './support/issues-seeds.js';
 import { buildLinkWorld, linkApi, type LinkWorld, rowCount, scriptIssue } from './support/link-fixture.js';
 
 // POST attach.json over real MySQL: equal values link at once; differing values need the
-// confirmation of the issue's exact `updatedAt` (`api/github-link.md#attach`).
+// confirmation of the issue's exact `updatedAt` (`docs/agents/backend/routes/issues/github-link.md#attach`).
 describe('Issue attach (real MySQL)', () => {
   let harness: IssuesHttpDbHarness;
   let world: LinkWorld;

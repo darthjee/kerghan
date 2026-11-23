@@ -17,7 +17,7 @@ export interface MarkerState {
 
 /**
  * The marker and link queries of the single Edit, the Delete and the sync's reconcile
- * (`docs/agents/specs/issues/sync.md#marker-lifecycle`). The write methods run inside the caller's
+ * (`docs/agents/modules/issues/sync.md#marker-lifecycle`). The write methods run inside the caller's
  * transaction, after the caller locked the issue row, and take the next locks of the order (issues,
  * links, markers).
  */

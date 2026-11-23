@@ -1,13 +1,13 @@
 # Issues and Projects — Projects
 
 The project as the home of issues.
-Part of the [Issues and Projects specs](../issues.md).
+Part of the [Issues and Projects module](../issues.md).
 
-Routes, payloads and error codes are decided in [api.md](api.md); columns and types in [model.md](model.md#issues_projects), sync mechanics in [sync.md](sync.md) and UI in [ui.md](ui.md).
+Routes, payloads and error codes are decided in [routes/issues.md](../../backend/routes/issues.md); columns and types in [data-model.md](data-model.md#issues_projects), sync mechanics in [sync.md](sync.md) and UI in [frontend.md](frontend.md).
 
 ## Naming
 
-"Project" is Kerghan's concept: an application (backed by a repository) or a life/other project (no repository). It is not a GitHub Project. In these specs "project" always means Kerghan's; the GitHub feature is always written in full as "GitHub Project". No Kerghan-side term is coined for GitHub Projects (out of scope for the epic).
+"Project" is Kerghan's concept: an application (backed by a repository) or a life/other project (no repository). It is not a GitHub Project. In these docs "project" always means Kerghan's; the GitHub feature is always written in full as "GitHub Project". No Kerghan-side term is coined for GitHub Projects (out of scope for the epic).
 
 ## Repository and ownership
 
@@ -28,8 +28,8 @@ Routes, payloads and error codes are decided in [api.md](api.md); columns and ty
 | Deletion marker | See [Deletion](#deletion). |
 
 - There is no status or archive state in v1.
-- The read model adds a repository summary (owner, name, private and the row status Added, Unavailable or Unknown), derived on read and never stored on the project. The read model also adds `openIssueCount`, the project's open issues (it may lag, is computed on read and never stored; [API](api/projects.md#open-issue-count)). There are no other counts and no sync info in v1.
-- Columns, types and lengths (name 100, description 2000) are in [model.md](model.md#issues_projects).
+- The read model adds a repository summary (owner, name, private and the row status Added, Unavailable or Unknown), derived on read and never stored on the project. The read model also adds `openIssueCount`, the project's open issues (it may lag, is computed on read and never stored; [API](../../backend/routes/issues/projects.md#open-issue-count)). There are no other counts and no sync info in v1.
+- Columns, types and lengths (name 100, description 2000) are in [data-model.md](data-model.md#issues_projects).
 
 ## Creation paths
 
@@ -43,15 +43,15 @@ Routes, payloads and error codes are decided in [api.md](api.md); columns and ty
 - Local work (reading and editing issues) continues whatever the status.
 - GitHub sync is refused while the repository is Unavailable and allowed while it is Unknown; pending writes stay in their markers under the retry and sync-failed rules of [sync.md](sync.md#retries-and-sync_failed).
 - A dangling repository reference reads like an Unavailable repository with no summary fields.
-- The future "remove an added repository" feature (not built) must refuse with `409` while a non-deleted project of the user uses the repository. #564 (the fold issue) copies that rule into `modules/repositories.md`.
+- The future "remove an added repository" feature (not built) must refuse with `409` while a non-deleted project of the user uses the repository. The rule is also recorded in [Repositories](../repositories.md#not-built).
 - If the integration is deleted, the project is unaffected directly.
-- If the user is deleted, their projects (including soft-deleted ones), issues, links and markers are removed for real (the `user.deleted` contract is in [model.md](model.md#cleanup); remaining cases stay with #493).
+- If the user is deleted, their projects (including soft-deleted ones), issues, links and markers are removed for real (the `user.deleted` contract is in [data-model.md](data-model.md#cleanup); remaining cases stay with #493).
 
 ## Deletion
 
 - Soft delete: the project gets a deletion timestamp.
 - A deleted project answers `404` for every read or write and is excluded from listings, like another user's project. Its issues, links and markers are deleted in the same transaction; the project row stays as a tombstone with its description cleared ([security.md](security.md#project-deletion-removes-the-issues-at-once)).
-- Uniqueness of name and repository covers only non-deleted projects, so both can be reused after deletion (enforced by the `deleted_token` unique indexes, see [model.md](model.md#issues_projects)).
+- Uniqueness of name and repository covers only non-deleted projects, so both can be reused after deletion (enforced by the `deleted_token` unique indexes, see [data-model.md](data-model.md#issues_projects)).
 - The project's GitHub links are deleted on deletion, which frees their GitHub issues for another project.
 - Pending markers are discarded.
 - A live project counts toward the per-user cap (`409 PROJECTS_LIMIT_REACHED`, default 100); tombstones do not count, and the shortcut's existing-project `200` is never refused ([security.md](security.md#per-user-caps-on-stored-data)). Queued or in-flight jobs for a deleted project or user are a no-op (no error, no retry).
@@ -118,7 +118,7 @@ Default tier: e2e with fakes; the cleanup queries and concurrency are DB-backed 
 - Uniqueness of name and repository covers only non-deleted projects; both can be reused after deletion.
 - Deleting a project releases its links, discards its markers, makes queued jobs a no-op, makes no GitHub call and deletes its issues, tombstones the project (description cleared) and answers `unsentIssueCount`, the count of issues with unsent changes counted before the delete; deleting a user removes their projects (including soft-deleted ones), issues, links and markers.
 - Attaching a repository to a project without one works and never syncs; attaching a repository that already has a project is rejected with `409 PROJECT_REPOSITORY_TAKEN`; changing or detaching a repository is allowed at zero links and refused with `409 PROJECT_HAS_LINKS` carrying the link count otherwise, and a concurrent link creation never leaves a link against a changed repository `(db)` (E62).
-- `openIssueCount` is on every project object and reads `0` without open issues ([api/projects.md](api/projects.md#open-issue-count)).
+- `openIssueCount` is on every project object and reads `0` without open issues ([routes/issues/projects.md](../../backend/routes/issues/projects.md#open-issue-count)).
 - Project and issue access goes through the single access check.
 - GitHub work uses the owner's credentials, whoever triggers it.
 - The simultaneous cases of the edge-case table resolve as stated `(db)`.

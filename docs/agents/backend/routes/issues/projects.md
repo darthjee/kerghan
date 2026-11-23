@@ -1,6 +1,6 @@
 # Issues and Projects API — Projects
 
-The project routes: object, listing, creation, edit, repository, delete and refusal data. Back to the [Issues and Projects API](../api.md) hub.
+The project routes: object, listing, creation, edit, repository, delete and refusal data. Back to the [Issues and Projects API](../issues.md) hub.
 
 ## Projects
 
@@ -14,7 +14,7 @@ The project routes: object, listing, creation, edit, repository, delete and refu
 | Repository | `POST /projects/:projectId/repository.json` | `{ repository: <repo ref> \| null }` | `200` project |
 | Delete | `POST /projects/:projectId/delete.json` | none | `200` `{ unsentIssueCount }` |
 
-`repository` is always the [repo ref](../api.md#exposed-identifiers). Both creation routes call the one service method of [projects.md](../projects.md#creation-paths). The project refresh route is a [trigger](github-link.md#trigger-routes).
+`repository` is always the [repo ref](../issues.md#exposed-identifiers). Both creation routes call the one service method of [projects.md](../../../modules/issues/projects.md#creation-paths). The project refresh route is a [trigger](github-link.md#trigger-routes).
 
 ### Project object
 
@@ -34,7 +34,7 @@ The project routes: object, listing, creation, edit, repository, delete and refu
 ```
 
 - `repository` is `null` for a non-code project. `status` is `added`, `unavailable` or `unknown`; a dangling reference reads `unavailable` with the snapshot fields `null`.
-- `openIssueCount` is the number of the project's open issues ([below](#open-issue-count)). No other issue counts and no sync info in v1 ([projects.md](../projects.md#fields)).
+- `openIssueCount` is the number of the project's open issues ([below](#open-issue-count)). No other issue counts and no sync info in v1 ([projects.md](../../../modules/issues/projects.md#fields)).
 - The same object, with `openIssueCount`, is returned by every route above except delete, and is the listing row.
 
 ### Open-issue count
@@ -42,7 +42,7 @@ The project routes: object, listing, creation, edit, repository, delete and refu
 - **Definition.** `openIssueCount` counts the project's issues whose stored local `state` is `open`, whatever their link state. A linked issue counts by its local state (sync pulls GitHub's state into it); a pending local close counts as closed at once.
 - **Contract: the value may lag.** Clients must not assume it equals the issue listing's `pagination.total` for `state=open` or reflects a write made a moment earlier. This leaves room for a later cache without an API change.
 - **v1 computation: at read time**, no stored column and no cache (so in practice it is exact today).
-  - **Listing:** one extra grouped query per page, `SELECT project_id, COUNT(*) FROM issues WHERE project_id IN (:pageIds) AND state = 'open' GROUP BY project_id`, served by the (`project_id`, `state`) prefix of `idx_issues_project_id_state_created_at` ([model.md](../model.md#indexes)). Projects absent from the result read `0`. Never one query per project.
+  - **Listing:** one extra grouped query per page, `SELECT project_id, COUNT(*) FROM issues WHERE project_id IN (:pageIds) AND state = 'open' GROUP BY project_id`, served by the (`project_id`, `state`) prefix of `idx_issues_project_id_state_created_at` ([data-model.md](../../../modules/issues/data-model.md#indexes)). Projects absent from the result read `0`. Never one query per project.
   - **Show, edit, repository change, the shortcut's existing-project `200`:** one indexed `COUNT` for the single project. Create and the shortcut's new-project `201` return `0` without querying.
 - **Cost bound:** every count is bounded by the per-project issue cap (`ISSUES_LIMIT_REACHED`).
 - **Not added:** sorting or filtering projects by count, and the count on the issue listing (its `pagination.total` already serves that).
@@ -77,13 +77,13 @@ No GitHub call and no job, on either route.
 
 - A ref attaches (project without repository) or changes the repository; `null` detaches.
 - The same checks as creation (`404`, `409 PROJECT_REPOSITORY_NOT_ADDED`, `409 PROJECT_REPOSITORY_TAKEN` with `meta.projectId`).
-- Changing or detaching while the project has links answers `409 PROJECT_HAS_LINKS` with `meta.linkCount`; checked under the project-row lock ([github-link.md](../github-link.md#same-repository-rule-and-repository-changes), E62).
+- Changing or detaching while the project has links answers `409 PROJECT_HAS_LINKS` with `meta.linkCount`; checked under the project-row lock ([github-link.md](../../../modules/issues/github-link.md#same-repository-rule-and-repository-changes), E62).
 - Setting the current repository again, or detaching a project without one, is a no-op `200` (links or not).
 - Never syncs or enqueues a job.
 
 ### Project delete
 
-- Soft delete of the project row, hard delete of its issues, as in [projects.md](../projects.md#deletion); no confirmation flag (the UI warns beforehand, decided there).
+- Soft delete of the project row, hard delete of its issues, as in [projects.md](../../../modules/issues/projects.md#deletion); no confirmation flag (the UI warns beforehand, decided there).
 - Answers `200` `{ "unsentIssueCount": 2 }`, the number of issues whose markers were discarded, counted before the issues are deleted. `200` rather than `204` because it has a body.
 - A second delete, or any route on a deleted project, answers `404`.
 

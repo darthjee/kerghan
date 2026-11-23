@@ -47,7 +47,7 @@ export function isFresh(hasMarker: boolean, lastSyncedAt: Date | null, now: Date
 }
 
 /**
- * The manual sync triggers T2, T3 and T4 (`docs/agents/specs/issues/api/github-link.md#trigger-routes`).
+ * The manual sync triggers T2, T3 and T4 (`docs/agents/backend/routes/issues/github-link.md#trigger-routes`).
  * Each makes its refusals first, before any reset or enqueue, and never calls GitHub: it only
  * resets a failure and enqueues reconciles through the per-link dedupe. The `404`s come from
  * `IssuesAccess`; the owner's own project and issue only.

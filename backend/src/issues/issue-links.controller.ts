@@ -19,7 +19,7 @@ import type {
 } from './types/issues-api.types.js';
 
 /**
- * The GitHub link routes (`docs/agents/specs/issues/api/github-link.md`) — thin: each validates
+ * The GitHub link routes (`docs/agents/backend/routes/issues/github-link.md`) — thin: each validates
  * through its DTO, makes one `IssueLinksService` call and answers with its result. Every route is
  * `POST`, behind the global `JwtGuard` and `OriginGuard`, scoped to the caller from
  * `@CurrentUser()`, cache class `user-scoped`, and never warmed by Navi. Both path ids must be

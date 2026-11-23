@@ -8,8 +8,9 @@ toward, and update it as decisions change.
 
 ## Overview
 
-Kerghan's backend stays deliberately thin: it owns account/login state and each user's repo
-listing and selection, nothing about issue data. Issue fetching happens live, on demand, straight from the
+Kerghan's backend stays deliberately thin: it owns account/login state, each user's repo
+listing and selection, and each user's own projects and issues (see step 7), but it does not
+store the GitHub issue data the dashboard shows. That data is fetched live, on demand, straight from the
 user's own browser to GitHub's public API — this is what lets the backend "go back to sleep"
 between visits instead of running a poller, and it moves GitHub's unauthenticated rate limit
 (60 requests/hour/IP) from being shared across every Kerghan user behind the backend's one IP to
@@ -25,8 +26,9 @@ being scoped to each user's own browser IP instead.
    Password/Register/Recover modes, plus a device-authorization mode: the user can instead ask an
    already-logged-in device to vouch for their username, and poll until that device approves or
    denies the request. A user can also store GitHub credentials as integrations (see
-   `docs/agents/modules/integrations.md`), but issue fetching doesn't use them yet, and they
-   aren't required for the public-repo flow described here.
+   `docs/agents/modules/integrations.md`), but fetching issues for the dashboard doesn't use them
+   yet, and they aren't required for the public-repo flow described here. The backend uses them
+   to list repositories (step 2) and to sync linked issues (step 7).
 
 2. **Repo discovery.** The backend fetches the user's repositories from GitHub and shows them on
    the **Repositories** page. The listing merges every source the user has: each of their
@@ -55,19 +57,29 @@ being scoped to each user's own browser IP instead.
    a single user re-fetching too often only affects their own rate-limit budget, not anyone
    else's.
 
+7. **Projects and issues.** Separately from the live fetch, a user can create **projects**
+   (optionally connected to one added repository) and Kerghan **issues** inside them, and link an
+   issue one to one to a GitHub issue of the project's repository. Those are stored by the
+   backend, together with a snapshot of the GitHub data of a linked issue. Background workers keep
+   each linked pair in sync both ways, on demand only, with the project owner's integration
+   credential, inside the Integrations module. The browser never calls GitHub for them. See
+   [Issues and Projects](modules/issues.md).
+
 ## Deliberately deferred
 
 These are known future directions, not part of the current design:
 
-- **Opt-in issue persistence.** Nothing about issue history/trends is stored today. If a user
-  wants to look back over time, persisting fetched issues (only when the user opts in) is a
-  future addition — see `docs/agents/product.md`.
+- **Opt-in issue persistence.** Nothing about the history/trends of fetched issues is stored
+  today. If a user wants to look back over time, persisting fetched issues (only when the user
+  opts in) is a future addition — see `docs/agents/product.md`. It is distinct from the issues
+  Kerghan stores for [Issues and Projects](modules/issues.md) (step 7).
 - **Historical/trend collection.** Volume-over-time or similar trend views need periodic
   snapshotting, which depends on the opt-in persistence above. Not built yet.
 - **Private repos for issue fetching.** Users can store their own GitHub credentials as
   integrations (see `docs/agents/modules/integrations.md`), and the backend uses them to list
-  private repositories (step 2), but issue fetching doesn't use them yet: reading the issues of
-  private repos on their behalf (most likely by proxying through the backend) is not built.
+  private repositories (step 2) and sync linked issues (step 7), but fetching the dashboard's
+  issues doesn't use them yet: reading the issues of private repos on their behalf (most likely
+  by proxying through the backend) is not built.
 
 ## Per-user cache (upcoming)
 

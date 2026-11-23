@@ -1,12 +1,12 @@
 # Issues and Projects — Sync and workers
 
 Two-way sync between a Kerghan issue and its linked GitHub issue.
-Part of the [Issues and Projects specs](../issues.md).
+Part of the [Issues and Projects module](../issues.md).
 
 Settled rules that frame everything below:
 
-- Sync is two-way, on demand only (no timer, no polling), and built on the in-process, in-memory queues of `WorkersService` (`register` / `enqueue`, [workers module](../../modules/workers.md)); #479 is done.
-- Outbound writes use a durable pending marker in the database, re-enqueued at boot, so a restart does not lose a pending write ([model.md](model.md#issues_pending_writes-the-pending-marker)).
+- Sync is two-way, on demand only (no timer, no polling), and built on the in-process, in-memory queues of `WorkersService` (`register` / `enqueue`, [workers module](../workers.md)); #479 is done.
+- Outbound writes use a durable pending marker in the database, re-enqueued at boot, so a restart does not lose a pending write ([data-model.md](data-model.md#issues_pending_writes-the-pending-marker)).
 - Jobs receive ids only. Credentials stay in the Integrations module and never appear in job params or logs.
 - Sync is refused while the project's repository is Unavailable and allowed while it is Unknown; pending writes stay in their markers ([projects.md](projects.md#linked-repository-unavailable-or-removed)).
 - Creating a project and attaching a repository never sync or enqueue a job ([projects.md](projects.md#creation-paths)).
@@ -20,7 +20,7 @@ Settled rules that frame everything below:
 ## Fields and ownership
 
 - **Synced fields:** `title`, `body` and `state`, all three **two-way**. No side owns a field outright: either side may change any of them, and conflicts are settled per field by E6 to E11 (base snapshot plus newest timestamp per field).
-- **`state_reason` is not synced (accepted loss, v1).** A push never sends `state_reason`. A push carries only changed fields, so an edit of the title or body leaves a GitHub "not planned" close untouched; a close pushed from Kerghan gets GitHub's default reason (`completed`), and a reopen gets GitHub's default too. This settles E55 ([model.md](model.md#edge-cases)) as a documented known limitation; storing `state_reason` is a follow-up with no owner issue yet.
+- **`state_reason` is not synced (accepted loss, v1).** A push never sends `state_reason`. A push carries only changed fields, so an edit of the title or body leaves a GitHub "not planned" close untouched; a close pushed from Kerghan gets GitHub's default reason (`completed`), and a reopen gets GitHub's default too. This settles E55 ([data-model.md](data-model.md#edge-cases)) as a documented known limitation; storing `state_reason` is a follow-up with no owner issue yet.
 - **The push payload is a diff.** The `PATCH` carries only the fields whose current local value differs from the base snapshot (after the conflict rules drop the fields GitHub wins). A push with an empty diff makes no call and clears the marker (E8).
 - **Values are verbatim (normalization invariant).** Inbound values are stored exactly as GitHub returns them, except a blank body, which is stored as `NULL`. Comparisons (local vs base, base vs remote) treat `NULL` and `''` as equal and apply no other normalization (no CRLF or whitespace rewriting), so what Kerghan stores matches GitHub byte for byte. One function produces the stored values, the base snapshot and the operands of every "values differ" test.
 - Title and body limits match GitHub's (256 and 65536 characters), so an inbound value never needs truncation.
@@ -63,7 +63,7 @@ Every trigger enqueues the same reconcile job with a link id. No trigger fires f
 
 | # | Event | Enqueues |
 |---|---|---|
-| T1 | A local edit that changes a synced field of a linked issue | The marker upsert (same transaction as the edit), then one reconcile, enqueued **after the commit** so the job never reads uncommitted rows. A crash between commit and enqueue is covered by T5. Enqueued through the mandatory per-link dedupe ([below](#queued-jobs-are-deduplicated-per-link)); duplicates across instances are harmless by E13 (a later job finds no marker and costs at most a `304` `GET`). A [bulk state change](api/issues.md#bulk-close-and-reopen) is a set of such edits: each changed `linked`/`sync_failed` link gets its marker in the call's transaction and one T1 after the commit, through the same dedupe; `gone` links stay local. No new trigger. |
+| T1 | A local edit that changes a synced field of a linked issue | The marker upsert (same transaction as the edit), then one reconcile, enqueued **after the commit** so the job never reads uncommitted rows. A crash between commit and enqueue is covered by T5. Enqueued through the mandatory per-link dedupe ([below](#queued-jobs-are-deduplicated-per-link)); duplicates across instances are harmless by E13 (a later job finds no marker and costs at most a `304` `GET`). A [bulk state change](../../backend/routes/issues/issues.md#bulk-close-and-reopen) is a set of such edits: each changed `linked`/`sync_failed` link gets its marker in the call's transaction and one T1 after the commit, through the same dedupe; `gone` links stay local. No new trigger. |
 | T2 | The user's manual refresh of one issue | One reconcile, with or without a marker. |
 | T3 | The user's manual refresh of a project | One reconcile per non-`gone` link of the project's issues, oldest `last_synced_at` first (never-synced first). The burst is governed by the rate-limit rules. |
 | T4 | The user's manual "retry sync" on a link | One reconcile (state transitions are in [Retries and `sync_failed`](#retries-and-sync_failed)). |
@@ -71,9 +71,9 @@ Every trigger enqueues the same reconcile job with a link id. No trigger fires f
 | T6 | A reconcile whose compare-and-clear deletes no row (the revision changed) | The same reconcile again. |
 
 - <a id="queued-jobs-are-deduplicated-per-link"></a>**Mandatory per-link dedupe.** While a reconcile for a link is queued and not yet started, enqueuing the same link again is a no-op. The link leaves the queued set when its job starts, so an edit during a running job still enqueues the next one (T6 is unaffected). Every trigger (T1 to T6) and the rate-limit timer go through it, so the in-memory queue holds at most one waiting job per link. Per process, lost on restart; correctness never depends on it (E13). Decided in [security.md](security.md#queued-jobs-are-deduplicated-per-link).
-- **No approval trigger (E24).** `denied` is final in [user-approval](../../modules/auth/user-approval.md) (approve only moves `pending` to `approved`; there is no un-deny), and `authorization-request.approved` is login authorization, not account approval. So no listener re-enqueues a user's markers: they stay until the user is deleted, and boot or retry jobs stop at the approval guard with no call. A future un-deny feature must re-enqueue the user's markers itself.
+- **No approval trigger (E24).** `denied` is final in [user-approval](../auth/user-approval.md) (approve only moves `pending` to `approved`; there is no un-deny), and `authorization-request.approved` is login authorization, not account approval. So no listener re-enqueues a user's markers: they stay until the user is deleted, and boot or retry jobs stop at the approval guard with no call. A future un-deny feature must re-enqueue the user's markers itself.
 - **No trigger** for link creation or attach (the request already reads GitHub, E61), unlinking, `gone`, a repository change, or fixing or adding an integration (E19: fixing the integration does not push by itself; the user retries).
-- Routes and payloads for T2 to T4 are decided in [api.md](api/github-link.md#trigger-routes); wording and placement are in [ui.md](ui/linking-and-sync.md#link-and-sync-states).
+- Routes and payloads for T2 to T4 are decided in [routes/issues.md](../../backend/routes/issues/github-link.md#trigger-routes); wording and placement are in [frontend.md](frontend/linking-and-sync.md#link-and-sync-states).
 
 ## Job
 
@@ -123,21 +123,21 @@ Every trigger enqueues the same reconcile job with a link id. No trigger fires f
 - **Left** (back to `linked`, reason `NULL`) by:
   - a push whose compare-and-clear deletes the marker;
   - a successful reconcile when no marker exists (a refresh never clears a failure that belongs to an unsent write);
-  - the **retry sync** action, which resets the status to `linked` at once and enqueues T4; the UI then shows the derived *pending* state, and the job sets the failure again if it still fails. Exception: while the repository is Unavailable (or dangling) the retry is refused with `409 PROJECT_REPOSITORY_UNAVAILABLE` before the reset, because the reset would clear the failure reason and the job would stop at the repository guard without setting a new one ([api.md](api/github-link.md#trigger-routes));
+  - the **retry sync** action, which resets the status to `linked` at once and enqueues T4; the UI then shows the derived *pending* state, and the job sets the failure again if it still fails. Exception: while the repository is Unavailable (or dangling) the retry is refused with `409 PROJECT_REPOSITORY_UNAVAILABLE` before the reset, because the reset would clear the failure reason and the job would stop at the repository guard without setting a new one ([routes/issues.md](../../backend/routes/issues/github-link.md#trigger-routes));
   - `gone`, which replaces it.
 - An edit never writes a status; it only creates the marker and enqueues T1. `sync_failed` never blocks a job: every trigger still runs, and credential reasons stop at the guards with no call where they can.
-- The reason set stays at the four values of [model.md](model.md#issues_github_links); no `access_lost` reason is added.
+- The reason set stays at the four values of [data-model.md](data-model.md#issues_github_links); no `access_lost` reason is added.
 
 ## Staleness
 
 - **`last_synced_at`** is set by every successful reconcile and by link creation or attach (which read GitHub in the request, E61), so a link is never "never synced".
-- **Stale** means `last_synced_at` is older than `KERGHAN_ISSUES_SYNC_STALE_AFTER_SECONDS` (default 3600). The backend derives a `stale` flag next to `lastSyncedAt` ([api.md](api/github-link.md#link-object) exposes both, [ui.md](ui/linking-and-sync.md#link-and-sync-states) words them). It is never stored and never a link state. A `gone` link is never reported stale.
+- **Stale** means `last_synced_at` is older than `KERGHAN_ISSUES_SYNC_STALE_AFTER_SECONDS` (default 3600). The backend derives a `stale` flag next to `lastSyncedAt` ([routes/issues.md](../../backend/routes/issues/github-link.md#link-object) exposes both, [frontend.md](frontend/linking-and-sync.md#link-and-sync-states) words them). It is never stored and never a link state. A `gone` link is never reported stale.
 - **Display only.** A stale link is shown as such ("last synced X ago" plus a stale hint) and the user refreshes it (T2 or T3). A read never enqueues a job, so every GET stays side-effect free; no auto-refresh on open or on the issue list.
-- **Manual refresh skips fresh links.** T2 and T3 skip any link **without a marker** whose `last_synced_at` is under 60 seconds old; a single-issue refresh of such a link answers "already fresh" (`200` with `alreadyFresh: true`, [api.md](api/github-link.md#trigger-routes)). A link with a marker is never skipped, since it has a write to push. No cooldown state or `429` is needed.
+- **Manual refresh skips fresh links.** T2 and T3 skip any link **without a marker** whose `last_synced_at` is under 60 seconds old; a single-issue refresh of such a link answers "already fresh" (`200` with `alreadyFresh: true`, [routes/issues.md](../../backend/routes/issues/github-link.md#trigger-routes)). A link with a marker is never skipped, since it has a write to push. No cooldown state or `429` is needed.
 
 ## Integration selection
 
-- **Candidates.** The project owner's **usable** integrations (`listUsableIntegrations`: `active` and type enabled) whose source lists the project's repository in `repositories_sources`, read through Repositories' exported service (never a join). A handle-only listing is not a candidate (E20). Resolved at job time; nothing in the feature stores an integration id ([model.md](model.md#cleanup)), and the owner's integrations are used whoever triggered the job.
+- **Candidates.** The project owner's **usable** integrations (`listUsableIntegrations`: `active` and type enabled) whose source lists the project's repository in `repositories_sources`, read through Repositories' exported service (never a join). A handle-only listing is not a candidate (E20). Resolved at job time; nothing in the feature stores an integration id ([data-model.md](data-model.md#cleanup)), and the owner's integrations are used whoever triggered the job.
 - **None.** No candidate: `sync_failed` with `no_credential`, or `credential_invalid` when an integration lists the repository but is not usable (`expired`, `invalid`, `undecryptable`). No call is made.
 - **Order.** By **known write capability**, oldest first within a group: (1) known writable: OAuth app, classic PAT, and a GitHub App whose recorded installation permissions have `issues: write`; (2) unknown: fine-grained PAT; (3) known read-only: a GitHub App whose recorded permissions have `issues: read`. The recorded permissions can be stale (an owner who accepts the update on GitHub is seen at the next test connection); this never causes a wrong outcome, because the credential-only fallback below moves to the next candidate on a `403`, and the aggregate reason stays `forbidden` only when every candidate refuses ([security.md](security.md#write-access-to-github)).
 - **Fallback on credential failures only**, mirroring Repositories' sync: on a `401`, a non-rate-limit `403` or `integration_unusable`, the reconcile restarts from its `GET` with the next candidate, within the same attempt (a `401` still marks that integration `invalid`). A rate limit, timeout or `5xx` never falls back. When every candidate fails on credentials, the reason is `forbidden` if any answered a `403`, else `credential_invalid`.
@@ -147,7 +147,7 @@ Every trigger enqueues the same reconcile job with a link id. No trigger fires f
 
 ## Marker lifecycle
 
-Complements the marker rules of [model.md](model.md#issues_pending_writes-the-pending-marker) (coalesced, no payload, compare-and-clear, boot oldest first, attempts in memory).
+Complements the marker rules of [data-model.md](data-model.md#issues_pending_writes-the-pending-marker) (coalesced, no payload, compare-and-clear, boot oldest first, attempts in memory).
 
 - **Creation.** An edit that changes a synced value creates or bumps the marker while the link is `linked` or `sync_failed`, including while the repository is Unavailable, the integration is rate limited or the user has no credential. Only `gone` blocks a marker (E1). `marked_at` is set only on insert; `updated_at` and `revision` move on every value-changing edit; both timestamps come from the injected `Clock`.
 - **Commit guard.** The reconcile's commit locks the link and applies only if the link still exists and is not `gone`; otherwise it writes nothing (E1 race, E32).
@@ -171,7 +171,7 @@ Complements the marker rules of [model.md](model.md#issues_pending_writes-the-pe
 - **Redirect host check.** No client follows a redirect automatically. A rename is followed once only when the `Location` is `https://api.github.com/` in the rename form; any other scheme, host, port or path shape is unclassifiable: not followed, no credential sent; the client answers `unavailable{reason:'redirect'}`, which the sync treats as `transient` (E65). This applies to `updateIssue` too.
 - `renamed` stays adapter-internal: the client retries once at the `Location` and returns the result with a `renamedTo: { owner, name }` hint, which the caller hands to Repositories (E65).
 - **`forbidden` is its own kind** (a non-rate-limit `403`) for issue operations, rather than `unavailable{reason:'forbidden'}`, so the sync tells E5 and E21 apart from transient failures without inspecting reasons.
-- Listing for import is not part of this spec (link creation, #487 and [api.md](api.md)).
+- Listing for import is not part of this spec (link creation, #487 and [routes/issues.md](../../backend/routes/issues.md)).
 
 ## Configuration
 
@@ -213,11 +213,8 @@ The last six are the caps and request rate limits decided in [security.md](secur
 
 ## Open questions
 
-Owned elsewhere; none is owned by #488.
+Unresolved:
 
-- [x] Routes and payloads of refresh, retry sync and the exposed `lastSyncedAt`/`stale` fields: decided in [api.md](api.md) (#489).
-- [x] Wording and placement of the stale hint and states: decided in [ui.md](ui/linking-and-sync.md#link-and-sync-states) (#491).
-- [x] Whether the GitHub App gets issue write permission: decided in [security.md](security.md#the-github-app-gains-issues-write) (#490): Issues: write, with per-operation tokens.
 - [ ] Per-field timestamps (E7 uses one per-issue timestamp): accepted limitation, no owner issue.
 
 ## Required tests

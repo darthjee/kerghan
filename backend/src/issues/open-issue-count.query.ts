@@ -4,7 +4,7 @@ import { EntityManager, Repository } from 'typeorm';
 import { Issue } from './entities/issue.entity.js';
 
 /**
- * The open-issue counts of the project object (`docs/agents/specs/issues/api/projects.md#open-issue-count`):
+ * The open-issue counts of the project object (`docs/agents/backend/routes/issues/projects.md#open-issue-count`):
  * the issues whose stored local `state` is `open`, whatever their link state, computed at read
  * time (no stored column, no cache) over `idx_issues_project_id_state_created_at`.
  */

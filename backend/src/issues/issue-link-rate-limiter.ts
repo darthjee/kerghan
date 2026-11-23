@@ -7,7 +7,7 @@ import { Clock } from '../core/clock.js';
 export type LinkRateLimitDecision = RateLimitDecision;
 
 /**
- * The per-user link-creation rate limit (`docs/agents/specs/issues/security.md#request-rate-limits`):
+ * The per-user link-creation rate limit (`docs/agents/modules/issues/security.md#request-rate-limits`):
  * a `FixedWindowRateLimiter` of `linkMaxPerWindow` creations per `linkWindowMs`. Import and attach
  * share the one window; unlink is not limited. Separate from the edit limiter's window.
  */

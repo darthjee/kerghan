@@ -131,14 +131,16 @@ returns credential material (secrets, tokens, GitHub App installation tokens) or
 computed from it, beyond the masked `secretHint` of the Integrations routes.** Data fetched
 *with* a credential (the private-repo listing) is not credential material.
 
-- For the repository listing, every GitHub call happens in the backend, authenticated or not; the
-  frontend never calls GitHub for it. (Issue data is still fetched by the browser,
-  unauthenticated, public repositories only.)
+- For the repository listing and for linked Kerghan issues, every GitHub call happens in the
+  backend, authenticated or not; the frontend never calls GitHub for them. Linked issues are read
+  and written with the project owner's integration, inside the Integrations module
+  ([Issues and Projects](../modules/issues/security.md#the-integrations-boundary)). (Fetched issue
+  data is still read by the browser, unauthenticated, public repositories only.)
 - Inside the backend, credentials stay **inside the Integrations module**
   ([GitHub service](../modules/integrations/github-service/api.md#exported-service)).
 - A minted GitHub App installation token is a credential too: it is cached **in process memory
   only**, inside the Integrations module (in a `Secret`), never in the database, a log or a
-  response, and minted with `metadata: read` only
+  response, and minted with the least permission each operation needs (`metadata: read` for listings; `issues` read or write for linked issues, per operation)
   ([installation tokens](../modules/integrations/github-service/api.md#github-app-installation-tokens)). Any other persistence
   needs its own product decision (`CLAUDE.md`, #295).
 - Repo responses carry no integration field beyond its `uuid` and label
@@ -155,10 +157,11 @@ Guarantees of the exported `IntegrationsGithubService`
   only, and logs carry safe fields (integration id, operation, HTTP status, result kind).
 - **Owner-scoped:** every call loads the integration with `WHERE id = ? AND user_id = ?`; a
   missing or foreign one answers `integration_unusable` without a GitHub call.
-- **Fixed operations:** `GET`-only, except the single
-  `IntegrationsGithubIssueWriter.updateIssue` (a `PATCH` of `title`, `body` and `state` only,
-  [boundary](../specs/issues/security.md#the-integrations-boundary)), with fixed endpoints and
-  parameters; no generic `request(path)`, so no caller chooses a path.
+- **Fixed operations:** `IntegrationsGithubService` is `GET`-only. The only non-`GET` call is the
+  single `IntegrationsGithubIssueWriter.updateIssue` (a `PATCH` of `title`, `body` and `state` only,
+  [boundary](../modules/issues/security.md#the-integrations-boundary)), on a separate service that
+  only the issues sync service injects. Endpoints and parameters are fixed; no generic
+  `request(path)`, so no caller chooses a path.
 
 The boundary is enforced by tooling in the Repositories module, the first consumer of
 `IntegrationsGithubService` ([module boundaries](../modules/repositories/security.md#module-boundaries)).

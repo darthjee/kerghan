@@ -1,6 +1,6 @@
 # Issues and Projects UI — Decisions
 
-Rejected alternatives, backward compatibility, and performance and security. Back to the [Issues and Projects UI](../ui.md) hub.
+Rejected alternatives, backward compatibility, and performance and security. Back to the [Issues and Projects UI](../frontend.md) hub.
 
 ## Rejected alternatives
 

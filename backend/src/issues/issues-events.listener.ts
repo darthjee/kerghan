@@ -9,7 +9,7 @@ const USER_LINK_IDS = 'SELECT id FROM issues_github_links WHERE user_id = ?';
 
 /**
  * The Issues module's cross-module cleanup, registered at boot (the module is always-on):
- * `user.deleted` (`docs/agents/specs/issues/model.md#cleanup`). It runs one transaction where
+ * `user.deleted` (`docs/agents/modules/issues/data-model.md#cleanup`). It runs one transaction where
  * every statement is scoped to the user, takes the locks in the module's lock order (projects,
  * then issues, then links, then markers) and deletes children first. It catches its own error and
  * logs safe fields only, so the emitter's deletion always stands. There is no

@@ -13,7 +13,7 @@ export interface AccessOptions {
 
 /**
  * The single access check of the module: the one place that answers "this user's live project,
- * or 404" (`docs/agents/specs/issues/security.md`). Issues carry no owner: they derive access
+ * or 404" (`docs/agents/modules/issues/security.md`). Issues carry no owner: they derive access
  * from their project, so no other code filters by `user_id` for access. The project lock taken
  * here is the first lock of the lock order (projects, issues, links, markers).
  */

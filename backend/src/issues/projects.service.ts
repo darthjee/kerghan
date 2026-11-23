@@ -29,10 +29,10 @@ import type {
   ProjectRepositoryInput,
 } from './types/projects-api.types.js';
 
-// The unique index a rename race can hit (`model.md#issues_projects`).
+// The unique index a rename race can hit (`docs/agents/modules/issues/data-model.md#issues_projects`).
 
 /**
- * The Projects business logic (`docs/agents/specs/issues/projects.md`): the one surface of the
+ * The Projects business logic (`docs/agents/modules/issues/projects.md`): the one surface of the
  * project controller, with typed inputs and the wire shapes as outputs. Every single-project
  * route resolves the project through `IssuesAccess` (no scattered `user_id` filter for access);
  * the listing's `WHERE user_id` is the listing's own scope. Nothing here calls GitHub or
@@ -64,7 +64,7 @@ export class ProjectsService {
   ) {}
 
   /**
-   * Creates a project (`docs/agents/specs/issues/api/projects.md#project-creation`), for both routes.
+   * Creates a project (`docs/agents/backend/routes/issues/projects.md#project-creation`), for both routes.
    * @param {number} userId - The session's user.
    * @param {ProjectCreationInput} input - The validated input.
    * @param {CreationMode} mode - `explicit` or `shortcut`.
@@ -114,7 +114,7 @@ export class ProjectsService {
   }
 
   /**
-   * Edits the name and/or description (`docs/agents/specs/issues/api/projects.md#project-edit`).
+   * Edits the name and/or description (`docs/agents/backend/routes/issues/projects.md#project-edit`).
    * An omitted field is unchanged; `description: null` clears it. An empty body, or values equal
    * to the stored ones, answers the project with no write and no `updated_at` change. A taken
    * name (including a rename race lost on the unique index) is `PROJECT_NAME_TAKEN`.
@@ -142,7 +142,7 @@ export class ProjectsService {
 
   /**
    * Connects, changes or detaches the project's repository
-   * (`docs/agents/specs/issues/api/projects.md#project-repository`). Never syncs or enqueues a job.
+   * (`docs/agents/backend/routes/issues/projects.md#project-repository`). Never syncs or enqueues a job.
    * @param {number} userId - The session's user.
    * @param {string} projectUuid - The project's public id.
    * @param {ProjectRepositoryInput} input - The validated input; `repository: null` detaches.

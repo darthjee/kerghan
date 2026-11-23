@@ -33,7 +33,7 @@ const ROUTES: Array<[string, Route]> = [
   ['links retry-sync', { path: (p, i) => `/projects/${p}/issues/${i}/retry-sync.json`, body: {}, takesIssue: true }],
 ];
 
-// The real-database 404 identity of `testing.md#security-verification`: a project that belongs to
+// The real-database 404 identity of `docs/agents/modules/issues/testing.md#security-verification`: a project that belongs to
 // another user, is deleted or never existed answers byte-identical bodies; so does an issue of another
 // user, of another project or that never existed; and an admin session gets no wider view.
 describe('Issues routes: the identical 404 (real MySQL)', () => {

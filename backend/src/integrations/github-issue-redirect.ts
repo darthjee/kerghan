@@ -1,6 +1,6 @@
 /**
  * Classifies a redirect of an issue call by its `Location` (E65, see
- * `docs/agents/specs/issues/security.md#redirects-never-carry-a-credential-off-github`).
+ * `docs/agents/modules/issues/security.md#redirects-never-carry-a-credential-off-github`).
  * Pure: the client acts on the answer. No credential is ever sent to a URL
  * this module did not rebuild from `GITHUB_API_URL` and two integer ids.
  */

@@ -221,7 +221,7 @@ describe('IssueGithubReader', () => {
     });
   });
 
-  it('has no logger to write to: a read never adds a line to the access line of its request (security.md, what may be logged)', async () => {
+  it('has no logger to write to: a read never adds a line to the access line of its request (docs/agents/modules/issues/security.md, what may be logged)', async () => {
     const { reader, github } = build([1]);
 
     github.script(1, 'getIssue', NUMBER, issue(githubIssue({ number: NUMBER, title: 'SECRET TITLE' })));

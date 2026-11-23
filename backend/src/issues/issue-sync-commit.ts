@@ -26,7 +26,7 @@ export interface CommitPlan {
 export type CommitResult = 'done' | 'requeue';
 
 /**
- * The reconcile's commit (`docs/agents/specs/issues/sync.md#reconcile`, steps 5 and 6): one
+ * The reconcile's commit (`docs/agents/modules/issues/sync.md#reconcile`, steps 5 and 6): one
  * transaction in lock order (issue, link, marker) that applies the push effects, the pulled
  * fields only while the marker revision is still the one the job read, and the compare-and-clear.
  * It writes nothing when the issue or the link is gone (E1, E32, E44) and never inserts.

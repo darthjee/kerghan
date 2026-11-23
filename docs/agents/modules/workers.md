@@ -73,7 +73,7 @@ trigger enqueues through `IssueSyncQueue`, which drops a second enqueue of a lin
 and not yet started (per process, lost on restart). The job keeps a private attempt counter, so
 the last attempt is known without the library's `exhausted()`, and a rate-limited job finishes
 without `_fail`, so a wait never consumes an attempt. See
-`docs/agents/specs/issues/sync.md#job`.
+[Sync, job](issues/sync.md#job).
 
 ## Edge cases
 

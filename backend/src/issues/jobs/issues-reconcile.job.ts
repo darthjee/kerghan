@@ -14,7 +14,7 @@ export interface ReconcileJobAttributes {
 }
 
 /**
- * The one sync job (`docs/agents/specs/issues/sync.md#job`): it reconciles one link. Its params
+ * The one sync job (`docs/agents/modules/issues/sync.md#job`): it reconciles one link. Its params
  * are `{ linkId }` only; the sync service, the queue and the config arrive as injected
  * attributes. It is thin: `perform()` runs `reconcile` and maps its outcome.
  *

@@ -14,7 +14,7 @@ function projectPath(projectId, action) {
 }
 
 /**
- * HTTP client for the caller's projects (`docs/agents/specs/issues/api/projects.md`).
+ * HTTP client for the caller's projects (`docs/agents/backend/routes/issues/projects.md`).
  *
  * @description Every route is a `POST` scoped to the logged-in user. Each method resolves
  * `undefined` when the session turned out to be expired, and rejects with an `ApiError` on any

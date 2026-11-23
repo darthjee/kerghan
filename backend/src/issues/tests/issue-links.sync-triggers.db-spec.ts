@@ -5,7 +5,7 @@ import { buildIssuesHttpDbHarness, type IssuesHttpDbHarness } from './support/is
 import { seedIssue, seedLink, seedMarker, seedProject } from './support/issues-seeds.js';
 import { addLinkUser, buildLinkWorld, linkApi, linkRepository, type LinkWorld } from './support/link-fixture.js';
 
-// T2, T3 and T4 (`api/github-link.md#trigger-routes`): they reset a failure and enqueue, and never
+// T2, T3 and T4 (`docs/agents/backend/routes/issues/github-link.md#trigger-routes`): they reset a failure and enqueue, and never
 // call GitHub themselves. `FakeWorkersService` captures the jobs.
 describe('Sync trigger routes (real MySQL)', () => {
   let harness: IssuesHttpDbHarness;

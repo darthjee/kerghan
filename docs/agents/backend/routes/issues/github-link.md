@@ -1,6 +1,6 @@
 # Issues and Projects API — GitHub link
 
-The GitHub link routes (import, attach, unlink), their failures, and how sync state is exposed. Back to the [Issues and Projects API](../api.md) hub.
+The GitHub link routes (import, attach, unlink), their failures, and how sync state is exposed. Back to the [Issues and Projects API](../issues.md) hub.
 
 ## GitHub link
 
@@ -10,11 +10,11 @@ The GitHub link routes (import, attach, unlink), their failures, and how sync st
 | Attach | `POST /projects/:projectId/issues/:issueId/attach.json` | `{ number, confirmUpdatedAt? }` | `200` issue (linked) |
 | Unlink | `POST /projects/:projectId/issues/:issueId/unlink.json` | `{ discardUnsentChanges? }` | `200` `{ issue, droppedUnsentChanges }` |
 
-`number` is the GitHub issue number in the project's repository, a positive integer ([github-link.md](../github-link.md#creating-a-link)). Import and attach share one service method.
+`number` is the GitHub issue number in the project's repository, a positive integer ([github-link.md](../../../modules/issues/github-link.md#creating-a-link)). Import and attach share one service method.
 
 ### Order of checks (import and attach)
 
-1. DTO and path validation (`400`), then the link rate limit (`429 ISSUE_LINK_RATE_LIMITED`, import and attach share one window, [security.md](../security.md#request-rate-limits)), then the single access check (`404`). Import only: the issue cap pre-check, `409 ISSUES_LIMIT_REACHED`, before any GitHub call.
+1. DTO and path validation (`400`), then the link rate limit (`429 ISSUE_LINK_RATE_LIMITED`, import and attach share one window, [security.md](../../../modules/issues/security.md#request-rate-limits)), then the single access check (`404`). Import only: the issue cap pre-check, `409 ISSUES_LIMIT_REACHED`, before any GitHub call.
 2. Attach only: the Kerghan issue already has a link: `409 ISSUE_ALREADY_LINKED` (E64).
 3. The project has no repository: `409 PROJECT_HAS_NO_REPOSITORY`. Its repository is Unavailable (or dangling): `409 PROJECT_REPOSITORY_UNAVAILABLE`. Neither makes a GitHub call; Unknown is allowed.
 4. One `GET` of the GitHub issue with the owner's credential, outside any transaction. Failures map as below; nothing is stored, no job, no wait.
@@ -39,7 +39,7 @@ A rename `301` is followed once inside the adapter and is not a failure (E65). G
 - Under the issue-row lock, `confirmUpdatedAt` must equal the stored `updated_at` exactly; a missing or stale value while values differ answers the same `409` with the current differences and `updatedAt`. Each call makes one GitHub read; there is no separate preview route.
 - A confirmation sent while the values are equal is ignored.
 - **Precision:** `issues.updated_at` is `datetime(3)` (milliseconds from the injected `Clock`), so an edit made in the same second as the warning still changes it. The other `datetime` columns are unchanged.
-- `meta.differences` names fields only, never GitHub content (rendering rules are in [security.md](../security.md#github-and-user-content)).
+- `meta.differences` names fields only, never GitHub content (rendering rules are in [security.md](../../../modules/issues/security.md#github-and-user-content)).
 
 ### Unlink (E63, E64)
 
@@ -71,15 +71,15 @@ The `link` field of an issue (`null` when unlinked):
 |---|---|
 | `number`, `url` | The GitHub issue number and its URL, built from the repository's stored `owner`/`name`. |
 | `state` | The primary state: the first of `states`. |
-| `states` | Every state that applies, in the precedence order of [github-link.md](../github-link.md#link-states): `gone`, `sync_failed`, `repository_unavailable`, `rate_limited`, `pending`. `linked` appears (alone) only when none of the others applies. |
+| `states` | Every state that applies, in the precedence order of [github-link.md](../../../modules/issues/github-link.md#link-states): `gone`, `sync_failed`, `repository_unavailable`, `rate_limited`, `pending`. `linked` appears (alone) only when none of the others applies. |
 | `reason` | The stored `status_reason`: `deleted`/`moved` for `gone`; `retries_exhausted`, `no_credential`, `credential_invalid`, `forbidden` for `sync_failed`; otherwise `null`. |
 | `rateLimitedUntil` | The reset time while the link is in a waiting set (in memory, so it disappears on restart); otherwise `null`. Never names the integration. |
 | `lastSyncedAt` | Never `null` (set on link creation). |
 | `stale` | `lastSyncedAt` older than `KERGHAN_ISSUES_SYNC_STALE_AFTER_SECONDS`; always `false` for `gone`. |
 
-- Derived states are computed on read and never stored; a read never enqueues a job ([sync.md](../sync.md#staleness)).
-- There is no "refresh queued" or "syncing" state in v1: queue membership is not exposed. After a trigger the UI re-reads the issue (show or listing); the bounded re-reads are specified in [ui.md](../ui/linking-and-sync.md#re-reading-after-a-trigger).
-- Wording and placement of every state are in [ui.md](../ui/linking-and-sync.md#link-and-sync-states).
+- Derived states are computed on read and never stored; a read never enqueues a job ([sync.md](../../../modules/issues/sync.md#staleness)).
+- There is no "refresh queued" or "syncing" state in v1: queue membership is not exposed. After a trigger the UI re-reads the issue (show or listing); the bounded re-reads are specified in [frontend.md](../../../modules/issues/frontend/linking-and-sync.md#re-reading-after-a-trigger).
+- Wording and placement of every state are in [frontend.md](../../../modules/issues/frontend/linking-and-sync.md#link-and-sync-states).
 
 ### Trigger routes
 
@@ -93,5 +93,5 @@ The `link` field of an issue (`null` when unlinked):
 - **T3:** enqueues one reconcile per non-`gone` link of the project, oldest `lastSyncedAt` first, skipping fresh marker-less links; `enqueued` and `skippedFresh` are counts. A project with no links answers `202` with zeros.
 - **T4:** a `sync_failed` link is reset to `linked` (reason `null`) at once and enqueued, so the returned link reads *pending* or `linked`. A `linked` link (double click) is a no-op `200` with nothing enqueued.
 - **Refusals,** before any reset or enqueue and with no GitHub call: no link, `409 ISSUE_NOT_LINKED`; a `gone` link (T2, T4), `409 ISSUE_LINK_GONE`; no repository (T3), `409 PROJECT_HAS_NO_REPOSITORY`; repository Unavailable or dangling (T2, T3, T4), `409 PROJECT_REPOSITORY_UNAVAILABLE`.
-- **Retry while Unavailable is refused, not reset.** Otherwise the reset would clear the failure reason and the job would stop at the repository guard without setting a new one ([sync.md](../sync.md#retries-and-sync_failed)).
-- No trigger route has a cooldown or `429`: the 60-second fresh skip and the per-integration rate-limit pause bound the GitHub calls ([sync.md](../sync.md#staleness)).
+- **Retry while Unavailable is refused, not reset.** Otherwise the reset would clear the failure reason and the job would stop at the repository guard without setting a new one ([sync.md](../../../modules/issues/sync.md#retries-and-sync_failed)).
+- No trigger route has a cooldown or `429`: the 60-second fresh skip and the per-integration rate-limit pause bound the GitHub calls ([sync.md](../../../modules/issues/sync.md#staleness)).

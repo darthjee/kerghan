@@ -15,7 +15,7 @@ export interface IssueValues {
  * through `normalizeBody` (so `''` and `null` are both `NULL`). It produces the local values on
  * import, the replacement values on attach, the base snapshot and the operands of the "values
  * differ" test, which keeps the normalization invariant structural
- * (`docs/agents/specs/issues/sync.md#fields-and-ownership`).
+ * (`docs/agents/modules/issues/sync.md#fields-and-ownership`).
  * @param {GithubIssue} issue - The GitHub issue.
  * @returns {IssueValues} The values.
  */
@@ -30,7 +30,7 @@ export const SYNC_FIELDS: readonly AttachDifference[] = ['title', 'body', 'state
  * Whether two sets of values agree on one field. The body compares through `normalizeBody`, so
  * `NULL` equals `''`; the title and the state compare verbatim (no trimming, no case folding). The
  * one comparison behind every "values differ" test of the sync, so the normalization invariant
- * stays structural (`docs/agents/specs/issues/sync.md#fields-and-ownership`).
+ * stays structural (`docs/agents/modules/issues/sync.md#fields-and-ownership`).
  * @param {AttachDifference} field - The field to compare.
  * @param {IssueValues} a - One side's values.
  * @param {IssueValues} b - The other side's values.

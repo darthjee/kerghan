@@ -132,7 +132,7 @@ export type MarkAddedOutcome =
   | { kind: 'already_added'; repository: ListedRepository }
   | { kind: 'gone' };
 
-/** The repository as a project exposes it (`docs/agents/specs/issues/api/projects.md`). */
+/** The repository as a project exposes it (`docs/agents/backend/routes/issues/projects.md`). */
 export interface RepositorySummary {
   githubId: number;
   owner: string;

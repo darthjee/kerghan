@@ -6,7 +6,7 @@ import type { CreationResult } from '../../types/projects-api.types.js';
 import { buildIssuesDbHarness, type IssuesDbHarness } from '../support/issues-db-harness.js';
 import { seedProject } from '../support/issues-seeds.js';
 
-// E34 and E35 (`docs/agents/specs/issues/edge-cases.md`): the unique indexes decide simultaneous
+// E34 and E35 (`docs/agents/modules/issues/edge-cases.md`): the unique indexes decide simultaneous
 // creations and renames. The checks before the insert run for both callers first (the barrier
 // below), so both reach the insert and the database picks the winner.
 
