@@ -128,7 +128,8 @@ excludes env files.
 - **Offline** (`darthjee/kerghan-standalone:<v>-offline`): the inner images are preloaded as
   tarballs (`kerghan.tar`, `mysql.tar`, `tent.tar`, plus `mysql-legacy.tar` (`mysql:9.3.0`) for the #469
   migration release only, one set per architecture, written by
-  `bin/release_kerghan_standalone.sh` with `docker save`). Vault runs `docker load` on every
+  `bin/release_kerghan_standalone.sh` with `docker save`; each tarball is single-architecture, as the
+  images are pulled by digest). Vault runs `docker load` on every
   start, and `--pull never` keeps it off the network. Use it on hosts without access to Docker
   Hub. Costs: a larger image, image data stored twice (tarball plus loaded image), and a slower
   start.
