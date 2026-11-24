@@ -9,7 +9,7 @@
 
 # Only visible to the FROM lines below
 ARG SCRIPTS_IMAGE=darthjee/scripts:0.8.0
-ARG NODE_IMAGE_VERSION=0.2.1
+ARG NODE_IMAGE_VERSION=0.3.0
 # bin/image.sh always passes it; the default only keeps the FROM line valid
 ARG BASE_IMAGE=darthjee/node
 

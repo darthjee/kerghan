@@ -8,7 +8,7 @@ workflows:
       - yarn_project:
           name: backend_tests
           dir: backend
-          image: darthjee/circleci_kerghan-base:0.1.0
+          image: darthjee/circleci_kerghan-base:0.1.1
           script: coverage
           step_name: Tests
           upload_coverage: true
@@ -22,7 +22,7 @@ workflows:
       - yarn_project:
           name: backend_checks
           dir: backend
-          image: darthjee/circleci_kerghan-base:0.1.0
+          image: darthjee/circleci_kerghan-base:0.1.1
           script: lint
           step_name: Check JS Lint
           requires: [release-circleci_kerghan-base, release-circleci_kerghan-base-arm64]
@@ -197,7 +197,7 @@ jobs:
   # job takes a single image. The tier's Jest globalSetup waits for MySQL, so no wait step here.
   backend_db_tests:
     docker:
-      - image: darthjee/circleci_kerghan-base:0.1.0
+      - image: darthjee/circleci_kerghan-base:0.1.1
         environment:
           KERGHAN_MYSQL_HOST: 127.0.0.1
           KERGHAN_MYSQL_PORT: "3306"
@@ -223,7 +223,7 @@ jobs:
   # get.sh uploader only needs bash/curl and the job doesn't touch repository files.
   coverage-final:
     docker:
-      - image: darthjee/circleci_kerghan-base:0.1.0
+      - image: darthjee/circleci_kerghan-base:0.1.1
     steps:
       - run:
           name: Finalize Codacy coverage
@@ -459,7 +459,7 @@ jobs:
   # workspace-scoped temp dir — staged, not yet swapped live (see the `release` job below).
   upload_fe_files:
     docker:
-      - image: darthjee/vite_kerghan-base:0.1.0
+      - image: darthjee/vite_kerghan-base:0.1.1
     steps:
       - checkout
       - setup_project:
@@ -483,7 +483,7 @@ jobs:
   # this job simply never runs and the previously-live build keeps serving unchanged.
   release:
     docker:
-      - image: darthjee/vite_kerghan-base:0.1.0
+      - image: darthjee/vite_kerghan-base:0.1.1
     steps:
       - checkout
       - run:

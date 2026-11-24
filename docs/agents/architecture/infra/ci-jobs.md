@@ -6,13 +6,13 @@ The CircleCI job table and per-job details. Part of the [infra architecture hub]
 
 | Job | Image/Executor | Filter | Purpose |
 |-----|-----------------|--------|---------|
-| `backend_tests` | `darthjee/circleci_kerghan-base:0.1.0` | every push | `yarn_project` instance (`dir: backend`, `script: coverage`, `upload_coverage: true`): backend test suite + coverage; uploads a partial Codacy coverage report afterward (best-effort, non-blocking) |
-| `backend_db_tests` | `darthjee/circleci_kerghan-base:0.1.0` + `mysql:8.4.11` service container | every push | DB-backed backend test tier (`npm run test:db`, no coverage) against a throwaway MySQL reached on `127.0.0.1` — see "`backend_db_tests` — the DB-backed tier" below. Gates the release and deploy jobs |
-| `backend_checks` | `darthjee/circleci_kerghan-base:0.1.0` | every push | `yarn_project` instance (`dir: backend`, `script: lint`): backend ESLint |
+| `backend_tests` | `darthjee/circleci_kerghan-base:0.1.1` | every push | `yarn_project` instance (`dir: backend`, `script: coverage`, `upload_coverage: true`): backend test suite + coverage; uploads a partial Codacy coverage report afterward (best-effort, non-blocking) |
+| `backend_db_tests` | `darthjee/circleci_kerghan-base:0.1.1` + `mysql:8.4.11` service container | every push | DB-backed backend test tier (`npm run test:db`, no coverage) against a throwaway MySQL reached on `127.0.0.1` — see "`backend_db_tests` — the DB-backed tier" below. Gates the release and deploy jobs |
+| `backend_checks` | `darthjee/circleci_kerghan-base:0.1.1` | every push | `yarn_project` instance (`dir: backend`, `script: lint`): backend ESLint |
 | `jasmine` | `darthjee/circleci_node:0.2.1` | every push | `yarn_project` instance (`dir: frontend`, `script: coverage`, `upload_coverage: true`): frontend test suite + coverage; uploads a partial Codacy coverage report afterward (best-effort, non-blocking) |
 | `frontend-checks` | `darthjee/circleci_node:0.2.1` | every push | `yarn_project` instance (`dir: frontend`, `script: lint`): frontend ESLint |
 | `proxy_extension_tests` | `darthjee/tent-test:1.0.3` | every push | PHPUnit tests for `proxy/extension/` |
-| `coverage-final` | `darthjee/circleci_kerghan-base:0.1.0` | every push | Finalizes the aggregated Codacy coverage report once `backend_tests`/`jasmine`'s partial uploads land (best-effort, non-blocking) |
+| `coverage-final` | `darthjee/circleci_kerghan-base:0.1.1` | every push | Finalizes the aggregated Codacy coverage report once `backend_tests`/`jasmine`'s partial uploads land (best-effort, non-blocking) |
 | `release-image` | machine (multi-arch: amd64 + arm64) | every push (no-op unless tag) | Publishes one of the 4 base images to Docker Hub via `bin/image.sh`; instantiated through a single workflow `matrix` (4 images × 2 archs = 8 jobs) — see below |
 | `release-kerghan` | machine (`ubuntu-2204:current`, multi-arch: amd64 + arm64) | tag only | Builds and pushes `darthjee/kerghan:<tag>` and `:latest` as one multi-arch manifest via `bin/release_kerghan.sh release` (buildx, `docker-container` builder) — see below |
 | `release-kerghan-standalone` | machine (`ubuntu-2204:current`, multi-arch: amd64 + arm64) | tag only | Requires `release-kerghan`. Publishes `darthjee/kerghan-standalone` online and offline via `bin/release_kerghan_standalone.sh release`; smoke-tests the offline image before moving `latest`/`latest-offline` — see below |
@@ -21,15 +21,15 @@ The CircleCI job table and per-job details. Part of the [infra architecture hub]
 | `scripts_tests` | `bats/bats:1.11.0` | every push | bats suite for the Render deploy scripts (`bats scripts/test`); locally `docker-compose run --rm scripts_tests` |
 | `build-and-release` | machine (`ubuntu-2204:current`, for `curl --fail-with-body`) | tag only | Requires `release-kerghan`. Checks the thin Render Dockerfile is `FROM darthjee/kerghan:<tag>`, moves the Render service branch to the tag and triggers a deploy (`scripts/deploy.sh deploy`), blocks until it reports "live" — see "Render deploy" |
 | `upload_proxy_files` | `darthjee/tent:1.0.3` | tag only | Uploads Tent proxy runtime to the SSH deploy host's staging dir |
-| `upload_fe_files` | `darthjee/vite_kerghan-base:0.1.0` | tag only | Builds the Vite frontend, uploads the static output to the staging dir |
+| `upload_fe_files` | `darthjee/vite_kerghan-base:0.1.1` | tag only | Builds the Vite frontend, uploads the static output to the staging dir |
 | `upload_extension` | `darthjee/tent:1.0.3` | tag only | Uploads the proxy PHP extension (test files stripped) |
 | `copy_proxy_configuration` | `darthjee/tent:1.0.3` | tag only | Uploads prod proxy config + restores host-only state (`locals.php`, `.htaccess`) |
-| `release` | `darthjee/vite_kerghan-base:0.1.0` | tag only | Atomic swap: only runs once every upload/build job above has succeeded |
+| `release` | `darthjee/vite_kerghan-base:0.1.1` | tag only | Atomic swap: only runs once every upload/build job above has succeeded |
 
 ### `backend_db_tests` — the DB-backed tier
 
 A standalone job (not a `yarn_project` instance, whose `docker:` takes a single image). The
-primary container is `darthjee/circleci_kerghan-base:0.1.0`; a secondary `mysql:8.4.11` container
+primary container is `darthjee/circleci_kerghan-base:0.1.1`; a secondary `mysql:8.4.11` container
 (`MYSQL_DATABASE=kerghan_test`, `MYSQL_USER`/`MYSQL_PASSWORD`/`MYSQL_ROOT_PASSWORD=kerghan`, no
 volume) shares its network, so the tests reach it on `127.0.0.1`. The primary container sets the
 app's own connection variables to the test database:
