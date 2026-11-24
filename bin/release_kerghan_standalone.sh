@@ -48,15 +48,49 @@ function tent_image_for() {
   fi
 }
 
-# Pulls <image> for <arch>, checks the local copy really is <arch> and saves
-# it to standalone/images/<arch>/<name>.tar.
+# Prints the digest(s) of the linux/<arch> manifest(s) of <image>: the matching
+# entries of an index / manifest list (variant ignored, so arm64/v8 matches and
+# unknown/unknown attestations never do) or, for a single-platform manifest,
+# its own digest.
+function platform_digest() {
+  local arch=$1
+  local image=$2
+
+  docker buildx imagetools inspect "$image" --format '{{json .Manifest}}' \
+    | jq -r --arg a "$arch" '
+        if .manifests
+        then [.manifests[] | select(.platform.os == "linux" and .platform.architecture == $a) | .digest]
+        else [.digest]
+        end | .[]'
+}
+
+# Pulls the linux/<arch> manifest of <image> by digest, re-tags it as <image>,
+# checks the local copy really is <arch> and saves it to
+# standalone/images/<arch>/<name>.tar.
 function save_image() {
   local arch=$1
   local image=$2
   local name=$3
+  local digests
+  local digest
   local actual
+  # Assumes no registry host with a port in the image name (repo:tag only).
+  local repo=${image%:*}
 
-  docker pull --platform "linux/$arch" "$image"
+  digests=$(platform_digest "$arch" "$image" | grep -E '^sha256:[0-9a-f]{64}$' || true)
+
+  if [ -z "$digests" ]; then
+    echo "$image has no linux/$arch manifest." >&2
+    exit 1
+  fi
+  if [ "$(echo "$digests" | wc -l)" -gt 1 ]; then
+    echo "$image has several linux/$arch manifests." >&2
+    exit 1
+  fi
+  digest=$digests
+
+  docker pull "$repo@$digest"
+  docker tag "$repo@$digest" "$image"
 
   actual=$(docker image inspect -f '{{.Architecture}}' "$image")
   if [ "$actual" != "$arch" ]; then
@@ -67,8 +101,10 @@ function save_image() {
   docker save "$image" -o "$IMAGES_DIR/$arch/$name.tar"
 }
 
-# One architecture at a time: with the classic image store a new pull of the
-# same tag replaces the local copy.
+# One architecture at a time. Pulling by per-platform digest and re-tagging
+# leaves a single-platform local image on both the classic and the containerd
+# image store (where a plain `--platform` pull would add to a multi-platform
+# image), so the architecture check and `docker save` are per-arch.
 function save_images() {
   local version=$1
   local arch
@@ -145,6 +181,8 @@ function release() {
   local repo="$DOCKER_ID_USER/$IMAGE"
 
   setup_builder
+  docker version
+  docker info -f '{{.Driver}} {{json .DriverStatus}}' || true
   login
 
   save_images "$version"
@@ -154,12 +192,15 @@ function release() {
   inspect "$repo" "$version"
 }
 
-ACTION=${1:-}
+# Runs only when executed, not when sourced (the bats tests source it).
+if [ "${BASH_SOURCE[0]}" = "$0" ]; then
+  ACTION=${1:-}
 
-case $ACTION in
-  "release") release ;;
-  *)
-    echo "Usage: $0 release"
-    exit 1
-    ;;
-esac
+  case $ACTION in
+    "release") release ;;
+    *)
+      echo "Usage: $0 release"
+      exit 1
+      ;;
+  esac
+fi
