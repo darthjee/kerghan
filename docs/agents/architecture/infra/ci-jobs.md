@@ -44,7 +44,16 @@ app's own connection variables to the test database:
 | `KERGHAN_MYSQL_PORT` | `3306` |
 | `KERGHAN_MYSQL_USER` | `kerghan` |
 | `KERGHAN_MYSQL_PASSWORD` | `kerghan` |
-| `KERGHAN_MYSQL_NAME` | `kerghan_test` |
+| `KERGHAN_MYSQL_NAME` | `kerghan_test` (the base name; each Jest worker uses `kerghan_w<id>_test`) |
+| `KERGHAN_MYSQL_ADMIN_USER` | `root` |
+| `KERGHAN_MYSQL_ADMIN_PASSWORD` | `kerghan` (the container's throwaway `MYSQL_ROOT_PASSWORD`, not a new secret) |
+
+The admin variables are read only by the tier's `globalSetup`, which creates the per-worker
+schemas and grants the app user access to them. The step runs `npm run test:db -- --maxWorkers=2`
+(no `--runInBand`). The job uses the default medium resource class (2 vCPUs, matching the worker
+count). A `large` class with 3 or 4 workers was not adopted: the before/after measurement was not
+performed, so there is no evidence the extra credits pay off; revisit with numbers. CircleCI
+`parallelism` is out of scope.
 
 There is no wait step: the tier's Jest `globalSetup` retries the connection for up to 60 s, and
 refuses to run unless `KERGHAN_MYSQL_NAME` ends in `_test`. The job uploads no coverage, so it

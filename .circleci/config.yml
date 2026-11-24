@@ -195,6 +195,10 @@ jobs:
   # DB-backed backend test tier (`npm run test:db`, never with coverage) against a throwaway
   # mysql:8.4.11 secondary container, reached on 127.0.0.1. Not a yarn_project instance, since that
   # job takes a single image. The tier's Jest globalSetup waits for MySQL, so no wait step here.
+  # Each Jest worker gets its own <prefix>_w<id>_test schema, created by globalSetup through the
+  # admin connection (KERGHAN_MYSQL_ADMIN_*, MySQL root). The worker count is fixed with
+  # --maxWorkers=2 because the default medium resource class has 2 vCPUs and Jest would
+  # otherwise size workers from the host's core count.
   backend_db_tests:
     docker:
       - image: darthjee/circleci_kerghan-base:0.1.2
@@ -204,6 +208,8 @@ jobs:
           KERGHAN_MYSQL_USER: kerghan
           KERGHAN_MYSQL_PASSWORD: kerghan
           KERGHAN_MYSQL_NAME: kerghan_test
+          KERGHAN_MYSQL_ADMIN_USER: root
+          KERGHAN_MYSQL_ADMIN_PASSWORD: kerghan
       # Durability is off on purpose: the DB is throwaway and discarded after each job.
       # These flags were validated against mysql:8.4.11; re-check them on a tag bump.
       # With --skip-log-bin, CI does not exercise binlog-enabled behavior: a migration that adds
@@ -227,7 +233,7 @@ jobs:
           dir: backend
       - run:
           name: DB tests
-          command: npm run test:db
+          command: npm run test:db -- --maxWorkers=2
 
   # Finalizes the aggregated Codacy coverage report once both partial uploads
   # (backend_tests, jasmine) have completed. Reuses circleci_kerghan-base since the
