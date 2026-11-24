@@ -168,14 +168,15 @@ services:
       KERGHAN_TEST_BASH32: "1"
     command: bats /standalone/test
 
-  # bats suite for scripts/ (Render deploy: deploy.sh/render.sh); image entrypoint is `bats`
+  # bats suite for scripts/ (Render deploy: deploy.sh/render.sh; standalone release: bin/release_kerghan_standalone.sh); image entrypoint is `bats`
   scripts_tests:
     build:
       context: ./dockerfiles/scripts_tests
     image: kerghan_scripts_tests
+    working_dir: /repo
     volumes:
-      - ./scripts:/scripts:ro
-    command: /scripts/test
+      - .:/repo:ro
+    command: scripts/test
 
   # PSR-12 PHPCS check for proxy/ (ruleset: root phpcs.xml; the same file Codacy reads)
   proxy_lint:

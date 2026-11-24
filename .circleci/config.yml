@@ -301,7 +301,8 @@ jobs:
           name: Tests
           command: KERGHAN_TEST_BASH32=1 bats standalone/test
 
-  # bats suite for scripts/ (Render deploy: deploy.sh/render.sh), same bats/bats image as
+  # bats suite for scripts/ (Render deploy: deploy.sh/render.sh, and the standalone release
+  # script bin/release_kerghan_standalone.sh), same bats/bats image as
   # standalone_tests plus jq, which the deploy scripts need (mirrors dockerfiles/scripts_tests).
   scripts_tests:
     docker:

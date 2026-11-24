@@ -69,12 +69,20 @@ Both targets come from `dockerfiles/kerghan_standalone/Dockerfile`, built with
 `KERGHAN_VERSION=<tag>`. The script runs in this order:
 
 1. **Save the inner images.** For each architecture (amd64, then arm64) it clears
-   `standalone/images/<arch>/`, then pulls with `--platform linux/<arch>` and `docker save`s
+   `standalone/images/<arch>/`, then pulls each image by its `linux/<arch>` manifest digest and
+   `docker save`s
    `darthjee/kerghan:<tag>`, `mysql:8.4.11`, the Tent image (`darthjee/tent:1.0.3` for amd64,
    `darthjee/tent:1.0.3-arm64` for arm64) and, for the #469 migration only, `mysql:9.3.0`, as
-   `kerghan.tar`, `mysql.tar`, `tent.tar` and `mysql-legacy.tar`. It fails if
-   a pulled image's architecture does not match. Each architecture is saved before the next one is
-   pulled, because a new pull of the same tag replaces the local copy. The offline stage copies
+   `kerghan.tar`, `mysql.tar`, `tent.tar` and `mysql-legacy.tar`. The digest comes from
+   `docker buildx imagetools inspect` (the matching entry of the index, or the manifest's own digest
+   for a single-platform image such as Tent). The pulled `repo@digest` is re-tagged to `repo:tag`,
+   checked with `docker image inspect` (the job fails if the architecture does not match) and
+   saved. Pulling by digest is needed because the containerd image store keeps multi-platform
+   images under one tag: a pull by tag with `--platform` adds to the local image, and an inspect
+   then reports the host architecture (amd64). Each architecture is saved before the next one is
+   pulled. The job logs `docker version` and the storage driver so the image store in use shows in
+   the CI log. (#580's diagnosis of amd64 base images was not the cause of this symptom, #589.) The
+   offline stage copies
    `standalone/images/${TARGETARCH:-amd64}/`, so each platform gets its own tarballs. The folder is
    git-ignored.
 2. **Build and push** `<tag>` and `<tag>-offline`. The offline build reuses the cached frontend and
