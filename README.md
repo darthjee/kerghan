@@ -8,9 +8,9 @@ A tool for monitoring github issues
 
 ![kerghan](https://raw.githubusercontent.com/darthjee/kerghan/main/kerghan.png)
 
-**Current Version:** [0.10.0](https://github.com/darthjee/kerghan/releases/tag/0.10.0)
+**Current Version:** [0.10.1](https://github.com/darthjee/kerghan/releases/tag/0.10.1)
 
-**Next Release:** [0.10.1](https://github.com/darthjee/kerghan/compare/0.10.0...main)
+**Next Release:** [0.10.2](https://github.com/darthjee/kerghan/compare/0.10.1...main)
 
 ## About
 
