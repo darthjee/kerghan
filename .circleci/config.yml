@@ -204,7 +204,18 @@ jobs:
           KERGHAN_MYSQL_USER: kerghan
           KERGHAN_MYSQL_PASSWORD: kerghan
           KERGHAN_MYSQL_NAME: kerghan_test
+      # Durability is off on purpose: the DB is throwaway and discarded after each job.
+      # These flags were validated against mysql:8.4.11; re-check them on a tag bump.
+      # With --skip-log-bin, CI does not exercise binlog-enabled behavior: a migration that adds
+      # a trigger, function or procedure (needs SUPER or log_bin_trust_function_creators=1 when
+      # the binlog is on) must be checked against a binlog-enabled server.
       - image: mysql:8.4.11
+        command:
+          - mysqld
+          - --innodb-flush-log-at-trx-commit=2
+          - --skip-log-bin
+          - --innodb-doublewrite=OFF
+          - --performance-schema=OFF
         environment:
           MYSQL_DATABASE: kerghan_test
           MYSQL_USER: kerghan

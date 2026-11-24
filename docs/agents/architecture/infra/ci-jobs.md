@@ -31,7 +31,11 @@ The CircleCI job table and per-job details. Part of the [infra architecture hub]
 A standalone job (not a `yarn_project` instance, whose `docker:` takes a single image). The
 primary container is `darthjee/circleci_kerghan-base:0.1.2`; a secondary `mysql:8.4.11` container
 (`MYSQL_DATABASE=kerghan_test`, `MYSQL_USER`/`MYSQL_PASSWORD`/`MYSQL_ROOT_PASSWORD=kerghan`, no
-volume) shares its network, so the tests reach it on `127.0.0.1`. The primary container sets the
+volume) shares its network, so the tests reach it on `127.0.0.1`. The MySQL container starts with
+`mysqld --innodb-flush-log-at-trx-commit=2 --skip-log-bin --innodb-doublewrite=OFF
+--performance-schema=OFF`, since the throwaway database needs no durability. Caveat: with the binlog
+off, CI does not exercise binlog-enabled behavior, so a migration adding a trigger, function or
+procedure must be checked against a binlog-enabled server. The primary container sets the
 app's own connection variables to the test database:
 
 | Var | Value |
