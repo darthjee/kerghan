@@ -145,7 +145,7 @@ of `bin/image.sh`; the only per-image content left in the Dockerfile is each tar
   still bypasses the guard).
 - The version pins live in one place, as `ARG` defaults at the top of `dockerfiles/base/Dockerfile`:
   `SCRIPTS_IMAGE` (`darthjee/scripts`) and `NODE_IMAGE_VERSION` (used for both `darthjee/node` and
-  `darthjee/circleci_node`), so a bump is a one-line edit. The `darthjee/scripts` pin in the leaf
+  `darthjee/circleci_node`), so a bump is a one-line edit. The `darthjee/scripts` pin (0.15.0) in the leaf
   Dockerfiles is separate and not covered by this.
 - `BUILDER_USER` is `root` for `kerghan-base` and `vite_kerghan-base`: `yarn_builder.sh` has to be
   able to write to the root-owned global yarn cache in the node images, otherwise it finds no new

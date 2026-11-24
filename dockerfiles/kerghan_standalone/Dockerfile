@@ -12,10 +12,10 @@
 
 #######################
 # Frontend build (architecture-independent output, so it runs on the build
-# platform). Note: darthjee/vite_kerghan-base:0.1.1 is published for amd64
+# platform). Note: darthjee/vite_kerghan-base:0.1.2 is published for amd64
 # only (arm64 lives under the -arm64 tag), so an arm64 build host runs this
 # stage under emulation.
-FROM --platform=$BUILDPLATFORM darthjee/vite_kerghan-base:0.1.1 AS frontend
+FROM --platform=$BUILDPLATFORM darthjee/vite_kerghan-base:0.1.2 AS frontend
 
 USER node
 WORKDIR /home/node/app

@@ -107,7 +107,7 @@ An unsupported `TARGETARCH` fails the build.
 
 `dockerfiles/kerghan_standalone/Dockerfile` (build context: the repo root, BuildKit required):
 
-- **`frontend`** stage: `FROM --platform=$BUILDPLATFORM darthjee/vite_kerghan-base:0.1.1`, runs
+- **`frontend`** stage: `FROM --platform=$BUILDPLATFORM darthjee/vite_kerghan-base:0.1.2`, runs
   `yarn build`. That base tag is amd64-only, so an arm64 build host runs it under emulation.
 - **`standalone`** (online): `FROM darthjee/vault:0.1.0`; copies `standalone/vault/` to `/vault`,
   the built frontend to `/vault/tent/static/` and the Tent extension to `/vault/tent/extension/`;
