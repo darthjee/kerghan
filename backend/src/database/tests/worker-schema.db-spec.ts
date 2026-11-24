@@ -12,6 +12,7 @@ import { getTestDataSource } from './db-tier/db-tier.js';
   imports: [
     ConfigModule.forRoot({ ignoreEnvFile: true }),
     TypeOrmModule.forRootAsync({
+      imports: [ConfigModule],
       inject: [ConfigService],
       useFactory: (config: ConfigService) => ({
         type: 'mysql' as const,
