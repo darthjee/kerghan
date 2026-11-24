@@ -39,8 +39,8 @@ ARG SOURCE_DIR
 # User running yarn_builder.sh. It must be able to write to the global yarn cache
 # (/usr/local/share/.cache/yarn/v6, owned by root in the node images), otherwise
 # yarn_builder.sh finds no "new" packages and the pre-warmed cache ends up empty.
-# bin/image.sh sets it to root for the node images that are meant to be warmed
-# (kerghan-base, vite_kerghan-base) and to $USER_NAME for the others.
+# bin/image.sh sets it to root for the images that are meant to be warmed
+# (kerghan-base, vite_kerghan-base, circleci_kerghan-base) and to $USER_NAME for the others.
 ARG BUILDER_USER
 
 ENV HOME_DIR=$HOME_DIR

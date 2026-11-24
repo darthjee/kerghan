@@ -60,7 +60,7 @@ function build_args() {
       BUILD_ARGS=(
         --build-arg "BASE_IMAGE=darthjee/circleci_node"
         --build-arg "USER_NAME=circleci"
-        --build-arg "BUILDER_USER=circleci"
+        --build-arg "BUILDER_USER=root"
         --build-arg "HOME_DIR=/home/circleci"
         --build-arg "APP_DIR=/home/circleci/project"
         --build-arg "SOURCE_DIR=backend"
