@@ -1,10 +1,11 @@
-import { DataSource, DataSourceOptions } from 'typeorm';
+import { DataSource, DataSourceOptions, QueryRunner } from 'typeorm';
 import { buildDbTierOptions } from './db-tier-options.js';
 
 const MIGRATIONS_TABLE = 'migrations';
 
 let dataSource: DataSource | undefined;
 let initializing: Promise<DataSource> | undefined;
+let cachedTables: string[] | undefined;
 
 /**
  * Returns the test file's shared data source, initializing it on first use.
@@ -31,31 +32,31 @@ export async function destroyTestDataSource(): Promise<void> {
 
   dataSource = undefined;
   initializing = undefined;
+  cachedTables = undefined;
   if (current?.isInitialized) await current.destroy();
 }
 
 /**
  * Empties every table in the current schema except `migrations`, on a
  * single query runner so the foreign-key toggle applies to the same
- * connection as the truncates.
+ * connection as the deletes. Uses `DELETE FROM` rather than `TRUNCATE TABLE`
+ * (DDL in MySQL 8, roughly ten times slower per call); auto-increment is not
+ * reset. The table list is cached per test file, as migrations only run in
+ * `globalSetup`.
  *
- * @param ds - the data source (or a promise of it) to truncate.
+ * @param ds - the data source (or a promise of it) to empty.
  * @returns resolves once every table is empty.
  */
 export async function truncateAll(ds: DataSource | Promise<DataSource>): Promise<void> {
   const runner = (await ds).createQueryRunner();
 
   try {
-    const tables: Array<{ name: string }> = await runner.query(
-      'SELECT table_name AS name FROM information_schema.tables '
-      + "WHERE table_schema = DATABASE() AND table_type = 'BASE TABLE' AND table_name <> ?",
-      [MIGRATIONS_TABLE],
-    );
+    cachedTables ??= await loadTableNames(runner);
 
     await runner.query('SET FOREIGN_KEY_CHECKS = 0');
     try {
-      for (const { name } of tables) {
-        await runner.query(`TRUNCATE TABLE \`${name}\``);
+      for (const name of cachedTables) {
+        await runner.query(`DELETE FROM \`${name}\``);
       }
     } finally {
       await runner.query('SET FOREIGN_KEY_CHECKS = 1');
@@ -63,6 +64,16 @@ export async function truncateAll(ds: DataSource | Promise<DataSource>): Promise
   } finally {
     await runner.release();
   }
+}
+
+async function loadTableNames(runner: QueryRunner): Promise<string[]> {
+  const tables: Array<{ name: string }> = await runner.query(
+    'SELECT table_name AS name FROM information_schema.tables '
+    + "WHERE table_schema = DATABASE() AND table_type = 'BASE TABLE' AND table_name <> ?",
+    [MIGRATIONS_TABLE],
+  );
+
+  return tables.map(({ name }) => name);
 }
 
 type TruncatedHook = () => Promise<void>;
