@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+# Test stub for docker, used by bin/release_kerghan_standalone.sh:
+#   docker buildx imagetools inspect <image> --format ...  prints $STUB_MANIFESTS_DIR/<image, / and : as _>.json
+#   docker image inspect -f ... <image>                    prints $STUB_ARCH
+#   docker pull / tag / save                               succeed (save touches the -o path)
+echo "docker $*" >>"$STUB_LOG"
+case "$1 $2" in
+  "buildx imagetools")
+    file="$STUB_MANIFESTS_DIR/$(echo "$4" | tr '/:' '__').json"
+    [ -f "$file" ] || { echo "no fixture $file" >&2; exit 1; }
+    cat "$file"
+    ;;
+  "image inspect") echo "${STUB_ARCH:-}" ;;
+esac
+if [ "$1" = "save" ]; then
+  while [ $# -gt 0 ]; do
+    [ "$1" = "-o" ] && touch "$2"
+    shift
+  done
+fi
+exit 0
