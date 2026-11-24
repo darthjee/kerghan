@@ -89,6 +89,7 @@ async function migrateSchema(name: string, migrations: Awaited<ReturnType<typeof
   try {
     await dataSource.initialize();
     await dataSource.runMigrations({ transaction: 'each' });
+    // eslint-disable-next-line no-console
     console.log(`[db-tier] migrated ${name} in ${Date.now() - started}ms`);
   } catch (error) {
     throw new Error(`Migrating schema ${name} failed: ${error instanceof Error ? error.message : String(error)}`);
@@ -117,5 +118,6 @@ export async function migrateTestDatabase(maxWorkers: number): Promise<void> {
   const failure = results.find((result): result is PromiseRejectedResult => result.status === 'rejected');
 
   if (failure) throw failure.reason;
+  // eslint-disable-next-line no-console
   console.log(`[db-tier] globalSetup finished in ${Date.now() - started}ms`);
 }

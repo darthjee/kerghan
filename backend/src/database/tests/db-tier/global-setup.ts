@@ -2,6 +2,10 @@ import Module from 'module';
 
 const RELATIVE_JS = /^\.{1,2}\/.*\.js$/;
 
+interface GlobalConfig {
+  maxWorkers: number;
+}
+
 type ResolveFilename = (request: string, ...rest: unknown[]) => string;
 
 // `Module._resolveFilename` is Node's internal CommonJS resolver; it is not
@@ -24,7 +28,7 @@ const cjsModule = Module as unknown as { _resolveFilename: ResolveFilename };
  * @param globalConfig - Jest's resolved global config (`maxWorkers` decides how many schemas to create).
  * @returns resolves once migrations have been applied.
  */
-export default async function globalSetup(globalConfig: { maxWorkers: number }): Promise<void> {
+export default async function globalSetup(globalConfig: GlobalConfig): Promise<void> {
   const original = cjsModule._resolveFilename;
 
   cjsModule._resolveFilename = function resolveTsFallback(request, ...rest) {
