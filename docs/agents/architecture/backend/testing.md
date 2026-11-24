@@ -45,7 +45,7 @@ stays on the fakes.
 - **Schema guard:** the tier refuses to start unless `KERGHAN_MYSQL_NAME` ends in `_test`.
 - **Lifecycle:** `globalSetup` retries the connection for up to 60 s, then runs every migration
   once per run, loaded from the TypeScript sources (`database/tests/db-tier/`). Before each test,
-  every table except `migrations` is truncated (seeded rows included), so each test starts
+  every table except `migrations` is emptied with `DELETE` (seeded rows included), so each test starts
   empty. Specs get the file's shared connection from `getTestDataSource()`.
 
 See `database/tests/db-tier.db-spec.ts` for the smoke spec.
