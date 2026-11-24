@@ -10,9 +10,15 @@ How CI jobs are set up, validated and how production boots. Part of the [infra a
 the shared `setup_project` command, `npm run <script>`, and — when `upload_coverage` is true — the
 best-effort Codacy upload.
 
-`setup_project` (a top-level CircleCI `commands:` entry, also used by `upload_fe_files` with
-`dir: frontend`) copies the chosen subdirectory to the workspace root and drops the other one, since
-the CI base images expect files there, then runs `yarn install`:
+`setup_project` (a top-level CircleCI `commands:` entry, also used by `backend_db_tests` with
+`dir: backend` and by `upload_fe_files` with `dir: frontend`) takes `dir` and a required `image`
+parameter (each caller passes the same string as its primary `docker` image). It copies the chosen
+subdirectory to the workspace root and drops the other one, since the CI base images expect files
+there, then restores `node_modules` from the CircleCI cache, runs `yarn install --frozen-lockfile`
+and saves the cache. The cache key is `yarn-<dir>-<image>-<checksum of yarn.lock>`, a single key with
+no prefix fallback, so a changed lockfile always starts from an empty `node_modules`. `yarn install`
+always runs (a fast integrity check on a hit). Because of `--frozen-lockfile`, a `yarn.lock` that is
+out of sync with `package.json` now fails CI.
 
 ```yaml
 # dir: backend

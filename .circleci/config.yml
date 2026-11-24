@@ -136,12 +136,16 @@ workflows:
           filters: *all_tags
 commands:
   # Keeps only the requested project folder (backend or frontend) at the checkout root and
-  # installs its dependencies. Shared by yarn_project and upload_fe_files.
+  # installs its dependencies. Shared by yarn_project, backend_db_tests and upload_fe_files.
+  # node_modules is cached under a single key built from dir + image + yarn.lock (no fallback
+  # key, so a changed lockfile never starts from a stale node_modules).
   setup_project:
     parameters:
       dir:
         type: enum
         enum: [backend, frontend]
+      image:
+        type: string
     steps:
       - run:
           name: Set folder
@@ -151,15 +155,24 @@ commands:
               *) other=backend ;;
             esac
             rm "$other" -rf; cp << parameters.dir >>/* ./ -r; rm << parameters.dir >> -rf
+      - restore_cache:
+          name: Restore node_modules cache
+          keys:
+            - yarn-<< parameters.dir >>-<< parameters.image >>-{{ checksum "yarn.lock" }}
       - run:
           name: Yarn install
-          command: yarn install
+          command: yarn install --frozen-lockfile
+      - save_cache:
+          name: Save node_modules cache
+          key: yarn-<< parameters.dir >>-<< parameters.image >>-{{ checksum "yarn.lock" }}
+          paths:
+            - node_modules
 jobs:
   # Minimal bootstrap CI: backend, frontend and proxy-extension tests/lint. The release chain
   # (build/upload/deploy) lives further down in this same file, gated to semver tag pushes only.
   #
   # Backend/frontend tests and lint are all instances of this one job (see the workflow entries
-  # above): checkout, keep only `dir`, yarn install, run `npm run <script>`, and optionally upload
+  # above): checkout, keep only `dir`, yarn install (with the node_modules cache), run `npm run <script>`, and optionally upload
   # the partial coverage report to Codacy (best-effort).
   yarn_project:
     parameters:
@@ -182,6 +195,7 @@ jobs:
       - checkout
       - setup_project:
           dir: << parameters.dir >>
+          image: << parameters.image >>
       - run:
           name: << parameters.step_name >>
           command: npm run << parameters.script >>
@@ -231,6 +245,7 @@ jobs:
       - checkout
       - setup_project:
           dir: backend
+          image: darthjee/circleci_kerghan-base:0.1.2
       - run:
           name: DB tests
           command: npm run test:db -- --maxWorkers=2
@@ -482,6 +497,7 @@ jobs:
       - checkout
       - setup_project:
           dir: frontend
+          image: darthjee/vite_kerghan-base:0.1.2
       - run:
           name: Build assets
           command: bin/deploy_frontend.sh build
