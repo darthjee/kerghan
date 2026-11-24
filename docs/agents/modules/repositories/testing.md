@@ -27,8 +27,9 @@ conditional writes or `bigint` round trips, so a **narrow** tier runs them on re
 
 - **Suffix:** `*.db-spec.ts`, excluded from the default `yarn test` run.
 - **Runner:** a separate Jest config (`jest.db.config.ts`) and script, `yarn test:db`. It runs
-  **serially**, on a dedicated test schema: the migrations run once per run, loaded from the
-  TypeScript sources, and every table except `migrations` is emptied with `DELETE` before each test.
+  **in parallel**, one test schema per Jest worker (`<prefix>_w<id>_test`, see
+  [the backend testing architecture](../../architecture/backend/testing.md)): the migrations run
+  once per run on every worker schema, loaded from the TypeScript sources, and every table except `migrations` is emptied with `DELETE` before each test.
 - **Guard:** the tier refuses to start unless `KERGHAN_MYSQL_NAME` ends in `_test`, so it can
   never truncate dev or production data.
 - **Locally:** through docker-compose, against the throwaway `kerghan_mysql_test` service, run

@@ -85,6 +85,8 @@ services:
 
   # DB-backed test tier (yarn test:db) against kerghan_mysql_test. The
   # environment values override the anchor's .env, pointing at the test DB.
+  # The tier creates per-worker schemas (<prefix>_w<id>_test) through the admin
+  # connection (KERGHAN_MYSQL_ADMIN_*, the container's root user).
   kerghan_db_tests:
     <<: *base
     container_name: kerghan_db_tests
@@ -99,6 +101,8 @@ services:
       - KERGHAN_MYSQL_USER=kerghan
       - KERGHAN_MYSQL_PASSWORD=kerghan
       - KERGHAN_MYSQL_NAME=kerghan_test
+      - KERGHAN_MYSQL_ADMIN_USER=root
+      - KERGHAN_MYSQL_ADMIN_PASSWORD=kerghan
     command: yarn test:db
 
   kerghan_prod_app:

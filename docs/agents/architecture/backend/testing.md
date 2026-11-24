@@ -32,7 +32,7 @@ stays on the fakes.
 
 - **Suffix and script:** `*.db-spec.ts`, run only by `yarn test:db` (`jest.db.config.ts`, which
   shares its base settings with `jest.config.ts` through the plain CommonJS `jest.base.cjs`),
-  always `--runInBand` and never with coverage. The default `testRegex` does not match
+  in parallel (see *Per-worker schemas*) and never with coverage. The default `testRegex` does not match
   `*.db-spec.ts`.
 - **Node versions:** the CI image (Node 22.14) loads TS Jest configs through ts-node, the dev
   image (Node 22.21) through native type stripping. Neither can load a `.ts` config imported from
@@ -43,10 +43,29 @@ stays on the fakes.
   the throwaway `kerghan_mysql_test` service; in CI via the `backend_db_tests` job and its MySQL
   service container. Connection settings are the app's own `KERGHAN_MYSQL_*` vars.
 - **Schema guard:** the tier refuses to start unless `KERGHAN_MYSQL_NAME` ends in `_test`.
-- **Lifecycle:** `globalSetup` retries the connection for up to 60 s, then runs every migration
-  once per run, loaded from the TypeScript sources (`database/tests/db-tier/`). Before each test,
-  every table except `migrations` is emptied with `DELETE` (seeded rows included), so each test starts
-  empty. Specs get the file's shared connection from `getTestDataSource()`.
+- **Per-worker schemas:** in the tier, `KERGHAN_MYSQL_NAME` is the *base* name. Each Jest worker
+  uses its own schema `<base without _test>_w<JEST_WORKER_ID>_test` (`kerghan_test` gives
+  `kerghan_w1_test`, `kerghan_w2_test`, ...). The `worker-schema.ts` `setupFiles` hook overrides
+  `KERGHAN_MYSQL_NAME` per worker before any spec code reads it, so harnesses keep reading the
+  variable unchanged. Running a single spec file still works (it runs as worker 1).
+- **Admin credentials and grant:** `KERGHAN_MYSQL_ADMIN_USER` / `KERGHAN_MYSQL_ADMIN_PASSWORD` are
+  read only by `globalSetup` (it throws a clear error when either is missing) and are deleted from
+  the environment in the workers, so specs never see them. With them `globalSetup` runs
+  `CREATE DATABASE IF NOT EXISTS` for every worker schema and a narrow
+  ``GRANT ALL ON `<prefix>\_w%\_test`.* TO '<KERGHAN_MYSQL_USER>'@'%'``; migrations then run as
+  the app user, so every run proves the grant is enough.
+- **Worker count:** `maxWorkers` is fixed at 2 in `jest.db.config.ts` (a percentage would follow
+  `os.cpus()`, which reports the CI host's cores). Override it with
+  `yarn test:db --maxWorkers=<n>`; `globalSetup` creates as many schemas as the resolved value.
+- **Parallel-safety rule:** a spec must not depend on another file's data or timing. Make race
+  specs deterministic (barriers, deferred promises), never just raise timeouts. A spec that cannot
+  be made parallel-safe moves to a second `maxWorkers: 1` Jest project (serial fallback) and gets
+  a follow-up issue.
+- **Lifecycle:** `globalSetup` retries the connection for up to 60 s, creates the worker schemas,
+  then runs every migration on each of them in parallel, loaded from the TypeScript sources
+  (`database/tests/db-tier/`). Before each test, every table except `migrations` is emptied with
+  `DELETE` (seeded rows included), so each test starts empty. Specs get the file's shared
+  connection from `getTestDataSource()`. `worker-schema.db-spec.ts` is the isolation canary.
 
 See `database/tests/db-tier.db-spec.ts` for the smoke spec.
 

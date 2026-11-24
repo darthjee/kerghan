@@ -1,6 +1,43 @@
-import { assertTestDatabase, buildDbTierOptions, loadMigrations } from './db-tier/db-tier-options.js';
+import {
+  assertTestDatabase,
+  buildDbTierOptions,
+  loadMigrations,
+  resolveWorkerId,
+  workerGrantPattern,
+  workerSchemaName,
+  workerSchemaNames,
+} from './db-tier/db-tier-options.js';
 
 describe('db-tier-options', () => {
+  describe('worker schema helpers', () => {
+    it('names worker schemas', () => {
+      expect(workerSchemaName('kerghan_test', 1)).toBe('kerghan_w1_test');
+      expect(workerSchemaName('kerghan_test', 3)).toBe('kerghan_w3_test');
+    });
+
+    it('rejects a bad base name or worker id', () => {
+      expect(() => workerSchemaName('kerghan', 1)).toThrow(/must end in "_test"/);
+      expect(() => workerSchemaName('kerghan_test', 0)).toThrow(/worker id/);
+    });
+
+    it('lists names for maxWorkers', () => {
+      expect(workerSchemaNames('kerghan_test', 3)).toEqual(['kerghan_w1_test', 'kerghan_w2_test', 'kerghan_w3_test']);
+    });
+
+    it('resolves the worker id', () => {
+      expect(resolveWorkerId({ JEST_WORKER_ID: '2' }, 3)).toBe(2);
+    });
+
+    it.each([undefined, '', 'abc', '0', '4'])('rejects JEST_WORKER_ID %p', (id) => {
+      expect(() => resolveWorkerId({ JEST_WORKER_ID: id }, 3)).toThrow(/JEST_WORKER_ID/);
+    });
+
+    it('builds an escaped grant pattern', () => {
+      expect(workerGrantPattern('kerghan_test')).toBe('kerghan\\_w%\\_test');
+      expect(workerGrantPattern('my_app_test')).toBe('my\\_app\\_w%\\_test');
+    });
+  });
+
   describe('assertTestDatabase', () => {
     it('returns a name ending in _test', () => {
       expect(assertTestDatabase('kerghan_test')).toBe('kerghan_test');

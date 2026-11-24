@@ -2,6 +2,10 @@ import Module from 'module';
 
 const RELATIVE_JS = /^\.{1,2}\/.*\.js$/;
 
+interface GlobalConfig {
+  maxWorkers: number;
+}
+
 type ResolveFilename = (request: string, ...rest: unknown[]) => string;
 
 // `Module._resolveFilename` is Node's internal CommonJS resolver; it is not
@@ -9,8 +13,8 @@ type ResolveFilename = (request: string, ...rest: unknown[]) => string;
 const cjsModule = Module as unknown as { _resolveFilename: ResolveFilename };
 
 /**
- * Jest `globalSetup` for the DB-backed tier: migrates the test database once
- * per run (see `migrate-test-database.ts`).
+ * Jest `globalSetup` for the DB-backed tier: creates one schema per worker and migrates
+ * them once per run (see `migrate-test-database.ts`).
  *
  * Global setup runs in Jest's own process, where the `.js` → `.ts`
  * `moduleNameMapper` does not apply. Jest's swc transform compiles this
@@ -21,9 +25,10 @@ const cjsModule = Module as unknown as { _resolveFilename: ResolveFilename };
  * `module.registerHooks`, Node 22.15+). That is also why the tier modules
  * are imported lazily, after the wrapper is in place.
  *
+ * @param globalConfig - Jest's resolved global config (`maxWorkers` decides how many schemas to create).
  * @returns resolves once migrations have been applied.
  */
-export default async function globalSetup(): Promise<void> {
+export default async function globalSetup(globalConfig: GlobalConfig): Promise<void> {
   const original = cjsModule._resolveFilename;
 
   cjsModule._resolveFilename = function resolveTsFallback(request, ...rest) {
@@ -38,7 +43,7 @@ export default async function globalSetup(): Promise<void> {
   try {
     const { migrateTestDatabase } = await import('./migrate-test-database.js');
 
-    await migrateTestDatabase();
+    await migrateTestDatabase(globalConfig.maxWorkers);
   } finally {
     cjsModule._resolveFilename = original;
   }
