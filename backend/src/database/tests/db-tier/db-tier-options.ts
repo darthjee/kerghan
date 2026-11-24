@@ -32,6 +32,73 @@ export function assertTestDatabase(name: string | undefined): string {
 }
 
 /**
+ * Builds the schema name of one Jest worker: the base name without its
+ * trailing `_test`, plus `_w<workerId>_test`.
+ *
+ * @param base - the base database name (`KERGHAN_MYSQL_NAME`, ending in `_test`).
+ * @param workerId - the 1-based Jest worker id.
+ * @returns the worker schema name (for example `kerghan_w1_test`).
+ */
+export function workerSchemaName(base: string, workerId: number): string {
+  assertTestDatabase(base);
+  if (!Number.isInteger(workerId) || workerId < 1) {
+    throw new Error(`DB test tier needs a positive integer worker id (got "${workerId}").`);
+  }
+
+  const prefix = base.slice(0, -TEST_DATABASE_SUFFIX.length);
+
+  return assertTestDatabase(`${prefix}_w${workerId}${TEST_DATABASE_SUFFIX}`);
+}
+
+/**
+ * Lists the schema names for workers `1..maxWorkers`.
+ *
+ * @param base - the base database name.
+ * @param maxWorkers - how many workers Jest may run.
+ * @returns the worker schema names, in worker order.
+ */
+export function workerSchemaNames(base: string, maxWorkers: number): string[] {
+  return Array.from({ length: maxWorkers }, (_, index) => workerSchemaName(base, index + 1));
+}
+
+/**
+ * Parses `JEST_WORKER_ID`. Never falls back to the base schema.
+ *
+ * @param env - the environment to read from.
+ * @param maxWorkers - when given, the highest valid worker id.
+ * @returns the worker id.
+ */
+export function resolveWorkerId(env: NodeJS.ProcessEnv, maxWorkers?: number): number {
+  const raw = env.JEST_WORKER_ID;
+
+  if (!raw || !/^[0-9]+$/.test(raw)) {
+    throw new Error(`DB test tier needs a numeric JEST_WORKER_ID (got "${raw ?? ''}").`);
+  }
+
+  const workerId = Number(raw);
+
+  if (workerId < 1 || (maxWorkers !== undefined && workerId > maxWorkers)) {
+    throw new Error(`DB test tier: JEST_WORKER_ID ${workerId} is out of range (1..${maxWorkers ?? 'n'}).`);
+  }
+
+  return workerId;
+}
+
+/**
+ * Builds the GRANT database pattern covering every worker schema.
+ *
+ * @param base - the base database name.
+ * @returns the pattern, with `_` and `%` escaped in the prefix (`kerghan\_w%\_test`).
+ */
+export function workerGrantPattern(base: string): string {
+  assertTestDatabase(base);
+
+  const prefix = base.slice(0, -TEST_DATABASE_SUFFIX.length).replace(/[_%]/g, (char) => `\\${char}`);
+
+  return `${prefix}\\_w%\\_test`;
+}
+
+/**
  * Loads every migration class from the TypeScript sources. The classes are
  * handed to TypeORM directly instead of a glob: for a `"type": "module"`
  * package TypeORM would native-`import()` the `.ts` files, bypassing Jest's
