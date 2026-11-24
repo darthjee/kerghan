@@ -1,7 +1,7 @@
 {
   "name": "kerghan-backend",
   "type": "module",
-  "version": "0.10.1",
+  "version": "0.10.2",
   "description": "Kerghan backend — GitHub issue monitoring/dashboard API",
   "private": true,
   "main": "dist/main.js",
