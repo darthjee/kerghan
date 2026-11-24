@@ -8,8 +8,8 @@
 # darthjee/node (or darthjee/circleci_node) versions are defined.
 
 # Only visible to the FROM lines below
-ARG SCRIPTS_IMAGE=darthjee/scripts:0.8.0
-ARG NODE_IMAGE_VERSION=0.2.1
+ARG SCRIPTS_IMAGE=darthjee/scripts:0.15.0
+ARG NODE_IMAGE_VERSION=0.3.0
 # bin/image.sh always passes it; the default only keeps the FROM line valid
 ARG BASE_IMAGE=darthjee/node
 
@@ -39,8 +39,8 @@ ARG SOURCE_DIR
 # User running yarn_builder.sh. It must be able to write to the global yarn cache
 # (/usr/local/share/.cache/yarn/v6, owned by root in the node images), otherwise
 # yarn_builder.sh finds no "new" packages and the pre-warmed cache ends up empty.
-# bin/image.sh sets it to root for the node images that are meant to be warmed
-# (kerghan-base, vite_kerghan-base) and to $USER_NAME for the others.
+# bin/image.sh sets it to root for the images that are meant to be warmed
+# (kerghan-base, vite_kerghan-base, circleci_kerghan-base) and to $USER_NAME for the others.
 ARG BUILDER_USER
 
 ENV HOME_DIR=$HOME_DIR

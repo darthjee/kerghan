@@ -49,7 +49,7 @@ set -euo pipefail
 # The user's override is read before the stamp line below, which
 # scripts/bump_version.sh rewrites on every release.
 requested_version="${KERGHAN_VERSION:-}"
-KERGHAN_VERSION="0.10.0"
+KERGHAN_VERSION="0.10.1"
 version="${requested_version:-$KERGHAN_VERSION}"
 
 # Not overridable: it must match `FROM darthjee/vault:<v>` in

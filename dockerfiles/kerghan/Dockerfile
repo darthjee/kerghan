@@ -1,5 +1,5 @@
 ARG BASE_VERSION=latest
-FROM darthjee/scripts:0.8.0 as scripts
+FROM darthjee/scripts:0.15.0 as scripts
 FROM darthjee/kerghan-base:${BASE_VERSION} as base
 
 COPY --chown=node:node \

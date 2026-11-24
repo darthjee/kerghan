@@ -59,7 +59,7 @@ from rebuilding on every tag — `skip_if_unchanged` diffs `dockerfiles/base/` a
 a change to either rebuilds all four; `FORCE_IMAGE_BUILD` bypasses both guards when a forced
 rebuild/republish is needed.
 
-`backend_tests`/`backend_checks` now run from the published `darthjee/circleci_kerghan-base:0.1.0`
+`backend_tests`/`backend_checks` now run from the published `darthjee/circleci_kerghan-base:0.1.2`
 image (pinned to the version in the root `version` file, not `:latest`), `requires:`-gated on
 `release-circleci_kerghan-base`/`release-circleci_kerghan-base-arm64` so they wait for a fresh
 publish on tag builds; `yarn install` still runs but reads from the base image's pre-warmed cache

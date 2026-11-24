@@ -60,12 +60,12 @@ function build_args() {
       BUILD_ARGS=(
         --build-arg "BASE_IMAGE=darthjee/circleci_node"
         --build-arg "USER_NAME=circleci"
-        --build-arg "BUILDER_USER=circleci"
+        --build-arg "BUILDER_USER=root"
         --build-arg "HOME_DIR=/home/circleci"
         --build-arg "APP_DIR=/home/circleci/project"
         --build-arg "SOURCE_DIR=backend"
         --build-arg "YARN_CACHE_DIR=/home/circleci/.cache/yarn/v6"
-        --build-arg "RSYNC_VERSION=3.2.7-0ubuntu0.22.04.7"
+        --build-arg "RSYNC_VERSION=3.2.7-1ubuntu1.5"
       )
       ;;
     *)
