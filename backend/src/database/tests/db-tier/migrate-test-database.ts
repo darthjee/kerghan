@@ -75,26 +75,47 @@ export async function prepareWorkerSchemas(env: NodeJS.ProcessEnv, maxWorkers: n
 }
 
 /**
- * Creates the worker schemas, waits for MySQL, applies every pending
- * migration to each worker schema (one transaction each), then disconnects.
+ * Migrates one worker schema as the app user, logging how long it took.
+ *
+ * @param name - the worker schema name.
+ * @param migrations - the migration classes to register.
+ * @returns resolves once the schema is migrated.
+ */
+async function migrateSchema(name: string, migrations: Awaited<ReturnType<typeof loadMigrations>>): Promise<void> {
+  const started = Date.now();
+  const options = buildDbTierOptions({ ...process.env, KERGHAN_MYSQL_NAME: name }, migrations);
+  const dataSource = new DataSource(options);
+
+  try {
+    await dataSource.initialize();
+    await dataSource.runMigrations({ transaction: 'each' });
+    console.log(`[db-tier] migrated ${name} in ${Date.now() - started}ms`);
+  } catch (error) {
+    throw new Error(`Migrating schema ${name} failed: ${error instanceof Error ? error.message : String(error)}`);
+  } finally {
+    if (dataSource.isInitialized) await dataSource.destroy();
+  }
+}
+
+/**
+ * Creates the worker schemas, waits for MySQL, then applies every pending
+ * migration to each worker schema in parallel, as the app user.
  *
  * @param maxWorkers - how many worker schemas to prepare.
- * @returns resolves once migrations have been applied.
+ * @returns resolves once migrations have been applied everywhere.
  */
 export async function migrateTestDatabase(maxWorkers: number): Promise<void> {
+  const started = Date.now();
+
   await prepareWorkerSchemas(process.env, maxWorkers);
 
   const base = assertTestDatabase(process.env.KERGHAN_MYSQL_NAME);
   const migrations = await loadMigrations();
+  const results = await Promise.allSettled(
+    workerSchemaNames(base, maxWorkers).map((name) => migrateSchema(name, migrations)),
+  );
+  const failure = results.find((result): result is PromiseRejectedResult => result.status === 'rejected');
 
-  for (const name of workerSchemaNames(base, maxWorkers)) {
-    const options = buildDbTierOptions({ ...process.env, KERGHAN_MYSQL_NAME: name }, migrations);
-    const dataSource = await initializeWithRetry(new DataSource(options));
-
-    try {
-      await dataSource.runMigrations({ transaction: 'each' });
-    } finally {
-      await dataSource.destroy();
-    }
-  }
+  if (failure) throw failure.reason;
+  console.log(`[db-tier] globalSetup finished in ${Date.now() - started}ms`);
 }
