@@ -14,15 +14,28 @@ export const REFRESH_TOKEN_COOKIE_PATH = '/auth';
 // the signed JWT's actual expiry.
 const DEFAULT_ACCESS_TOKEN_TTL_MS = 15 * 60 * 1000;
 
-const BASE_OPTIONS: CookieOptions = { secure: true, sameSite: 'strict' };
+/**
+ * Decides whether the session cookies carry the `Secure` attribute. Only the
+ * exact string `false` in `KERGHAN_COOKIE_SECURE` turns it off, so a typo or
+ * an unset variable keeps the safe default.
+ * @param {ConfigService} configService - Supplies `KERGHAN_COOKIE_SECURE`.
+ * @returns {boolean} `false` only when `KERGHAN_COOKIE_SECURE` is `false`.
+ */
+export function cookieSecure(configService: ConfigService): boolean {
+  return configService.get<string>('KERGHAN_COOKIE_SECURE') !== 'false';
+}
 
-const ACCESS_TOKEN_OPTIONS: CookieOptions = { ...BASE_OPTIONS, httpOnly: true, path: '/' };
-const REFRESH_TOKEN_OPTIONS: CookieOptions = {
-  ...BASE_OPTIONS,
-  httpOnly: true,
-  path: REFRESH_TOKEN_COOKIE_PATH,
-};
-const LOGGED_IN_OPTIONS: CookieOptions = { ...BASE_OPTIONS, httpOnly: false, path: '/' };
+function sessionCookieOptions(
+  secure: boolean,
+): { access: CookieOptions; refresh: CookieOptions; loggedIn: CookieOptions } {
+  const base: CookieOptions = { secure, sameSite: 'strict' };
+
+  return {
+    access: { ...base, httpOnly: true, path: '/' },
+    refresh: { ...base, httpOnly: true, path: REFRESH_TOKEN_COOKIE_PATH },
+    loggedIn: { ...base, httpOnly: false, path: '/' },
+  };
+}
 
 /**
  * Sets the three session cookies on a session-minting response: the httpOnly
@@ -32,30 +45,34 @@ const LOGGED_IN_OPTIONS: CookieOptions = { ...BASE_OPTIONS, httpOnly: false, pat
  * token) the frontend uses for its optimistic login state.
  * @param {Response} res - The response to set the cookies on.
  * @param {AuthResult} result - The freshly issued session.
- * @param {ConfigService} configService - Supplies the access-token TTL.
+ * @param {ConfigService} configService - Supplies the access-token TTL and the `Secure` setting.
  * @returns {void}
  */
 export function setSessionCookies(res: Response, result: AuthResult, configService: ConfigService): void {
+  const options = sessionCookieOptions(cookieSecure(configService));
   const refreshMaxAge = Math.max(0, result.refreshTokenExpiresAt.getTime() - Date.now());
 
   res.cookie(ACCESS_TOKEN_COOKIE, result.accessToken, {
-    ...ACCESS_TOKEN_OPTIONS,
+    ...options.access,
     maxAge: configService.get<number>('KERGHAN_ACCESS_TOKEN_TTL_MS', DEFAULT_ACCESS_TOKEN_TTL_MS),
   });
-  res.cookie(REFRESH_TOKEN_COOKIE, result.refreshToken, { ...REFRESH_TOKEN_OPTIONS, maxAge: refreshMaxAge });
-  res.cookie(LOGGED_IN_COOKIE, '1', { ...LOGGED_IN_OPTIONS, maxAge: refreshMaxAge });
+  res.cookie(REFRESH_TOKEN_COOKIE, result.refreshToken, { ...options.refresh, maxAge: refreshMaxAge });
+  res.cookie(LOGGED_IN_COOKIE, '1', { ...options.loggedIn, maxAge: refreshMaxAge });
 }
 
 /**
  * Clears the three session cookies, each with the same `path`/`secure`/
  * `sameSite` options it was set with so browsers actually drop it.
  * @param {Response} res - The response to clear the cookies on.
+ * @param {ConfigService} configService - Supplies the `Secure` setting.
  * @returns {void}
  */
-export function clearSessionCookies(res: Response): void {
-  res.clearCookie(ACCESS_TOKEN_COOKIE, ACCESS_TOKEN_OPTIONS);
-  res.clearCookie(REFRESH_TOKEN_COOKIE, REFRESH_TOKEN_OPTIONS);
-  res.clearCookie(LOGGED_IN_COOKIE, LOGGED_IN_OPTIONS);
+export function clearSessionCookies(res: Response, configService: ConfigService): void {
+  const options = sessionCookieOptions(cookieSecure(configService));
+
+  res.clearCookie(ACCESS_TOKEN_COOKIE, options.access);
+  res.clearCookie(REFRESH_TOKEN_COOKIE, options.refresh);
+  res.clearCookie(LOGGED_IN_COOKIE, options.loggedIn);
 }
 
 /**
@@ -92,6 +109,7 @@ export function resolveRefreshToken(req: Request, fallbackToken?: string): strin
  * @param {Response} res - The response to clear the cookies on.
  * @param {string | undefined} token - The refresh token to renew with.
  * @param {(token: string) => Promise<T>} action - The renewal to run.
+ * @param {ConfigService} configService - Supplies the `Secure` setting for the clear.
  * @returns {Promise<T>} The action's result.
  * @throws {UnauthorizedException} When the token is missing or the action rejects it.
  */
@@ -99,6 +117,7 @@ export async function clearSessionCookiesOnUnauthorized<T>(
   res: Response,
   token: string | undefined,
   action: (token: string) => Promise<T>,
+  configService: ConfigService,
 ): Promise<T> {
   try {
     if (!token) {
@@ -108,7 +127,7 @@ export async function clearSessionCookiesOnUnauthorized<T>(
     return await action(token);
   } catch (error) {
     if (error instanceof UnauthorizedException) {
-      clearSessionCookies(res);
+      clearSessionCookies(res, configService);
     }
 
     throw error;

@@ -72,8 +72,8 @@ Every session-minting response (login, register, refresh and the winning
 `POST /auth/authorization-requests/:uuid/poll.json`) goes through the shared `respondWithSession`
 helper (`auth/auth-response.ts`), which calls `setSessionCookies` (`auth/auth-cookies.ts`), so
 the response bodies/cookies cannot drift apart. An automatic login on `status.json` calls
-`setSessionCookies` directly, so it sets the same cookies. All three cookies are `Secure` and
-`SameSite=Strict`:
+`setSessionCookies` directly, so it sets the same cookies. All three cookies are `Secure` (unless
+`KERGHAN_COOKIE_SECURE=false`; `clearSessionCookies` uses the same setting) and `SameSite=Strict`:
 
 | Name | httpOnly | Path | Value | maxAge |
 | --- | --- | --- | --- | --- |
