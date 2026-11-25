@@ -234,7 +234,7 @@ ones (from the flags, the config and the defaults):
   `log directory changed (<a> -> <b>)`, data volume kept. The UID and GID are not compared.
 
 Before this comparison `up` runs `prepare_log_dir`: with `file-logs=true` it creates the resolved
-`log-dir` (`~/` expanded by `resolved_log_dir`), sets mode `700` and probes it with a temporary
+`log-dir` (`~/` expanded by `resolved_log_dir`), sets mode `700` only when it created the directory (an existing one keeps its mode and owner) and probes it with a temporary
 file. When that fails it warns `log directory <dir> is not writable; starting without file logs`
 and passes `KERGHAN_FILE_LOGS=false` and no `-v`; logging never makes `up` fail. With an image
 tag older than `FIRST_FILE_LOGS_VERSION` it also prints a hint, since an older image ignores file

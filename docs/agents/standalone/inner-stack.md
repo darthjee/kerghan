@@ -34,14 +34,16 @@ the client mounts from the host `log-dir` (default `~/.kerghan/logs`). MySQL is 
 `standalone/vault/logs-collector/collect.sh` (POSIX `sh`) does the work:
 
 - With `KERGHAN_FILE_LOGS` not `true` it idles, so `restart: unless-stopped` does not loop.
-- It creates `/logs` with `umask 077`, `chown`s it to `KERGHAN_HOST_UID:KERGHAN_HOST_GID` and sets
-  mode `700`; every file is created with mode `600` and the same owner. Failures are logged to
-  stderr and the script keeps going.
+- It runs with `umask 077` and never changes the owner or mode of `/logs` itself (the client
+  creates the directory and sets `700` only when it created it); every log file is created with
+  mode `600` and `chown`ed to `KERGHAN_HOST_UID:KERGHAN_HOST_GID`, as are the `.since` files.
+  Failures are logged to stderr and the script keeps going.
 - Each line has Docker's RFC 3339 timestamp. A file rotates at 10 MB, keeping `.log.1` to `.log.5`.
 - It finds each container by the Compose service and project labels (the project comes from its
   own container labels). When a container stops or is recreated it sleeps 2 s and resolves it again,
   resuming with `--since` the last timestamp saved in `/logs/.<svc>.since`, so a restart does not
-  duplicate lines. If a follower dies the script exits and compose restarts the service.
+  duplicate lines. The `.since` file is only written when the line's first field is an RFC 3339
+  timestamp, and is read back only if it still matches that pattern, passed as `--since=<value>`. If a follower dies the script exits and compose restarts the service.
 - The files are appended to, so they survive `kerghan down`, `reset` and restarts.
 
 `LOGS_IMAGE` is written to `/vault/.env` by the Dockerfile next to `TENT_IMAGE`. The outer Vault

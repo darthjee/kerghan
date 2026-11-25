@@ -41,7 +41,7 @@ log-dir=              # host directory; default ~/.kerghan/logs
 | `bind` | an IPv4 address | `127.0.0.1` with auto-login on, `0.0.0.0` with it off | `--bind ADDRESS` | the host IP in `-p <bind>:<port>:80` |
 | `restart-on-update` | `ask` \| `always` \| `never` | `ask` (prompt on a terminal; without one, like `never`) | `update --restart`, `update --no-restart` | not passed; read by `kerghan update` only (see [`update`](client.md#update)) |
 | `file-logs` | `true` \| `false` | `true` | none | `-e KERGHAN_FILE_LOGS=<effective>` (with `-e KERGHAN_HOST_UID` / `KERGHAN_HOST_GID`) and, when effective, `-v <log-dir>:/vault/logs` |
-| `log-dir` | an absolute path or `~/path`, without `:`, whitespace or `#` | `~/.kerghan/logs` | none | the source of the `-v <log-dir>:/vault/logs` mount |
+| `log-dir` | an absolute path or `~/path`, without `:`, whitespace, `#` or `..` segments | `~/.kerghan/logs` | none | the source of the `-v <log-dir>:/vault/logs` mount |
 
 - **Precedence:** command-line flag, then `~/.kerghan/config`, then the default. `--offline`
   selects the offline variant even with `variant=online`; with `variant=offline`, a run without

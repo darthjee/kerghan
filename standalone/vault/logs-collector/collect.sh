@@ -12,9 +12,9 @@ LOG_DIR=/logs
 MAX_BYTES=10485760
 UID_GID="${KERGHAN_HOST_UID:-0}:${KERGHAN_HOST_GID:-0}"
 
-mkdir -p "$LOG_DIR" || echo "logs: cannot create $LOG_DIR" >&2
-chown "$UID_GID" "$LOG_DIR" || echo "logs: cannot chown $LOG_DIR" >&2
-chmod 700 "$LOG_DIR" || echo "logs: cannot chmod $LOG_DIR" >&2
+# The client creates (and, when it did, chmods 700) the host directory; the
+# collector never changes the ownership or mode of $LOG_DIR itself.
+[ -d "$LOG_DIR" ] || mkdir -p "$LOG_DIR" || echo "logs: cannot create $LOG_DIR" >&2
 
 project=$(docker inspect "$HOSTNAME" --format '{{index .Config.Labels "com.docker.compose.project"}}')
 
@@ -41,7 +41,19 @@ writer() {
     printf '%s\n' "$line" >> "$file"
     size=$((size + ${#line} + 1))
     # Persist the last timestamp (first field) to resume without duplicates.
-    printf '%s\n' "${line%% *}" > "$since_file"
+    # Only an RFC 3339 timestamp is stored (never arbitrary log text).
+    ts="${line%% *}"
+    case "$ts" in
+      [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9]*Z)
+        case "$ts" in
+          *[!0-9TZ:.-]*) ;;
+          *)
+            printf '%s\n' "$ts" > "$since_file"
+            chown "$UID_GID" "$since_file" 2>/dev/null
+            ;;
+        esac
+        ;;
+    esac
   done
 }
 
@@ -54,9 +66,20 @@ follow() {
       --filter "label=com.docker.compose.project=$project" | head -n 1)
     if [ -n "$id" ]; then
       since=""
-      [ -s "$since_file" ] && since="--since $(cat "$since_file")"
-      # shellcheck disable=SC2086
-      docker logs -f -t $since "$id" 2>&1 | writer "$LOG_DIR/$svc.log"
+      if [ -s "$since_file" ]; then
+        ts=$(head -n 1 "$since_file")
+        case "$ts" in
+          [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T*Z)
+            case "$ts" in
+              *[!0-9TZ:.-]*) ;;
+              *) since="--since=$ts" ;;
+            esac
+            ;;
+        esac
+      fi
+      # 2>&1: the container's own stderr is part of its log; the writer only
+      # persists a validated timestamp, so stray text cannot reach --since.
+      docker logs -f -t ${since:+"$since"} "$id" 2>&1 | writer "$LOG_DIR/$svc.log"
     fi
     sleep 2
   done
