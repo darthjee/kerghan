@@ -8,7 +8,8 @@
 #   latest / latest-offline  moved only after the offline smoke test passes
 #
 # The offline stage copies standalone/images/${TARGETARCH}/ into the image, so
-# the inner images are saved once per architecture before the build.
+# the inner images (kerghan, mysql, mysql-legacy, tent and the docker-cli log
+# collector tarballs) are saved once per architecture before the build.
 
 set -euo pipefail
 
@@ -18,6 +19,8 @@ ARCHES="amd64 arm64"
 MYSQL_IMAGE=mysql:8.4.11
 MYSQL_LEGACY_IMAGE=mysql:9.3.0
 TENT_IMAGE=darthjee/tent:1.0.3
+# Log collector image: must match LOGS_IMAGE in the standalone Dockerfile's .env step.
+LOGS_IMAGE=docker:27.5.1-cli
 IMAGES_DIR=standalone/images
 DOCKERFILE=dockerfiles/kerghan_standalone/Dockerfile
 
@@ -119,6 +122,7 @@ function save_images() {
     # with the compose `mysql-legacy` service.
     save_image "$arch" "$MYSQL_LEGACY_IMAGE" mysql-legacy
     save_image "$arch" "$(tent_image_for "$arch")" tent
+    save_image "$arch" "$LOGS_IMAGE" docker-cli
   done
 }
 
