@@ -49,6 +49,7 @@ KERGHAN_VERSION="0.10.2"
 FIRST_UPDATE_VERSION="0.8.3"
 # RELEASES_URL - where `kerghan update` downloads the release's install.sh.
 RELEASES_URL="https://github.com/darthjee/kerghan/releases"
+HTTPS_DOCS_URL="https://github.com/darthjee/kerghan/blob/main/docs/agents/standalone/https.md"
 
 IMAGE_REPO="darthjee/kerghan-standalone"
 INSTANCE="kerghan"
@@ -548,6 +549,34 @@ wanted_cookie_secure() {
       *) echo loopback ;;
     esac
   fi
+}
+
+# plain_http_lan_hint <bind> <port> - hints that logging in over plain HTTP
+# fails from other machines when the session cookies follow the loopback
+# rule (see wanted_cookie_secure); prints nothing otherwise.
+plain_http_lan_hint() {
+  local bind="$1" port="$2"
+  [ "$(wanted_cookie_secure "$bind" "$port")" = "loopback" ] || return 0
+  if [ "$bind" = "0.0.0.0" ]; then
+    hint "other machines cannot log in over plain HTTP; on this host use http://localhost:$port, from the LAN put a TLS reverse proxy in front and set an https FRONTEND_BASE_URL (see $HTTPS_DOCS_URL)"
+  else
+    hint "logging in over plain HTTP fails on $bind; put a TLS reverse proxy in front and set an https FRONTEND_BASE_URL (see $HTTPS_DOCS_URL)"
+  fi
+}
+
+# proxy_auto_login_warning <auto_login> <bind> <port> - warns that automatic
+# login behind a reverse proxy (loopback bind, https FRONTEND_BASE_URL) logs
+# everyone who reaches the proxy in as admin; prints nothing otherwise.
+proxy_auto_login_warning() {
+  local auto_login="$1" bind="$2" url
+  { [ "$auto_login" = "true" ] && is_loopback "$bind"; } || return 0
+  url="$(effective_frontend_base_url "$3")"
+  case "$url" in
+    https://*) ;;
+    *) return 0 ;;
+  esac
+  warn "automatic login is on and FRONTEND_BASE_URL is $url: if a reverse proxy publishes Kerghan, anyone who can reach it is logged in as admin"
+  hint "use 'kerghan up --no-auto-login' or set auto-login=false in ~/.kerghan/config"
 }
 
 # running_image - prints the image of the running vault-kerghan container, or
@@ -1618,7 +1647,8 @@ batch_apply_hint() {
 }
 
 # cross_key_warnings - the warnings of the written values (needs
-# read_settings): auto-login on with a non-loopback bind, and auto-login=true
+# read_settings): auto-login on with a non-loopback bind, auto-login on with an
+# https FRONTEND_BASE_URL (a reverse proxy may publish it), and auto-login=true
 # without the default user in kerghan.env (up would fail).
 cross_key_warnings() {
   local auto_login bind auto_login_source
@@ -1631,6 +1661,8 @@ cross_key_warnings() {
     warn "automatic login is on and the port is published on $bind: anyone who can reach it is logged in as admin"
     hint "use 'kerghan up --no-auto-login' or set bind=127.0.0.1 in ~/.kerghan/config to restrict it"
   fi
+  setting_lookup port
+  proxy_auto_login_warning "$auto_login" "$bind" "$SETTING_VALUE"
   if [ "$auto_login" = "true" ] && [ "$auto_login_source" = "file" ] &&
     [ "$ER_EXISTS" = "true" ] && ! env_has_default_user; then
     warn "auto-login=true needs the default user, but $ENV_FILE has no KERGHAN_DEFAULT_USER_USERNAME, KERGHAN_DEFAULT_USER_EMAIL and KERGHAN_DEFAULT_USER_PASSWORD: 'kerghan up' will fail"
@@ -1832,6 +1864,8 @@ cmd_up() {
     warn "automatic login is on and the port is published on $bind: anyone who can reach it is logged in as admin"
     hint "use 'kerghan up --no-auto-login' or set bind=127.0.0.1 in ~/.kerghan/config to restrict it"
   fi
+  proxy_auto_login_warning "$auto_login" "$bind" "$port"
+  plain_http_lan_hint "$bind" "$port"
 
   # 3. Compare with the running instance (FRONTEND_BASE_URL is added by
   # up_instance).
