@@ -322,10 +322,11 @@ valid_restart_on_update() { in_values "$1" "$RESTART_ON_UPDATE_VALUES"; }
 valid_file_logs() { in_values "$1" "$FILE_LOGS_VALUES"; }
 
 # valid_log_dir <path> - an absolute path or ~/path, without ':' (it would
-# break the -v SRC:DST mount), whitespace or '#'.
+# break the -v SRC:DST mount), whitespace, '#' or '..' segments.
 valid_log_dir() {
   case "$1" in
     '' | *[[:space:]]* | *:* | *'#'*) return 1 ;;
+    */../* | */.. | "~/../"* | "~/..") return 1 ;;
     /* | "~/"*) return 0 ;;
   esac
   return 1
@@ -733,9 +734,13 @@ prepare_log_dir() {
   EFFECTIVE_FILE_LOGS=false
   EFFECTIVE_LOG_DIR=""
   [ "${CFG_FILE_LOGS:-$DEFAULT_FILE_LOGS}" = "true" ] || return 0
-  local dir probe
+  local dir probe existed=false
   dir="$(resolved_log_dir)"
-  if mkdir -p "$dir" 2>/dev/null && chmod 700 "$dir" 2>/dev/null &&
+  [ -e "$dir" ] && existed=true
+  # Only a directory this tool creates gets mode 700; an existing one is
+  # left as the user set it.
+  if mkdir -p "$dir" 2>/dev/null &&
+    { [ "$existed" = "true" ] || chmod 700 "$dir" 2>/dev/null; } &&
     probe="$(mktemp "$dir/.probe.XXXXXX" 2>/dev/null)" && rm -f "$probe"; then
     EFFECTIVE_FILE_LOGS=true
     EFFECTIVE_LOG_DIR="$dir"

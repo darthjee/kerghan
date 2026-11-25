@@ -19,6 +19,16 @@ setup_running() {
   [ "$(file_mode "$HOME/.kerghan/logs")" = "700" ]
 }
 
+@test "an existing log directory keeps its mode" {
+  write_env_file
+  mkdir -p "$HOME/shared"
+  chmod 755 "$HOME/shared"
+  write_config "log-dir=$HOME/shared"
+  run "$KERGHAN" up
+  [ "$status" -eq 0 ]
+  [ "$(file_mode "$HOME/shared")" = "755" ]
+}
+
 @test "log-dir=~/custom is expanded against HOME" {
   write_env_file
   write_config "log-dir=~/custom"
@@ -122,7 +132,7 @@ setup_running() {
 
 @test "invalid log-dir values fail with the line number and touch nothing" {
   local bad
-  for bad in "log-dir=relative/path" "log-dir=/a:b" "log-dir=/a b" "file-logs=yes"; do
+  for bad in "log-dir=relative/path" "log-dir=/a:b" "log-dir=/a b" "log-dir=/a/../b" "log-dir=~/../b" "log-dir=/a/.." "file-logs=yes"; do
     write_config "port=3000" "$bad"
     run "$KERGHAN" up
     [ "$status" -eq 1 ]
