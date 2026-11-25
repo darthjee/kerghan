@@ -21,5 +21,5 @@ load helpers/setup
   write_env_file "FRONTEND_BASE_URL=https://kerghan.example.com"
   run "$KERGHAN" up -p 8080
   [ "$status" -eq 0 ]
-  [ "$(vault_calls)" = "vault up --name kerghan --image $IMAGE --env-file $ENV_FILE -p 127.0.0.1:8080:80 $DEFAULT_USER_ARGS --runtime auto --stop-timeout 60" ]
+  [ "$(vault_calls)" = "vault up --name kerghan --image $IMAGE --env-file $ENV_FILE -p 127.0.0.1:8080:80 $(default_user_args true true) --runtime auto --stop-timeout 60" ]
 }

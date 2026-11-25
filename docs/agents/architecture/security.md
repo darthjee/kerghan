@@ -18,7 +18,10 @@ The proxy's HMAC cache tokens (`core/cache-token.service.ts`) are a per-user cac
 1. **`SameSite=Strict` cookies**: `access_token` (`Path=/`) and `refresh_token`
    (`Path=/auth`) are `httpOnly` + `Secure` + `SameSite=Strict`, and the readable `logged_in`
    marker is `Secure` + `SameSite=Strict` too (`backend/src/auth/auth-cookies.ts`, locked in by
-   the login e2e spec). Browsers never send them on a cross-site request, so a forged request
+   the login e2e spec). `Secure` is on by default and is dropped only when
+   `KERGHAN_COOKIE_SECURE` is exactly `false`; the standalone client sets that only for a
+   loopback bind whose effective `FRONTEND_BASE_URL` is not `https` (issue #600), and always
+   `true` otherwise. `httpOnly` and `SameSite=Strict` never change. Browsers never send them on a cross-site request, so a forged request
    from another site arrives unauthenticated and without a refresh token.
 2. **Credentialed CORS allowlist**: CORS is off (same-origin only) unless
    `KERGHAN_ALLOWED_ORIGINS` or, as a fallback, `FRONTEND_BASE_URL` is set
@@ -114,7 +117,9 @@ attack.
   the only `GET` routes are the public `/health.json` and `/ready.json` probes; `/ready.json`
   exposes only per-check `up`/`down` states, never error details.
 - **Don't relax the cookies**: `access_token` and `refresh_token` stay `httpOnly` + `Secure` +
-  `SameSite=Strict`, and the refresh token never goes back into a response body. Only
+  `SameSite=Strict`, except the one documented opt-out of `Secure` above
+  (`KERGHAN_COOKIE_SECURE=false`, loopback plain-HTTP standalone only; never set it on a
+  deployment reachable over a network), and the refresh token never goes back into a response body. Only
   `logged_in` (no secret, value `1`) is script-readable.
 - **Don't bypass `OriginGuard`**: new mutating routes get it automatically as a global guard.
   Don't add an opt-out, and don't register another guard ahead of it that short-circuits.

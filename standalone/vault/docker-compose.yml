@@ -81,6 +81,7 @@ services:
       - KERGHAN_INTEGRATIONS_KEY
       # Optional pass-through allowlist (name only: passed only when set).
       - FRONTEND_BASE_URL
+      - KERGHAN_COOKIE_SECURE
       - KERGHAN_ALLOWED_ORIGINS
       - KERGHAN_LOG_LEVEL
       - KERGHAN_ACCESS_TOKEN_TTL_MS

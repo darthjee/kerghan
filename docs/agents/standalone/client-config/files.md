@@ -28,8 +28,8 @@ When the commands read a value, they read it the way its consumer does:
 - The generated keys, `DEFAULT_ENV_KEYS` in the client: `KERGHAN_SECRET_KEY`,
   `KERGHAN_INTEGRATIONS_KEY`, `KERGHAN_DEFAULT_USER_ENABLED`, `KERGHAN_DEFAULT_USER_USERNAME`,
   `KERGHAN_DEFAULT_USER_EMAIL`, `KERGHAN_DEFAULT_USER_PASSWORD`, `KERGHAN_DEFAULT_USER_ADMIN`.
-- The client-managed pair, `KERGHAN_DEFAULT_USER_ALWAYS_AUTHENTICATED` and
-  `KERGHAN_DEFAULT_USER_ALLOWED_IPS`: always refused (see [Refused keys](configure.md#refused-keys)).
+- The client-managed keys, `KERGHAN_DEFAULT_USER_ALWAYS_AUTHENTICATED`,
+  `KERGHAN_DEFAULT_USER_ALLOWED_IPS` and `KERGHAN_COOKIE_SECURE`: always refused (see [Refused keys](configure.md#refused-keys)).
 - `FRONTEND_BASE_URL`: optional; when `kerghan.env` does not set it, `up` passes
   `http://localhost:<port>`.
 

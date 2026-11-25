@@ -121,10 +121,11 @@ Restrictions: [Values](files.md#values), case 10.
 
 ### Refused keys
 
-`KERGHAN_DEFAULT_USER_ALWAYS_AUTHENTICATED` and `KERGHAN_DEFAULT_USER_ALLOWED_IPS` are managed by
-the client on every `up`. Setting either is refused (exit `1`) with the same hint as `up`'s
-`refuse_client_managed_keys`: use `auto-login` (`--[no-]auto-login`) and `bind` (`--bind`)
-instead. `--unset` of either is allowed, so a user can remove a line `up` refuses.
+`KERGHAN_DEFAULT_USER_ALWAYS_AUTHENTICATED`, `KERGHAN_DEFAULT_USER_ALLOWED_IPS` and
+`KERGHAN_COOKIE_SECURE` are managed by the client on every `up`. Setting any is refused (exit `1`)
+with the same hint as `up`'s `refuse_client_managed_keys`: use `auto-login` (`--[no-]auto-login`)
+and `bind` (`--bind`) instead; to keep the session cookies `Secure`, set an `https`
+`FRONTEND_BASE_URL`. `--unset` of either is allowed, so a user can remove a line `up` refuses.
 
 ### Required tests
 

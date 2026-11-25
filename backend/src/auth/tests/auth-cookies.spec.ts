@@ -11,6 +11,12 @@ function requestWith(cookies?: Record<string, unknown>): Request {
   return { cookies } as unknown as Request;
 }
 
+function configWith(secure?: string): ConfigService {
+  return {
+    get: jest.fn((key: string, fallback?: unknown) => (key === 'KERGHAN_COOKIE_SECURE' ? secure : fallback)),
+  } as unknown as ConfigService;
+}
+
 describe('auth-cookies', () => {
   describe('setSessionCookies', () => {
     const configService = { get: jest.fn((_key: string, fallback: number) => fallback) };
@@ -58,7 +64,7 @@ describe('auth-cookies', () => {
     it('clears each cookie with the path and options it was set with', () => {
       const res = responseMock();
 
-      clearSessionCookies(res as unknown as Response);
+      clearSessionCookies(res as unknown as Response, configWith());
 
       expect(res.clearCookie).toHaveBeenCalledWith('access_token', expect.objectContaining({ path: '/', httpOnly: true }));
       expect(res.clearCookie).toHaveBeenCalledWith(
@@ -66,6 +72,33 @@ describe('auth-cookies', () => {
         expect.objectContaining({ path: '/auth', httpOnly: true, secure: true, sameSite: 'strict' }),
       );
       expect(res.clearCookie).toHaveBeenCalledWith('logged_in', expect.objectContaining({ path: '/', httpOnly: false }));
+    });
+  });
+
+  describe('KERGHAN_COOKIE_SECURE', () => {
+    const session = {
+      accessToken: 'jwt',
+      refreshToken: 'raw',
+      refreshTokenExpiresAt: new Date('2030-01-01T00:00:00Z'),
+    } as AuthResult;
+
+    it.each([
+      ['false', false],
+      ['true', true],
+      [undefined, true],
+      ['nope', true],
+      ['False', true],
+    ])('with %s sets and clears the cookies with secure=%s', (value, expected) => {
+      const res = responseMock();
+
+      setSessionCookies(res as unknown as Response, session, configWith(value));
+      clearSessionCookies(res as unknown as Response, configWith(value));
+
+      expect(res.cookie).toHaveBeenCalledTimes(3);
+      expect(res.clearCookie).toHaveBeenCalledTimes(3);
+      for (const call of [...res.cookie.mock.calls, ...res.clearCookie.mock.calls]) {
+        expect(call[call.length - 1]).toEqual(expect.objectContaining({ secure: expected }));
+      }
     });
   });
 

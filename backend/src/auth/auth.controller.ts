@@ -123,7 +123,7 @@ export class AuthController {
       await this.authService.logout(refreshToken);
     }
 
-    clearSessionCookies(res);
+    clearSessionCookies(res, this.configService);
   }
 
   /**
@@ -164,6 +164,7 @@ export class AuthController {
       res,
       resolveRefreshToken(req, dto.refreshToken),
       (token) => this.authService.refresh(token),
+      this.configService,
     );
 
     return respondWithSession(result, res, this.configService);
@@ -228,7 +229,7 @@ export class AuthController {
     if (session) {
       setSessionCookies(res, session, this.configService);
     } else if (!loggedIn && !status) {
-      clearSessionCookies(res);
+      clearSessionCookies(res, this.configService);
     }
 
     return status ? { loggedIn, isAdmin, status } : { loggedIn, isAdmin };

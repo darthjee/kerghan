@@ -6,10 +6,10 @@ load helpers/setup
 
 WARNING="kerghan: warning: automatic login is on and the port is published on"
 
-# up_line <bind> <auto-login> [port] - the expected `vault up` line.
+# up_line <bind> <auto-login> [port] [cookie-secure] - the expected `vault up` line.
 up_line() {
   local port="${3:-3000}"
-  echo "vault up --name kerghan --image $IMAGE --env-file $ENV_FILE -p $1:$port:80 -e FRONTEND_BASE_URL=http://localhost:$port $(default_user_args "$2") --runtime auto --stop-timeout 60"
+  echo "vault up --name kerghan --image $IMAGE --env-file $ENV_FILE -p $1:$port:80 -e FRONTEND_BASE_URL=http://localhost:$port $(default_user_args "$2" "${4:-}") --runtime auto --stop-timeout 60"
 }
 
 @test "bind= from the file is used" {
@@ -26,7 +26,7 @@ up_line() {
   write_config "bind=0.0.0.0" "auto-login=false"
   run "$KERGHAN" up --bind 127.0.0.1
   [ "$status" -eq 0 ]
-  [ "$(vault_calls)" = "$(up_line 127.0.0.1 false)" ]
+  [ "$(vault_calls)" = "$(up_line 127.0.0.1 false 3000 false)" ]
 }
 
 @test "an explicit bind wins over the auto-login-off default" {
@@ -52,7 +52,7 @@ up_line() {
   [ "$status" -eq 0 ]
   assert_output_contains "$WARNING 0.0.0.0: anyone who can reach it is logged in as admin"
   assert_output_contains "kerghan: hint: use 'kerghan up --no-auto-login' or set bind=127.0.0.1"
-  [ "$(vault_calls)" = "$(up_line 0.0.0.0 true)" ]
+  [ "$(vault_calls)" = "$(up_line 0.0.0.0 true 3000 true)" ]
   assert_output_contains "Kerghan is running at http://localhost:3000"
 }
 

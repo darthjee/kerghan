@@ -454,7 +454,7 @@ mode_e2e() {
   report "instance published: $(docker_or "(not found on this machine)" port "$KERGHAN_CONTAINER" 80/tcp | tr '\n' ' ')"
   report "instance runtime: $(instance_runtime)"
   env_lines=$(docker_or "" inspect -f '{{range .Config.Env}}{{println .}}{{end}}' "$KERGHAN_CONTAINER" \
-    | grep -E '^KERGHAN_DEFAULT_USER_(ALWAYS_AUTHENTICATED|ALLOWED_IPS)=' || true)
+    | grep -E '^(KERGHAN_DEFAULT_USER_(ALWAYS_AUTHENTICATED|ALLOWED_IPS)|KERGHAN_COOKIE_SECURE)=' || true)
   if [ -n "$env_lines" ]; then
     while IFS= read -r line; do
       report "instance env: $line"

@@ -499,14 +499,14 @@ has_default_user_credentials() {
 # too: Docker's env-file reads it from the environment.
 refuse_client_managed_keys() {
   local key found=""
-  for key in KERGHAN_DEFAULT_USER_ALWAYS_AUTHENTICATED KERGHAN_DEFAULT_USER_ALLOWED_IPS; do
+  for key in $CLIENT_MANAGED_KEYS; do
     if grep -qE "^[[:space:]]*$key(=|[[:space:]]*\$)" "$ENV_FILE" 2>/dev/null; then
       found="$found $key"
     fi
   done
   [ -n "$found" ] || return 0
   error "$ENV_FILE sets${found}, which the client manages itself"
-  hint "remove the line(s) from kerghan.env; use auto-login (--[no-]auto-login) and bind (--bind) instead"
+  hint "remove the line(s) from kerghan.env; use auto-login (--[no-]auto-login) and bind (--bind) instead; to keep the session cookies Secure, set an https FRONTEND_BASE_URL"
   exit 1
 }
 
@@ -515,6 +515,33 @@ refuse_client_managed_keys() {
 frontend_base_url_args() {
   if ! grep -q "^${FRONTEND_BASE_URL_KEY}=" "$ENV_FILE" 2>/dev/null; then
     printf '%s\n' "-e" "${FRONTEND_BASE_URL_KEY}=http://localhost:$1"
+  fi
+}
+
+# effective_frontend_base_url <port> - the FRONTEND_BASE_URL the instance gets:
+# the value kerghan.env sets, else the derived default.
+effective_frontend_base_url() {
+  if env_file_sets "$FRONTEND_BASE_URL_KEY"; then
+    grep -E "^[[:space:]]*${FRONTEND_BASE_URL_KEY}=" "$ENV_FILE" | tail -n 1 |
+      sed -e "s/^[[:space:]]*${FRONTEND_BASE_URL_KEY}=//" -e 's/[[:space:]]*$//'
+  else
+    echo "http://localhost:$1"
+  fi
+}
+
+# wanted_cookie_secure <bind> <port> - prints false (session cookies without
+# the Secure attribute) when the bind is loopback and the effective
+# FRONTEND_BASE_URL is not https, else true.
+wanted_cookie_secure() {
+  local url
+  url="$(effective_frontend_base_url "$2")"
+  if is_loopback "$1"; then
+    case "$url" in
+      https://*) echo true ;;
+      *) echo false ;;
+    esac
+  else
+    echo true
   fi
 }
 
@@ -566,9 +593,32 @@ ENV
   echo "${value:-false}"
 }
 
+# running_cookie_secure - prints the KERGHAN_COOKIE_SECURE value of the running
+# container, or true when it is not set (an instance started by an older
+# client had Secure cookies). When the inspect fails it prints "unknown",
+# which never matches, so the instance is always recreated.
+running_cookie_secure() {
+  local env line value=""
+  env="$(docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' "$CONTAINER" 2>/dev/null)" || {
+    echo unknown
+    return 0
+  }
+  while IFS= read -r line; do
+    case "$line" in
+      KERGHAN_COOKIE_SECURE=*)
+        value="${line#*=}"
+        ;;
+    esac
+  done <<ENV
+$env
+ENV
+  echo "${value:-true}"
+}
+
 # settings_reason <current auto-login> <wanted auto-login> <current bind>
-# <wanted bind> - prints why the running instance must be recreated for a
-# changed auto-login or bind, or nothing when both match.
+# <wanted bind> <current cookie-secure> <wanted cookie-secure> - prints why
+# the running instance must be recreated for a changed auto-login, bind or
+# cookie setting, or nothing when all match.
 settings_reason() {
   if [ "$1" != "$2" ]; then
     if [ "$2" = "true" ]; then
@@ -578,6 +628,12 @@ settings_reason() {
     fi
   elif [ "$3" != "$4" ]; then
     echo "publishing on $4"
+  elif [ "$5" != "$6" ]; then
+    if [ "$6" = "false" ]; then
+      echo "allowing login over plain HTTP on loopback"
+    else
+      echo "requiring HTTPS for the session cookies"
+    fi
   fi
 }
 
@@ -631,7 +687,7 @@ SECRET_KEYS="KERGHAN_DEFAULT_USER_PASSWORD KERGHAN_SECRET_KEY KERGHAN_INTEGRATIO
 # FORCE_KEYS - only written with --force (stored data depends on them).
 FORCE_KEYS="KERGHAN_SECRET_KEY KERGHAN_INTEGRATIONS_KEY"
 # CLIENT_MANAGED_KEYS - passed by the client on every up; never written.
-CLIENT_MANAGED_KEYS="KERGHAN_DEFAULT_USER_ALWAYS_AUTHENTICATED KERGHAN_DEFAULT_USER_ALLOWED_IPS"
+CLIENT_MANAGED_KEYS="KERGHAN_DEFAULT_USER_ALWAYS_AUTHENTICATED KERGHAN_DEFAULT_USER_ALLOWED_IPS KERGHAN_COOKIE_SECURE"
 # PASSWORD_MIN_LENGTH - the backend refuses to boot with a shorter password.
 PASSWORD_MIN_LENGTH=8
 MASK="********"
@@ -1199,7 +1255,7 @@ batch_validate() {
     fi
     if is_client_managed_key "$key"; then
       error "$key is managed by the client and cannot be set in kerghan.env"
-      hint "use auto-login (--[no-]auto-login) and bind (--bind) instead"
+      hint "use auto-login (--[no-]auto-login) and bind (--bind) instead; to keep the session cookies Secure, set an https FRONTEND_BASE_URL"
       ok=1
       continue
     fi
@@ -1781,7 +1837,7 @@ cmd_up() {
     current_port="$(running_port)"
     reason="$(recreate_reason "$current" "$image" "$current_port" "$port")" || exit 1
     if [ -z "$reason" ]; then
-      reason="$(settings_reason "$(running_auto_login)" "$auto_login" "$(running_bind)" "$bind")"
+      reason="$(settings_reason "$(running_auto_login)" "$auto_login" "$(running_bind)" "$bind" "$(running_cookie_secure)" "$(wanted_cookie_secure "$bind" "$port")")"
     fi
     if [ -z "$reason" ]; then
       echo "Kerghan is already running at http://localhost:$port"
@@ -1794,7 +1850,7 @@ cmd_up() {
 
   # 4. Start it.
   warn_port_conflict "$bind" "$port"
-  up_instance "$image" "$port" "$foreground" "$bind" "$auto_login"
+  up_instance "$image" "$port" "$foreground" "$bind" "$auto_login" "$(wanted_cookie_secure "$bind" "$port")"
 }
 
 # warn_port_conflict <bind> <port> - warns when another process already
@@ -1911,15 +1967,15 @@ recreate_reason() {
   fi
 }
 
-# up_instance <image> <port> <foreground> <bind> <auto-login> - runs
-# `vault up`, keeping Vault's stderr and adding a hint on a port conflict.
+# up_instance <image> <port> <foreground> <bind> <auto-login> <cookie-secure>
+# - runs `vault up`, keeping Vault's stderr and adding a hint on a port conflict.
 #
-# The port is published on <bind> only. KERGHAN_DEFAULT_USER_ALWAYS_AUTHENTICATED
-# and KERGHAN_DEFAULT_USER_ALLOWED_IPS are always passed with -e, so auto-login
-# is the single source of truth (cmd_up refuses a kerghan.env that sets them,
-# see refuse_client_managed_keys).
+# The port is published on <bind> only. KERGHAN_DEFAULT_USER_ALWAYS_AUTHENTICATED,
+# KERGHAN_DEFAULT_USER_ALLOWED_IPS and KERGHAN_COOKIE_SECURE are always passed
+# with -e, so the client is the single source of truth (cmd_up refuses a
+# kerghan.env that sets them, see refuse_client_managed_keys).
 up_instance() {
-  local image="$1" port="$2" foreground="$3" bind="$4" auto_login="$5"
+  local image="$1" port="$2" foreground="$3" bind="$4" auto_login="$5" cookie_secure="$6"
   local args=(--image "$image" --env-file "$ENV_FILE" -p "$bind:$port:80")
   local extra
   while IFS= read -r extra; do
@@ -1927,6 +1983,7 @@ up_instance() {
   done < <(frontend_base_url_args "$port")
   args+=(-e "KERGHAN_DEFAULT_USER_ALWAYS_AUTHENTICATED=$auto_login")
   args+=(-e "KERGHAN_DEFAULT_USER_ALLOWED_IPS=$DEFAULT_USER_ALLOWED_IPS")
+  args+=(-e "KERGHAN_COOKIE_SECURE=$cookie_secure")
   args+=(--runtime "$(effective_runtime)" --stop-timeout "$(effective_stop_timeout)")
   if [ "$foreground" = "true" ]; then
     args+=(-f)

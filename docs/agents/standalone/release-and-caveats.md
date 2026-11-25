@@ -35,10 +35,14 @@ The CI jobs that build and publish the images and the client assets (`release-ke
 
 ## Caveats
 
-- **HTTPS.** The access-token cookie is always `Secure`. Browsers accept it on
-  `http://localhost`, but not over plain HTTP on a LAN IP or a hostname, where login silently
-  fails. Run standalone on `localhost`, or put your own TLS reverse proxy in front of it (and set
-  `FRONTEND_BASE_URL` to the `https` URL in `kerghan.env`). An `https` `FRONTEND_BASE_URL` is also
+- **HTTPS.** On a loopback `bind` (the default `127.0.0.1`) the client drops `Secure` from the
+  session cookies (`KERGHAN_COOKIE_SECURE=false`), so login works over plain HTTP in every browser,
+  Safari included. On a LAN bind (`0.0.0.0` or a LAN IP) the cookies stay `Secure` and plain-HTTP
+  login fails silently; this includes Safari on `127.0.0.1` of a `bind=0.0.0.0` instance. Put your
+  own TLS reverse proxy in front of it and set `FRONTEND_BASE_URL` to the `https` URL in
+  `kerghan.env`, which also keeps `Secure` on loopback. Opt-in LAN support is tracked in
+  [#601](https://github.com/darthjee/kerghan/issues/601). `localhost` and `127.0.0.1` are different
+  cookie hosts: logging in on one does not log in the other. An `https` `FRONTEND_BASE_URL` is also
   required to enable the GitHub OAuth App and GitHub App integration types.
 - **Docker Engine before 28.0 on Linux exposes `127.0.0.1` ports to the LAN.** This is a known
   Docker issue ([moby#45610](https://github.com/moby/moby/issues/45610)), fixed in Docker Engine
