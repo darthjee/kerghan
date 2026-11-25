@@ -32,12 +32,12 @@ ALLOWED_IPS="127.0.0.1,::1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16"
 
 # default_user_args <true|false> [cookie-secure] - the -e words for the
 # client-managed variables, as they appear in the vault up line. The cookie
-# setting defaults to false with auto-login on (a loopback bind) and true
+# setting defaults to false with auto-login on (a loopback bind) and loopback
 # otherwise.
 default_user_args() {
   local cookie="${2:-}"
   if [ -z "$cookie" ]; then
-    if [ "$1" = "true" ]; then cookie=false; else cookie=true; fi
+    if [ "$1" = "true" ]; then cookie=false; else cookie=loopback; fi
   fi
   echo "-e KERGHAN_DEFAULT_USER_ALWAYS_AUTHENTICATED=$1 -e KERGHAN_DEFAULT_USER_ALLOWED_IPS=$ALLOWED_IPS -e KERGHAN_COOKIE_SECURE=$cookie"
 }

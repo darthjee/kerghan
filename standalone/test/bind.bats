@@ -52,7 +52,7 @@ up_line() {
   [ "$status" -eq 0 ]
   assert_output_contains "$WARNING 0.0.0.0: anyone who can reach it is logged in as admin"
   assert_output_contains "kerghan: hint: use 'kerghan up --no-auto-login' or set bind=127.0.0.1"
-  [ "$(vault_calls)" = "$(up_line 0.0.0.0 true 3000 true)" ]
+  [ "$(vault_calls)" = "$(up_line 0.0.0.0 true 3000 loopback)" ]
   assert_output_contains "Kerghan is running at http://localhost:3000"
 }
 

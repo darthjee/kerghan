@@ -1,6 +1,7 @@
 import { UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import type { CookieOptions, Request, Response } from 'express';
+import { forwardedHttps, isLoopbackHost } from './loopback-host.js';
 import type { AuthResult } from './token.service.js';
 
 export const ACCESS_TOKEN_COOKIE = 'access_token';
@@ -15,14 +16,26 @@ export const REFRESH_TOKEN_COOKIE_PATH = '/auth';
 const DEFAULT_ACCESS_TOKEN_TTL_MS = 15 * 60 * 1000;
 
 /**
- * Decides whether the session cookies carry the `Secure` attribute. Only the
- * exact string `false` in `KERGHAN_COOKIE_SECURE` turns it off, so a typo or
- * an unset variable keeps the safe default.
+ * Decides whether the session cookies carry the `Secure` attribute. The exact
+ * string `false` in `KERGHAN_COOKIE_SECURE` never sets it; the exact string
+ * `loopback` omits it only for a request whose `Host` is a loopback host and
+ * that was not forwarded over HTTPS; anything else (typo, unset) keeps it.
  * @param {ConfigService} configService - Supplies `KERGHAN_COOKIE_SECURE`.
- * @returns {boolean} `false` only when `KERGHAN_COOKIE_SECURE` is `false`.
+ * @param {Request} [req] - The request, used in `loopback` mode.
+ * @returns {boolean} Whether the cookies must be `Secure`.
  */
-export function cookieSecure(configService: ConfigService): boolean {
-  return configService.get<string>('KERGHAN_COOKIE_SECURE') !== 'false';
+export function cookieSecure(configService: ConfigService, req?: Request): boolean {
+  const mode = configService.get<string>('KERGHAN_COOKIE_SECURE');
+
+  if (mode === 'false') {
+    return false;
+  }
+
+  if (mode === 'loopback') {
+    return !(req && isLoopbackHost(req.headers?.host) && !forwardedHttps(req));
+  }
+
+  return true;
 }
 
 function sessionCookieOptions(
@@ -45,11 +58,12 @@ function sessionCookieOptions(
  * token) the frontend uses for its optimistic login state.
  * @param {Response} res - The response to set the cookies on.
  * @param {AuthResult} result - The freshly issued session.
- * @param {ConfigService} configService - Supplies the access-token TTL and the `Secure` setting.
+ * @param {ConfigService} configService - Supplies the access-token TTL and the `Secure` setting
+ *   (`false`, `loopback` decided per request from `res.req`, or the always-`Secure` default).
  * @returns {void}
  */
 export function setSessionCookies(res: Response, result: AuthResult, configService: ConfigService): void {
-  const options = sessionCookieOptions(cookieSecure(configService));
+  const options = sessionCookieOptions(cookieSecure(configService, res.req));
   const refreshMaxAge = Math.max(0, result.refreshTokenExpiresAt.getTime() - Date.now());
 
   res.cookie(ACCESS_TOKEN_COOKIE, result.accessToken, {
@@ -64,11 +78,12 @@ export function setSessionCookies(res: Response, result: AuthResult, configServi
  * Clears the three session cookies, each with the same `path`/`secure`/
  * `sameSite` options it was set with so browsers actually drop it.
  * @param {Response} res - The response to clear the cookies on.
- * @param {ConfigService} configService - Supplies the `Secure` setting.
+ * @param {ConfigService} configService - Supplies the `Secure` setting
+ *   (same per-request decision as {@link setSessionCookies}).
  * @returns {void}
  */
 export function clearSessionCookies(res: Response, configService: ConfigService): void {
-  const options = sessionCookieOptions(cookieSecure(configService));
+  const options = sessionCookieOptions(cookieSecure(configService, res.req));
 
   res.clearCookie(ACCESS_TOKEN_COOKIE, options.access);
   res.clearCookie(REFRESH_TOKEN_COOKIE, options.refresh);

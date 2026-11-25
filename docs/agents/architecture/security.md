@@ -19,9 +19,14 @@ The proxy's HMAC cache tokens (`core/cache-token.service.ts`) are a per-user cac
    (`Path=/auth`) are `httpOnly` + `Secure` + `SameSite=Strict`, and the readable `logged_in`
    marker is `Secure` + `SameSite=Strict` too (`backend/src/auth/auth-cookies.ts`, locked in by
    the login e2e spec). `Secure` is on by default and is dropped only when
-   `KERGHAN_COOKIE_SECURE` is exactly `false`; the standalone client sets that only for a
-   loopback bind whose effective `FRONTEND_BASE_URL` is not `https` (issue #600), and always
-   `true` otherwise. `httpOnly` and `SameSite=Strict` never change. Browsers never send them on a cross-site request, so a forged request
+   `KERGHAN_COOKIE_SECURE` is exactly `false`, or exactly `loopback` and the request's raw `Host`
+   header is a loopback host (`localhost`, `127.0.0.0/8`, `[::1]`) with no `https` in
+   `X-Forwarded-Proto` (issue #601). The standalone client sets `false` for a loopback bind and
+   `loopback` for a non-loopback bind, only when the effective `FRONTEND_BASE_URL` is not `https`
+   (issues #600, #601), and `true` otherwise. A spoofed `Host` or `X-Forwarded-Proto` only affects
+   the spoofing client's own response, and `X-Forwarded-Proto` can only add `Secure`, never remove
+   it. Accepted exposure: a non-`Secure` cookie on `127.0.0.1` is not port-scoped, so another
+   local service on that host can see it. `httpOnly` and `SameSite=Strict` never change. Browsers never send them on a cross-site request, so a forged request
    from another site arrives unauthenticated and without a refresh token.
 2. **Credentialed CORS allowlist**: CORS is off (same-origin only) unless
    `KERGHAN_ALLOWED_ORIGINS` or, as a fallback, `FRONTEND_BASE_URL` is set
@@ -118,7 +123,7 @@ attack.
   exposes only per-check `up`/`down` states, never error details.
 - **Don't relax the cookies**: `access_token` and `refresh_token` stay `httpOnly` + `Secure` +
   `SameSite=Strict`, except the one documented opt-out of `Secure` above
-  (`KERGHAN_COOKIE_SECURE=false`, loopback plain-HTTP standalone only; never set it on a
+  (`KERGHAN_COOKIE_SECURE=false` or `loopback`, plain-HTTP standalone only; never set it on a
   deployment reachable over a network), and the refresh token never goes back into a response body. Only
   `logged_in` (no secret, value `1`) is script-readable.
 - **Don't bypass `OriginGuard`**: new mutating routes get it automatically as a global guard.

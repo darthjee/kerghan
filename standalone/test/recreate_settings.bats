@@ -36,7 +36,8 @@ KERGHAN_COOKIE_SECURE=false"
 
 @test "an unchanged auto-login off on every interface is a no-op" {
   setup_running
-  export STUB_RUNNING_HOST_IP="" STUB_RUNNING_ENV="KERGHAN_DEFAULT_USER_ALWAYS_AUTHENTICATED=false"
+  export STUB_RUNNING_HOST_IP="" STUB_RUNNING_ENV="KERGHAN_DEFAULT_USER_ALWAYS_AUTHENTICATED=false
+KERGHAN_COOKIE_SECURE=loopback"
   write_config "auto-login=false"
   run "$KERGHAN" up
   [ "$status" -eq 0 ]
@@ -69,7 +70,7 @@ KERGHAN_COOKIE_SECURE=false"
   run "$KERGHAN" up
   [ "$status" -eq 0 ]
   assert_output_contains "publishing on 0.0.0.0"
-  assert_recreated 0.0.0.0 true true
+  assert_recreated 0.0.0.0 true loopback
 }
 
 @test "an instance published on every interface moves to 127.0.0.1" {
@@ -102,7 +103,7 @@ KERGHAN_COOKIE_SECURE=false"
 @test "a pre-#371 instance with a pre-#371 kerghan.env is left running" {
   write_legacy_env_file
   export STUB_VOLUME_EXISTS=1 STUB_RUNNING_IMAGE="$IMAGE" STUB_RUNNING_PORT=3000 \
-    STUB_RUNNING_HOST_IP="" STUB_RUNNING_ENV=""
+    STUB_RUNNING_HOST_IP="" STUB_RUNNING_ENV="KERGHAN_COOKIE_SECURE=loopback"
   run "$KERGHAN" up
   [ "$status" -eq 0 ]
   assert_output_contains "Kerghan is already running"
