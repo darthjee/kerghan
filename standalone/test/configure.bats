@@ -24,11 +24,15 @@ list_row() {
   [ "$(list_row auto-login)" = " auto-login true default" ]
   [ "$(list_row bind)" = " bind 127.0.0.1 derived (auto-login on)" ]
   [ "$(list_row restart-on-update)" = " restart-on-update ask default" ]
+  [ "$(list_row file-logs)" = " file-logs true default" ]
+  [ "$(list_row log-dir)" = " log-dir $HOME/.kerghan/logs default" ]
   [[ "${lines[7]}" == "  bind "* ]]
   [[ "${lines[8]}" == "  restart-on-update "* ]]
-  [ "${lines[9]}" = "env (~/.kerghan/kerghan.env)" ]
+  [[ "${lines[9]}" == "  file-logs "* ]]
+  [[ "${lines[10]}" == "  log-dir "* ]]
+  [ "${lines[11]}" = "env (~/.kerghan/kerghan.env)" ]
   assert_output_contains "not created yet"
-  [ "${#lines[@]}" -eq 11 ]
+  [ "${#lines[@]}" -eq 13 ]
   [ ! -e "$HOME/.kerghan" ]
 }
 

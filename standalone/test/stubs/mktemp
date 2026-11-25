@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+# Test stub for mktemp: fails when the template is under STUB_UNWRITABLE_DIR
+# (tests run as root, so mode bits cannot make a directory unwritable), and
+# otherwise defers to the real mktemp.
+#   STUB_UNWRITABLE_DIR   a directory whose mktemp calls fail
+if [ -n "${STUB_UNWRITABLE_DIR:-}" ]; then
+  for arg in "$@"; do
+    case "$arg" in
+      "$STUB_UNWRITABLE_DIR"/*)
+        echo "mktemp: failed to create file via template '$arg': Permission denied" >&2
+        exit 1
+        ;;
+    esac
+  done
+fi
+exec "$(PATH="${SYSTEM_PATH:-$PATH}" command -v mktemp | head -n 1)" "$@"

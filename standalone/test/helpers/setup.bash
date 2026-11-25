@@ -39,22 +39,29 @@ default_user_args() {
   if [ -z "$cookie" ]; then
     if [ "$1" = "true" ]; then cookie=false; else cookie=loopback; fi
   fi
-  echo "-e KERGHAN_DEFAULT_USER_ALWAYS_AUTHENTICATED=$1 -e KERGHAN_DEFAULT_USER_ALLOWED_IPS=$ALLOWED_IPS -e KERGHAN_COOKIE_SECURE=$cookie"
+  echo "-e KERGHAN_DEFAULT_USER_ALWAYS_AUTHENTICATED=$1 -e KERGHAN_DEFAULT_USER_ALLOWED_IPS=$ALLOWED_IPS -e KERGHAN_COOKIE_SECURE=$cookie $(log_args)"
+}
+
+# log_args [dir] - the -e / -v words the client passes for the log directory
+# (default ~/.kerghan/logs, file logs on), right after the default-user words.
+log_args() {
+  echo "-e KERGHAN_FILE_LOGS=true -e KERGHAN_HOST_UID=$(id -u) -e KERGHAN_HOST_GID=$(id -g) -v ${1:-$HOME/.kerghan/logs}:/vault/logs"
 }
 
 # DEFAULT_USER_ARGS - the default-user -e words with auto-login on (default).
-DEFAULT_USER_ARGS="$(default_user_args true)"
+DEFAULT_USER_ARGS="(set in setup, after HOME)"
 
 setup() {
   TEST_ROOT="$(mktemp -d "$BATS_TMPDIR/kerghan-test.XXXXXX")"
   export HOME="$TEST_ROOT/home"
+  DEFAULT_USER_ARGS="$(default_user_args true)"
   STUB_BIN="$TEST_ROOT/bin"
   mkdir -p "$HOME" "$STUB_BIN"
   cp "$BATS_TEST_DIRNAME/stubs/vault" "$BATS_TEST_DIRNAME/stubs/docker" \
     "$BATS_TEST_DIRNAME/stubs/openssl" "$BATS_TEST_DIRNAME/stubs/lsof" \
-    "$BATS_TEST_DIRNAME/stubs/ss" "$STUB_BIN/"
+    "$BATS_TEST_DIRNAME/stubs/ss" "$BATS_TEST_DIRNAME/stubs/mktemp" "$STUB_BIN/"
   chmod +x "$STUB_BIN"/*
-  SYSTEM_PATH="$PATH"
+  export SYSTEM_PATH="$PATH"
   export PATH="$STUB_BIN:$PATH"
   export STUB_LOG="$TEST_ROOT/stub.log"
   : >"$STUB_LOG"
@@ -65,7 +72,8 @@ setup() {
     STUB_RUNNING_HOST_IP STUB_RUNNING_ENV STUB_RUNNING_ENV_FAIL \
     STUB_VAULT_UP_EXIT STUB_VAULT_UP_STDERR KERGHAN_ASSUME_TTY STUB_MV_FAIL \
     STUB_LEGACY_VOLUME STUB_LEGACY_EMPTY STUB_LEGACY_RM_EXIT STUB_MIG_FAIL \
-    STUB_LSOF_OUTPUT STUB_LSOF_EXIT STUB_SS_OUTPUT STUB_SS_EXIT
+    STUB_LSOF_OUTPUT STUB_LSOF_EXIT STUB_SS_OUTPUT STUB_SS_EXIT \
+    STUB_LOG_MOUNT STUB_FILE_LOGS STUB_UNWRITABLE_DIR
 }
 
 teardown() {

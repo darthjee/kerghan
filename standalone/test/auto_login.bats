@@ -123,7 +123,7 @@ up_line() {
   write_env_file
   run "$KERGHAN" up --no-auto-login
   [ "$status" -eq 0 ]
-  vault_calls | grep -qF -- "-e KERGHAN_DEFAULT_USER_ALLOWED_IPS=$ALLOWED_IPS -e KERGHAN_COOKIE_SECURE=loopback --runtime"
+  vault_calls | grep -qF -- "-e KERGHAN_DEFAULT_USER_ALLOWED_IPS=$ALLOWED_IPS -e KERGHAN_COOKIE_SECURE=loopback $(log_args) --runtime"
 }
 
 @test "a pre-#371 kerghan.env turns the default auto-login off, on 0.0.0.0, with a notice" {

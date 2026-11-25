@@ -12,6 +12,10 @@
 #                          KERGHAN_DEFAULT_USER_ALWAYS_AUTHENTICATED=true, the
 #                          client's default; set it empty for an instance
 #                          started without it)
+#   STUB_FILE_LOGS         KERGHAN_FILE_LOGS appended to its .Config.Env (default
+#                          true; "none" for an instance from an older client)
+#   STUB_LOG_MOUNT         source of its /vault/logs mount (default
+#                          $HOME/.kerghan/logs; set it empty for no mount)
 #   STUB_RUNNING_ENV_FAIL=1  inspecting its .Config.Env fails (exit 1)
 #   STUB_DOCKER_INFO_EXIT  exit code of `docker info` (default 0)
 #   STUB_DOCKER_PULL_EXIT  exit code of `docker pull` (default 0)
@@ -77,8 +81,10 @@ if [ "${1:-}" = "inspect" ]; then
       env_value="${STUB_RUNNING_ENV-KERGHAN_DEFAULT_USER_ALWAYS_AUTHENTICATED=true
 KERGHAN_COOKIE_SECURE=false}"
       [ -z "$env_value" ] || printf '%s\n' "$env_value"
+      [ "${STUB_FILE_LOGS-true}" = "none" ] || echo "KERGHAN_FILE_LOGS=${STUB_FILE_LOGS-true}"
       echo
       ;;
+    *Mounts*) echo "${STUB_LOG_MOUNT-$HOME/.kerghan/logs}" ;;
     *HostPort*) echo "${STUB_RUNNING_PORT:-3000}" ;;
     '{{.Id}}') echo "${STUB_CONTAINER_ID:-container-$(grep -c '^vault up' "$STUB_LOG")}" ;;
     *HostIp*) echo "${STUB_RUNNING_HOST_IP-127.0.0.1}" ;;

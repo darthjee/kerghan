@@ -13,12 +13,12 @@ ALL_COMMANDS=("up " "down " "logs " "status " "compose " "reset " "update " "upd
 UP_FLAGS=("--offline " "-p " "--port " "--auto-login " "--no-auto-login " "--bind " "-f ")
 UPDATE_FLAGS=("--force " "--yes " "--restart " "--no-restart ")
 CONFIG_KEYS_EQ=("port=" "variant=" "runtime=" "stop-timeout=" "image-tag=" "auto-login="
-  "bind=" "restart-on-update=")
+  "bind=" "restart-on-update=" "file-logs=" "log-dir=")
 ENV_KEYS_EQ=("KERGHAN_SECRET_KEY=" "KERGHAN_INTEGRATIONS_KEY=" "KERGHAN_DEFAULT_USER_ENABLED="
   "KERGHAN_DEFAULT_USER_USERNAME=" "KERGHAN_DEFAULT_USER_EMAIL="
   "KERGHAN_DEFAULT_USER_PASSWORD=" "KERGHAN_DEFAULT_USER_ADMIN=" "FRONTEND_BASE_URL=")
 UNSET_KEYS=("port " "variant " "runtime " "stop-timeout " "image-tag " "auto-login " "bind "
-  "restart-on-update " "FRONTEND_BASE_URL ")
+  "restart-on-update " "file-logs " "log-dir " "FRONTEND_BASE_URL ")
 
 # source_completion - writes `kerghan completion bash` to a file and sources it
 # into the test shell itself (not through `run`: COMPREPLY is read afterwards).
