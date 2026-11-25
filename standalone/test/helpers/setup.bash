@@ -63,6 +63,8 @@ setup() {
 }
 
 teardown() {
+  # hide_listener_tools narrows PATH: restore it before cleaning up.
+  [ -z "${SYSTEM_PATH:-}" ] || export PATH="$SYSTEM_PATH"
   rm -rf "$TEST_ROOT"
 }
 
