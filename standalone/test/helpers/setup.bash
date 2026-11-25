@@ -45,8 +45,10 @@ setup() {
   STUB_BIN="$TEST_ROOT/bin"
   mkdir -p "$HOME" "$STUB_BIN"
   cp "$BATS_TEST_DIRNAME/stubs/vault" "$BATS_TEST_DIRNAME/stubs/docker" \
-    "$BATS_TEST_DIRNAME/stubs/openssl" "$STUB_BIN/"
+    "$BATS_TEST_DIRNAME/stubs/openssl" "$BATS_TEST_DIRNAME/stubs/lsof" \
+    "$BATS_TEST_DIRNAME/stubs/ss" "$STUB_BIN/"
   chmod +x "$STUB_BIN"/*
+  SYSTEM_PATH="$PATH"
   export PATH="$STUB_BIN:$PATH"
   export STUB_LOG="$TEST_ROOT/stub.log"
   : >"$STUB_LOG"
@@ -56,7 +58,8 @@ setup() {
   unset STUB_VOLUME_EXISTS STUB_RUNNING_IMAGE STUB_RUNNING_STATE STUB_RUNNING_PORT \
     STUB_RUNNING_HOST_IP STUB_RUNNING_ENV STUB_RUNNING_ENV_FAIL \
     STUB_VAULT_UP_EXIT STUB_VAULT_UP_STDERR KERGHAN_ASSUME_TTY STUB_MV_FAIL \
-    STUB_LEGACY_VOLUME STUB_LEGACY_EMPTY STUB_LEGACY_RM_EXIT STUB_MIG_FAIL
+    STUB_LEGACY_VOLUME STUB_LEGACY_EMPTY STUB_LEGACY_RM_EXIT STUB_MIG_FAIL \
+    STUB_LSOF_OUTPUT STUB_LSOF_EXIT STUB_SS_OUTPUT STUB_SS_EXIT
 }
 
 teardown() {
@@ -160,4 +163,32 @@ file_mode() {
 make_old() {
   touch -t 200001010000 "$1"
   touch -t 200101010000 "$TEST_ROOT/old-ref"
+}
+
+# hide_lsof - removes the lsof stub, so only ss can be found.
+hide_lsof() {
+  rm -f "$STUB_BIN/lsof"
+  hide_real_listener_tools
+}
+
+# hide_listener_tools - neither lsof nor ss can be found: the stubs are removed
+# and PATH is reduced to STUB_BIN plus symlinks to the few tools the client
+# needs, so the host's real lsof/ss are unreachable.
+hide_listener_tools() {
+  rm -f "$STUB_BIN/lsof" "$STUB_BIN/ss"
+  hide_real_listener_tools
+}
+
+# hide_real_listener_tools - PATH = STUB_BIN + a directory of symlinks to the
+# host tools, minus lsof and ss.
+hide_real_listener_tools() {
+  local safe="$TEST_ROOT/safe-bin" tool path
+  mkdir -p "$safe"
+  for tool in bash env sh awk sort cat grep sed tr mkdir rm cp chmod mktemp date head tail cut wc dirname basename id ls touch stat tee printf readlink; do
+    path="$(PATH="$SYSTEM_PATH" command -v "$tool" 2>/dev/null || true)"
+    case "$path" in
+      /*) ln -sf "$path" "$safe/$tool" ;;
+    esac
+  done
+  export PATH="$STUB_BIN:$safe"
 }

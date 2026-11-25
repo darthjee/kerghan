@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+# Test stub for lsof: logs its call and prints $STUB_LSOF_OUTPUT (lsof -F
+# output). Unset: no match, exit 1 (as the real lsof). STUB_LSOF_EXIT
+# overrides the exit code.
+echo "lsof $*" >>"$STUB_LOG"
+if [ -z "${STUB_LSOF_OUTPUT:-}" ]; then
+  exit "${STUB_LSOF_EXIT:-1}"
+fi
+printf '%s\n' "$STUB_LSOF_OUTPUT"
+exit "${STUB_LSOF_EXIT:-0}"
