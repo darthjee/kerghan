@@ -60,7 +60,7 @@ rather than an edit to the seed migration's `INSERT`, since the seed migration r
   rotated without logging users out — see the rotation runbook in
   `docs/agents/environment-variables.md`. Expiry is configurable via `KERGHAN_ACCESS_TOKEN_TTL_MS` (milliseconds;
   defaults to `900000`, 15 minutes, when unset) — see `docs/agents/environment-variables.md`. Set
-  as an `httpOnly` + `Secure` (unless `KERGHAN_COOKIE_SECURE=false`) + `SameSite=Strict` cookie (`access_token`), whose `maxAge` is
+  as an `httpOnly` + `Secure` (unless `KERGHAN_COOKIE_SECURE=false`, or `loopback` and the request host is loopback over plain HTTP) + `SameSite=Strict` cookie (`access_token`), whose `maxAge` is
   driven by the same env var — never returned in the response body. The payload
   (`core/access-token-payload.ts`'s `AccessTokenPayload`) carries `sub` (the user id), `sid`,
   `username` and `isAdmin`. **`sid`** is the `sessionUuid` of the refresh-token session the

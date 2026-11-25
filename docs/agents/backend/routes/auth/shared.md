@@ -73,7 +73,7 @@ Every session-minting response (login, register, refresh and the winning
 helper (`auth/auth-response.ts`), which calls `setSessionCookies` (`auth/auth-cookies.ts`), so
 the response bodies/cookies cannot drift apart. An automatic login on `status.json` calls
 `setSessionCookies` directly, so it sets the same cookies. All three cookies are `Secure` (unless
-`KERGHAN_COOKIE_SECURE=false`; `clearSessionCookies` uses the same setting) and `SameSite=Strict`:
+`KERGHAN_COOKIE_SECURE=false`, or `loopback` and the request `Host` is loopback over plain HTTP; `clearSessionCookies` makes the same per-request decision) and `SameSite=Strict`:
 
 | Name | httpOnly | Path | Value | maxAge |
 | --- | --- | --- | --- | --- |

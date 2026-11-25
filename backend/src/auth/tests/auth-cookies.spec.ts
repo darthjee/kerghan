@@ -102,6 +102,73 @@ describe('auth-cookies', () => {
     });
   });
 
+  describe('KERGHAN_COOKIE_SECURE=loopback', () => {
+    const session = {
+      accessToken: 'jwt',
+      refreshToken: 'raw',
+      refreshTokenExpiresAt: new Date('2030-01-01T00:00:00Z'),
+    } as AuthResult;
+
+    function secureFlags(value: string | undefined, req: unknown): boolean[] {
+      const res = { ...responseMock(), req };
+
+      setSessionCookies(res as unknown as Response, session, configWith(value));
+      clearSessionCookies(res as unknown as Response, configWith(value));
+
+      return [...res.cookie.mock.calls, ...res.clearCookie.mock.calls].map(
+        (call) => (call[call.length - 1] as { secure: boolean }).secure,
+      );
+    }
+
+    it.each(['127.0.0.1:5050', '127.1.2.3', 'localhost', 'LOCALHOST:80', '[::1]:5050', '[::1]'])(
+      'drops Secure for the loopback Host %s',
+      (host) => {
+        expect(secureFlags('loopback', { headers: { host } })).toEqual([false, false, false, false, false, false]);
+      },
+    );
+
+    it.each([
+      '192.168.1.10:5050', 'example.com', 'localhost.evil.com', '127.0.0.1.nip.io', 'kerghan.localhost',
+      '256.0.0.1', '[::2]', '[::1]x', '127.0.0', '',
+    ])('keeps Secure for the non-loopback Host "%s"', (host) => {
+      expect(secureFlags('loopback', { headers: { host } })).toEqual(Array(6).fill(true));
+    });
+
+    it('keeps Secure when the Host header is missing', () => {
+      expect(secureFlags('loopback', { headers: {} })).toEqual(Array(6).fill(true));
+    });
+
+    it.each(['https', 'HTTPS', 'http, https'])('keeps Secure with X-Forwarded-Proto %s', (proto) => {
+      const req = { headers: { host: '127.0.0.1:5050', 'x-forwarded-proto': proto } };
+
+      expect(secureFlags('loopback', req)).toEqual(Array(6).fill(true));
+    });
+
+    it('keeps Secure with an array X-Forwarded-Proto containing https', () => {
+      const req = { headers: { host: 'localhost', 'x-forwarded-proto': ['http', 'https'] } };
+
+      expect(secureFlags('loopback', req)).toEqual(Array(6).fill(true));
+    });
+
+    it('drops Secure with X-Forwarded-Proto http', () => {
+      const req = { headers: { host: 'localhost', 'x-forwarded-proto': 'http' } };
+
+      expect(secureFlags('loopback', req)).toEqual(Array(6).fill(false));
+    });
+
+    it('keeps Secure when the response has no req', () => {
+      expect(secureFlags('loopback', undefined)).toEqual(Array(6).fill(true));
+    });
+
+    it('never sets Secure with false, whatever the host', () => {
+      expect(secureFlags('false', { headers: { host: 'example.com' } })).toEqual(Array(6).fill(false));
+    });
+
+    it.each(['true', 'Loopback', 'typo', undefined])('keeps Secure for %s on a loopback host', (value) => {
+      expect(secureFlags(value, { headers: { host: '127.0.0.1' } })).toEqual(Array(6).fill(true));
+    });
+  });
+
   describe('readRefreshToken', () => {
     it.each([
       ['a present cookie', { refresh_token: 'raw' }, 'raw'],
