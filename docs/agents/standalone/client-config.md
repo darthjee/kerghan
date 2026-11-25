@@ -20,7 +20,7 @@ Both use one writer (key routing, validation, line editing, atomic writes) and o
 secret-handling rules.
 
 - **Both files.** `~/.kerghan/config` holds the client settings, all lower-case keys: `port`,
-  `variant`, `runtime`, `stop-timeout`, `image-tag`, `auto-login`, `bind`, `restart-on-update`.
+  `variant`, `runtime`, `stop-timeout`, `image-tag`, `auto-login`, `bind`, `restart-on-update`, `file-logs`, `log-dir`.
   `~/.kerghan/kerghan.env` holds the container's environment, all upper-case keys (the two
   secrets, the `KERGHAN_DEFAULT_USER_*` values, `FRONTEND_BASE_URL`, any custom variable).
 - **Routing by key.** The two namespaces never collide, so the key alone decides which file is

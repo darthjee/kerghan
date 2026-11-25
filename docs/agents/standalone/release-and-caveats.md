@@ -51,6 +51,12 @@ The CI jobs that build and publish the images and the client assets (`release-ke
   `localhost` and `127.0.0.1` are different
   cookie hosts: logging in on one does not log in the other. An `https` `FRONTEND_BASE_URL` is also
   required to enable the GitHub OAuth App and GitHub App integration types.
+- **Log files.** With `file-logs=true` (the default) the `tent` and `kerghan` logs are written to
+  `~/.kerghan/logs` (or `log-dir`), 10 MB per file, 5 rotated copies. They survive `kerghan down`
+  and `kerghan reset`; delete them with `rm -r ~/.kerghan/logs`. On Docker Desktop for macOS a
+  custom `log-dir` must be inside a shared file path. The outer Vault container's own log is
+  unbounded until darthjee/vault#81; set `log-opts` in Docker's `daemon.json` to cap it. Needs an
+  image from the release that ships the collector; see [Log files](inner-stack.md#log-files).
 - **Docker Engine before 28.0 on Linux exposes `127.0.0.1` ports to the LAN.** This is a known
   Docker issue ([moby#45610](https://github.com/moby/moby/issues/45610)), fixed in Docker Engine
   28.0: on older engines, hosts on the same LAN segment can reach a port published on
@@ -111,7 +117,7 @@ The CI jobs that build and publish the images and the client assets (`release-ke
 | What | How |
 |---|---|
 | Build the online image locally | `make build-standalone` (tags `darthjee/kerghan-standalone:dev`) |
-| Smoke-test it | `make standalone-smoke`, which runs `standalone/scripts/smoke_test.sh`: boots the image with `--privileged`, checks `/health.json` and `/` through Tent, restarts with the data volume kept, and checks no env file or secret is baked in. Needs `--privileged` support on the host Docker. |
+| Smoke-test it | `make standalone-smoke`, which runs `standalone/scripts/smoke_test.sh`: boots the image with `--privileged`, checks `/health.json` and `/` through Tent, restarts with the data volume kept, and checks no env file or secret is baked in. It also mounts a host directory for the log files and checks `tent.log` and `kerghan.log` (timestamps, modes, owner), that a request path is logged, that a killed collector restarts and keeps appending, and that the files survive the restart. Needs `--privileged` support on the host Docker. |
 | Verify the effective client IP | `standalone/scripts/verify_client_ip.sh [probe\|reach\|e2e]`, run by hand (no `make` target): measures the address the backend sees through Vault, and checks `status.json` against a running instance. See [Verifying the effective client IP](inner-stack.md#verifying-the-effective-client-ip). |
 | Client and installer tests | The bats suite in `standalone/test/` (with `helpers/` and command `stubs/`): `docker-compose run --rm standalone_tests`. CI runs it in the `standalone_tests` job. It also covers `configure` and `wizard` (`configure_files.bats`, `configure.bats`, `wizard.bats`, `configure_security.bats`; see the "Required tests" sections of the [Client config](client-config.md) pages), `update` (`update.bats`; see the "Required tests" sections of [Client update](client-update.md)), and bash completion (`completion.bats`, `completion_command.bats`, `completion_safety.bats`, `completion_sync.bats`, `install_completion.bats`; see the "Required tests" sections of [Client completion](client-completion.md)). The whole suite also runs under bash 3.2 (the version macOS ships): `docker-compose run --rm standalone_tests_bash32`, in CI job `standalone_tests_bash32`. |
 

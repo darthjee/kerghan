@@ -174,7 +174,7 @@ must pass `--privileged` (or the Sysbox runtime), the required secrets (`KERGHAN
 
 | File | Content |
 |---|---|
-| `~/.kerghan/config` | Optional client settings: `port`, `variant`, `runtime`, `stop-timeout`, `image-tag`, `auto-login`, `bind`, `restart-on-update`. Copy `config.example` from the release assets to start. |
+| `~/.kerghan/config` | Optional client settings: `port`, `variant`, `runtime`, `stop-timeout`, `image-tag`, `auto-login`, `bind`, `restart-on-update`, `file-logs`, `log-dir`. Copy `config.example` from the release assets to start. |
 | `~/.kerghan/kerghan.env` | Secrets generated on the first `kerghan up`, plus any backend variables you add (see [Standalone variables](docs/agents/environment-variables/standalone.md)). |
 
 Instead of editing the files by hand, use `kerghan configure` (scriptable: `kerghan configure`
@@ -193,6 +193,7 @@ See [Caveats](docs/agents/standalone/release-and-caveats.md#caveats) for the det
 - **HTTPS:** plain HTTP login works on the default loopback bind (`127.0.0.1`), in every browser.
   On a LAN bind (`0.0.0.0` or a LAN IP), put a TLS reverse proxy in front and use an `https`
   `FRONTEND_BASE_URL`, otherwise login fails.
+- **Logs:** the `tent` and `kerghan` logs are written to `~/.kerghan/logs` (set `log-dir` to move them, `file-logs=false` to turn them off). They survive `kerghan down` and `kerghan reset`; delete them with `rm -r ~/.kerghan/logs`.
 - **Back up `~/.kerghan/kerghan.env`:** losing it logs everyone out and makes stored integration
   credentials unreadable.
 - **MySQL password:** fixed when the data volume is created.

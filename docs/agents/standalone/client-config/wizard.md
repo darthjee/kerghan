@@ -26,6 +26,8 @@ Asked in this order; `+` marks the questions only asked with `--advanced`:
 | 6 | Automatic login (true / false) | `auto-login` | config |
 | 7 | Bind address | `bind` | config |
 | 8 | Restart after update (ask / always / never) | `restart-on-update` | config |
+| 8a + | Write logs to a host directory (true / false) | `file-logs` | config |
+| 8b + | Log directory (only when `file-logs` is true) | `log-dir` | config |
 | 9 + | Default user enabled (true / false) | `KERGHAN_DEFAULT_USER_ENABLED` | env |
 | 10 + | Default user is admin (true / false) | `KERGHAN_DEFAULT_USER_ADMIN` | env |
 | 11 | Default user username | `KERGHAN_DEFAULT_USER_USERNAME` | env |
@@ -139,7 +141,7 @@ unless stated:
 
 - Without `KERGHAN_ASSUME_TTY` and with piped stdin: exit `1` pointing to `kerghan configure`, no
   question printed. An unknown option exits `2`.
-- Without `--advanced`, questions 1, 2, 6, 7, 8, 11, 12, 13 in that order; with it, all fourteen.
+- Without `--advanced`, questions 1, 2, 6, 7, 8, 11, 12, 13 in that order; with it, all sixteen (`file-logs` and `log-dir` are advanced-only; `log-dir` is asked only when the `file-logs` answer is true).
 - Enter on every question with no `config` writes nothing and prints `Nothing changed.`.
 - Port `3002` + confirm writes `port=3002`, prints the change list and the `kerghan up` hint.
 - The `bind` default follows the auto-login answer; Enter on it writes no `bind` line.

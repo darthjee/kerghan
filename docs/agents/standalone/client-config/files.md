@@ -6,7 +6,7 @@ Part of [Client config](../client-config.md).
 
 | File | Keys | Read by | Mode |
 |------|------|---------|------|
-| `~/.kerghan/config` | lower-case: `port`, `variant`, `runtime`, `stop-timeout`, `image-tag`, `auto-login`, `bind`, `restart-on-update` | the client's `load_config` (`up`, `down`, `reset`, `update`, `update-env`) | whatever it has (usually `644`) |
+| `~/.kerghan/config` | lower-case: `port`, `variant`, `runtime`, `stop-timeout`, `image-tag`, `auto-login`, `bind`, `restart-on-update`, `file-logs`, `log-dir` | the client's `load_config` (`up`, `down`, `reset`, `update`, `update-env`) | whatever it has (usually `644`) |
 | `~/.kerghan/kerghan.env` | upper-case: any environment variable | Docker's env-file parser, through Vault, on `up` | `600` |
 
 When the commands read a value, they read it the way its consumer does:
@@ -40,7 +40,7 @@ Any other upper-case key is a **custom** env variable: accepted and written verb
 - A key made only of upper-case letters, digits and `_`, starting with a letter or `_`
   (`[A-Z_][A-Z0-9_]*`), is an **env key** → `kerghan.env`.
 - A key made only of lower-case letters, digits and `-`, starting with a letter
-  (`[a-z][a-z0-9-]*`), is a **config key** → `config`. Only the seven known config keys are
+  (`[a-z][a-z0-9-]*`), is a **config key** → `config`. Only the nine known config keys are
   accepted (see [Existing content](#existing-content), case 7).
 - Any other key (mixed case, other characters, empty) is a malformed argument: usage error,
   exit `2`.
@@ -151,7 +151,7 @@ After the change list, both commands print the hint for the keys that changed:
 
 | Keys changed | Hint |
 |--------------|------|
-| `port`, `variant`, `image-tag`, `auto-login`, `bind` | `Run 'kerghan up' to apply (recreates the instance; data is kept).` |
+| `port`, `variant`, `image-tag`, `auto-login`, `bind`, `file-logs`, `log-dir` | `Run 'kerghan up' to apply (recreates the instance; data is kept).` |
 | `runtime`, `stop-timeout` | `Run 'kerghan down && kerghan up' to apply.` |
 | Any env key | `Run 'kerghan down && kerghan up' to apply.` |
 | Only `restart-on-update` | `Takes effect on the next 'kerghan update'.` (see [Client update](../client-update.md#apply-hint)) |

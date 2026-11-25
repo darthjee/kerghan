@@ -18,8 +18,34 @@ The inner compose file is `standalone/vault/docker-compose.yml`, copied to `/vau
 | `kerghan` | `darthjee/kerghan:${KERGHAN_VERSION}` | Runs migrations on boot. Waits for `mysql` to be healthy. Receives only the allowlisted environment (see [environment-variables/standalone.md](../environment-variables/standalone.md)). |
 | `tent` | `${TENT_IMAGE}` (stock `darthjee/tent`) | Published on Vault port 80. Serves the frontend and proxies `*.json` to `http://kerghan:3000/`. |
 
-`mysql`, `kerghan` and `tent` use `restart: unless-stopped`. With the healthcheck and `depends_on`, a backend started
+| `logs` | `${LOGS_IMAGE}` (`docker:27.5.1-cli`) | The log collector (see [Log files](#log-files)). `init: true`, `restart: unless-stopped`, mounts the inner Docker socket (it is the only service that does), `./logs` at `/logs` and `./logs-collector` at `/collector` (read-only). Env: `KERGHAN_FILE_LOGS`, `KERGHAN_HOST_UID`, `KERGHAN_HOST_GID`. Nothing depends on it. |
+
+`mysql`, `kerghan`, `tent` and `logs` use `restart: unless-stopped`. With the healthcheck and `depends_on`, a backend started
 before MySQL is ready retries instead of leaving the stack dead.
+
+Every service logs with the `json-file` driver capped at `max-size: 10m`, `max-file: 5` (the
+`x-logging` anchor), so Docker's own copy of a service's output cannot fill the inner volume.
+
+### Log files
+
+`logs` follows the `tent` (Apache access and error output) and `kerghan` (backend and workers)
+containers with `docker logs -f -t` and writes `tent.log` and `kerghan.log` to `/vault/logs`, which
+the client mounts from the host `log-dir` (default `~/.kerghan/logs`). MySQL is not collected.
+`standalone/vault/logs-collector/collect.sh` (POSIX `sh`) does the work:
+
+- With `KERGHAN_FILE_LOGS` not `true` it idles, so `restart: unless-stopped` does not loop.
+- It creates `/logs` with `umask 077`, `chown`s it to `KERGHAN_HOST_UID:KERGHAN_HOST_GID` and sets
+  mode `700`; every file is created with mode `600` and the same owner. Failures are logged to
+  stderr and the script keeps going.
+- Each line has Docker's RFC 3339 timestamp. A file rotates at 10 MB, keeping `.log.1` to `.log.5`.
+- It finds each container by the Compose service and project labels (the project comes from its
+  own container labels). When a container stops or is recreated it sleeps 2 s and resolves it again,
+  resuming with `--since` the last timestamp saved in `/logs/.<svc>.since`, so a restart does not
+  duplicate lines. If a follower dies the script exits and compose restarts the service.
+- The files are appended to, so they survive `kerghan down`, `reset` and restarts.
+
+`LOGS_IMAGE` is written to `/vault/.env` by the Dockerfile next to `TENT_IMAGE`. The outer Vault
+container's own log is not bounded (darthjee/vault#81).
 
 ### MySQL 9.3 to 8.4.11 migration
 
@@ -123,10 +149,10 @@ excludes env files.
 ### Online and offline variants
 
 - **Online** (`darthjee/kerghan-standalone:<v>`): small image; the first start pulls
-  `darthjee/kerghan:<v>`, `mysql:8.4.11` and the Tent image. `mysql:9.3.0` is pulled only when a
+  `darthjee/kerghan:<v>`, `mysql:8.4.11`, the Tent image and `docker:27.5.1-cli` (the log collector). `mysql:9.3.0` is pulled only when a
   migration needs it.
 - **Offline** (`darthjee/kerghan-standalone:<v>-offline`): the inner images are preloaded as
-  tarballs (`kerghan.tar`, `mysql.tar`, `tent.tar`, plus `mysql-legacy.tar` (`mysql:9.3.0`) for the #469
+  tarballs (`kerghan.tar`, `mysql.tar`, `tent.tar`, `docker-cli.tar`, plus `mysql-legacy.tar` (`mysql:9.3.0`) for the #469
   migration release only, one set per architecture, written by
   `bin/release_kerghan_standalone.sh` with `docker save`; each tarball is single-architecture, as the
   images are pulled by digest). Vault runs `docker load` on every
