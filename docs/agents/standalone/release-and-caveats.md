@@ -43,9 +43,10 @@ The CI jobs that build and publish the images and the client assets (`release-ke
   host over `http://127.0.0.1:<port>` or `http://localhost:<port>` keeps the login in every browser
   (needs a Kerghan image with the #601 fix; an older backend reads `loopback` as `Secure`). Hosts
   reaching it by a LAN address still get `Secure` cookies and plain-HTTP login fails silently:
-  put your own TLS reverse proxy in front of it and set `FRONTEND_BASE_URL` to the `https` URL in
-  `kerghan.env` (the client then passes `true`). Opt-in LAN support over plain HTTP is tracked in
-  [#603](https://github.com/darthjee/kerghan/issues/603). Accepted limitation: cookies are not
+  put your own TLS reverse proxy in front of it and set `FRONTEND_BASE_URL` to the `https` URL
+  (`kerghan configure FRONTEND_BASE_URL=https://...`; the client then passes `true`), as described
+  in [https.md](https.md). Plain-HTTP login from the LAN is not supported, by design; `kerghan up`
+  hints at this on non-loopback binds. Accepted limitation: cookies are not
   port-scoped, so on a loopback host they are also sent to other services on the same host name.
   `localhost` and `127.0.0.1` are different
   cookie hosts: logging in on one does not log in the other. An `https` `FRONTEND_BASE_URL` is also

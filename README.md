@@ -127,6 +127,9 @@ kerghan up -p 8080      # on another port
 kerghan up --offline    # with the offline image
 ```
 
+To use Kerghan from other machines on your LAN, see
+[Serving Kerghan over HTTPS on the LAN](docs/agents/standalone/https.md).
+
 On macOS, ports 5000 and 7000 are taken by the AirPlay Receiver; `kerghan up` warns about it (see
 [the caveat](docs/agents/standalone/release-and-caveats.md#caveats)).
 

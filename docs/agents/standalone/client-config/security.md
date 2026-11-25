@@ -53,6 +53,9 @@ after the apply hint; they never stop the write:
 - **`auto-login` on with a non-loopback `bind`** (outside `127.0.0.0/8`): the same warning and
   hint `up` prints (anyone who can reach the port is logged in as admin; use
   `kerghan up --no-auto-login` or set `bind=127.0.0.1`).
+- **`auto-login` on with a loopback `bind` and an `https` `FRONTEND_BASE_URL`:** the
+  auto-login-behind-a-proxy warning `up` prints (`proxy_auto_login_warning`, see
+  [https.md](../https.md)). `configure` never prints the plain-HTTP hint.
 - **`auto-login=true` without default-user credentials** (`auto-login=true` is set in
   `config`, `kerghan.env` exists and lacks a value for `KERGHAN_DEFAULT_USER_USERNAME`,
   `KERGHAN_DEFAULT_USER_EMAIL` or `KERGHAN_DEFAULT_USER_PASSWORD`): a warning that `kerghan up`
