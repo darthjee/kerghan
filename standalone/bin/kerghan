@@ -184,6 +184,42 @@ valid_port() {
   [ "$1" -ge 1 ] && [ "$1" -le 65535 ]
 }
 
+# port_listeners <port> - the processes listening on TCP <port> on this host.
+# Shared contract (also reused by `kerghan diagnose`, #597): keep it stable.
+#   Output: one line per listener, "<address><TAB><process>", duplicates
+#           printed once. <address> is as the tool reports it (`*:5000`,
+#           `127.0.0.1:5000`, `[::1]:5000`); <process> is empty when unknown.
+#   Status: 0 - a tool ran (no output means no listener);
+#           2 - skipped: neither lsof nor ss is available (nothing printed).
+# It reports and does not decide. Uses lsof (full command names via +c 0),
+# else ss.
+port_listeners() {
+  local port="$1" raw
+  if command -v lsof >/dev/null 2>&1; then
+    # lsof exits 1 when nothing matches: that is "no listener", not a failure.
+    raw="$(lsof +c 0 -nP "-iTCP:$port" -sTCP:LISTEN -F cn 2>/dev/null || true)"
+    printf '%s\n' "$raw" | awk '
+      /^c/ { proc = substr($0, 2); next }
+      /^n/ { printf "%s\t%s\n", substr($0, 2), proc }
+    ' | sort -u
+    return 0
+  fi
+  if command -v ss >/dev/null 2>&1; then
+    raw="$(ss -Hltnp "sport = :$port" 2>/dev/null || true)"
+    printf '%s\n' "$raw" | awk '
+      NF >= 4 {
+        proc = ""
+        if (match($0, /users:\(\("[^"]*"/)) {
+          proc = substr($0, RSTART + 9, RLENGTH - 10)
+        }
+        printf "%s\t%s\n", $4, proc
+      }
+    ' | sort -u
+    return 0
+  fi
+  return 2
+}
+
 # The fixed value set of each config key that has one (space-separated, no
 # double spaces). Validation and the "expected ..." messages read these, and
 # `kerghan completion bash` (#429) generates its word lists from them.
@@ -1757,7 +1793,52 @@ cmd_up() {
   fi
 
   # 4. Start it.
+  warn_port_conflict "$bind" "$port"
   up_instance "$image" "$port" "$foreground" "$bind" "$auto_login"
+}
+
+# warn_port_conflict <bind> <port> - warns when another process already
+# listens on <port> on this host (Kerghan does not hold it at this point).
+# Informational only: never changes the exit status nor stops `up`. Silent
+# when the engine is remote (DOCKER_HOST tcp:// or ssh://), when neither lsof
+# nor ss exists, or when nothing listens. On macOS the AirPlay Receiver
+# (ControlCenter) holds 5000 and 7000 on every address, so `localhost` can
+# reach it instead of Kerghan's 127.0.0.1 bind.
+warn_port_conflict() {
+  local bind="$1" port="$2" listeners airplay=""
+  case "${DOCKER_HOST:-}" in
+    tcp://* | ssh://*) return 0 ;;
+  esac
+  listeners="$(port_listeners "$port")" || return 0
+  [ -n "$listeners" ] || return 0
+
+  local summary
+  summary="$(printf '%s\n' "$listeners" | awk -F'\t' '
+    {
+      name = ($2 == "" ? "another process" : $2)
+      if (!(name in addrs)) { order[++n] = name; addrs[name] = $1 }
+      else { addrs[name] = addrs[name] ", " $1 }
+    }
+    END {
+      for (i = 1; i <= n; i++) {
+        printf "%s%s (%s)", (i > 1 ? ", " : ""), order[i], addrs[order[i]]
+      }
+    }')"
+  case "$port" in
+    5000 | 7000)
+      if printf '%s\n' "$listeners" | awk -F'\t' '$2 == "ControlCenter" { f = 1 } END { exit !f }'; then
+        airplay=1
+      fi
+      ;;
+  esac
+  warn "port $port is already in use by $summary"
+  warn "Kerghan is published on $bind:$port only; other addresses (such as localhost) may reach that process instead"
+  # shellcheck disable=SC2088 # the literal ~ is meant for display
+  hint "use 'kerghan up -p <port>' or set port= in ~/.kerghan/config to pick another port"
+  if [ -n "$airplay" ]; then
+    hint "on macOS this is the AirPlay Receiver; turn it off in System Settings > General > AirDrop & Handoff, or pick another port"
+  fi
+  return 0
 }
 
 # recreate_reason <current image> <wanted image> <current port> <wanted port>

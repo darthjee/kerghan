@@ -87,6 +87,13 @@ The CI jobs that build and publish the images and the client assets (`release-ke
 - **Failed migration.** A migration that fails during an upgrade keeps the backend from starting;
   it shows up in `kerghan status` and `kerghan logs`. Recovery is to fix forward with the next
   release.
+- **macOS AirPlay Receiver.** While it is on, ControlCenter listens on `*:5000` and `*:7000`
+  (IPv4 and IPv6). Docker's `127.0.0.1:<port>` bind still succeeds, but `localhost` resolves to
+  `::1` first and reaches AirPlay, which answers `403` with `Server: AirTunes`. To tell which one
+  answers, `curl -si http://127.0.0.1:<port>` shows `Server: Apache` when it is Kerghan's Tent.
+  Fixes: pick another port (`kerghan up -p <port>`), or turn off System Settings > General >
+  AirDrop & Handoff > AirPlay Receiver. `kerghan up` warns about this clash. The advertised-URL
+  change is tracked in #598.
 
 ## Testing
 
