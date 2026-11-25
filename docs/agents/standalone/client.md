@@ -230,6 +230,17 @@ container is created (`kerghan down && kerghan up` applies it now).
 
 ### Other behavior
 
+- **Plain-HTTP hint and proxy warning:** after the auto-login-on-non-loopback warning and before
+  the instance is compared or started (so on every `up`, "already running" included, and with
+  `-f`), `up` calls `proxy_auto_login_warning` and `plain_http_lan_hint`, both stderr only (see
+  [https.md](https.md)):
+  - `plain_http_lan_hint` prints one `hint` when `wanted_cookie_secure` is `loopback` (a
+    non-loopback `bind` with a non-`https` `FRONTEND_BASE_URL`). On `0.0.0.0` it says other
+    machines cannot log in over plain HTTP and points to `http://localhost:<port>`; on a specific
+    LAN address it says logging in over plain HTTP fails on that address. Both link to `https.md`.
+  - `proxy_auto_login_warning` warns when auto-login is on, the `bind` is loopback and the
+    effective `FRONTEND_BASE_URL` is `https` (a reverse proxy may publish Kerghan, logged in as
+    admin), with the `--no-auto-login` / `auto-login=false` hint.
 - **Port in use:** Vault's error is shown, with the hint
   `use 'kerghan up -p <port>' or set port= in ~/.kerghan/config to pick another port`.
 - **Port-in-use check before start:** right before a new container is created

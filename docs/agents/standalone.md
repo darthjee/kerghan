@@ -62,6 +62,7 @@ Everything else lives under `docs/agents/standalone/`. Read the page that matche
 | [config-files.md](standalone/config-files.md) | You change the `~/.kerghan/` files or the `config` format. |
 | [inner-stack.md](standalone/inner-stack.md) | You change what runs inside the container: MySQL, Tent, the frontend, image variants, `OriginGuard` or the effective client IP. |
 | [release-and-caveats.md](standalone/release-and-caveats.md) | You change image tags and versioning, or need the known caveats and how the distribution is tested. |
+| [https.md](standalone/https.md) | You change the HTTPS/LAN guidance, the plain-HTTP hint or the auto-login-behind-a-proxy warning. |
 | [client-config.md](standalone/client-config.md) | You change `kerghan configure` or `kerghan wizard`. |
 | [client-update.md](standalone/client-update.md) | You change `kerghan update`. |
 | [client-completion.md](standalone/client-completion.md) | You change bash completion. |
