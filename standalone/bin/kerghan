@@ -47,6 +47,9 @@ KERGHAN_VERSION="0.10.2"
 # 0.8.2 and not above that release behaves the same, since no release lies in
 # between. It must never change once released.
 FIRST_UPDATE_VERSION="0.8.3"
+# FIRST_FILE_LOGS_VERSION - the first image release that ships the logs
+# collector (file-logs). An older image ignores the -e / -v the client passes.
+FIRST_FILE_LOGS_VERSION="0.11.0"
 # RELEASES_URL - where `kerghan update` downloads the release's install.sh.
 RELEASES_URL="https://github.com/darthjee/kerghan/releases"
 HTTPS_DOCS_URL="https://github.com/darthjee/kerghan/blob/main/docs/agents/standalone/https.md"
@@ -692,6 +695,75 @@ ENV
   echo "${value:-true}"
 }
 
+# running_file_logs - prints the KERGHAN_FILE_LOGS value of the running
+# container, or false when it is not set (an instance created by an older
+# client has no collector env). "unknown" when the inspect fails, which never
+# matches, so the instance is recreated.
+running_file_logs() {
+  local env line value=""
+  env="$(docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' "$CONTAINER" 2>/dev/null)" || {
+    echo unknown
+    return 0
+  }
+  while IFS= read -r line; do
+    case "$line" in
+      KERGHAN_FILE_LOGS=*)
+        value="${line#*=}"
+        ;;
+    esac
+  done <<ENV
+$env
+ENV
+  echo "${value:-false}"
+}
+
+# running_log_dir - prints the host source of the /vault/logs mount of the
+# running container, or nothing when it has none.
+running_log_dir() {
+  docker inspect -f '{{range .Mounts}}{{if eq .Destination "/vault/logs"}}{{.Source}}{{end}}{{end}}' \
+    "$CONTAINER" 2>/dev/null || true
+}
+
+# prepare_log_dir - sets EFFECTIVE_FILE_LOGS (true|false) and EFFECTIVE_LOG_DIR.
+# File logs are on unless file-logs=false; when the directory cannot be
+# created or written, warns and turns them off. Never fails `up`.
+EFFECTIVE_FILE_LOGS=false
+EFFECTIVE_LOG_DIR=""
+prepare_log_dir() {
+  EFFECTIVE_FILE_LOGS=false
+  EFFECTIVE_LOG_DIR=""
+  [ "${CFG_FILE_LOGS:-$DEFAULT_FILE_LOGS}" = "true" ] || return 0
+  local dir probe
+  dir="$(resolved_log_dir)"
+  if mkdir -p "$dir" 2>/dev/null && chmod 700 "$dir" 2>/dev/null &&
+    probe="$(mktemp "$dir/.probe.XXXXXX" 2>/dev/null)" && rm -f "$probe"; then
+    EFFECTIVE_FILE_LOGS=true
+    EFFECTIVE_LOG_DIR="$dir"
+  else
+    warn "log directory $dir is not writable; starting without file logs"
+  fi
+  return 0
+}
+
+# file_logs_reason - prints why the running instance must be recreated for a
+# changed file-logs / log-dir (uses EFFECTIVE_*), or nothing when all match.
+file_logs_reason() {
+  local current_state current_dir
+  current_state="$(running_file_logs)"
+  if [ "$current_state" != "$EFFECTIVE_FILE_LOGS" ]; then
+    if [ "$EFFECTIVE_FILE_LOGS" = "true" ]; then
+      echo "file logs changed (off -> on); recreating..."
+    else
+      echo "file logs changed (on -> off); recreating..."
+    fi
+  elif [ "$EFFECTIVE_FILE_LOGS" = "true" ]; then
+    current_dir="$(running_log_dir)"
+    if [ "$current_dir" != "$EFFECTIVE_LOG_DIR" ]; then
+      echo "log directory changed (${current_dir:-none} -> $EFFECTIVE_LOG_DIR); recreating..."
+    fi
+  fi
+}
+
 # settings_reason <current auto-login> <wanted auto-login> <current bind>
 # <wanted bind> <current cookie-secure> <wanted cookie-secure> - prints why
 # the running instance must be recreated for a changed auto-login, bind or
@@ -764,7 +836,7 @@ SECRET_KEYS="KERGHAN_DEFAULT_USER_PASSWORD KERGHAN_SECRET_KEY KERGHAN_INTEGRATIO
 # FORCE_KEYS - only written with --force (stored data depends on them).
 FORCE_KEYS="KERGHAN_SECRET_KEY KERGHAN_INTEGRATIONS_KEY"
 # CLIENT_MANAGED_KEYS - passed by the client on every up; never written.
-CLIENT_MANAGED_KEYS="KERGHAN_DEFAULT_USER_ALWAYS_AUTHENTICATED KERGHAN_DEFAULT_USER_ALLOWED_IPS KERGHAN_COOKIE_SECURE"
+CLIENT_MANAGED_KEYS="KERGHAN_DEFAULT_USER_ALWAYS_AUTHENTICATED KERGHAN_DEFAULT_USER_ALLOWED_IPS KERGHAN_COOKIE_SECURE KERGHAN_FILE_LOGS KERGHAN_HOST_UID KERGHAN_HOST_GID"
 # PASSWORD_MIN_LENGTH - the backend refuses to boot with a shorter password.
 PASSWORD_MIN_LENGTH=8
 MASK="********"
@@ -1916,6 +1988,13 @@ cmd_up() {
   proxy_auto_login_warning "$auto_login" "$bind" "$port"
   plain_http_lan_hint "$bind" "$port"
 
+  prepare_log_dir
+  local wanted_tag="${CFG_IMAGE_TAG:-$KERGHAN_VERSION}"
+  if [ "$EFFECTIVE_FILE_LOGS" = "true" ] && is_semver "$wanted_tag" &&
+    [ "$(version_compare "$wanted_tag" "$FIRST_FILE_LOGS_VERSION")" = "lt" ]; then
+    hint "file logs need image $FIRST_FILE_LOGS_VERSION or newer; image $wanted_tag ignores them"
+  fi
+
   # 3. Compare with the running instance (FRONTEND_BASE_URL is added by
   # up_instance).
   local current
@@ -1926,6 +2005,9 @@ cmd_up() {
     reason="$(recreate_reason "$current" "$image" "$current_port" "$port")" || exit 1
     if [ -z "$reason" ]; then
       reason="$(settings_reason "$(running_auto_login)" "$auto_login" "$(running_bind)" "$bind" "$(running_cookie_secure)" "$(wanted_cookie_secure "$bind" "$port")")"
+    fi
+    if [ -z "$reason" ]; then
+      reason="$(file_logs_reason)"
     fi
     if [ -z "$reason" ]; then
       echo "Kerghan is already running at http://localhost:$port"
@@ -2073,6 +2155,11 @@ up_instance() {
   args+=(-e "KERGHAN_DEFAULT_USER_ALWAYS_AUTHENTICATED=$auto_login")
   args+=(-e "KERGHAN_DEFAULT_USER_ALLOWED_IPS=$DEFAULT_USER_ALLOWED_IPS")
   args+=(-e "KERGHAN_COOKIE_SECURE=$cookie_secure")
+  args+=(-e "KERGHAN_FILE_LOGS=$EFFECTIVE_FILE_LOGS")
+  args+=(-e "KERGHAN_HOST_UID=$(id -u)" -e "KERGHAN_HOST_GID=$(id -g)")
+  if [ "$EFFECTIVE_FILE_LOGS" = "true" ]; then
+    args+=(-v "$EFFECTIVE_LOG_DIR:/vault/logs")
+  fi
   args+=(--runtime "$(effective_runtime)" --stop-timeout "$(effective_stop_timeout)")
   if [ "$foreground" = "true" ]; then
     args+=(-f)
