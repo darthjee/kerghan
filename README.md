@@ -127,6 +127,9 @@ kerghan up -p 8080      # on another port
 kerghan up --offline    # with the offline image
 ```
 
+On macOS, ports 5000 and 7000 are taken by the AirPlay Receiver; `kerghan up` warns about it (see
+[the caveat](docs/agents/standalone/release-and-caveats.md#caveats)).
+
 The other commands are `kerghan down` (stop; data is kept), `kerghan logs [-f]`,
 `kerghan status`, `kerghan compose <args>` and `kerghan reset` (wipe all data, after a
 confirmation). Run `kerghan help` for the full list.

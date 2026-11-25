@@ -220,6 +220,24 @@ container is created (`kerghan down && kerghan up` applies it now).
 
 - **Port in use:** Vault's error is shown, with the hint
   `use 'kerghan up -p <port>' or set port= in ~/.kerghan/config to pick another port`.
+- **Port-in-use check before start:** right before a new container is created
+  (`warn_port_conflict`, called in `cmd_up` before `up_instance`; never when the instance is
+  already running with the same settings), `up` looks for another process listening on the port
+  on this host. If it finds one it warns on stderr, and never fails or stops `up`:
+  - `port <port> is already in use by <process> (<addresses>)` (`another process` when the name is
+    unknown);
+  - `Kerghan is published on <bind>:<port> only; other addresses (such as localhost) may reach that
+    process instead`;
+  - the `-p` hint above;
+  - on port 5000 or 7000 with `ControlCenter`, the AirPlay Receiver hint (see
+    [the macOS AirPlay caveat](release-and-caveats.md#caveats)).
+
+  It is skipped silently when neither `lsof` nor `ss` is available, or when `DOCKER_HOST` is
+  `tcp://` or `ssh://` (a remote engine).
+- **`port_listeners <port>`:** the helper behind that check, shared with `kerghan diagnose` (#597).
+  It prints one `<address><TAB><process>` line per distinct listener (`*:5000`, `[::1]:5000`; the
+  process is empty when unknown) using `lsof +c 0` or else `ss`. Exit `0` means a tool ran (no
+  output: no listener); exit `2` means skipped (no tool). Keep this format stable.
 - **`reset`:** asks `Continue? [y/N]` (default no), then stops the instance and removes
   `vault-kerghan-data`. It keeps `kerghan.env`.
 - **`status` / `logs`:** the way to see a failed migration or an unhealthy service.
