@@ -41,7 +41,7 @@ vault up --name kerghan --image darthjee/kerghan-standalone:<tag>[-offline] \
   --env-file ~/.kerghan/kerghan.env -p <bind>:<port>:80 [-e FRONTEND_BASE_URL=http://localhost:<port>] \
   -e KERGHAN_DEFAULT_USER_ALWAYS_AUTHENTICATED=<auto-login> \
   -e KERGHAN_DEFAULT_USER_ALLOWED_IPS=127.0.0.1,::1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16 \
-  -e KERGHAN_COOKIE_SECURE=<true|false> \
+  -e KERGHAN_COOKIE_SECURE=<true|false|loopback> \
   --runtime <runtime> --stop-timeout <seconds> [-f]
 vault down --name kerghan --stop-timeout <seconds>
 vault logs|status|compose --name kerghan ...
@@ -119,7 +119,9 @@ date (upgrading the client never modifies it):
 - `KERGHAN_COOKIE_SECURE` is also always passed and client-managed (refused in `kerghan.env`, with
   a hint to set an `https` `FRONTEND_BASE_URL` to keep `Secure`). It is `false` iff the `bind` is
   loopback and the effective `FRONTEND_BASE_URL` (`kerghan.env`, else the derived default) does not
-  start with `https://`; otherwise `true`.
+  start with `https://`. On a non-loopback `bind` it is `loopback` (the backend drops `Secure` per
+  request, only for a loopback `Host` over plain HTTP) unless the effective `FRONTEND_BASE_URL` is
+  `https://`; an `https` URL gives `true` on any bind.
 - A present but blank key is left as it is, with a warning naming it. For the default-user
   credentials (`USERNAME`, `EMAIL`, `PASSWORD`) a hint adds that `up` still treats the default
   user as missing.
@@ -219,8 +221,8 @@ ones (from the flags, the config and the defaults):
   recreated, and the data volume is kept.
 - Same image, port, auto-login and bind, but a changed cookie setting (read from the running
   container's `KERGHAN_COOKIE_SECURE`, missing counts as `true`, an inspect failure always
-  recreates): recreated with the reason `allowing login over plain HTTP on loopback` (to `false`)
-  or `requiring HTTPS for the session cookies` (to `true`), data volume kept. An instance created
+  recreates): recreated with the reason `allowing login over plain HTTP on loopback` (to `false`),
+  `allowing login over plain HTTP on loopback hosts` (to `loopback`) or `requiring HTTPS for the session cookies` (to `true`), data volume kept. An instance created
   by a client before this setting is therefore recreated on its next `kerghan up` on loopback.
 
 A changed `runtime` or `stop-timeout` never triggers a recreation; it applies the next time the

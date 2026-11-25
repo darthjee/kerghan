@@ -44,20 +44,52 @@ setup_running() {
   [ "$(cookie_arg)" = "false" ]
 }
 
-@test "bind 0.0.0.0 passes true" {
+@test "bind 0.0.0.0 passes loopback" {
   write_env_file
+  write_config "bind=0.0.0.0"
+  run "$KERGHAN" up
+  [ "$status" -eq 0 ]
+  [ "$(cookie_arg)" = "loopback" ]
+}
+
+@test "a LAN bind passes loopback" {
+  write_env_file
+  write_config "bind=192.168.1.10"
+  run "$KERGHAN" up
+  [ "$status" -eq 0 ]
+  [ "$(cookie_arg)" = "loopback" ]
+}
+
+@test "a non-loopback bind with an https FRONTEND_BASE_URL passes true" {
+  write_env_file "FRONTEND_BASE_URL=https://kerghan.example.com"
   write_config "bind=0.0.0.0"
   run "$KERGHAN" up
   [ "$status" -eq 0 ]
   [ "$(cookie_arg)" = "true" ]
 }
 
-@test "a LAN bind passes true" {
-  write_env_file
-  write_config "bind=192.168.1.10"
+@test "a running non-loopback instance with KERGHAN_COOKIE_SECURE=true is recreated" {
+  setup_running
+  write_config "bind=0.0.0.0"
+  export STUB_RUNNING_HOST_IP=0.0.0.0
+  export STUB_RUNNING_ENV="KERGHAN_DEFAULT_USER_ALWAYS_AUTHENTICATED=true
+KERGHAN_COOKIE_SECURE=true"
   run "$KERGHAN" up
   [ "$status" -eq 0 ]
-  [ "$(cookie_arg)" = "true" ]
+  assert_output_contains "allowing login over plain HTTP on loopback hosts"
+  [ "$(cookie_arg)" = "loopback" ]
+}
+
+@test "a running non-loopback instance with KERGHAN_COOKIE_SECURE=loopback is not recreated" {
+  setup_running
+  write_config "bind=0.0.0.0"
+  export STUB_RUNNING_HOST_IP=0.0.0.0
+  export STUB_RUNNING_ENV="KERGHAN_DEFAULT_USER_ALWAYS_AUTHENTICATED=true
+KERGHAN_COOKIE_SECURE=loopback"
+  run "$KERGHAN" up
+  [ "$status" -eq 0 ]
+  assert_output_contains "Kerghan is already running"
+  [ -z "$(vault_calls)" ]
 }
 
 @test "an instance without KERGHAN_COOKIE_SECURE on loopback is recreated" {

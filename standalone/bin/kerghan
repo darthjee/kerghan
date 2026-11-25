@@ -531,7 +531,9 @@ effective_frontend_base_url() {
 
 # wanted_cookie_secure <bind> <port> - prints false (session cookies without
 # the Secure attribute) when the bind is loopback and the effective
-# FRONTEND_BASE_URL is not https, else true.
+# FRONTEND_BASE_URL is not https; loopback (the backend decides per request,
+# no Secure only for a loopback Host over plain HTTP) when the bind is
+# non-loopback and the URL is not https; else true.
 wanted_cookie_secure() {
   local url
   url="$(effective_frontend_base_url "$2")"
@@ -541,7 +543,10 @@ wanted_cookie_secure() {
       *) echo false ;;
     esac
   else
-    echo true
+    case "$url" in
+      https://*) echo true ;;
+      *) echo loopback ;;
+    esac
   fi
 }
 
@@ -629,11 +634,11 @@ settings_reason() {
   elif [ "$3" != "$4" ]; then
     echo "publishing on $4"
   elif [ "$5" != "$6" ]; then
-    if [ "$6" = "false" ]; then
-      echo "allowing login over plain HTTP on loopback"
-    else
-      echo "requiring HTTPS for the session cookies"
-    fi
+    case "$6" in
+      false) echo "allowing login over plain HTTP on loopback" ;;
+      loopback) echo "allowing login over plain HTTP on loopback hosts" ;;
+      *) echo "requiring HTTPS for the session cookies" ;;
+    esac
   fi
 }
 
@@ -1974,6 +1979,7 @@ recreate_reason() {
 # KERGHAN_DEFAULT_USER_ALLOWED_IPS and KERGHAN_COOKIE_SECURE are always passed
 # with -e, so the client is the single source of truth (cmd_up refuses a
 # kerghan.env that sets them, see refuse_client_managed_keys).
+# KERGHAN_COOKIE_SECURE is true, false or loopback (see wanted_cookie_secure).
 up_instance() {
   local image="$1" port="$2" foreground="$3" bind="$4" auto_login="$5" cookie_secure="$6"
   local args=(--image "$image" --env-file "$ENV_FILE" -p "$bind:$port:80")
