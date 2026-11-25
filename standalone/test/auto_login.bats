@@ -7,7 +7,7 @@ load helpers/setup
 
 # up_line <bind> <auto-login> - the expected `vault up` line on port 3000.
 up_line() {
-  echo "vault up --name kerghan --image $IMAGE --env-file $ENV_FILE -p $1:3000:80 -e FRONTEND_BASE_URL=http://localhost:3000 $(default_user_args "$2") --runtime auto --stop-timeout 60"
+  echo "vault up --name kerghan --image $IMAGE --env-file $ENV_FILE -p $1:3000:80 -e FRONTEND_BASE_URL=http://localhost:3000 $(default_user_args "$2" "${3:-}") --runtime auto --stop-timeout 60"
 }
 
 @test "by default auto-login is on and the port is published on 127.0.0.1" {
@@ -123,7 +123,7 @@ up_line() {
   write_env_file
   run "$KERGHAN" up --no-auto-login
   [ "$status" -eq 0 ]
-  vault_calls | grep -qF -- "-e KERGHAN_DEFAULT_USER_ALLOWED_IPS=$ALLOWED_IPS --runtime"
+  vault_calls | grep -qF -- "-e KERGHAN_DEFAULT_USER_ALLOWED_IPS=$ALLOWED_IPS -e KERGHAN_COOKIE_SECURE=true --runtime"
 }
 
 @test "a pre-#371 kerghan.env turns the default auto-login off, on 0.0.0.0, with a notice" {
@@ -143,7 +143,7 @@ up_line() {
   write_config "bind=127.0.0.1"
   run "$KERGHAN" up
   [ "$status" -eq 0 ]
-  [ "$(vault_calls)" = "$(up_line 127.0.0.1 false)" ]
+  [ "$(vault_calls)" = "$(up_line 127.0.0.1 false false)" ]
 }
 
 @test "a kerghan.env missing only the password counts as having no default user" {

@@ -74,7 +74,8 @@ if [ "${1:-}" = "inspect" ]; then
         echo "Error: inspect failed" >&2
         exit 1
       fi
-      env_value="${STUB_RUNNING_ENV-KERGHAN_DEFAULT_USER_ALWAYS_AUTHENTICATED=true}"
+      env_value="${STUB_RUNNING_ENV-KERGHAN_DEFAULT_USER_ALWAYS_AUTHENTICATED=true
+KERGHAN_COOKIE_SECURE=false}"
       [ -z "$env_value" ] || printf '%s\n' "$env_value"
       echo
       ;;

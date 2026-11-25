@@ -30,10 +30,16 @@ IMAGE="$IMAGE_REPO:$CURRENT_VERSION"
 # ALLOWED_IPS - the KERGHAN_DEFAULT_USER_ALLOWED_IPS value the client passes.
 ALLOWED_IPS="127.0.0.1,::1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16"
 
-# default_user_args <true|false> - the -e words for the client-managed
-# default-user variables, as they appear in the vault up line.
+# default_user_args <true|false> [cookie-secure] - the -e words for the
+# client-managed variables, as they appear in the vault up line. The cookie
+# setting defaults to false with auto-login on (a loopback bind) and true
+# otherwise.
 default_user_args() {
-  echo "-e KERGHAN_DEFAULT_USER_ALWAYS_AUTHENTICATED=$1 -e KERGHAN_DEFAULT_USER_ALLOWED_IPS=$ALLOWED_IPS"
+  local cookie="${2:-}"
+  if [ -z "$cookie" ]; then
+    if [ "$1" = "true" ]; then cookie=false; else cookie=true; fi
+  fi
+  echo "-e KERGHAN_DEFAULT_USER_ALWAYS_AUTHENTICATED=$1 -e KERGHAN_DEFAULT_USER_ALLOWED_IPS=$ALLOWED_IPS -e KERGHAN_COOKIE_SECURE=$cookie"
 }
 
 # DEFAULT_USER_ARGS - the default-user -e words with auto-login on (default).
