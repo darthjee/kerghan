@@ -187,8 +187,9 @@ bash completion).
 
 See [Caveats](docs/agents/standalone/release-and-caveats.md#caveats) for the details of each one.
 
-- **HTTPS:** plain HTTP works only on `localhost`. Anywhere else, put a TLS reverse proxy in
-  front, otherwise login fails.
+- **HTTPS:** plain HTTP login works on the default loopback bind (`127.0.0.1`), in every browser.
+  On a LAN bind (`0.0.0.0` or a LAN IP), put a TLS reverse proxy in front and use an `https`
+  `FRONTEND_BASE_URL`, otherwise login fails.
 - **Back up `~/.kerghan/kerghan.env`:** losing it logs everyone out and makes stored integration
   credentials unreadable.
 - **MySQL password:** fixed when the data volume is created.

@@ -37,7 +37,8 @@ secret-handling rules.
 Out of scope:
 
 - Running or recreating the instance (the user runs the printed apply hint).
-- `KERGHAN_DEFAULT_USER_ALWAYS_AUTHENTICATED` and `KERGHAN_DEFAULT_USER_ALLOWED_IPS`: the client
+- `KERGHAN_DEFAULT_USER_ALWAYS_AUTHENTICATED`, `KERGHAN_DEFAULT_USER_ALLOWED_IPS` and
+  `KERGHAN_COOKIE_SECURE`: the client
   manages them itself on every `up` and refuses them in `kerghan.env` (see
   [Refused keys](client-config/configure.md#refused-keys)).
 - A machine-readable listing (`--json`): scripts use the single read
