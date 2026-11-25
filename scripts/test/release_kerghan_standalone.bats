@@ -35,6 +35,23 @@ D5=sha256:5555555555555555555555555555555555555555555555555555555555555555
   refute_logged_prefix "docker pull mysql@$D5"
 }
 
+@test "docker cli index: picks each arch digest and saves docker-cli.tar" {
+  export STUB_ARCH=arm64
+  run save_image arm64 docker:27.5.1-cli docker-cli
+  [ "$status" -eq 0 ]
+  assert_logged "docker pull docker@$D3"
+  assert_logged "docker tag docker@$D3 docker:27.5.1-cli"
+  assert_logged "docker save docker:27.5.1-cli -o $IMAGES_DIR/arm64/docker-cli.tar"
+  refute_logged_prefix "docker pull docker@$D4"
+}
+
+@test "docker cli index, amd64: pulls the amd64 digest" {
+  export STUB_ARCH=amd64
+  run save_image amd64 docker:27.5.1-cli docker-cli
+  [ "$status" -eq 0 ]
+  assert_logged "docker pull docker@$D1"
+}
+
 @test "single-platform manifest: pulls its own digest and tags the -arm64 image" {
   export STUB_ARCH=arm64
   run save_image arm64 darthjee/tent:1.0.3-arm64 tent

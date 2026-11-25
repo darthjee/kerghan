@@ -7,7 +7,7 @@
 # `vault-kerghan-data`, secrets in ~/.kerghan/kerghan.env.
 #
 # Persistent settings (port, variant, runtime, stop-timeout, image-tag,
-# auto-login, bind, restart-on-update) are read from the optional
+# auto-login, bind, restart-on-update, file-logs, log-dir) are read from the optional
 # ~/.kerghan/config (flat key=value, see config.example); CLI flags override
 # it, built-in defaults fill the rest. It is only loaded by up, down, reset, update and update-env, so a broken
 # config never blocks the other commands.
@@ -47,6 +47,9 @@ KERGHAN_VERSION="0.10.2"
 # 0.8.2 and not above that release behaves the same, since no release lies in
 # between. It must never change once released.
 FIRST_UPDATE_VERSION="0.8.3"
+# FIRST_FILE_LOGS_VERSION - the first image release that ships the logs
+# collector (file-logs). An older image ignores the -e / -v the client passes.
+FIRST_FILE_LOGS_VERSION="0.11.0"
 # RELEASES_URL - where `kerghan update` downloads the release's install.sh.
 RELEASES_URL="https://github.com/darthjee/kerghan/releases"
 HTTPS_DOCS_URL="https://github.com/darthjee/kerghan/blob/main/docs/agents/standalone/https.md"
@@ -61,6 +64,7 @@ DEFAULT_RUNTIME=auto
 DEFAULT_STOP_TIMEOUT=60
 DEFAULT_AUTO_LOGIN=true
 DEFAULT_RESTART_ON_UPDATE=ask
+DEFAULT_FILE_LOGS=true
 # The default bind depends on auto-login: loopback when it is on, every
 # interface when it is off.
 DEFAULT_BIND_AUTO_LOGIN=127.0.0.1
@@ -76,6 +80,8 @@ DEFAULT_USER_ALLOWED_IPS="127.0.0.1,::1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16"
 KERGHAN_HOME="${HOME}/.kerghan"
 ENV_FILE="$KERGHAN_HOME/kerghan.env"
 CONFIG_FILE="$KERGHAN_HOME/config"
+# The default log directory (config key log-dir), mounted at /vault/logs.
+DEFAULT_LOG_DIR="$KERGHAN_HOME/logs"
 
 # Values read from CONFIG_FILE by load_config (empty = unset, default applies).
 CFG_PORT=""
@@ -86,6 +92,8 @@ CFG_IMAGE_TAG=""
 CFG_AUTO_LOGIN=""
 CFG_BIND=""
 CFG_RESTART_ON_UPDATE=""
+CFG_FILE_LOGS=""
+CFG_LOG_DIR=""
 
 usage() {
   cat <<USAGE
@@ -136,8 +144,10 @@ Settings are read from ~/.kerghan/config (optional, one key=value per line):
   auto-login=$DEFAULT_AUTO_LOGIN      true | false (overridden by --[no-]auto-login)
   bind=                host address (overridden by --bind)
   restart-on-update=$DEFAULT_RESTART_ON_UPDATE  ask | always | never (overridden by update --[no-]restart)
+  file-logs=$DEFAULT_FILE_LOGS      true | false, write the tent and kerghan logs to log-dir
+  log-dir=             host directory for the logs (default $DEFAULT_LOG_DIR)
 Flags override the file; an empty value uses the default. A changed port,
-variant, image-tag, auto-login or bind recreates the instance on the next
+variant, image-tag, auto-login, bind, file-logs or log-dir recreates the instance on the next
 'kerghan up'; a changed runtime or stop-timeout applies the next time the
 container is created ('kerghan down && kerghan up').
 A changed restart-on-update applies to the next 'kerghan update'.
@@ -228,6 +238,7 @@ VARIANT_VALUES="online offline"
 RUNTIME_VALUES="auto sysbox privileged"
 AUTO_LOGIN_VALUES="true false"
 RESTART_ON_UPDATE_VALUES="ask always never"
+FILE_LOGS_VALUES="true false"
 
 # in_values <value> <space-separated list> - <value> is one of the words of the
 # list. Empty values and values holding whitespace never match (so a value
@@ -307,6 +318,30 @@ ADDRESS
 # (lower-case).
 valid_restart_on_update() { in_values "$1" "$RESTART_ON_UPDATE_VALUES"; }
 
+# valid_file_logs <value> - one of FILE_LOGS_VALUES.
+valid_file_logs() { in_values "$1" "$FILE_LOGS_VALUES"; }
+
+# valid_log_dir <path> - an absolute path or ~/path, without ':' (it would
+# break the -v SRC:DST mount), whitespace, '#' or '..' segments.
+valid_log_dir() {
+  case "$1" in
+    '' | *[[:space:]]* | *:* | *'#'*) return 1 ;;
+    */../* | */.. | "~/../"* | "~/..") return 1 ;;
+    /* | "~/"*) return 0 ;;
+  esac
+  return 1
+}
+
+# resolved_log_dir - prints the effective log directory with ~/ expanded to
+# $HOME (the config value, or the default when unset). Needs load_config.
+resolved_log_dir() {
+  local dir="${CFG_LOG_DIR:-$DEFAULT_LOG_DIR}"
+  case "$dir" in
+    "~/"*) dir="$HOME/${dir#"~/"}" ;;
+  esac
+  printf '%s\n' "$dir"
+}
+
 # is_loopback <address> - the address is in 127.0.0.0/8.
 is_loopback() {
   case "$1" in
@@ -342,6 +377,8 @@ load_config() {
   CFG_AUTO_LOGIN=""
   CFG_BIND=""
   CFG_RESTART_ON_UPDATE=""
+  CFG_FILE_LOGS=""
+  CFG_LOG_DIR=""
   [ -e "$CONFIG_FILE" ] || return 0
   if [ ! -r "$CONFIG_FILE" ] || [ -d "$CONFIG_FILE" ]; then
     error "$CONFIG_FILE: cannot be read"
@@ -399,6 +436,16 @@ load_config() {
         [ -z "$value" ] || valid_restart_on_update "$value" ||
           config_invalid "$n" "$key" "$value" "$(config_expected "$key")"
         CFG_RESTART_ON_UPDATE="$value"
+        ;;
+      file-logs)
+        [ -z "$value" ] || valid_file_logs "$value" ||
+          config_invalid "$n" "$key" "$value" "$(config_expected "$key")"
+        CFG_FILE_LOGS="$value"
+        ;;
+      log-dir)
+        [ -z "$value" ] || valid_log_dir "$value" ||
+          config_invalid "$n" "$key" "$value" "$(config_expected "$key")"
+        CFG_LOG_DIR="$value"
         ;;
       *)
         warn "$CONFIG_FILE:$n: unknown key '$key' (ignored)"
@@ -649,6 +696,79 @@ ENV
   echo "${value:-true}"
 }
 
+# running_file_logs - prints the KERGHAN_FILE_LOGS value of the running
+# container, or false when it is not set (an instance created by an older
+# client has no collector env). "unknown" when the inspect fails, which never
+# matches, so the instance is recreated.
+running_file_logs() {
+  local env line value=""
+  env="$(docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' "$CONTAINER" 2>/dev/null)" || {
+    echo unknown
+    return 0
+  }
+  while IFS= read -r line; do
+    case "$line" in
+      KERGHAN_FILE_LOGS=*)
+        value="${line#*=}"
+        ;;
+    esac
+  done <<ENV
+$env
+ENV
+  echo "${value:-false}"
+}
+
+# running_log_dir - prints the host source of the /vault/logs mount of the
+# running container, or nothing when it has none.
+running_log_dir() {
+  docker inspect -f '{{range .Mounts}}{{if eq .Destination "/vault/logs"}}{{.Source}}{{end}}{{end}}' \
+    "$CONTAINER" 2>/dev/null || true
+}
+
+# prepare_log_dir - sets EFFECTIVE_FILE_LOGS (true|false) and EFFECTIVE_LOG_DIR.
+# File logs are on unless file-logs=false; when the directory cannot be
+# created or written, warns and turns them off. Never fails `up`.
+EFFECTIVE_FILE_LOGS=false
+EFFECTIVE_LOG_DIR=""
+prepare_log_dir() {
+  EFFECTIVE_FILE_LOGS=false
+  EFFECTIVE_LOG_DIR=""
+  [ "${CFG_FILE_LOGS:-$DEFAULT_FILE_LOGS}" = "true" ] || return 0
+  local dir probe existed=false
+  dir="$(resolved_log_dir)"
+  [ -e "$dir" ] && existed=true
+  # Only a directory this tool creates gets mode 700; an existing one is
+  # left as the user set it.
+  if mkdir -p "$dir" 2>/dev/null &&
+    { [ "$existed" = "true" ] || chmod 700 "$dir" 2>/dev/null; } &&
+    probe="$(mktemp "$dir/.probe.XXXXXX" 2>/dev/null)" && rm -f "$probe"; then
+    EFFECTIVE_FILE_LOGS=true
+    EFFECTIVE_LOG_DIR="$dir"
+  else
+    warn "log directory $dir is not writable; starting without file logs"
+  fi
+  return 0
+}
+
+# file_logs_reason - prints why the running instance must be recreated for a
+# changed file-logs / log-dir (uses EFFECTIVE_*), or nothing when all match.
+file_logs_reason() {
+  local current_state current_dir
+  current_state="$(running_file_logs)"
+  if [ "$current_state" != "$EFFECTIVE_FILE_LOGS" ]; then
+    if [ "$EFFECTIVE_FILE_LOGS" = "true" ]; then
+      echo "file logs changed (off -> on); recreating..."
+    else
+      echo "file logs changed (on -> off); recreating..."
+    fi
+  elif [ "$EFFECTIVE_FILE_LOGS" = "true" ]; then
+    current_dir="$(running_log_dir)"
+    if [ "$current_dir" != "$EFFECTIVE_LOG_DIR" ]; then
+      echo "log directory changed (${current_dir:-none} -> $EFFECTIVE_LOG_DIR); recreating..."
+    fi
+  fi
+}
+
 # settings_reason <current auto-login> <wanted auto-login> <current bind>
 # <wanted bind> <current cookie-secure> <wanted cookie-secure> - prints why
 # the running instance must be recreated for a changed auto-login, bind or
@@ -715,13 +835,13 @@ compare_number() {
 # key is written. Docs: docs/agents/standalone/client-config.md (hub) and its pages under client-config/.
 
 # CONFIG_KEYS - the known ~/.kerghan/config keys, in listing order.
-CONFIG_KEYS="port variant runtime stop-timeout image-tag auto-login bind restart-on-update"
+CONFIG_KEYS="port variant runtime stop-timeout image-tag auto-login bind restart-on-update file-logs log-dir"
 # SECRET_KEYS - masked in the listing, the single read and the change list.
 SECRET_KEYS="KERGHAN_DEFAULT_USER_PASSWORD KERGHAN_SECRET_KEY KERGHAN_INTEGRATIONS_KEY"
 # FORCE_KEYS - only written with --force (stored data depends on them).
 FORCE_KEYS="KERGHAN_SECRET_KEY KERGHAN_INTEGRATIONS_KEY"
 # CLIENT_MANAGED_KEYS - passed by the client on every up; never written.
-CLIENT_MANAGED_KEYS="KERGHAN_DEFAULT_USER_ALWAYS_AUTHENTICATED KERGHAN_DEFAULT_USER_ALLOWED_IPS KERGHAN_COOKIE_SECURE"
+CLIENT_MANAGED_KEYS="KERGHAN_DEFAULT_USER_ALWAYS_AUTHENTICATED KERGHAN_DEFAULT_USER_ALLOWED_IPS KERGHAN_COOKIE_SECURE KERGHAN_FILE_LOGS KERGHAN_HOST_UID KERGHAN_HOST_GID"
 # PASSWORD_MIN_LENGTH - the backend refuses to boot with a shorter password.
 PASSWORD_MIN_LENGTH=8
 MASK="********"
@@ -772,6 +892,8 @@ valid_config_value() {
     auto-login) valid_bool "$2" ;;
     bind) valid_bind "$2" ;;
     restart-on-update) valid_restart_on_update "$2" ;;
+    file-logs) valid_file_logs "$2" ;;
+    log-dir) valid_log_dir "$2" ;;
     *) return 1 ;;
   esac
 }
@@ -787,6 +909,8 @@ config_expected() {
     auto-login) or_list "$AUTO_LOGIN_VALUES" ;;
     bind) echo "an IPv4 address" ;;
     restart-on-update) or_list "$RESTART_ON_UPDATE_VALUES" ;;
+    file-logs) or_list "$FILE_LOGS_VALUES" ;;
+    log-dir) echo "an absolute path or ~/path, without ':' or spaces" ;;
   esac
 }
 
@@ -801,6 +925,8 @@ config_default() {
     image-tag) echo "$KERGHAN_VERSION" ;;
     auto-login) echo "$DEFAULT_AUTO_LOGIN" ;;
     restart-on-update) echo "$DEFAULT_RESTART_ON_UPDATE" ;;
+    file-logs) echo "$DEFAULT_FILE_LOGS" ;;
+    log-dir) echo "$DEFAULT_LOG_DIR" ;;
   esac
 }
 
@@ -1867,6 +1993,13 @@ cmd_up() {
   proxy_auto_login_warning "$auto_login" "$bind" "$port"
   plain_http_lan_hint "$bind" "$port"
 
+  prepare_log_dir
+  local wanted_tag="${CFG_IMAGE_TAG:-$KERGHAN_VERSION}"
+  if [ "$EFFECTIVE_FILE_LOGS" = "true" ] && is_semver "$wanted_tag" &&
+    [ "$(version_compare "$wanted_tag" "$FIRST_FILE_LOGS_VERSION")" = "lt" ]; then
+    hint "file logs need image $FIRST_FILE_LOGS_VERSION or newer; image $wanted_tag ignores them"
+  fi
+
   # 3. Compare with the running instance (FRONTEND_BASE_URL is added by
   # up_instance).
   local current
@@ -1877,6 +2010,9 @@ cmd_up() {
     reason="$(recreate_reason "$current" "$image" "$current_port" "$port")" || exit 1
     if [ -z "$reason" ]; then
       reason="$(settings_reason "$(running_auto_login)" "$auto_login" "$(running_bind)" "$bind" "$(running_cookie_secure)" "$(wanted_cookie_secure "$bind" "$port")")"
+    fi
+    if [ -z "$reason" ]; then
+      reason="$(file_logs_reason)"
     fi
     if [ -z "$reason" ]; then
       echo "Kerghan is already running at http://localhost:$port"
@@ -2024,6 +2160,11 @@ up_instance() {
   args+=(-e "KERGHAN_DEFAULT_USER_ALWAYS_AUTHENTICATED=$auto_login")
   args+=(-e "KERGHAN_DEFAULT_USER_ALLOWED_IPS=$DEFAULT_USER_ALLOWED_IPS")
   args+=(-e "KERGHAN_COOKIE_SECURE=$cookie_secure")
+  args+=(-e "KERGHAN_FILE_LOGS=$EFFECTIVE_FILE_LOGS")
+  args+=(-e "KERGHAN_HOST_UID=$(id -u)" -e "KERGHAN_HOST_GID=$(id -g)")
+  if [ "$EFFECTIVE_FILE_LOGS" = "true" ]; then
+    args+=(-v "$EFFECTIVE_LOG_DIR:/vault/logs")
+  fi
   args+=(--runtime "$(effective_runtime)" --stop-timeout "$(effective_stop_timeout)")
   if [ "$foreground" = "true" ]; then
     args+=(-f)
@@ -2307,6 +2448,7 @@ COMPLETION
   printf '    runtime) values=(%s) ;;\n' "$RUNTIME_VALUES"
   printf '    auto-login) values=(%s) ;;\n' "$AUTO_LOGIN_VALUES"
   printf '    restart-on-update) values=(%s) ;;\n' "$RESTART_ON_UPDATE_VALUES"
+  printf '    file-logs) values=(%s) ;;\n' "$FILE_LOGS_VALUES"
   cat <<'COMPLETION'
   esac
 }
@@ -3008,7 +3150,7 @@ wizard_read() {
 
 # is_bool_key <key> - the key takes true / false (y / n in the wizard).
 is_bool_key() {
-  in_list "$1" "auto-login KERGHAN_DEFAULT_USER_ENABLED KERGHAN_DEFAULT_USER_ADMIN"
+  in_list "$1" "auto-login file-logs KERGHAN_DEFAULT_USER_ENABLED KERGHAN_DEFAULT_USER_ADMIN"
 }
 
 # wizard_ask <key> <label> <bracket-text> [note] - asks one config or env
@@ -3515,6 +3657,12 @@ wizard_questions() {
   wizard_config_question bind "Bind address"
   # Always asked, like bind: the last config question.
   wizard_config_question restart-on-update "Restart after update (ask/always/never)"
+  if wizard_asks_config file-logs "$advanced"; then
+    wizard_config_question file-logs "Write logs to a host directory (true/false)"
+    if [ "$WIZARD_VALUE" = "true" ] && wizard_asks_config log-dir "$advanced"; then
+      wizard_config_question log-dir "Log directory"
+    fi
+  fi
 
   # KERGHAN_DEFAULT_USER_ENABLED: the answer with --advanced, the current
   # value otherwise (the backend treats anything other than true as off).

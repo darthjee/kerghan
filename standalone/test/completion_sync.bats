@@ -11,7 +11,7 @@ load helpers/completion
 # Accepted by the client, never completed (hidden steps).
 EXCLUDED_WORDS="--finish"
 # Config keys whose value is typed freely; every other config key has a value constant.
-FREE_FORM_KEYS="port bind image-tag stop-timeout"
+FREE_FORM_KEYS="port bind image-tag stop-timeout log-dir"
 
 # client_const NAME - prints the client's constant NAME (empty when unset). The
 # client is sourced in a subshell: its BASH_SOURCE guard keeps main from

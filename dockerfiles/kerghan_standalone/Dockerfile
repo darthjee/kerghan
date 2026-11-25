@@ -49,7 +49,7 @@ RUN set -e; \
       arm64) tent_image=darthjee/tent:1.0.3-arm64 ;; \
       *) echo "Unsupported TARGETARCH: ${TARGETARCH}" >&2; exit 1 ;; \
     esac; \
-    printf 'TENT_IMAGE=%s\nKERGHAN_VERSION=%s\n' "$tent_image" "$KERGHAN_VERSION" > /vault/.env; \
+    printf 'TENT_IMAGE=%s\nKERGHAN_VERSION=%s\nLOGS_IMAGE=%s\n' "$tent_image" "$KERGHAN_VERSION" "docker:27.5.1-cli" > /vault/.env; \
     cat /vault/.env
 
 #######################
@@ -57,7 +57,8 @@ RUN set -e; \
 # standalone/images/<arch>/ (amd64, arm64) must exist and hold that
 # architecture's `docker save` tarballs of darthjee/kerghan:<v>, mysql:8.4.11
 # (mysql.tar), mysql:9.3.0 (mysql-legacy.tar, only for the #469 migration
-# release) and the matching Tent tag before building this target. They are produced by
+# release), docker:27.5.1-cli (docker-cli.tar, the logs collector) and the
+# matching Tent tag before building this target. They are produced by
 # bin/release_kerghan_standalone.sh; only the folder matching TARGETARCH is
 # copied, so a multi-platform build gives each architecture its own.
 FROM standalone AS standalone-offline

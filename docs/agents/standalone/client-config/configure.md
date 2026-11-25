@@ -40,6 +40,9 @@ config (~/.kerghan/config)
   image-tag     0.8.1       default
   auto-login    true        default
   bind          127.0.0.1   derived (auto-login on)
+  restart-on-update  ask    default
+  file-logs     true        default
+  log-dir       ~/.kerghan/logs  default
 env (~/.kerghan/kerghan.env)
   KERGHAN_SECRET_KEY              ********              file
   KERGHAN_INTEGRATIONS_KEY        ********              file
@@ -52,7 +55,7 @@ env (~/.kerghan/kerghan.env)
   MY_CUSTOM_VAR                   hello                 file
 ```
 
-- **config rows:** always the seven keys, in this order, then any unknown key found in the file
+- **config rows:** always the nine keys, in this order, then any unknown key found in the file
   (source `unknown (ignored)`).
 - **env rows:** the `DEFAULT_ENV_KEYS` keys in their order, then `FRONTEND_BASE_URL`, then every
   other key in file order. A client-managed key found in the file is listed with source
@@ -131,7 +134,7 @@ and `bind` (`--bind`) instead; to keep the session cookies `Secure`, set an `htt
 
 Covered by `standalone/test/configure.bats`:
 
-- No files: lists the seven config keys as `default` (bind `derived (auto-login on)`) and the env
+- No files: lists the nine config keys as `default` (bind `derived (auto-login on)`) and the env
   section as not created; creates nothing.
 - Every source appears where it applies: `file`, `default`, `derived (auto-login off)`,
   `not set`, `file, invalid`, `unknown (ignored)`, `file, from environment`,

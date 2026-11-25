@@ -42,6 +42,8 @@ vault up --name kerghan --image darthjee/kerghan-standalone:<tag>[-offline] \
   -e KERGHAN_DEFAULT_USER_ALWAYS_AUTHENTICATED=<auto-login> \
   -e KERGHAN_DEFAULT_USER_ALLOWED_IPS=127.0.0.1,::1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16 \
   -e KERGHAN_COOKIE_SECURE=<true|false|loopback> \
+  -e KERGHAN_FILE_LOGS=<true|false> -e KERGHAN_HOST_UID=$(id -u) -e KERGHAN_HOST_GID=$(id -g) \
+  [-v <log-dir>:/vault/logs] \
   --runtime <runtime> --stop-timeout <seconds> [-f]
 vault down --name kerghan --stop-timeout <seconds>
 vault logs|status|compose --name kerghan ...
@@ -184,7 +186,7 @@ contracts, required tests): [Client update](client-update.md).
 
 `kerghan completion bash` prints a static bash completion script on stdout; `bash` is the only
 supported shell. It completes commands, flags, `configure` keys and the fixed values of
-`variant`, `runtime`, `auto-login` and `restart-on-update`, never free-form values, versions,
+`variant`, `runtime`, `auto-login`, `restart-on-update` and `file-logs`, never free-form values, versions,
 passthrough arguments or filenames, and runs no subprocess on TAB. `install.sh` installs it into
 the bash-completion user directory, so it lazy-loads on the first `kerghan <TAB>`; without the
 `bash-completion` package, load it with `eval "$(kerghan completion bash)"`. Opt out of the
@@ -225,6 +227,20 @@ ones (from the flags, the config and the defaults):
   `allowing login over plain HTTP on loopback hosts` (to `loopback`) or `requiring HTTPS for the session cookies` (to `true`), data volume kept. An instance created
   by a client before this setting is therefore recreated on its next `kerghan up` on loopback.
 
+- Same image, port, auto-login, bind and cookie setting, but a changed file-logs state (read from
+  the running container's `KERGHAN_FILE_LOGS`, missing counts as `false`, so an instance from an
+  older client is recreated) or log directory (the source of its `/vault/logs` mount): recreated
+  with the reason `file logs changed (off -> on)` / `(on -> off)` or
+  `log directory changed (<a> -> <b>)`, data volume kept. The UID and GID are not compared.
+
+Before this comparison `up` runs `prepare_log_dir`: with `file-logs=true` it creates the resolved
+`log-dir` (`~/` expanded by `resolved_log_dir`), sets mode `700` only when it created the directory (an existing one keeps its mode and owner) and probes it with a temporary
+file. When that fails it warns `log directory <dir> is not writable; starting without file logs`
+and passes `KERGHAN_FILE_LOGS=false` and no `-v`; logging never makes `up` fail. With an image
+tag older than `FIRST_FILE_LOGS_VERSION` it also prints a hint, since an older image ignores file
+logs. `KERGHAN_FILE_LOGS`, `KERGHAN_HOST_UID` and `KERGHAN_HOST_GID` are client-managed: a
+`kerghan.env` that sets them is refused.
+
 A changed `runtime` or `stop-timeout` never triggers a recreation; it applies the next time the
 container is created (`kerghan down && kerghan up` applies it now).
 
@@ -262,6 +278,6 @@ container is created (`kerghan down && kerghan up` applies it now).
   process is empty when unknown) using `lsof +c 0` or else `ss`. Exit `0` means a tool ran (no
   output: no listener); exit `2` means skipped (no tool). Keep this format stable.
 - **`reset`:** asks `Continue? [y/N]` (default no), then stops the instance and removes
-  `vault-kerghan-data`. It keeps `kerghan.env`.
+  `vault-kerghan-data`. It keeps `kerghan.env` and the log files (`down` keeps them too).
 - **`status` / `logs`:** the way to see a failed migration or an unhealthy service.
 

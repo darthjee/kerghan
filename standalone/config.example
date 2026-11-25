@@ -14,8 +14,8 @@
 #
 # Precedence: command-line flag, then this file, then the default.
 #
-# A changed port, variant, image-tag, auto-login or bind recreates the instance
-# on the next `kerghan up` (the data volume is kept). A changed runtime or
+# A changed port, variant, image-tag, auto-login, bind, file-logs or log-dir
+# recreates the instance on the next `kerghan up` (the data volume is kept). A changed runtime or
 # stop-timeout applies the next time the container is created; run
 # `kerghan down && kerghan up` to apply it now.
 
@@ -72,3 +72,16 @@
 # A stopped instance is never started, and a downgrade never restarts.
 # Overridden by `kerghan update --restart` / `kerghan update --no-restart`.
 #restart-on-update=ask
+
+# Write the tent (access and error log) and kerghan (backend and workers) logs
+# to files under log-dir on this machine: true | false. Each file is rotated at
+# 10 MB, keeping 5 copies, and every line has a timestamp. The files survive
+# `kerghan down` and `kerghan reset`. When the directory cannot be created or
+# written, `kerghan up` warns and starts without file logs.
+#file-logs=true
+
+# Host directory for the log files. An absolute path or ~/path, without ':' or
+# spaces. Defaults to ~/.kerghan/logs. The directory is created with mode 700
+# and the files with mode 600. On Docker Desktop for macOS it must be inside a
+# shared file path.
+#log-dir=

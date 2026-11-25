@@ -20,7 +20,14 @@
 #                    COMPOSE_UP_ARGS holds `--pull never` and that the inner
 #                    daemon has darthjee/kerghan:$KERGHAN_VERSION, mysql:8.4.11
 #                    and the TENT_IMAGE from /vault/.env, i.e. that the stack
-#                    started from the preloaded tarballs (default false)
+#                    started from the preloaded tarballs, plus the logs
+#                    collector's LOGS_IMAGE (default false)
+#
+# It also mounts a host directory at /vault/logs with KERGHAN_FILE_LOGS=true and
+# checks the collector: tent.log and kerghan.log appear (RFC 3339 timestamps,
+# mode 600, owned by the current user, directory mode 700), a request path is
+# logged, a killed collector comes back and keeps appending, and the files are
+# appended to (not truncated) across a container restart.
 set -euo pipefail
 
 IMAGE="${IMAGE:-darthjee/kerghan-standalone:dev}"
@@ -36,6 +43,7 @@ CONTAINER="kerghan-standalone-smoke-$RUN_ID"
 VOLUME="kerghan-standalone-smoke-data-$RUN_ID"
 BASE_URL="http://localhost:$SMOKE_PORT"
 SUCCESS=false
+LOG_DIR=""
 
 log() {
   printf '[smoke] %s\n' "$*"
@@ -53,6 +61,7 @@ cleanup() {
   fi
   docker rm -f "$CONTAINER" >/dev/null 2>&1 || true
   docker volume rm -f "$VOLUME" >/dev/null 2>&1 || true
+  [ -z "$LOG_DIR" ] || rm -rf "$LOG_DIR"
 }
 trap cleanup EXIT
 
@@ -86,7 +95,7 @@ inner_mysql() {
 # Asserts the offline image started from its preloaded tarballs: compose runs
 # with --pull never and every inner image is already in the inner daemon.
 check_offline() {
-  local compose_args tent_image image
+  local compose_args tent_image logs_image image
   log "checking the offline preload"
   compose_args=$(docker exec "$CONTAINER" printenv COMPOSE_UP_ARGS || true)
   case " $compose_args " in
@@ -95,10 +104,50 @@ check_offline() {
   esac
   tent_image=$(docker exec "$CONTAINER" sh -c 'sed -n "s/^TENT_IMAGE=//p" /vault/.env' || true)
   [ -n "$tent_image" ] || fail "could not read TENT_IMAGE from /vault/.env"
-  for image in "darthjee/kerghan:$KERGHAN_VERSION" "mysql:8.4.11" "$tent_image"; do
+  logs_image=$(docker exec "$CONTAINER" sh -c 'sed -n "s/^LOGS_IMAGE=//p" /vault/.env' || true)
+  [ -n "$logs_image" ] || fail "could not read LOGS_IMAGE from /vault/.env"
+  for image in "darthjee/kerghan:$KERGHAN_VERSION" "mysql:8.4.11" "$tent_image" "$logs_image"; do
     docker exec "$CONTAINER" docker image inspect "$image" >/dev/null 2>&1 \
       || fail "inner image $image is missing from the inner daemon (not preloaded)"
   done
+}
+
+# file_mode <path> - permission bits in octal (GNU or BSD stat).
+file_mode() {
+  stat -c '%a' "$1" 2>/dev/null || stat -f '%Lp' "$1"
+}
+
+# file_owner <path> - numeric owner (GNU or BSD stat).
+file_owner() {
+  stat -c '%u' "$1" 2>/dev/null || stat -f '%u' "$1"
+}
+
+# wait_for_log_line <file> <fixed string> - polls up to ~10 s for the string.
+wait_for_log_line() {
+  local file="$1" text="$2" i
+  for i in 1 2 3 4 5 6 7 8 9 10; do
+    if [ -f "$file" ] && grep -qF -- "$text" "$file"; then
+      return 0
+    fi
+    sleep 1
+  done
+  fail "$file did not get a line containing '$text' within 10s"
+}
+
+# Asserts the collector wrote both files with the expected shape and rights.
+check_log_files() {
+  local name file bad
+  log "checking the collected log files in $LOG_DIR"
+  for name in tent kerghan; do
+    file="$LOG_DIR/$name.log"
+    wait_for_log_line "$file" ""
+    [ -s "$file" ] || fail "$file is empty"
+    [ "$(file_mode "$file")" = "600" ] || fail "$file is not mode 600"
+    [ "$(file_owner "$file")" = "$(id -u)" ] || fail "$file is not owned by the current user"
+    bad=$(grep -vE '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9:.]+(Z|[+-][0-9:]+) ' "$file" | head -n 1 || true)
+    [ -z "$bad" ] || fail "$file has a line without an RFC 3339 timestamp: $bad"
+  done
+  [ "$(file_mode "$LOG_DIR")" = "700" ] || fail "$LOG_DIR is not mode 700"
 }
 
 if [ "$SKIP_BUILD" != "true" ]; then
@@ -109,10 +158,11 @@ fi
 
 log "checking that no env file or secret is baked into $IMAGE"
 vault_env=$(docker run --rm --entrypoint sh "$IMAGE" -c 'cat /vault/.env')
-unexpected=$(printf '%s\n' "$vault_env" | grep -vE '^(TENT_IMAGE|KERGHAN_VERSION)=' || true)
+unexpected=$(printf '%s\n' "$vault_env" | grep -vE '^(TENT_IMAGE|KERGHAN_VERSION|LOGS_IMAGE)=' || true)
 [ -z "$unexpected" ] || fail "/vault/.env holds unexpected entries: $unexpected"
 printf '%s\n' "$vault_env" | grep -q '^TENT_IMAGE=darthjee/tent:' || fail "/vault/.env has no TENT_IMAGE"
 printf '%s\n' "$vault_env" | grep -q "^KERGHAN_VERSION=" || fail "/vault/.env has no KERGHAN_VERSION"
+printf '%s\n' "$vault_env" | grep -q '^LOGS_IMAGE=docker:' || fail "/vault/.env has no LOGS_IMAGE"
 stray=$(docker run --rm --entrypoint sh "$IMAGE" -c \
   'find / -xdev \( -name ".env" -o -name ".env.*" -o -name "*.env" \) ! -path /vault/.env 2>/dev/null' || true)
 [ -z "$stray" ] || fail "env files found in the image: $stray"
@@ -132,9 +182,13 @@ if [ -n "$SMOKE_PRELOAD_DIR" ]; then
   preload_args=(-v "$(cd "$SMOKE_PRELOAD_DIR" && pwd):/vault/images:ro")
 fi
 
+LOG_DIR="$(mktemp -d)"
+
 log "starting $CONTAINER on port $SMOKE_PORT"
 docker run -d --privileged --name "$CONTAINER" ${preload_args[@]+"${preload_args[@]}"} \
   -v "$VOLUME:/var/lib/docker" -p "$SMOKE_PORT:80" \
+  -v "$LOG_DIR:/vault/logs" -e KERGHAN_FILE_LOGS=true \
+  -e KERGHAN_HOST_UID="$(id -u)" -e KERGHAN_HOST_GID="$(id -g)" \
   -e KERGHAN_SECRET_KEY -e KERGHAN_INTEGRATIONS_KEY \
   -e FRONTEND_BASE_URL="$BASE_URL" \
   "$IMAGE" >/dev/null
@@ -156,6 +210,18 @@ code=$(printf '%s\n' "$body" | tail -n 1)
 [ "$code" = "200" ] || fail "GET / answered $code"
 printf '%s\n' "$body" | grep -q 'id="root"' || fail "GET / did not return the app's index.html"
 
+log_path="/smoke-logs-$RUN_ID"
+curl -s -o /dev/null "$BASE_URL$log_path" || true
+wait_for_log_line "$LOG_DIR/tent.log" "$log_path"
+check_log_files
+
+log "killing the collector; it must come back and keep appending"
+docker exec -w /vault "$CONTAINER" docker compose exec -T logs pkill -f collect.sh >/dev/null 2>&1 || true
+sleep 5
+log_path2="/smoke-logs-after-collector-$RUN_ID"
+curl -s -o /dev/null "$BASE_URL$log_path2" || true
+wait_for_log_line "$LOG_DIR/tent.log" "$log_path2"
+
 log "writing a marker row before the restart"
 inner_mysql "CREATE TABLE IF NOT EXISTS smoke_marker (run_id VARCHAR(64)); INSERT INTO smoke_marker VALUES ('$RUN_ID');" \
   || fail "could not write the marker row"
@@ -166,6 +232,9 @@ wait_for_200 "$BASE_URL/health.json"
 
 marker=$(inner_mysql "SELECT run_id FROM smoke_marker;" || true)
 [ "$marker" = "$RUN_ID" ] || fail "data did not survive the restart (marker: '${marker}')"
+
+wait_for_log_line "$LOG_DIR/tent.log" "$log_path"
+wait_for_log_line "$LOG_DIR/tent.log" "$log_path2"
 
 SUCCESS=true
 log "OK: $IMAGE boots, serves /health.json and /, and keeps data across a restart"

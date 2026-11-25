@@ -22,7 +22,7 @@ run_wizard() {
 # prompts - the question labels on stderr, in order, comma-separated.
 prompts() {
   printf '%s' "$stderr" |
-    grep -oE 'Port \[|Image variant|Docker runtime|Stop timeout|Image tag|Automatic login|Bind address|Restart after update|Default user enabled|Default user is admin|Default user username|Default user email|Default user password|Public URL' |
+    grep -oE 'Port \[|Image variant|Docker runtime|Stop timeout|Image tag|Automatic login|Bind address|Restart after update|Write logs to a host directory|Log directory|Default user enabled|Default user is admin|Default user username|Default user email|Default user password|Public URL' |
     sed 's/ \[$//' | paste -sd, -
 }
 
@@ -64,7 +64,7 @@ unchanged_files() {
 }
 
 DEFAULT_ORDER="Port,Image variant,Automatic login,Bind address,Restart after update,Default user username,Default user email,Default user password"
-ADVANCED_ORDER="Port,Image variant,Docker runtime,Stop timeout,Image tag,Automatic login,Bind address,Restart after update,Default user enabled,Default user is admin,Default user username,Default user email,Default user password,Public URL"
+ADVANCED_ORDER="Port,Image variant,Docker runtime,Stop timeout,Image tag,Automatic login,Bind address,Restart after update,Write logs to a host directory,Log directory,Default user enabled,Default user is admin,Default user username,Default user email,Default user password,Public URL"
 
 # --- arguments and starting state ---
 
@@ -113,7 +113,7 @@ ADVANCED_ORDER="Port,Image variant,Docker runtime,Stop timeout,Image tag,Automat
 
 @test "with --advanced it asks all fourteen in table order" {
   write_env_file
-  run_wizard "\n\n\n\n\n\n\n\n\n\n\n\n\n\n" --advanced
+  run_wizard "\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n" --advanced
   [ "$status" -eq 0 ]
   [ "$(prompts)" = "$ADVANCED_ORDER" ]
   [ "$output" = "Nothing changed." ]
@@ -121,7 +121,7 @@ ADVANCED_ORDER="Port,Image variant,Docker runtime,Stop timeout,Image tag,Automat
 
 @test "the secrets, the client-managed pair and custom keys are never asked" {
   write_env_file "MY_CUSTOM=1"
-  run_wizard "\n\n\n\n\n\n\n\n\n\n\n\n\n\n" --advanced
+  run_wizard "\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n" --advanced
   [ "$status" -eq 0 ]
   refute_stderr_contains "KERGHAN_SECRET_KEY"
   refute_stderr_contains "KERGHAN_INTEGRATIONS_KEY"
@@ -197,9 +197,9 @@ ADVANCED_ORDER="Port,Image variant,Docker runtime,Stop timeout,Image tag,Automat
 
 @test "with --advanced the skip rule uses the enabled answer" {
   write_env_file
-  run_wizard "\n\n\n\n\nfalse\n\n\nn\n\n\n" --advanced
+  run_wizard "\n\n\n\n\nfalse\n\n\n\n\nn\n\n\n" --advanced
   [ "$status" -eq 0 ]
-  [ "$(prompts)" = "Port,Image variant,Docker runtime,Stop timeout,Image tag,Automatic login,Bind address,Restart after update,Default user enabled,Public URL" ]
+  [ "$(prompts)" = "Port,Image variant,Docker runtime,Stop timeout,Image tag,Automatic login,Bind address,Restart after update,Write logs to a host directory,Log directory,Default user enabled,Public URL" ]
   grep -qx 'KERGHAN_DEFAULT_USER_ENABLED=false' "$ENV_FILE"
   [ "$(cat "$CONFIG_FILE")" = "auto-login=false" ]
 }
@@ -224,7 +224,7 @@ ADVANCED_ORDER="Port,Image variant,Docker runtime,Stop timeout,Image tag,Automat
 @test "an invalid runtime line is shown as invalid and Enter writes the default (--advanced)" {
   write_env_file
   write_config "runtime=bogus"
-  run_wizard "\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n" --advanced
+  run_wizard "\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n" --advanced
   [ "$status" -eq 0 ]
   assert_stderr_contains "Docker runtime (auto/sysbox/privileged) [auto] (current value 'bogus' is invalid): "
   [ "$(cat "$CONFIG_FILE")" = "runtime=auto" ]
@@ -315,7 +315,7 @@ ADVANCED_ORDER="Port,Image variant,Docker runtime,Stop timeout,Image tag,Automat
 
 @test "with --advanced restart-on-update is asked right after bind" {
   write_env_file
-  run_wizard "\n\n\n\n\n\n\nnever\n\n\n\n\n\n\n\n" --advanced
+  run_wizard "\n\n\n\n\n\n\nnever\n\n\n\n\n\n\n\n\n\n" --advanced
   [ "$status" -eq 0 ]
   [ "$(prompts)" = "$ADVANCED_ORDER" ]
   [ "$(cat "$CONFIG_FILE")" = "restart-on-update=never" ]
@@ -386,7 +386,7 @@ ADVANCED_ORDER="Port,Image variant,Docker runtime,Stop timeout,Image tag,Automat
 @test "--advanced public URL: Enter with none set writes nothing" {
   write_env_file
   cp "$ENV_FILE" "$TEST_ROOT/env.before"
-  run_wizard "\n\n\n\n\n\n\n\n\n\n\n\n\n\n" --advanced
+  run_wizard "\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n" --advanced
   [ "$status" -eq 0 ]
   assert_stderr_contains "Public URL [http://localhost:3000, derived from port]:"
   cmp "$ENV_FILE" "$TEST_ROOT/env.before"
@@ -394,7 +394,7 @@ ADVANCED_ORDER="Port,Image variant,Docker runtime,Stop timeout,Image tag,Automat
 
 @test "--advanced public URL: the default follows the port answer and an answer is written" {
   write_env_file
-  run_wizard "3002\n\n\n\n\n\n\n\n\n\n\n\n\nhttps://kerghan.example.com\n\n" --advanced
+  run_wizard "3002\n\n\n\n\n\n\n\n\n\n\n\n\n\n\nhttps://kerghan.example.com\n\n" --advanced
   [ "$status" -eq 0 ]
   assert_stderr_contains "Public URL [http://localhost:3002, derived from port]:"
   grep -qx 'FRONTEND_BASE_URL=https://kerghan.example.com' "$ENV_FILE"
@@ -404,7 +404,7 @@ ADVANCED_ORDER="Port,Image variant,Docker runtime,Stop timeout,Image tag,Automat
 
 @test "--advanced public URL: a set value is offered as its current value" {
   write_env_file "FRONTEND_BASE_URL=https://old.example.com"
-  run_wizard "\n\n\n\n\n\n\n\n\n\n\n\n\n\n" --advanced
+  run_wizard "\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n" --advanced
   [ "$status" -eq 0 ]
   assert_stderr_contains "Public URL [https://old.example.com]:"
   [ "$output" = "Nothing changed." ]
@@ -480,8 +480,19 @@ ADVANCED_ORDER="Port,Image variant,Docker runtime,Stop timeout,Image tag,Automat
   write_env_file
   run_wizard "3002\n\n\n\n\n\n\ng\n\n"
   [ "$status" -eq 0 ]
-  run_wizard "3002\n\n\n\n\n\n\n\n\n\n\n\nt\nwizard-typed-pw\nwizard-typed-pw\n\n\n" --advanced
+  run_wizard "3002\n\n\n\n\n\n\n\n\n\n\n\n\n\nt\nwizard-typed-pw\nwizard-typed-pw\n\n\n" --advanced
   [ "$status" -eq 0 ]
   refute_logged_prefix "vault"
   refute_logged_prefix "docker"
+}
+
+# --- file-logs / log-dir ---
+
+@test "with --advanced log-dir is skipped when file-logs is answered false" {
+  write_env_file
+  run_wizard "\n\n\n\n\n\n\n\nfalse\n\n\n\n\n\n\n\n" --advanced
+  [ "$status" -eq 0 ]
+  refute_stderr_contains "Log directory"
+  assert_stderr_contains "Write logs to a host directory"
+  [ "$(cat "$CONFIG_FILE")" = "file-logs=false" ]
 }

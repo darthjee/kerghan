@@ -72,8 +72,9 @@ Both targets come from `dockerfiles/kerghan_standalone/Dockerfile`, built with
    `standalone/images/<arch>/`, then pulls each image by its `linux/<arch>` manifest digest and
    `docker save`s
    `darthjee/kerghan:<tag>`, `mysql:8.4.11`, the Tent image (`darthjee/tent:1.0.3` for amd64,
-   `darthjee/tent:1.0.3-arm64` for arm64) and, for the #469 migration only, `mysql:9.3.0`, as
-   `kerghan.tar`, `mysql.tar`, `tent.tar` and `mysql-legacy.tar`. The digest comes from
+   `darthjee/tent:1.0.3-arm64` for arm64) and, for the #469 migration only, `mysql:9.3.0`, plus the log collector image `docker:27.5.1-cli` (it must match `LOGS_IMAGE` in
+   the Dockerfile's `.env` step), as
+   `kerghan.tar`, `mysql.tar`, `tent.tar`, `mysql-legacy.tar` and `docker-cli.tar`. The digest comes from
    `docker buildx imagetools inspect` (the matching entry of the index, or the manifest's own digest
    for a single-platform image such as Tent). The pulled `repo@digest` is re-tagged to `repo:tag`,
    checked with `docker image inspect` (the job fails if the architecture does not match) and
