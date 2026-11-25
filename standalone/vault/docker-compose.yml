@@ -10,6 +10,7 @@
 # /vault/.env (written by the image build, no secrets) provides:
 #   TENT_IMAGE      - darthjee/tent tag matching the image's architecture
 #   KERGHAN_VERSION - darthjee/kerghan tag baked into this image
+#   LOGS_IMAGE      - docker CLI image for the logs collector service
 #
 # Environment allowlist rule: the `kerghan` service only receives the
 # variables listed in its `environment:` below. Fixed values are literals, so
@@ -17,11 +18,21 @@
 # variables are listed by name only, so each reaches the backend only when it
 # is set on the Vault container. A backend variable not listed here never
 # reaches the backend; add it here when the backend gains a new one.
+#
+# KERGHAN_FILE_LOGS, KERGHAN_HOST_UID and KERGHAN_HOST_GID (passed with -e by
+# the client) go only to the `logs` service, never to `kerghan`'s allowlist.
+
+x-logging: &bounded-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
 
 services:
   mysql:
     image: mysql:8.4.11
     restart: unless-stopped
+    logging: *bounded-logging
     environment:
       MYSQL_DATABASE: kerghan
       MYSQL_USER: kerghan
@@ -45,6 +56,7 @@ services:
   mysql-legacy:
     image: mysql:9.3.0
     profiles: [migrate-mysql-9]
+    logging: *bounded-logging
     environment:
       MYSQL_DATABASE: kerghan
       MYSQL_USER: kerghan
@@ -62,6 +74,7 @@ services:
   kerghan:
     image: darthjee/kerghan:${KERGHAN_VERSION}
     restart: unless-stopped
+    logging: *bounded-logging
     depends_on:
       mysql:
         condition: service_healthy
@@ -125,6 +138,7 @@ services:
   tent:
     image: ${TENT_IMAGE}
     restart: unless-stopped
+    logging: *bounded-logging
     depends_on:
       - kerghan
     ports:
@@ -135,6 +149,24 @@ services:
       # Kerghan's custom Tent middlewares, copied from proxy/extension/ at
       # image build time (the rules depend on them).
       - ./tent/extension:/var/www/html/extension:ro
+
+  # Follows the tent and kerghan container logs into /vault/logs (a host
+  # directory when the client mounts one). Idle unless KERGHAN_FILE_LOGS=true.
+  # Nothing depends on it. It is the only service with the Docker socket.
+  logs:
+    image: ${LOGS_IMAGE}
+    restart: unless-stopped
+    init: true
+    entrypoint: ["/bin/sh", "/collector/collect.sh"]
+    environment:
+      - KERGHAN_FILE_LOGS=${KERGHAN_FILE_LOGS:-false}
+      - KERGHAN_HOST_UID=${KERGHAN_HOST_UID:-0}
+      - KERGHAN_HOST_GID=${KERGHAN_HOST_GID:-0}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./logs:/logs
+      - ./logs-collector:/collector:ro
+    logging: *bounded-logging
 
 volumes:
   mysql84-data: {}
