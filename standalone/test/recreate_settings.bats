@@ -6,7 +6,7 @@ load helpers/setup
 
 # up_line <bind> <auto-login> - the expected `vault up` line on port 3000.
 up_line() {
-  echo "vault up --name kerghan --image $IMAGE --env-file $ENV_FILE -p $1:3000:80 -e FRONTEND_BASE_URL=http://$(advertised_host "$1"):3000$(default_user_args "$2" "${3:-}") --runtime auto --stop-timeout 60"
+  echo "vault up --name kerghan --image $IMAGE --env-file $ENV_FILE -p $1:3000:80 -e FRONTEND_BASE_URL=http://$(advertised_host "$1"):3000 $(default_user_args "$2" "${3:-}") --runtime auto --stop-timeout 60"
 }
 
 # assert_recreated <bind> <auto-login> - vault down then vault up, volume kept.

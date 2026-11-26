@@ -9,7 +9,7 @@ WARNING="kerghan: warning: automatic login is on and the port is published on"
 # up_line <bind> <auto-login> [port] [cookie-secure] - the expected `vault up` line.
 up_line() {
   local port="${3:-3000}"
-  echo "vault up --name kerghan --image $IMAGE --env-file $ENV_FILE -p $1:$port:80 -e FRONTEND_BASE_URL=http://$(advertised_host "$1"):$port$(default_user_args "$2" "${4:-}") --runtime auto --stop-timeout 60"
+  echo "vault up --name kerghan --image $IMAGE --env-file $ENV_FILE -p $1:$port:80 -e FRONTEND_BASE_URL=http://$(advertised_host "$1"):$port $(default_user_args "$2" "${4:-}") --runtime auto --stop-timeout 60"
 }
 
 @test "bind= from the file is used" {
