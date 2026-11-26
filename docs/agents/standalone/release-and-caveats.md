@@ -109,7 +109,8 @@ The CI jobs that build and publish the images and the client assets (`release-ke
   `::1` first and reaches AirPlay, which answers `403` with `Server: AirTunes`. To tell which one
   answers, `curl -si http://127.0.0.1:<port>` shows `Server: Apache` when it is Kerghan's Tent.
   Fixes: pick another port (`kerghan up -p <port>`), or turn off System Settings > General >
-  AirDrop & Handoff > AirPlay Receiver. `kerghan up` warns about this clash. The advertised-URL
+  AirDrop & Handoff > AirPlay Receiver. `kerghan up` warns about this clash, and `kerghan diagnose` names the process that answers
+  and the URL that reaches Kerghan (see [client-diagnose.md](client-diagnose.md)). The advertised-URL
   change is tracked in #598.
 
 ## Testing
