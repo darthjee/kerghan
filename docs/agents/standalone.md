@@ -65,4 +65,5 @@ Everything else lives under `docs/agents/standalone/`. Read the page that matche
 | [https.md](standalone/https.md) | You change the HTTPS/LAN guidance, the plain-HTTP hint or the auto-login-behind-a-proxy warning. |
 | [client-config.md](standalone/client-config.md) | You change `kerghan configure` or `kerghan wizard`. |
 | [client-update.md](standalone/client-update.md) | You change `kerghan update`. |
+| [client-diagnose.md](standalone/client-diagnose.md) | You change `kerghan diagnose`. |
 | [client-completion.md](standalone/client-completion.md) | You change bash completion. |

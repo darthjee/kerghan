@@ -8,7 +8,7 @@
 
 # --- Word sets (the spec's lists; completion_sync.bats guards them) --------
 
-ALL_COMMANDS=("up " "down " "logs " "status " "compose " "reset " "update " "update-env "
+ALL_COMMANDS=("up " "down " "logs " "status " "diagnose " "compose " "reset " "update " "update-env "
   "configure " "wizard " "version " "completion " "help " "-h " "--help ")
 UP_FLAGS=("--offline " "-p " "--port " "--auto-login " "--no-auto-login " "--bind " "-f ")
 UPDATE_FLAGS=("--force " "--yes " "--restart " "--no-restart ")

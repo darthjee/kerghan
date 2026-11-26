@@ -10,6 +10,7 @@ kerghan up [--offline] [-p PORT] [--[no-]auto-login] [--bind ADDRESS] [-f]
 kerghan down                            # stop and remove the container; data is kept
 kerghan logs [-f]                       # show (or follow) the logs
 kerghan status                          # show the instance state
+kerghan diagnose                        # check the instance end to end (read-only); see client-diagnose.md
 kerghan compose <args>                  # docker compose inside the instance, e.g. compose exec mysql sh
 kerghan reset                           # wipe all data, asks for confirmation
 kerghan update [VERSION] [--force] [--yes] [--[no-]restart]
@@ -269,7 +270,8 @@ container is created (`kerghan down && kerghan up` applies it now).
     process instead`;
   - the `-p` hint above;
   - on port 5000 or 7000 with `ControlCenter`, the AirPlay Receiver hint (see
-    [the macOS AirPlay caveat](release-and-caveats.md#caveats)).
+    [the macOS AirPlay caveat](release-and-caveats.md#caveats));
+  - and last, `run 'kerghan diagnose' for details` (see [client-diagnose.md](client-diagnose.md)).
 
   It is skipped silently when neither `lsof` nor `ss` is available, or when `DOCKER_HOST` is
   `tcp://` or `ssh://` (a remote engine).

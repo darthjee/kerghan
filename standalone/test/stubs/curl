@@ -16,6 +16,14 @@
 #                                   status (exit 6, status 000)
 #   -w '%{http_code}'               prints the HTTP status (200, 404 or 000)
 #
+# Probe requests (kerghan diagnose): http://<host>:<port>/health.json and
+# /ready.json, answered from STUB_PROBE_<HOST>_<HEALTH|READY>, where <HOST> is
+# the host upper-cased with every non-alphanumeric character turned into _
+# (127.0.0.1 -> 127_0_0_1, localhost -> LOCALHOST). The value is
+# `<status>|<body>|<server>`, `timeout` (exit 28) or `refused` (exit 7).
+# Unset: health answers 200 {"status":"ok"} from Apache, ready answers 200.
+# -D writes the headers (Server: <server>), -o the body.
+#
 # The fake kerghan installer (update tests) logs
 # `installer $0=<path> KERGHAN_VERSION=<v> KERGHAN_INSTALL_DIR=<dir>`, refuses
 # like check_docker when `docker info` fails, and writes <dir>/kerghan:
@@ -44,6 +52,7 @@ echo "curl $*" >>"$STUB_LOG"
 out=""
 url=""
 write_out=""
+headers_out=""
 while [ "$#" -gt 0 ]; do
   case "$1" in
     -o)
@@ -54,7 +63,8 @@ while [ "$#" -gt 0 ]; do
       write_out="$2"
       shift 2
       ;;
-    --proto | --proto-redir)
+    --proto | --proto-redir | -D | --connect-timeout | --max-time | --noproxy)
+      case "$1" in -D) headers_out="$2" ;; esac
       shift 2
       ;;
     -*) shift ;;
@@ -198,6 +208,46 @@ echo "kerghan-install: kerghan $version installed to $dir/kerghan"
 INSTALLER
       } >"$out"
     fi
+    ;;
+  http://*/health.json | http://*/ready.json)
+    hostport="${url#http://}"
+    hostport="${hostport%%/*}"
+    host="${hostport%:*}"
+    case "$hostport" in
+      \[*\]:*) host="${hostport%\]:*}]" ;;
+    esac
+    key="$(printf '%s' "$host" | tr -c 'A-Za-z0-9\n' '_' | tr 'a-z' 'A-Z')"
+    case "$url" in
+      */health.json)
+        var="STUB_PROBE_${key}_HEALTH"
+        default='200|{"status":"ok"}|Apache/2.4.68 (Debian)'
+        ;;
+      *)
+        var="STUB_PROBE_${key}_READY"
+        default='200|{"status":"ready"}|Apache/2.4.68 (Debian)'
+        ;;
+    esac
+    value="${!var-$default}"
+    case "$value" in
+      timeout)
+        http_status 000
+        exit 28
+        ;;
+      refused)
+        http_status 000
+        exit 7
+        ;;
+    esac
+    code="${value%%|*}"
+    rest="${value#*|}"
+    body="${rest%%|*}"
+    server="${rest#*|}"
+    [ -z "$out" ] || printf '%s' "$body" >"$out"
+    if [ -n "$headers_out" ]; then
+      printf 'HTTP/1.1 %s X\r\nServer: %s\r\nContent-Type: text/plain\r\n\r\n' "$code" "$server" >"$headers_out"
+    fi
+    http_status "$code"
+    exit 0
     ;;
   *)
     http_status 404

@@ -2,6 +2,8 @@
 # Test stub for the vault CLI: logs its call and the directory it ran from.
 #   STUB_VAULT_UP_EXIT    exit code for `vault up` (default 0)
 #   STUB_VAULT_UP_STDERR  text printed on stderr by a failing `vault up`
+#   STUB_COMPOSE_PS       output of `compose ps` (rows `<service> <state> <health>`,
+#                         default: tent, kerghan and mysql running and healthy)
 #   STUB_MIG_FAIL         step of the MySQL migration that fails: stop,
 #                         legacy_up, legacy_health, dump, restore, start,
 #                         health or count (unset: none)
@@ -16,6 +18,12 @@ fi
 if [ "${1:-}" = "compose" ]; then
   fail_step="${STUB_MIG_FAIL:-}"
   case "$*" in
+    "compose --name kerghan ps "*)
+      printf '%s\n' "${STUB_COMPOSE_PS-tent running
+kerghan running
+mysql running healthy}"
+      exit 0
+      ;;
     *" stop kerghan"*) [ "$fail_step" = "stop" ] && exit 1 ;;
     *"up -d mysql-legacy"*) [ "$fail_step" = "legacy_up" ] && exit 1 ;;
     *"exec -T mysql-legacy mysqladmin"*) [ "$fail_step" = "legacy_health" ] && exit 1 ;;

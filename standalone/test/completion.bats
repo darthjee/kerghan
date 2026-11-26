@@ -221,10 +221,10 @@ load helpers/completion
   assert_no_reply
 }
 
-@test "edge 5: nothing left to offer (no-args): down, status, reset, update-env, version and help offer nothing" {
+@test "edge 5: nothing left to offer (no-args): down, status, diagnose, reset, update-env, version and help offer nothing" {
   source_completion
   local cmd
-  for cmd in down status reset update-env version help; do
+  for cmd in down status diagnose reset update-env version help; do
     complete_line "kerghan $cmd "
     assert_no_reply
   done

@@ -134,7 +134,8 @@ On macOS, ports 5000 and 7000 are taken by the AirPlay Receiver; `kerghan up` wa
 [the caveat](docs/agents/standalone/release-and-caveats.md#caveats)).
 
 The other commands are `kerghan down` (stop; data is kept), `kerghan logs [-f]`,
-`kerghan status`, `kerghan compose <args>` and `kerghan reset` (wipe all data, after a
+`kerghan status`, `kerghan diagnose` (check the instance end to end; run it and paste the output when
+something looks wrong), `kerghan compose <args>` and `kerghan reset` (wipe all data, after a
 confirmation). Run `kerghan help` for the full list.
 
 ### Upgrade
