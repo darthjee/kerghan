@@ -36,7 +36,7 @@ vault down
 docker volume rm vault-<name>-data
 ```
 
-See [cli.md → Instances](cli/runtime.md#instances).
+See [cli.md → Instances](cli.md#instances).
 
 ## Never share the data volume
 
@@ -46,7 +46,7 @@ volume (`vault-a-data`, `vault-b-data`, ...).
 
 With the CLI, two project directories with the same basename resolve to the same volume: pass
 `--name` (or `name=` in `.vaultrc`) to tell them apart. See
-[cli.md → Instances](cli/runtime.md#instances).
+[cli.md → Instances](cli.md#instances).
 
 ## Shutdown
 
@@ -125,7 +125,7 @@ vault compose exec app sh
 ```
 
 `vault compose` fails when the instance is not running; it exits with the inner command's exit
-code. See [cli.md → Commands](cli/commands.md#commands).
+code. See [cli.md → Commands](cli.md#commands).
 
 Do not start a second container (`docker run ... ps`, `vault run`) on the data volume of a
 running one: see [Never share the data volume](#never-share-the-data-volume). The CLI refuses

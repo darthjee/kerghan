@@ -54,7 +54,7 @@ version="${requested_version:-$KERGHAN_VERSION}"
 
 # Not overridable: it must match `FROM darthjee/vault:<v>` in
 # dockerfiles/kerghan_standalone/Dockerfile.
-VAULT_VERSION="0.1.0"
+VAULT_VERSION="0.4.0"
 
 install_dir="${KERGHAN_INSTALL_DIR:-$HOME/.local/bin}"
 client_url="https://github.com/darthjee/kerghan/releases/download/$version/kerghan"
