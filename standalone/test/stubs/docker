@@ -4,6 +4,7 @@
 #   STUB_VOLUME_EXISTS=1   vault-kerghan-data exists
 #   STUB_RUNNING_IMAGE     image of the vault-kerghan container (unset: none)
 #   STUB_RUNNING_STATE     its .State.Running (default true)
+#   STUB_RUNNING_EXIT_CODE its .State.ExitCode (default 0; with STUB_RUNNING_STATE=false, a stopped container)
 #   STUB_RUNNING_PORT      its host port for 80/tcp (default 3000)
 #   STUB_RUNNING_HOST_IP   its host IP for 80/tcp (unset: 127.0.0.1, the
 #                          client's default bind; set it empty for Docker's
@@ -72,6 +73,7 @@ if [ "${1:-}" = "inspect" ]; then
   fi
   case "${3:-}" in
     *State.Running*) echo "${STUB_RUNNING_STATE:-true}" ;;
+    *State.ExitCode*) echo "${STUB_RUNNING_EXIT_CODE:-0}" ;;
     *Config.Image*) echo "$STUB_RUNNING_IMAGE" ;;
     *Config.Env*)
       if [ "${STUB_RUNNING_ENV_FAIL:-0}" = "1" ]; then

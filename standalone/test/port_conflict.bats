@@ -7,6 +7,7 @@ load helpers/setup
 AIRPLAY=$'p1\ncControlCenter\nn*:5000\nn[::]:5000'
 HINT_P="kerghan: hint: use 'kerghan up -p <port>' or set port= in ~/.kerghan/config to pick another port"
 HINT_AIRPLAY="kerghan: hint: on macOS this is the AirPlay Receiver; turn it off in System Settings > General > AirDrop & Handoff, or pick another port"
+HINT_DIAGNOSE="kerghan: hint: run 'kerghan diagnose' for details"
 
 @test "ControlCenter on 5000: both warnings, the -p hint, the AirPlay hint, and up still starts" {
   write_env_file
