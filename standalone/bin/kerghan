@@ -105,6 +105,7 @@ Commands:
   down                            stop and remove the container; data is kept
   logs [-f]                       show (or follow) the logs
   status                          show the instance state
+  diagnose                        check the instance end to end (read-only)
   compose <args>                  run docker compose inside the instance (e.g. compose exec mysql sh)
   reset                           wipe all data (removes $VOLUME), asks for confirmation
   update [VERSION] [--force] [--yes] [--[no-]restart]
@@ -2170,6 +2171,7 @@ warn_port_conflict() {
   if [ -n "$airplay" ]; then
     hint "$AIRPLAY_HINT_TEXT"
   fi
+  hint "run 'kerghan diagnose' for details"
   return 0
 }
 
@@ -2897,7 +2899,7 @@ _kerghan() {
     return 0
   fi
   if [ "$cword" -eq 1 ]; then
-    _kerghan_offer "$cur" "" " " up down logs status compose reset update update-env \
+    _kerghan_offer "$cur" "" " " up down logs status diagnose compose reset update update-env \
       configure wizard version completion help -h --help
     return 0
   fi
@@ -2923,7 +2925,7 @@ _kerghan() {
       fi
       ;;
   esac
-  # Anything else (down, status, compose, reset, update-env, version, help, an
+  # Anything else (down, status, diagnose, compose, reset, update-env, version, help, an
   # unknown command): nothing, and never a filename.
   return 0
 }
@@ -4229,6 +4231,7 @@ main() {
     down) cmd_down ${@+"$@"} ;;
     logs) cmd_logs ${@+"$@"} ;;
     status) cmd_status ${@+"$@"} ;;
+    diagnose) cmd_diagnose ${@+"$@"} ;;
     compose) cmd_compose ${@+"$@"} ;;
     reset) cmd_reset ${@+"$@"} ;;
     update) cmd_update ${@+"$@"} ;;
