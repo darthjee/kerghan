@@ -36,12 +36,15 @@ The CI jobs that build and publish the images and the client assets (`release-ke
 ## Caveats
 
 - **HTTPS.** On a loopback `bind` (the default `127.0.0.1`) the client drops `Secure` from the
-  session cookies (`KERGHAN_COOKIE_SECURE=false`), so login works over plain HTTP in every browser,
-  Safari included. On a non-loopback `bind` (`0.0.0.0` or a LAN IP) the client passes
-  `KERGHAN_COOKIE_SECURE=loopback`: the backend then drops `Secure` per request only when the
-  `Host` is loopback (`localhost`, `127.0.0.0/8`, `[::1]`) over plain HTTP, so browsing from the
-  host over `http://127.0.0.1:<port>` or `http://localhost:<port>` keeps the login in every browser
-  (needs a Kerghan image with the #601 fix; an older backend reads `loopback` as `Secure`). Hosts
+  session cookies (`KERGHAN_COOKIE_SECURE=false`), so login works over plain HTTP at the
+  [advertised URL](client.md#advertised-url) in every browser, Safari included. On a non-loopback
+  `bind` (`0.0.0.0` or a LAN IP) the client passes `KERGHAN_COOKIE_SECURE=loopback`: the backend
+  then drops `Secure` per request only when the `Host` is loopback (`localhost`, `127.0.0.0/8`,
+  `[::1]`) over plain HTTP. So with `0.0.0.0`, browsing from the host keeps the login over
+  `http://127.0.0.1:<port>` in every browser, and over `http://localhost:<port>` in browsers that
+  send `Sec-Fetch-Site` (others get `403` on writes from `localhost`, see
+  [Same origin and `OriginGuard`](inner-stack.md#same-origin-and-originguard)). This needs a
+  Kerghan image with the #601 fix; an older backend reads `loopback` as `Secure`. Hosts
   reaching it by a LAN address still get `Secure` cookies and plain-HTTP login fails silently:
   put your own TLS reverse proxy in front of it and set `FRONTEND_BASE_URL` to the `https` URL
   (`kerghan configure FRONTEND_BASE_URL=https://...`; the client then passes `true`), as described

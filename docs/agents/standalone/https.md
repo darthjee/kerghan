@@ -6,9 +6,14 @@ cookie rules behind it.
 
 ## When you need it
 
-Plain HTTP works on the host itself with a loopback or `0.0.0.0` bind: `http://127.0.0.1:<port>`
-(the URL `kerghan up` prints with the default bind and with `0.0.0.0`), or
-`http://localhost:<port>` when no other process holds that port on `localhost`.
+Plain HTTP works on the host itself with a loopback or `0.0.0.0` bind, at these addresses:
+
+- with the default bind (`127.0.0.1`) or `0.0.0.0`: `http://127.0.0.1:<port>` (the URL
+  `kerghan up` prints), or `http://localhost:<port>` when no other process holds that port on
+  `localhost`. On `localhost`, browsers that do not send `Sec-Fetch-Site` get `403` on writes,
+  login included (see [Same origin and `OriginGuard`](inner-stack.md#same-origin-and-originguard));
+- with another loopback bind, such as `127.0.0.2`: the printed `http://<bind>:<port>` only.
+
 Other machines need HTTPS, because the session cookies stay `Secure` for any non-loopback host and
 the browser drops them over plain HTTP, so login fails silently. Login over plain HTTP from the
 LAN is not supported, by design: the session tokens would cross the network in clear.

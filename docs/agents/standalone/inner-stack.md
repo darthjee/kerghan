@@ -175,8 +175,12 @@ backend host, so those writes would be rejected (production has the same limitat
 default `FRONTEND_BASE_URL` (the [advertised URL](client.md#advertised-url),
 `http://127.0.0.1:<port>` with the default bind) makes `OriginGuard` trust that origin, the
 instance's own published one, and also gives the backend the base URL for password-reset links and
-the GitHub callback URLs. Browsing on `localhost` still works through the same-origin rule. Plain
-`docker run` users set it themselves.
+the GitHub callback URLs. In browsers that send `Sec-Fetch-Site`, browsing on `localhost` still
+works through the same-origin rule. Other browsers get `403` in two cases: on writes from
+`localhost` (which the old `http://localhost:<port>` default allowed), and, on a pinned-`image-tag`
+instance still holding that old value, on writes from the newly printed URL until the instance is
+recreated (see [`FRONTEND_BASE_URL`](client.md#frontend_base_url)). Both fail closed: nothing is
+exposed. Plain `docker run` users set `FRONTEND_BASE_URL` themselves.
 
 ### Effective client IP
 

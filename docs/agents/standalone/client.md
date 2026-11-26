@@ -232,9 +232,17 @@ changed). See [Same origin and `OriginGuard`](inner-stack.md#same-origin-and-ori
 The derived value depends only on `bind` and `port`, which already recreate the instance, and a
 client upgrade changes the wanted image, which recreates it too. The running value is not compared.
 Accepted gap: with `image-tag` pinned and the same `bind` and port, an instance created by a client
-before #598 keeps `FRONTEND_BASE_URL=http://localhost:<port>` until its next recreation. This is
-harmless: the backend accepts same-origin requests anyway, emails are disabled in standalone, and
-the cookie setting reads only the URL's scheme, which is unchanged.
+before #598 keeps `FRONTEND_BASE_URL=http://localhost:<port>` until its next recreation. In
+browsers that send `Sec-Fetch-Site` this is harmless, as the backend accepts their same-origin
+requests anyway. Other browsers get `403` on writes from the newly printed URL until the instance is
+recreated, because behind Tent only a trusted origin admits them (see
+[CSRF](../architecture/security.md#csrf)). Browsers send the header only to HTTPS and loopback
+URLs, so on a plain-HTTP LAN address every browser is one of those others. The gap fails closed
+(nothing is exposed). Emails are disabled in standalone, and the cookie setting reads only the URL's
+scheme, which is unchanged.
+
+An instance holding the new value has the mirror case: browsers that do not send `Sec-Fetch-Site`
+get `403` on writes from `localhost`, which the old value allowed. This fails closed too.
 
 ### `up`: start, no-op or recreate
 
