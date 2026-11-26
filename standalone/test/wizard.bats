@@ -388,15 +388,31 @@ ADVANCED_ORDER="Port,Image variant,Docker runtime,Stop timeout,Image tag,Automat
   cp "$ENV_FILE" "$TEST_ROOT/env.before"
   run_wizard "\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n" --advanced
   [ "$status" -eq 0 ]
-  assert_stderr_contains "Public URL [http://localhost:3000, derived from port]:"
+  assert_stderr_contains "Public URL [http://127.0.0.1:3000, derived from bind and port]:"
   cmp "$ENV_FILE" "$TEST_ROOT/env.before"
+}
+
+@test "--advanced public URL: the default follows the bind answer" {
+  write_env_file
+  run_wizard "\n\n\n\n\n\n192.168.1.5\n\n\n\n\n\n\n\n\n\n\n" --advanced
+  [ "$status" -eq 0 ]
+  assert_stderr_contains "Public URL [http://192.168.1.5:3000, derived from bind and port]:"
+  ! grep -q '^FRONTEND_BASE_URL=' "$ENV_FILE"
+}
+
+@test "--advanced public URL: a set bind of 0.0.0.0 offers 127.0.0.1" {
+  write_env_file
+  write_config "bind=0.0.0.0"
+  run_wizard "\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n" --advanced
+  [ "$status" -eq 0 ]
+  assert_stderr_contains "Public URL [http://127.0.0.1:3000, derived from bind and port]:"
 }
 
 @test "--advanced public URL: the default follows the port answer and an answer is written" {
   write_env_file
   run_wizard "3002\n\n\n\n\n\n\n\n\n\n\n\n\n\n\nhttps://kerghan.example.com\n\n" --advanced
   [ "$status" -eq 0 ]
-  assert_stderr_contains "Public URL [http://localhost:3002, derived from port]:"
+  assert_stderr_contains "Public URL [http://127.0.0.1:3002, derived from bind and port]:"
   grep -qx 'FRONTEND_BASE_URL=https://kerghan.example.com' "$ENV_FILE"
   assert_output_contains "FRONTEND_BASE_URL: (not set) -> https://kerghan.example.com"
   assert_output_contains "Run 'kerghan down && kerghan up' to apply."

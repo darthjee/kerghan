@@ -48,6 +48,16 @@ log_args() {
   echo "-e KERGHAN_FILE_LOGS=true -e KERGHAN_HOST_UID=$(id -u) -e KERGHAN_HOST_GID=$(id -g) -v ${1:-$HOME/.kerghan/logs}:/vault/logs"
 }
 
+# advertised_host <bind> - the host of the advertised URL (and so of the
+# derived FRONTEND_BASE_URL): 127.0.0.1 for 0.0.0.0 or an empty bind, otherwise
+# the bind itself.
+advertised_host() {
+  case "$1" in
+    '' | 0.0.0.0) echo "127.0.0.1" ;;
+    *) echo "$1" ;;
+  esac
+}
+
 # DEFAULT_USER_ARGS - the default-user -e words with auto-login on (default).
 DEFAULT_USER_ARGS="(set in setup, after HOME)"
 

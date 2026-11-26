@@ -602,7 +602,7 @@ x"; do
     "Added to $ENV_FILE:" \
     "pulled $NEWER_IMAGE" \
     "upgrading $IMAGE -> $NEWER_IMAGE" \
-    "Kerghan is running at http://localhost:3000" \
+    "Kerghan is running at http://127.0.0.1:3000" \
     "kerghan updated $CURRENT_VERSION -> $NEWER_VERSION" \
     "kerghan: hint: free disk space with 'docker image rm $IMAGE'"
   refute_output_contains "Run 'kerghan down && kerghan up' to apply the change."

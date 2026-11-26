@@ -44,7 +44,7 @@ refute_logged_substring() {
   fi
 }
 
-@test "healthy instance: OK, exit 0, both probes" {
+@test "healthy instance: OK, exit 0, the advertised URL is probed once" {
   run "$KERGHAN" diagnose
   [ "$status" -eq 0 ]
   assert_output_contains "kerghan diagnose (client $CURRENT_VERSION)"
@@ -54,56 +54,35 @@ refute_logged_substring() {
   assert_output_contains "[ok]   mysql    healthy"
   assert_output_contains "[ok]   http://127.0.0.1:3000/health.json   Kerghan (Server: Apache/2.4.68 (Debian))"
   assert_output_contains "[ok]   http://127.0.0.1:3000/ready.json   ready"
-  assert_output_contains "[ok]   http://localhost:3000/health.json"
+  assert_output_contains "[ok]   advertised URL is the published address"
   assert_output_contains "Verdict: OK"
+  [ "$(grep -c '/health.json' "$STUB_LOG")" -eq 1 ]
+  refute_logged_substring "localhost"
 }
 
-@test "advertised URL equal to the published one: a single health probe" {
-  export STUB_RUNNING_HOST_IP=localhost
-  run "$KERGHAN" diagnose
-  [ "$status" -eq 0 ]
-  [ "$(grep -c 'health.json' "$STUB_LOG")" -eq 1 ]
-  assert_output_contains "Verdict: OK"
-}
-
-@test "advertised URL answered by AirTunes: exit 6, AirPlay named, reachable-at hint" {
+@test "AirPlay holding localhost is not probed: healthy when Kerghan answers on 127.0.0.1" {
   export STUB_RUNNING_PORT=5000
   write_config "port=5000"
   export STUB_PROBE_LOCALHOST_HEALTH='403||AirTunes/935.7.1'
   export STUB_LSOF_OUTPUT="$AIRPLAY"
   run "$KERGHAN" diagnose
-  [ "$status" -eq 6 ]
-  assert_output_contains "[FAIL] http://localhost:5000/health.json   403 from another service (Server: AirTunes/935.7.1)"
+  [ "$status" -eq 0 ]
+  assert_output_contains "[ok]   http://127.0.0.1:5000/health.json"
+  assert_output_contains "[ok]   advertised URL is the published address"
   assert_output_contains "[warn]"
   assert_output_contains "ControlCenter"
-  assert_output_contains "Verdict: localhost:5000 is answered by another process (AirPlay Receiver);"
-  assert_output_contains "Kerghan is reachable at http://127.0.0.1:5000"
-  assert_output_contains "hint: on macOS this is the AirPlay Receiver"
+  assert_output_contains "Verdict: OK"
+  [ "$(grep -c '/health.json' "$STUB_LOG")" -eq 1 ]
+  refute_logged_substring "localhost"
 }
 
-@test "advertised URL answered by another service without AirPlay: Server named, no AirPlay hint" {
-  export STUB_PROBE_LOCALHOST_HEALTH='404|nope|nginx'
+@test "published address refusing: exit 5, no advertised URL line" {
+  export STUB_PROBE_127_0_0_1_HEALTH=refused
   run "$KERGHAN" diagnose
-  [ "$status" -eq 6 ]
-  assert_output_contains "Verdict: localhost:3000 is answered by another process (nginx);"
-  assert_output_contains "Kerghan is reachable at http://127.0.0.1:3000"
-  refute_output_contains "AirPlay"
-}
-
-@test "advertised URL timing out: exit 6" {
-  export STUB_PROBE_LOCALHOST_HEALTH=timeout
-  run "$KERGHAN" diagnose
-  [ "$status" -eq 6 ]
-  assert_output_contains "Verdict: localhost:3000 does not answer;"
-  assert_output_contains "Kerghan is reachable at http://127.0.0.1:3000"
-}
-
-@test "advertised URL refusing: exit 6" {
-  export STUB_PROBE_LOCALHOST_HEALTH=refused
-  run "$KERGHAN" diagnose
-  [ "$status" -eq 6 ]
+  [ "$status" -eq 5 ]
   assert_output_contains "connection refused"
-  assert_output_contains "Verdict: localhost:3000 does not answer;"
+  assert_output_contains "Verdict: 127.0.0.1:3000 does not answer"
+  refute_output_contains "advertised URL is the published address"
 }
 
 @test "published address answered by another service: exit 5, no second probe" {
@@ -200,6 +179,8 @@ refute_logged_substring() {
   [ "$status" -eq 0 ]
   assert_output_contains "published on 0.0.0.0:3000"
   assert_output_contains "http://127.0.0.1:3000/health.json"
+  assert_output_contains "[ok]   advertised URL is the published address"
+  [ "$(grep -c '/health.json' "$STUB_LOG")" -eq 1 ]
 }
 
 @test "E4: a 0.0.0.0 HostIp probes 127.0.0.1" {
@@ -207,6 +188,8 @@ refute_logged_substring() {
   run "$KERGHAN" diagnose
   [ "$status" -eq 0 ]
   assert_output_contains "http://127.0.0.1:3000/health.json"
+  assert_output_contains "[ok]   advertised URL is the published address"
+  [ "$(grep -c '/health.json' "$STUB_LOG")" -eq 1 ]
 }
 
 @test "E5: a LAN bind probes that address" {
@@ -215,6 +198,8 @@ refute_logged_substring() {
   [ "$status" -eq 0 ]
   assert_output_contains "http://192.168.1.10:3000/health.json"
   refute_output_contains "http://127.0.0.1:3000"
+  assert_output_contains "[ok]   advertised URL is the published address"
+  [ "$(grep -c '/health.json' "$STUB_LOG")" -eq 1 ]
 }
 
 @test "E6: FRONTEND_BASE_URL is printed and never probed" {
@@ -355,9 +340,9 @@ refute_logged_substring() {
 }
 
 @test "safety: control characters in a Server header are stripped" {
-  export STUB_PROBE_LOCALHOST_HEALTH="403||Evil"$'\033'"[31mRed"
+  export STUB_PROBE_127_0_0_1_HEALTH="403||Evil"$'\033'"[31mRed"
   run "$KERGHAN" diagnose
-  [ "$status" -eq 6 ]
+  [ "$status" -eq 5 ]
   case "$output" in
     *$'\033'*)
       echo "escape sequence in output" >&2
