@@ -57,7 +57,7 @@ To find which service failed, read the logs (`docker logs <container>`); see
 
 CLI diagnostics go to stderr, prefixed `vault: error:` (the command failed),
 `vault: warning:` (it goes on) or `vault: hint:` (what to do next). The full list is in
-[cli.md → Exit codes](cli/commands.md#exit-codes) and [cli.md → Messages](cli/commands.md#messages).
+[cli.md → Exit codes](cli.md#exit-codes) and [cli.md → Messages](cli.md#messages).
 
 ## Common mistakes
 
@@ -115,7 +115,7 @@ no compose file or the stack misses files.
 
 **Fix:** add the project directory and every `-v` source to Docker Desktop's shared file paths
 (Settings > Resources > File sharing). The CLI does not check it. See
-[cli.md → Docker Desktop](cli/guardrails.md#docker-desktop).
+[cli.md → Docker Desktop](cli.md#docker-desktop).
 
 ### Two containers sharing a data volume
 
