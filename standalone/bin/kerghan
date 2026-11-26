@@ -231,6 +231,107 @@ port_listeners() {
   return 2
 }
 
+# advertised_url <bind> <port> - the URL `kerghan up` prints for the instance.
+# Shared contract (also read by `kerghan diagnose`, #597): `up` and diagnose
+# both go through it, so they never drift. Today it is http://localhost:<port>
+# whatever the bind (#598 may change that, in this one place).
+advertised_url() {
+  echo "http://localhost:$2"
+}
+
+# published_probe_host <bind> - the host to probe for the published address:
+# 127.0.0.1 for 0.0.0.0 (or an empty bind), otherwise the bind itself.
+published_probe_host() {
+  case "$1" in
+    '' | 0.0.0.0) echo "127.0.0.1" ;;
+    *) echo "$1" ;;
+  esac
+}
+
+# with_timeout <seconds> <cmd...> - runs the command through `timeout` when it
+# is on PATH, otherwise runs it unbounded (no pure-bash watchdog).
+with_timeout() {
+  local secs="$1"
+  shift
+  if command -v timeout >/dev/null 2>&1; then
+    timeout "$secs" "$@"
+  else
+    "$@"
+  fi
+}
+
+# sanitize_header <value> - strips control characters and cuts to 100 chars,
+# so an untrusted Server header cannot inject terminal escapes.
+sanitize_header() {
+  printf '%s' "$1" | tr -d '\000-\037\177' | cut -c 1-100
+}
+
+# probe_http <url> - one hardened, read-only request (no -L, no cookies, no
+# auth, no proxy, ~/.curlrc ignored). Sets, for the caller:
+#   PROBE_STATUS - the HTTP status code, or timeout (curl 28), refused
+#                  (curl 7) or error (anything else);
+#   PROBE_SERVER - the sanitized Server header (may be empty);
+#   PROBE_BODY   - the response body, cut to 200 chars, control characters
+#                  stripped (to compare, never to print for foreign services).
+probe_http() {
+  local url="$1" body_file headers_file rc=0 code
+  body_file="$(mktemp)"
+  headers_file="$(mktemp)"
+  code="$(curl -q -s -o "$body_file" -D "$headers_file" -w '%{http_code}' \
+    --connect-timeout 2 --max-time 3 --noproxy '*' --proto '=http,https' \
+    "$url" 2>/dev/null)" || rc=$?
+  PROBE_SERVER=""
+  PROBE_BODY=""
+  if [ "$rc" -eq 0 ]; then
+    PROBE_STATUS="$code"
+    PROBE_SERVER="$(sanitize_header "$(awk 'tolower($1) == "server:" { sub(/^[^:]*:[ \t]*/, ""); sub(/\r$/, ""); print; exit }' "$headers_file")")"
+    PROBE_BODY="$(head -c 200 "$body_file" | tr -d '\000-\037\177')"
+  elif [ "$rc" -eq 28 ]; then
+    PROBE_STATUS="timeout"
+  elif [ "$rc" -eq 7 ]; then
+    PROBE_STATUS="refused"
+  else
+    PROBE_STATUS="error"
+  fi
+  rm -f "$body_file" "$headers_file"
+}
+
+# display_path <path> - ~/... when the path is under $HOME, else as is.
+display_path() {
+  case "$1" in
+    "$HOME") echo "~" ;;
+    "$HOME"/*) echo "~/${1#"$HOME"/}" ;;
+    *) echo "$1" ;;
+  esac
+}
+
+# is_docker_process <name> - true for the known Docker listener process names.
+is_docker_process() {
+  case "$1" in
+    com.docker.* | docker-proxy | vpnkit | OrbStack | rootlesskit | gvproxy | limactl) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+# docker_host_label - for a remote DOCKER_HOST (tcp:// or ssh://), prints the
+# scheme and host only (no user info, no port). Empty for a local engine.
+docker_host_label() {
+  local scheme rest
+  case "${DOCKER_HOST:-}" in
+    tcp://* | ssh://*) ;;
+    *) return 0 ;;
+  esac
+  scheme="${DOCKER_HOST%%://*}"
+  rest="${DOCKER_HOST#*://}"
+  rest="${rest%%/*}"
+  rest="${rest##*@}"
+  case "$rest" in
+    \[*\]*) rest="${rest%%\]*}]" ;;
+    *) rest="${rest%%:*}" ;;
+  esac
+  echo "$scheme://$rest"
+}
+
 # The fixed value set of each config key that has one (space-separated, no
 # double spaces). Validation and the "expected ..." messages read these, and
 # `kerghan completion bash` (#429) generates its word lists from them.
@@ -2015,7 +2116,7 @@ cmd_up() {
       reason="$(file_logs_reason)"
     fi
     if [ -z "$reason" ]; then
-      echo "Kerghan is already running at http://localhost:$port"
+      echo "Kerghan is already running at $(advertised_url "$bind" "$port")"
       mysql_migrate_if_needed
       return 0
     fi
@@ -2190,7 +2291,7 @@ up_instance() {
   rm -f "$errfile"
 
   if [ "$foreground" != "true" ]; then
-    echo "Kerghan is running at http://localhost:$port"
+    echo "Kerghan is running at $(advertised_url "$bind" "$port")"
     mysql_migrate_if_needed
   fi
 }
