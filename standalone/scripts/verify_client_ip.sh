@@ -29,7 +29,7 @@
 #
 # Env inputs (all optional):
 #   MODE           mode when no argument is given     (default probe)
-#   VAULT_IMAGE    Vault image for probe/reach        (default darthjee/vault:0.1.0)
+#   VAULT_IMAGE    Vault image for probe/reach        (default darthjee/vault:0.4.0)
 #   RUNTIME        auto | sysbox | privileged         (default auto: Sysbox
 #                  when the daemon has sysbox-runc, else --privileged)
 #   BIND           host address for probe             (default 127.0.0.1;
@@ -55,7 +55,7 @@ PROBE_DIR="$SCRIPT_DIR/verify_client_ip"
 CLIENT="$SCRIPT_DIR/../bin/kerghan"
 
 MODE="${1:-${MODE:-probe}}"
-VAULT_IMAGE="${VAULT_IMAGE:-darthjee/vault:0.1.0}"
+VAULT_IMAGE="${VAULT_IMAGE:-darthjee/vault:0.4.0}"
 RUNTIME="${RUNTIME:-auto}"
 BIND="${BIND:-127.0.0.1}"
 PORT="${PORT:-3090}"

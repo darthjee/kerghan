@@ -28,7 +28,7 @@ RUN yarn build
 
 #######################
 # Online image: inner images are pulled by Vault on first start.
-FROM darthjee/vault:0.1.0 AS standalone
+FROM darthjee/vault:0.4.0 AS standalone
 
 # No default: a default would override BuildKit's automatic TARGETARCH.
 # The legacy builder leaves it empty, which selects amd64 below.

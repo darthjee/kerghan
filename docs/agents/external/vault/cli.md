@@ -171,7 +171,7 @@ vault help                   # the usage
 ```
 name:     vault-my-stack
 state:    running
-image:    darthjee/vault:0.0.1
+image:    darthjee/vault:0.4.0
 runtime:  sysbox-runc
 ports:    3000->80/tcp
 volume:   vault-my-stack-data
@@ -363,7 +363,7 @@ Per-project defaults live in `.vaultrc`, read from `[dir]` (else from the curren
 ```
 # .vaultrc
 name=my-app
-image=darthjee/vault:0.0.1
+image=darthjee/vault:0.4.0
 runtime=sysbox
 port=3000:80
 port=3443:443

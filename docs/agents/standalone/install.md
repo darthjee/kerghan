@@ -30,7 +30,7 @@ curl -fsSL https://github.com/darthjee/kerghan/releases/latest/download/install.
    warning with the `export PATH=...` line to add.
 4. Installs the `vault` CLI when it is not on `PATH`, through Vault's own installer, pinned to the
    Vault version the standalone image is built on (`VAULT_VERSION="0.1.0"`, matching
-   `FROM darthjee/vault:0.1.0`). The Vault installer is downloaded to a file, never piped into
+   `FROM darthjee/vault:0.4.0`). The Vault installer is downloaded to a file, never piped into
    `bash`. An existing `vault` is left alone.
 5. Writes the bash completion file (the output of the just-installed
    `kerghan completion bash`) into the user-level bash-completion directory, unless

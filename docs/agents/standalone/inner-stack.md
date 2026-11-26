@@ -137,7 +137,7 @@ An unsupported `TARGETARCH` fails the build.
 
 - **`frontend`** stage: `FROM --platform=$BUILDPLATFORM darthjee/vite_kerghan-base:0.1.2`, runs
   `yarn build`. That base tag is amd64-only, so an arm64 build host runs it under emulation.
-- **`standalone`** (online): `FROM darthjee/vault:0.1.0`; copies `standalone/vault/` to `/vault`,
+- **`standalone`** (online): `FROM darthjee/vault:0.4.0`; copies `standalone/vault/` to `/vault`,
   the built frontend to `/vault/tent/static/` and the Tent extension to `/vault/tent/extension/`;
   writes `/vault/.env` (`KERGHAN_VERSION` is a build arg, default `latest`). Vault pulls the inner
   images on the first start.
@@ -185,7 +185,7 @@ own `REMOTE_ADDR` (one entry), and the backend reads it with `KERGHAN_TRUSTED_PR
 default of `1`, so the backend sees exactly the address Tent's socket sees. That is why
 `KERGHAN_TRUSTED_PROXY_HOPS` is not passed to the stack.
 
-Measured by #371 (2026-10-14, Docker Desktop for macOS, arm64) with `darthjee/vault:0.1.0`
+Measured by #371 (2026-10-14, Docker Desktop for macOS, arm64) with `darthjee/vault:0.4.0`
 running a probe inner service published like Tent (`ports: ["80:80"]`):
 
 | Outer publish | Request from | Address seen by the inner service |
@@ -221,7 +221,7 @@ Paste the whole block into the issue or PR. The header comment of the script lis
 
 | Mode | What it does |
 |---|---|
-| `probe` (default) | Repeats the #371 measurement: starts `darthjee/vault:0.1.0` (`VAULT_IMAGE`) with a probe inner service (`traefik/whoami`, `standalone/scripts/verify_client_ip/docker-compose.yml`) published like Tent (`ports: ["80:80"]`), with the outer container on `BIND:PORT:80` (`BIND` defaults to `127.0.0.1`, `PORT` to `3090`). Requests it from the host (from `127.0.0.1`, plus each non-loopback address when `BIND=0.0.0.0`) and reports the address the probe saw and whether it is inside the allowlist (`DEFAULT_USER_ALLOWED_IPS`, read from `standalone/bin/kerghan`). |
+| `probe` (default) | Repeats the #371 measurement: starts `darthjee/vault:0.4.0` (`VAULT_IMAGE`) with a probe inner service (`traefik/whoami`, `standalone/scripts/verify_client_ip/docker-compose.yml`) published like Tent (`ports: ["80:80"]`), with the outer container on `BIND:PORT:80` (`BIND` defaults to `127.0.0.1`, `PORT` to `3090`). Requests it from the host (from `127.0.0.1`, plus each non-loopback address when `BIND=0.0.0.0`) and reports the address the probe saw and whether it is inside the allowlist (`DEFAULT_USER_ALLOWED_IPS`, read from `standalone/bin/kerghan`). |
 | `reach` | Starts the same probe on `127.0.0.1:PORT`, tries each non-loopback address of the host (`ip -o addr` on Linux, `ifconfig` on macOS), and prints the commands a second LAN machine runs: the host port, and the moby#45610 route to the Vault container's address. |
 | `e2e` | No container management. POSTs `/auth/status.json` on `BASE_URL` (default `http://localhost:<port>`, the port from `~/.kerghan/config`, else `3000`) without cookies, and reports `loggedIn`, the user (from the `access_token` cookie), `isAdmin`, and the image, published address, runtime, auto-login variables and `KERGHAN_COOKIE_SECURE` of the `vault-kerghan` container. Exits 1 unless the answer matches `EXPECT_LOGGED_IN` (default `true`) and `EXPECT_USER` (default `admin`). |
 
