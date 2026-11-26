@@ -5,7 +5,7 @@
 load helpers/install_setup
 
 CLIENT_URL="https://github.com/darthjee/kerghan/releases/download/$CURRENT_VERSION/kerghan"
-VAULT_URL="https://raw.githubusercontent.com/darthjee/vault/0.1.0/install.sh"
+VAULT_URL="https://raw.githubusercontent.com/darthjee/vault/0.4.0/install.sh"
 
 @test "installs the stamped client version on Linux" {
   with_vault
@@ -100,7 +100,7 @@ VAULT_URL="https://raw.githubusercontent.com/darthjee/vault/0.1.0/install.sh"
   run_installer
   [ "$status" -eq 1 ]
   assert_output_contains "error: the Vault installer failed"
-  assert_logged "vault-install VAULT_VERSION=0.1.0"
+  assert_logged "vault-install VAULT_VERSION=0.4.0"
   assert_no_install
 }
 
@@ -108,7 +108,7 @@ VAULT_URL="https://raw.githubusercontent.com/darthjee/vault/0.1.0/install.sh"
   run_installer
   [ "$status" -eq 0 ]
   grep -q "^curl -fsSL -o .* $VAULT_URL\$" "$STUB_LOG"
-  assert_logged "vault-install VAULT_VERSION=0.1.0"
+  assert_logged "vault-install VAULT_VERSION=0.4.0"
   [ -x "$DEFAULT_DIR/vault" ]
   [ -x "$DEFAULT_DIR/kerghan" ]
 }

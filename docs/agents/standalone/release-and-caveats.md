@@ -21,7 +21,7 @@ Pinned images:
 
 | Image | Pin | Architectures |
 |---|---|---|
-| `darthjee/vault` (base) | `0.1.0` | multi-arch manifest |
+| `darthjee/vault` (base) | `0.4.0` | multi-arch manifest |
 | `mysql` (inner) | `8.4.11` | multi-arch manifest |
 | `mysql-legacy` (inner, migration only) | `9.3.0` | multi-arch manifest |
 | `darthjee/tent` (inner) | `1.0.3` (amd64), `1.0.3-arm64` (arm64) | separate tags, selected per architecture |
