@@ -2168,7 +2168,7 @@ warn_port_conflict() {
   # shellcheck disable=SC2088 # the literal ~ is meant for display
   hint "use 'kerghan up -p <port>' or set port= in ~/.kerghan/config to pick another port"
   if [ -n "$airplay" ]; then
-    hint "on macOS this is the AirPlay Receiver; turn it off in System Settings > General > AirDrop & Handoff, or pick another port"
+    hint "$AIRPLAY_HINT_TEXT"
   fi
   return 0
 }
@@ -2294,6 +2294,339 @@ up_instance() {
     echo "Kerghan is running at $(advertised_url "$bind" "$port")"
     mysql_migrate_if_needed
   fi
+}
+
+# The AirPlay Receiver hint, shared by `up`'s port conflict warning and
+# `kerghan diagnose`.
+AIRPLAY_HINT_TEXT="on macOS this is the AirPlay Receiver; turn it off in System Settings > General > AirDrop & Handoff, or pick another port"
+
+# listeners_have_airplay <port> <listeners> - the macOS AirPlay Receiver
+# (ControlCenter) is among the port_listeners lines, on port 5000 or 7000.
+listeners_have_airplay() {
+  case "$1" in
+    5000 | 7000) ;;
+    *) return 1 ;;
+  esac
+  printf '%s\n' "$2" | awk -F'\t' '$2 == "ControlCenter" { f = 1 } END { exit !f }'
+}
+
+# Diagnose state: the first failure sets the exit code and the verdict, and
+# later checks never override it.
+DIAG_CODE=0
+DIAG_VERDICT=""
+DIAG_HINT=""
+DIAG_ID=""
+DIAG_DESC=""
+
+# diag_fail <code> <verdict> - records the first failure only.
+diag_fail() {
+  if [ "$DIAG_CODE" -eq 0 ]; then
+    DIAG_CODE="$1"
+    DIAG_VERDICT="$2"
+  fi
+}
+
+# diag_line <marker> <text> - one report line.
+diag_line() {
+  printf '  %-6s %s\n' "$1" "$2"
+}
+
+# diag_classify <url> - probes <url>/health.json and sets DIAG_ID (kerghan,
+# foreign or none) and DIAG_DESC (what answered, never a foreign body).
+# Kerghan is identified by a 200 with the exact body {"status":"ok"}.
+diag_classify() {
+  local url="$1" body server=""
+  probe_http "$url/health.json"
+  body="${PROBE_BODY//[[:space:]]/}"
+  [ -z "$PROBE_SERVER" ] || server=" (Server: $PROBE_SERVER)"
+  case "$PROBE_STATUS" in
+    200)
+      if [ "$body" = '{"status":"ok"}' ]; then
+        DIAG_ID=kerghan
+        DIAG_DESC="Kerghan$server"
+        return 0
+      fi
+      DIAG_ID=foreign
+      DIAG_DESC="200 from another service$server"
+      ;;
+    timeout)
+      DIAG_ID=none
+      DIAG_DESC="no answer (timeout)"
+      ;;
+    refused)
+      DIAG_ID=none
+      DIAG_DESC="connection refused"
+      ;;
+    error)
+      DIAG_ID=none
+      DIAG_DESC="request failed"
+      ;;
+    *)
+      DIAG_ID=foreign
+      DIAG_DESC="$PROBE_STATUS from another service$server"
+      ;;
+  esac
+}
+
+# diag_service <service> <state> <health> <logs hint> - prints one inner
+# service line and records a failure (exit 4) for a service that is down or
+# unhealthy. An empty state is a row that could not be parsed: unknown.
+diag_service() {
+  local name="$1" state="$2" health="$3" logs_hint="$4" label
+  if [ -z "$state" ]; then
+    diag_line "[info]" "$(printf '%-8s unknown' "$name")"
+    return 0
+  fi
+  label="$state"
+  [ -z "$health" ] || label="$health"
+  case "$state/$health" in
+    running/ | running/healthy)
+      diag_line "[ok]" "$(printf '%-8s %s' "$name" "$label")"
+      ;;
+    running/starting)
+      diag_line "[warn]" "$(printf '%-8s %s' "$name" "$label")"
+      ;;
+    *)
+      diag_line "[FAIL]" "$(printf '%-8s %s' "$name" "$label")"
+      diag_fail 4 "$name is $label; $logs_hint"
+      ;;
+  esac
+}
+
+# diag_finish - prints the verdict (and hint) and exits with its code.
+diag_finish() {
+  echo
+  echo "Verdict: $DIAG_VERDICT"
+  [ -z "$DIAG_HINT" ] || echo "hint: $DIAG_HINT"
+  exit "$DIAG_CODE"
+}
+
+# cmd_diagnose - checks the instance end to end from the host and prints a
+# report ending in one verdict (see docs/agents/standalone/client-diagnose.md).
+# Read-only: it never writes under ~/.kerghan. Exit codes: 0 healthy, 1 not
+# running, 2 usage, 3 engine unreachable, 4 unhealthy, 5 published address
+# broken, 6 advertised URL broken.
+cmd_diagnose() {
+  [ "$#" -eq 0 ] || usage_error "unknown option '$1'"
+  load_config
+  DIAG_CODE=0
+  DIAG_VERDICT=""
+  DIAG_HINT=""
+  local partial=false
+
+  echo "kerghan diagnose (client $KERGHAN_VERSION)"
+  echo
+  echo "Instance"
+
+  # 1. Engine (E2).
+  if ! with_timeout 5 docker info >/dev/null 2>&1; then
+    diag_line "[FAIL]" "cannot reach the Docker engine"
+    diag_fail 3 "cannot reach the Docker engine"
+    diag_finish
+  fi
+
+  # 2. Instance (E1).
+  local image
+  image="$(running_image)"
+  if [ -z "$image" ]; then
+    local running exit_code reason="is not running"
+    running="$(with_timeout 5 docker inspect -f '{{.State.Running}}' "$CONTAINER" 2>/dev/null)" || running=""
+    if [ "$running" = "false" ]; then
+      exit_code="$(with_timeout 5 docker inspect -f '{{.State.ExitCode}}' "$CONTAINER" 2>/dev/null)" || exit_code=""
+      case "$exit_code" in
+        '' | *[!0-9]*) reason="is stopped" ;;
+        *) reason="is stopped (exit code $exit_code)" ;;
+      esac
+    fi
+    diag_line "[FAIL]" "$CONTAINER $reason"
+    diag_fail 1 "Kerghan is not running; start it with 'kerghan up'"
+    diag_finish
+  fi
+
+  local port bind auto_login file_logs log_dir=""
+  port="$(running_port)"
+  [ -n "$port" ] || port="$DEFAULT_PORT"
+  bind="$(running_bind)"
+  auto_login="$(running_auto_login)"
+  case "$auto_login" in
+    true) auto_login=on ;;
+    false) auto_login=off ;;
+  esac
+  file_logs="$(running_file_logs)"
+  if [ "$file_logs" = "true" ]; then
+    log_dir="$(running_log_dir)"
+  fi
+  diag_line "[ok]" "$CONTAINER is running ($image)"
+  diag_line "[info]" "published on $bind:$port, auto-login $auto_login"
+
+  # E7: the config differs from what is running.
+  local want_port want_offline=false want_image
+  want_port="${CFG_PORT:-$DEFAULT_PORT}"
+  if [ "${CFG_VARIANT:-$DEFAULT_VARIANT}" = "offline" ]; then
+    want_offline=true
+  fi
+  want_image="$(image_ref "$want_offline" "${CFG_IMAGE_TAG:-$KERGHAN_VERSION}")"
+  if [ "$want_port" != "$port" ]; then
+    diag_line "[info]" "config wants port $want_port; applies on the next 'kerghan up'"
+  fi
+  if [ -n "$CFG_BIND" ] && [ "$CFG_BIND" != "$bind" ]; then
+    diag_line "[info]" "config wants bind $CFG_BIND; applies on the next 'kerghan up'"
+  fi
+  if [ "$want_image" != "$image" ]; then
+    diag_line "[info]" "config wants image $want_image; applies on the next 'kerghan up'"
+  fi
+
+  # 3. Services (E8). Only the service name and state/health are parsed.
+  echo
+  echo "Services"
+  local logs_hint="see 'kerghan logs'" ps_out="" svc line s_name s_state s_health r_state r_health
+  if [ -n "$log_dir" ]; then
+    logs_hint="see 'kerghan logs' or $(display_path "$log_dir")"
+  fi
+  ps_out="$( (cd "$KERGHAN_HOME" 2>/dev/null &&
+    with_timeout 10 vault compose --name "$INSTANCE" ps -a --format '{{.Service}} {{.State}} {{.Health}}') 2>/dev/null)" || ps_out=""
+  for svc in tent kerghan mysql; do
+    r_state=""
+    r_health=""
+    while IFS= read -r line; do
+      [ -n "$line" ] || continue
+      s_name=""
+      s_state=""
+      s_health=""
+      read -r s_name s_state s_health <<EOF || true
+$line
+EOF
+      if [ "$s_name" = "$svc" ] && [ -n "$s_state" ]; then
+        r_state="$s_state"
+        r_health="$s_health"
+        break
+      fi
+    done <<EOF
+$ps_out
+EOF
+    diag_service "$svc" "$(sanitize_header "$r_state")" "$(sanitize_header "$r_health")" "$logs_hint"
+  done
+
+  # 4. Probes (E3, E6, E10); the listeners are read first (E9) because the
+  # verdict names the AirPlay Receiver when it holds the port.
+  local remote_label listeners="" listeners_rc=0 airplay=false
+  remote_label="$(docker_host_label)"
+  if [ -z "$remote_label" ]; then
+    listeners="$(port_listeners "$port")" || listeners_rc=$?
+    if [ "$listeners_rc" -eq 0 ] && listeners_have_airplay "$port" "$listeners"; then
+      airplay=true
+    fi
+  fi
+
+  echo
+  echo "Probes"
+  local probe_host pub_hostport pub_url adv_url adv_hostport
+  probe_host="$(published_probe_host "$bind")"
+  pub_hostport="$probe_host:$port"
+  pub_url="http://$pub_hostport"
+  adv_url="$(advertised_url "$bind" "$port")"
+  adv_hostport="${adv_url#*://}"
+  adv_hostport="${adv_hostport%%/*}"
+  read_env_file
+  if env_key_index "$FRONTEND_BASE_URL_KEY" && env_value_set "$FRONTEND_BASE_URL_KEY"; then
+    diag_line "[info]" "$FRONTEND_BASE_URL_KEY is $(sanitize_header "${ER_VALUES[EKI]}") (not probed)"
+  fi
+  if [ -n "$remote_label" ]; then
+    diag_line "[skip]" "remote Docker engine ($remote_label)"
+    partial=true
+  elif ! command -v curl >/dev/null 2>&1; then
+    diag_line "[skip]" "curl not found"
+    partial=true
+  else
+    diag_classify "$pub_url"
+    case "$DIAG_ID" in
+      kerghan)
+        diag_line "[ok]" "$pub_url/health.json   $DIAG_DESC"
+        probe_http "$pub_url/ready.json"
+        case "$PROBE_STATUS" in
+          200) diag_line "[ok]" "$pub_url/ready.json   ready" ;;
+          503)
+            diag_line "[FAIL]" "$pub_url/ready.json   not ready (database)"
+            diag_fail 4 "Kerghan answers but is not ready (database); $logs_hint"
+            ;;
+          *) diag_line "[info]" "$pub_url/ready.json   readiness unknown ($PROBE_STATUS)" ;;
+        esac
+        if [ "$adv_hostport" != "$pub_hostport" ]; then
+          diag_classify "$adv_url"
+          case "$DIAG_ID" in
+            kerghan) diag_line "[ok]" "$adv_url/health.json   $DIAG_DESC" ;;
+            foreign)
+              diag_line "[FAIL]" "$adv_url/health.json   $DIAG_DESC"
+              if [ "$airplay" = "true" ]; then
+                diag_fail 6 "$adv_hostport is answered by another process (AirPlay Receiver);
+         Kerghan is reachable at $pub_url"
+                DIAG_HINT="$AIRPLAY_HINT_TEXT"
+              else
+                diag_fail 6 "$adv_hostport is answered by another process (${PROBE_SERVER:-HTTP $PROBE_STATUS});
+         Kerghan is reachable at $pub_url"
+              fi
+              ;;
+            *)
+              diag_line "[FAIL]" "$adv_url/health.json   $DIAG_DESC"
+              diag_fail 6 "$adv_hostport does not answer;
+         Kerghan is reachable at $pub_url"
+              ;;
+          esac
+        fi
+        ;;
+      foreign)
+        diag_line "[FAIL]" "$pub_url/health.json   $DIAG_DESC"
+        diag_fail 5 "$pub_hostport is answered by another process (${PROBE_SERVER:-HTTP $PROBE_STATUS})"
+        ;;
+      *)
+        diag_line "[FAIL]" "$pub_url/health.json   $DIAG_DESC"
+        diag_fail 5 "$pub_hostport does not answer"
+        ;;
+    esac
+  fi
+
+  # 5. Listeners (E9, E11): supporting evidence only, never decide.
+  echo
+  echo "Listeners on port $port"
+  if [ -n "$remote_label" ]; then
+    diag_line "[skip]" "remote Docker engine ($remote_label)"
+  elif [ "$listeners_rc" -ne 0 ]; then
+    diag_line "[skip]" "neither lsof nor ss is available"
+  elif [ -z "$listeners" ]; then
+    diag_line "[info]" "no listener visible"
+  else
+    local l_addr l_proc tab
+    tab="$(printf '\t')"
+    while IFS="$tab" read -r l_addr l_proc; do
+      [ -n "$l_addr" ] || continue
+      l_proc="$(sanitize_header "$l_proc")"
+      if [ -z "$l_proc" ]; then
+        diag_line "[info]" "$(printf '%-22s unknown process' "$l_addr")"
+      elif is_docker_process "$l_proc"; then
+        diag_line "[info]" "$(printf '%-22s %s' "$l_addr" "$l_proc")"
+      else
+        diag_line "[warn]" "$(printf '%-22s %s' "$l_addr" "$l_proc")"
+      fi
+    done <<EOF
+$listeners
+EOF
+  fi
+
+  # 6. Logs.
+  if [ -n "$log_dir" ]; then
+    echo
+    echo "Logs"
+    diag_line "[info]" "$(display_path "$log_dir")"
+  fi
+
+  if [ "$DIAG_CODE" -eq 0 ]; then
+    if [ "$partial" = "true" ]; then
+      DIAG_VERDICT="OK (partial: probes skipped)"
+    else
+      DIAG_VERDICT="OK"
+    fi
+  fi
+  diag_finish
 }
 
 cmd_down() {
