@@ -43,7 +43,7 @@
 #   ALLOWED_IPS    allowlist the seen address is checked against (default:
 #                  DEFAULT_USER_ALLOWED_IPS from standalone/bin/kerghan)
 #   KERGHAN_HOME   client folder for e2e              (default ~/.kerghan)
-#   BASE_URL       e2e URL (default http://localhost:<port>, the port from
+#   BASE_URL       e2e URL (default http://127.0.0.1:<port>, the port from
 #                  KERGHAN_HOME/config, or 3000)
 #   KERGHAN_CONTAINER  instance container for e2e     (default vault-kerghan)
 #   EXPECT_LOGGED_IN   e2e expectation, true | false  (default true)
@@ -417,7 +417,7 @@ mode_e2e() {
   local port out code body token payload logged_in is_admin user result env_lines line
   if [ -z "$BASE_URL" ]; then
     port=$(config_port)
-    BASE_URL="http://localhost:${port:-3000}"
+    BASE_URL="http://127.0.0.1:${port:-3000}"
   fi
   BASE_URL="${BASE_URL%/}"
 

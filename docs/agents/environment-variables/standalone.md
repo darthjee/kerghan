@@ -37,12 +37,14 @@ or standalone users cannot set it.
 
 ### `FRONTEND_BASE_URL`
 
-- The `kerghan` client passes `FRONTEND_BASE_URL=http://localhost:<port>` (the effective port)
-  unless `kerghan.env` sets it. This makes `OriginGuard` trust that origin for browsers that do
-  not send `Sec-Fetch-Site`, and gives the backend the base URL for password-reset links and the
-  GitHub callback URLs (see [standalone.md](../standalone/inner-stack.md#same-origin-and-originguard)).
-- Plain `docker run` users set it themselves, for example
-  `-e FRONTEND_BASE_URL=http://localhost:3000`.
+- Unless `kerghan.env` sets it, the `kerghan` client passes the
+  [advertised URL](../standalone/client.md#advertised-url): `http://<bind>:<port>` (the effective
+  `bind` and port), with `127.0.0.1` for `0.0.0.0`, so `http://127.0.0.1:<port>` with the default
+  bind. This makes `OriginGuard` trust that origin for browsers that do not send `Sec-Fetch-Site`,
+  and gives the backend the base URL for password-reset links and the GitHub callback URLs (see
+  [standalone.md](../standalone/inner-stack.md#same-origin-and-originguard)).
+- Plain `docker run` users set it themselves to the URL they browse, for example
+  `-e FRONTEND_BASE_URL=http://127.0.0.1:3000`.
 - Because `NODE_ENV=production`, enabling the GitHub OAuth App or GitHub App types requires an
   `https` `FRONTEND_BASE_URL`, which in practice means running behind a TLS reverse proxy and
   setting `FRONTEND_BASE_URL` to its URL in `kerghan.env`.

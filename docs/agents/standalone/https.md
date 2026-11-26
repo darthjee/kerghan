@@ -6,7 +6,9 @@ cookie rules behind it.
 
 ## When you need it
 
-Plain HTTP works on the host itself: `http://localhost:<port>` or `http://127.0.0.1:<port>`.
+Plain HTTP works on the host itself with the default bind: `http://127.0.0.1:<port>` (the URL
+`kerghan up` prints) or `http://localhost:<port>`, as long as no other process holds that port on
+`localhost`.
 Other machines need HTTPS, because the session cookies stay `Secure` for any non-loopback host and
 the browser drops them over plain HTTP, so login fails silently. Login over plain HTTP from the
 LAN is not supported, by design: the session tokens would cross the network in clear.
@@ -39,7 +41,8 @@ LAN is not supported, by design: the session tokens would cross the network in c
 ## Caveats
 
 - Use the `https` URL everywhere, the host included: once `FRONTEND_BASE_URL` is `https`, the
-  plain-HTTP `localhost` login stops working.
+  plain-HTTP login on the host (`127.0.0.1` or `localhost`) stops working. `kerghan up` still
+  prints the published address, not the proxy URL.
 - The name in the URL (an mDNS `.local` name or a LAN IP) must match the certificate.
 - Port 443 needs privileges on the host; 8443 does not.
 - Logging in over plain HTTP on the host with a non-loopback bind needs an image with the #601
@@ -71,8 +74,9 @@ Both messages go to stderr only; stdout and the exit code do not change.
 - **Plain-HTTP hint** (a `hint`, on every `up` including "already running"): printed when the
   cookie setting the client passes is `loopback`, that is a non-loopback `bind` with a
   `FRONTEND_BASE_URL` that is not `https`. On `0.0.0.0` it says other machines cannot log in over
-  plain HTTP and points to `http://localhost:<port>` on the host; on a specific LAN address it
-  says logging in over plain HTTP fails on that address. Both link to this page.
+  plain HTTP and points to the [advertised URL](client.md#advertised-url)
+  (`http://127.0.0.1:<port>`) on the host; on a specific LAN address it says logging in over
+  plain HTTP fails on that address. Both link to this page.
 - **Auto-login behind a proxy warning** (also printed by `kerghan configure`, never by the
   plain-HTTP hint): printed when auto-login is on, the `bind` is loopback and the effective
   `FRONTEND_BASE_URL` is `https`, because a reverse proxy may then publish Kerghan to anyone who

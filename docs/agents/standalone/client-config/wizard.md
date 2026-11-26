@@ -45,9 +45,11 @@ Asked in this order; `+` marks the questions only asked with `--advanced`:
 - **Restart after update.** Asked as `Restart after update (ask/always/never) [ask]` (or the
   current value); not a boolean key, so `y` / `n` are not translated. See
   [Client update: wizard](../client-update.md#kerghan-wizard).
-- **Public URL.** Asked as `Public URL [http://localhost:<port>, derived from port]` (with the
-  port answer) when `kerghan.env` has no `FRONTEND_BASE_URL`, or with its current value. Enter
-  keeps the current value; nothing is written when it was never set.
+- **Public URL.** Asked as `Public URL [http://<host>:<port>, derived from bind and port]` (the
+  [advertised URL](../client.md#advertised-url) of the bind and port answers, so `<host>` is
+  `127.0.0.1` for the default bind and for `0.0.0.0`) when `kerghan.env` has no
+  `FRONTEND_BASE_URL`, or with its current value. Enter keeps the current value; nothing is
+  written when it was never set.
 - **Never asked:** `KERGHAN_SECRET_KEY`, `KERGHAN_INTEGRATIONS_KEY` (see
   [Changing the secrets](security.md#changing-the-secrets)), the client-managed pair, and custom env
   variables. Those are handled by `kerghan configure` only.

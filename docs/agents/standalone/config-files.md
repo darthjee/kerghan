@@ -58,8 +58,12 @@ log-dir=              # host directory; default ~/.kerghan/logs
   use `--no-auto-login` or `bind=127.0.0.1`. With auto-login off, log in as `admin` with the
   password in `kerghan.env`; sessions created by automatic login stay valid until they expire.
   Only IPv4 bind addresses (four `0-255` octets) are accepted: Docker needs IPv6 host addresses in
-  brackets, and IPv6 is not supported. The user-facing URL stays `http://localhost:<port>` with
-  any bind. Backend behavior and security rules:
+  brackets, and IPv6 is not supported. The user-facing URL is the published address,
+  `http://<bind>:<port>`, with `127.0.0.1` for `0.0.0.0` (see
+  [Advertised URL](client.md#advertised-url)). This reverses the earlier decision to keep
+  `http://localhost:<port>` with any bind
+  ([#598](https://github.com/darthjee/kerghan/issues/598)): `localhost` can resolve to `::1`,
+  where Kerghan is not published, and reach another process. Backend behavior and security rules:
   [Default user and automatic login](../modules/auth/default-user.md).
 - **Which commands read it:** only `up`, `down`, `reset`, `update` and `update-env` load the file, before any side effect
   (in `reset`, before the confirmation prompt). `version`, `help`, `logs`, `status` and `compose`

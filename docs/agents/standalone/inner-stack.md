@@ -172,8 +172,10 @@ Tent serves the frontend and the API from one origin, so CORS stays disabled. Mo
 `Sec-Fetch-Site: same-origin`, which `OriginGuard` accepts with no configuration. Older browsers
 without that header fall back to comparing `Origin` with `Host`, and Tent rewrites `Host` to the
 backend host, so those writes would be rejected (production has the same limitation). The client's
-default `FRONTEND_BASE_URL=http://localhost:<port>` makes `OriginGuard` trust that origin, and
-also gives the backend the base URL for password-reset links and the GitHub callback URLs. Plain
+default `FRONTEND_BASE_URL` (the [advertised URL](client.md#advertised-url),
+`http://127.0.0.1:<port>` with the default bind) makes `OriginGuard` trust that origin, the
+instance's own published one, and also gives the backend the base URL for password-reset links and
+the GitHub callback URLs. Browsing on `localhost` still works through the same-origin rule. Plain
 `docker run` users set it themselves.
 
 ### Effective client IP
@@ -223,7 +225,7 @@ Paste the whole block into the issue or PR. The header comment of the script lis
 |---|---|
 | `probe` (default) | Repeats the #371 measurement: starts `darthjee/vault:0.4.0` (`VAULT_IMAGE`) with a probe inner service (`traefik/whoami`, `standalone/scripts/verify_client_ip/docker-compose.yml`) published like Tent (`ports: ["80:80"]`), with the outer container on `BIND:PORT:80` (`BIND` defaults to `127.0.0.1`, `PORT` to `3090`). Requests it from the host (from `127.0.0.1`, plus each non-loopback address when `BIND=0.0.0.0`) and reports the address the probe saw and whether it is inside the allowlist (`DEFAULT_USER_ALLOWED_IPS`, read from `standalone/bin/kerghan`). |
 | `reach` | Starts the same probe on `127.0.0.1:PORT`, tries each non-loopback address of the host (`ip -o addr` on Linux, `ifconfig` on macOS), and prints the commands a second LAN machine runs: the host port, and the moby#45610 route to the Vault container's address. |
-| `e2e` | No container management. POSTs `/auth/status.json` on `BASE_URL` (default `http://localhost:<port>`, the port from `~/.kerghan/config`, else `3000`) without cookies, and reports `loggedIn`, the user (from the `access_token` cookie), `isAdmin`, and the image, published address, runtime, auto-login variables and `KERGHAN_COOKIE_SECURE` of the `vault-kerghan` container. Exits 1 unless the answer matches `EXPECT_LOGGED_IN` (default `true`) and `EXPECT_USER` (default `admin`). |
+| `e2e` | No container management. POSTs `/auth/status.json` on `BASE_URL` (default `http://127.0.0.1:<port>`, the port from `~/.kerghan/config`, else `3000`) without cookies, and reports `loggedIn`, the user (from the `access_token` cookie), `isAdmin`, and the image, published address, runtime, auto-login variables and `KERGHAN_COOKIE_SECURE` of the `vault-kerghan` container. Exits 1 unless the answer matches `EXPECT_LOGGED_IN` (default `true`) and `EXPECT_USER` (default `admin`). |
 
 - `RUNTIME=auto|sysbox|privileged` picks the runtime (`auto`, the default, uses Sysbox when the
   daemon has `sysbox-runc`); `RUNTIME=sysbox` fails when Sysbox is missing.

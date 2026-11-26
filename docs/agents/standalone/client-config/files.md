@@ -30,8 +30,9 @@ When the commands read a value, they read it the way its consumer does:
   `KERGHAN_DEFAULT_USER_EMAIL`, `KERGHAN_DEFAULT_USER_PASSWORD`, `KERGHAN_DEFAULT_USER_ADMIN`.
 - The client-managed keys, `KERGHAN_DEFAULT_USER_ALWAYS_AUTHENTICATED`,
   `KERGHAN_DEFAULT_USER_ALLOWED_IPS` and `KERGHAN_COOKIE_SECURE`: always refused (see [Refused keys](configure.md#refused-keys)).
-- `FRONTEND_BASE_URL`: optional; when `kerghan.env` does not set it, `up` passes
-  `http://localhost:<port>`.
+- `FRONTEND_BASE_URL`: optional; when `kerghan.env` does not set it, `up` passes the
+  [advertised URL](../client.md#advertised-url) of the `bind` and port
+  (`http://127.0.0.1:<port>` with the default bind).
 
 Any other upper-case key is a **custom** env variable: accepted and written verbatim.
 
