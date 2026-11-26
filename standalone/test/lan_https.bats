@@ -6,7 +6,7 @@
 load helpers/setup
 
 DOCS_URL="https://github.com/darthjee/kerghan/blob/main/docs/agents/standalone/https.md"
-HINT_ALL="kerghan: hint: other machines cannot log in over plain HTTP; on this host use http://localhost:"
+HINT_ALL="kerghan: hint: other machines cannot log in over plain HTTP; on this host use http://127.0.0.1:"
 HINT_LAN="kerghan: hint: logging in over plain HTTP fails on 192.168.1.10"
 WARN_PROXY="kerghan: warning: automatic login is on and FRONTEND_BASE_URL is https://kerghan.local:8443"
 
@@ -22,27 +22,29 @@ refute_output_contains() {
 
 # --- the plain-HTTP hint ------------------------------------------------------
 
-@test "bind 0.0.0.0 hints at localhost and the docs" {
+@test "bind 0.0.0.0 hints at the advertised URL and the docs, not localhost" {
   write_env_file
   run "$KERGHAN" up --no-auto-login --bind 0.0.0.0
   [ "$status" -eq 0 ]
-  assert_output_contains "${HINT_ALL}3000"
+  assert_output_contains "${HINT_ALL}3000, from the LAN"
   assert_output_contains "$DOCS_URL"
+  refute_output_contains "localhost"
 }
 
-@test "the localhost pointer uses the port" {
+@test "the advertised URL in the hint uses the port" {
   write_env_file
   run "$KERGHAN" up --no-auto-login -p 8080 --bind 0.0.0.0
   [ "$status" -eq 0 ]
   assert_output_contains "${HINT_ALL}8080"
 }
 
-@test "a LAN bind hints without a localhost pointer" {
+@test "a LAN bind hints without a loopback pointer" {
   write_env_file
   run "$KERGHAN" up --no-auto-login --bind 192.168.1.10
   [ "$status" -eq 0 ]
   assert_output_contains "$HINT_LAN"
   refute_output_contains "cannot log in over plain HTTP"
+  refute_output_contains "127.0.0.1"
 }
 
 @test "the default loopback bind has no hint" {

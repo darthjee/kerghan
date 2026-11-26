@@ -36,8 +36,11 @@ Both read the running container, and use `curl -q --connect-timeout 2 --max-time
 
 1. **Published address:** `<bind>:<port>`, or `127.0.0.1:<port>` for `0.0.0.0`.
 2. **Advertised URL:** the one `kerghan up` prints, through `advertised_url` (shared with `up`, so
-   the two never drift; #598 changes it in that one place). Probed only when its host:port differs
-   from probe 1.
+   the two never drift; see [Advertised URL](client.md#advertised-url)). It is probed only when its
+   host:port differs from probe 1; when they are equal (every `bind` since #598) there is no second
+   request, and once probe 1 finds Kerghan the report says
+   `[ok] advertised URL is the published address`. The second probe and exit 6 remain for the case
+   where the two ever differ.
 
 Kerghan is identified by `GET /health.json` answering `200` with the body `{"status":"ok"}`. The
 `Server` header is printed, never used to decide. `/ready.json` is probed only after that: `200`
@@ -64,7 +67,7 @@ last, followed by a `hint:` line when one applies.
 | 3 | Docker engine unreachable |
 | 4 | Unhealthy: an inner service is down or unhealthy, or `/ready.json` is `503` |
 | 5 | Published address broken |
-| 6 | Advertised URL broken while the published address works (the #594 AirPlay case) |
+| 6 | Advertised URL broken while the published address works (only when the two differ, which no `bind` produces since #598) |
 
 Skipped checks never fail the run: a remote `DOCKER_HOST` (`tcp://`, `ssh://`; only scheme and
 host are shown) skips the probes and listeners, a missing `curl` skips the probes, a missing

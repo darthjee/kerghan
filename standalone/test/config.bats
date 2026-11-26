@@ -4,7 +4,7 @@
 
 load helpers/setup
 
-URL_ARGS="-e FRONTEND_BASE_URL=http://localhost"
+URL_ARGS="-e FRONTEND_BASE_URL=http://127.0.0.1"
 
 # up_line <image> <port> [runtime] [stop-timeout] - the expected `vault up` line.
 up_line() {
@@ -35,7 +35,7 @@ refute_side_effects() {
   run "$KERGHAN" up
   [ "$status" -eq 0 ]
   [ "$(vault_calls)" = "$(up_line "$IMAGE" 8080)" ]
-  assert_output_contains "Kerghan is running at http://localhost:8080"
+  assert_output_contains "Kerghan is running at http://127.0.0.1:8080"
 }
 
 @test "-p wins over port= from the file" {
@@ -280,7 +280,7 @@ refute_side_effects() {
   export STUB_RUNNING_IMAGE="$IMAGE_REPO:$OLDER_VERSION-offline" STUB_RUNNING_PORT=3000
   run "$KERGHAN" up
   [ "$status" -eq 0 ]
-  assert_output_contains "Kerghan is already running at http://localhost:3000"
+  assert_output_contains "Kerghan is already running at http://127.0.0.1:3000"
   [ -z "$(vault_calls)" ]
 }
 
@@ -302,7 +302,7 @@ refute_side_effects() {
   export STUB_RUNNING_IMAGE="darthjee/kerghan-standalone:latest" STUB_RUNNING_PORT=3000
   run "$KERGHAN" up
   [ "$status" -eq 0 ]
-  assert_output_contains "Kerghan is already running at http://localhost:3000"
+  assert_output_contains "Kerghan is already running at http://127.0.0.1:3000"
   [ -z "$(vault_calls)" ]
 }
 
@@ -345,7 +345,7 @@ refute_side_effects() {
   export STUB_RUNNING_IMAGE="$IMAGE" STUB_RUNNING_PORT=3000
   run "$KERGHAN" up
   [ "$status" -eq 0 ]
-  assert_output_contains "Kerghan is already running at http://localhost:3000"
+  assert_output_contains "Kerghan is already running at http://127.0.0.1:3000"
   [ -z "$(vault_calls)" ]
 }
 

@@ -6,7 +6,7 @@ Part of [Standalone Distribution](../standalone.md). How the `kerghan` client wr
 
 ```
 kerghan up [--offline] [-p PORT] [--[no-]auto-login] [--bind ADDRESS] [-f]
-                                        # start (detached by default) on http://localhost:3000
+                                        # start (detached by default) on http://127.0.0.1:3000
 kerghan down                            # stop and remove the container; data is kept
 kerghan logs [-f]                       # show (or follow) the logs
 kerghan status                          # show the instance state
@@ -39,7 +39,7 @@ Every command calls `vault` with the fixed instance name `kerghan`, which gives 
 
 ```
 vault up --name kerghan --image darthjee/kerghan-standalone:<tag>[-offline] \
-  --env-file ~/.kerghan/kerghan.env -p <bind>:<port>:80 [-e FRONTEND_BASE_URL=http://localhost:<port>] \
+  --env-file ~/.kerghan/kerghan.env -p <bind>:<port>:80 [-e FRONTEND_BASE_URL=<advertised URL>] \
   -e KERGHAN_DEFAULT_USER_ALWAYS_AUTHENTICATED=<auto-login> \
   -e KERGHAN_DEFAULT_USER_ALLOWED_IPS=127.0.0.1,::1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16 \
   -e KERGHAN_COOKIE_SECURE=<true|false|loopback> \
@@ -200,11 +200,49 @@ updates the completion in the same PR (see
 [Definition of Done for PRs](../contributing.md#definition-of-done-for-prs));
 `standalone/test/completion_sync.bats` enforces it.
 
+### Advertised URL
+
+The URL the client gives out is the address the port is published on, never `localhost`:
+`localhost` resolves to `::1` first on macOS and many Linux hosts, where Docker does not listen, so
+it can reach another process on the same port. `advertised_url <bind> <port>` is the one rule behind
+the URL `up` prints (`Kerghan is running at ...`, `Kerghan is already running at ...`), the derived
+`FRONTEND_BASE_URL`, the wizard's Public URL default, the `0.0.0.0` plain-HTTP hint and
+[`kerghan diagnose`](client-diagnose.md) (#598):
+
+| `bind` | Advertised URL | Reaches the instance | Login over plain HTTP |
+|---|---|---|---|
+| `127.0.0.1` (default) | `http://127.0.0.1:<port>` | yes | yes (`KERGHAN_COOKIE_SECURE=false`) |
+| other loopback `127.x.y.z` | `http://127.x.y.z:<port>` | yes | yes (same rule) |
+| `0.0.0.0` or empty | `http://127.0.0.1:<port>` | yes (always reachable locally) | yes (`loopback` mode, loopback `Host`) |
+| specific non-loopback IP, e.g. `192.168.1.5` | `http://192.168.1.5:<port>` | yes (Docker publishes only on that IP) | no: the cookie is `Secure` there, see [https.md](https.md) |
+
+- A `FRONTEND_BASE_URL` set in `kerghan.env` (for example an `https` reverse-proxy URL) does not
+  change the printed URL: the client prints the address it published, not a proxy it does not
+  control.
+- With a remote engine (`DOCKER_HOST=tcp://...` or `ssh://...`), `127.0.0.1` is the remote host's
+  loopback (a known limitation).
+- IPv6 is not published, and `bind` stays IPv4-only.
+
 ### `FRONTEND_BASE_URL`
 
-`up` passes `FRONTEND_BASE_URL=http://localhost:<port>` (the effective port) unless
-`kerghan.env` sets `FRONTEND_BASE_URL` itself. See
-[Same origin and `OriginGuard`](inner-stack.md#same-origin-and-originguard) for why.
+`up` passes the [advertised URL](#advertised-url) of the effective `bind` and port as
+`FRONTEND_BASE_URL`, unless `kerghan.env` sets `FRONTEND_BASE_URL` itself (that value is never
+changed). See [Same origin and `OriginGuard`](inner-stack.md#same-origin-and-originguard) for why.
+
+The derived value depends only on `bind` and `port`, which already recreate the instance, and a
+client upgrade changes the wanted image, which recreates it too. The running value is not compared.
+Accepted gap: with `image-tag` pinned and the same `bind` and port, an instance created by a client
+before #598 keeps `FRONTEND_BASE_URL=http://localhost:<port>` until its next recreation. In
+browsers that send `Sec-Fetch-Site` this is harmless, as the backend accepts their same-origin
+requests anyway. Other browsers get `403` on writes from the newly printed URL until the instance is
+recreated, because behind Tent only a trusted origin admits them (see
+[CSRF](../architecture/security.md#csrf)). Browsers send the header only to HTTPS and loopback
+URLs, so on a plain-HTTP LAN address every browser is one of those others. The gap fails closed
+(nothing is exposed). Emails are disabled in standalone, and the cookie setting reads only the URL's
+scheme, which is unchanged.
+
+An instance holding the new value has the mirror case: browsers that do not send `Sec-Fetch-Site`
+get `403` on writes from `localhost`, which the old value allowed. This fails closed too.
 
 ### `up`: start, no-op or recreate
 
@@ -253,8 +291,9 @@ container is created (`kerghan down && kerghan up` applies it now).
   [https.md](https.md)):
   - `plain_http_lan_hint` prints one `hint` when `wanted_cookie_secure` is `loopback` (a
     non-loopback `bind` with a non-`https` `FRONTEND_BASE_URL`). On `0.0.0.0` it says other
-    machines cannot log in over plain HTTP and points to `http://localhost:<port>`; on a specific
-    LAN address it says logging in over plain HTTP fails on that address. Both link to `https.md`.
+    machines cannot log in over plain HTTP and points to the [advertised URL](#advertised-url)
+    (`http://127.0.0.1:<port>`) on the host; on a specific LAN address it says logging in over
+    plain HTTP fails on that address. Both link to `https.md`.
   - `proxy_auto_login_warning` warns when auto-login is on, the `bind` is loopback and the
     effective `FRONTEND_BASE_URL` is `https` (a reverse proxy may publish Kerghan, logged in as
     admin), with the `--no-auto-login` / `auto-login=false` hint.
@@ -266,8 +305,8 @@ container is created (`kerghan down && kerghan up` applies it now).
   on this host. If it finds one it warns on stderr, and never fails or stops `up`:
   - `port <port> is already in use by <process> (<addresses>)` (`another process` when the name is
     unknown);
-  - `Kerghan is published on <bind>:<port> only; other addresses (such as localhost) may reach that
-    process instead`;
+  - `Kerghan is published on <bind>:<port> only; other addresses (such as localhost:<port>) may
+    reach that process instead`;
   - the `-p` hint above;
   - on port 5000 or 7000 with `ControlCenter`, the AirPlay Receiver hint (see
     [the macOS AirPlay caveat](release-and-caveats.md#caveats));

@@ -19,7 +19,8 @@
 # stop-timeout applies the next time the container is created; run
 # `kerghan down && kerghan up` to apply it now.
 
-# Host port Kerghan is served on (http://localhost:<port>). 1-65535.
+# Host port Kerghan is served on (http://127.0.0.1:<port> with the default
+# bind). 1-65535.
 # Overridden by `kerghan up -p PORT`.
 #port=3000
 

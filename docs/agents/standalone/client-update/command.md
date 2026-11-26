@@ -105,7 +105,7 @@ kerghan-install: kerghan 0.9.1 installed to /home/me/.local/bin/kerghan
 Restart Kerghan now? [Y/n]
 upgrading darthjee/kerghan-standalone:0.9.0-offline -> darthjee/kerghan-standalone:0.9.1-offline
 ...
-Kerghan is running at http://localhost:3000
+Kerghan is running at http://127.0.0.1:3000
 kerghan updated 0.9.0 -> 0.9.1
 kerghan: hint: free disk space with 'docker image rm darthjee/kerghan-standalone:0.9.0-offline'
 ```

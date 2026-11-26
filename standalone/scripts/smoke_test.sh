@@ -41,7 +41,7 @@ SMOKE_EXPECT_OFFLINE="${SMOKE_EXPECT_OFFLINE:-false}"
 RUN_ID="$$-$(date +%s)"
 CONTAINER="kerghan-standalone-smoke-$RUN_ID"
 VOLUME="kerghan-standalone-smoke-data-$RUN_ID"
-BASE_URL="http://localhost:$SMOKE_PORT"
+BASE_URL="http://127.0.0.1:$SMOKE_PORT"
 SUCCESS=false
 LOG_DIR=""
 

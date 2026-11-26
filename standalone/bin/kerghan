@@ -101,7 +101,7 @@ Usage: kerghan <command> [options]
 
 Commands:
   up [--offline] [-p PORT] [--[no-]auto-login] [--bind ADDRESS] [-f]
-                                  start Kerghan (detached by default) on http://localhost:$DEFAULT_PORT
+                                  start Kerghan (detached by default) on http://127.0.0.1:$DEFAULT_PORT
   down                            stop and remove the container; data is kept
   logs [-f]                       show (or follow) the logs
   status                          show the instance state
@@ -232,16 +232,17 @@ port_listeners() {
   return 2
 }
 
-# advertised_url <bind> <port> - the URL `kerghan up` prints for the instance.
-# Shared contract (also read by `kerghan diagnose`, #597): `up` and diagnose
-# both go through it, so they never drift. Today it is http://localhost:<port>
-# whatever the bind (#598 may change that, in this one place).
+# advertised_url <bind> <port> - the URL of the instance: the published address
+# (see published_probe_host), never `localhost`, which can resolve to an
+# address the port is not published on. Shared contract: the URL `kerghan up`
+# prints, the derived FRONTEND_BASE_URL, the wizard's Public URL default and
+# `kerghan diagnose` all go through it, so they never drift.
 advertised_url() {
-  echo "http://localhost:$2"
+  echo "http://$(published_probe_host "$1"):$2"
 }
 
-# published_probe_host <bind> - the host to probe for the published address:
-# 127.0.0.1 for 0.0.0.0 (or an empty bind), otherwise the bind itself.
+# published_probe_host <bind> - the host to reach (and probe) the published
+# address: 127.0.0.1 for 0.0.0.0 (or an empty bind), otherwise the bind itself.
 published_probe_host() {
   case "$1" in
     '' | 0.0.0.0) echo "127.0.0.1" ;;
@@ -660,22 +661,24 @@ refuse_client_managed_keys() {
   exit 1
 }
 
-# frontend_base_url_args <port> - prints `-e FRONTEND_BASE_URL=...` (one word
-# per line) unless kerghan.env sets FRONTEND_BASE_URL itself.
+# frontend_base_url_args <bind> <port> - prints `-e FRONTEND_BASE_URL=...` (one
+# word per line, the advertised URL) unless kerghan.env sets FRONTEND_BASE_URL
+# itself.
 frontend_base_url_args() {
   if ! grep -q "^${FRONTEND_BASE_URL_KEY}=" "$ENV_FILE" 2>/dev/null; then
-    printf '%s\n' "-e" "${FRONTEND_BASE_URL_KEY}=http://localhost:$1"
+    printf '%s\n' "-e" "${FRONTEND_BASE_URL_KEY}=$(advertised_url "$1" "$2")"
   fi
 }
 
-# effective_frontend_base_url <port> - the FRONTEND_BASE_URL the instance gets:
-# the value kerghan.env sets, else the derived default.
+# effective_frontend_base_url <bind> <port> - the FRONTEND_BASE_URL the instance
+# gets: the value kerghan.env sets, else the derived default (the advertised
+# URL).
 effective_frontend_base_url() {
   if env_file_sets "$FRONTEND_BASE_URL_KEY"; then
     grep -E "^[[:space:]]*${FRONTEND_BASE_URL_KEY}=" "$ENV_FILE" | tail -n 1 |
       sed -e "s/^[[:space:]]*${FRONTEND_BASE_URL_KEY}=//" -e 's/[[:space:]]*$//'
   else
-    echo "http://localhost:$1"
+    advertised_url "$1" "$2"
   fi
 }
 
@@ -686,7 +689,7 @@ effective_frontend_base_url() {
 # non-loopback and the URL is not https; else true.
 wanted_cookie_secure() {
   local url
-  url="$(effective_frontend_base_url "$2")"
+  url="$(effective_frontend_base_url "$1" "$2")"
   if is_loopback "$1"; then
     case "$url" in
       https://*) echo true ;;
@@ -707,7 +710,7 @@ plain_http_lan_hint() {
   local bind="$1" port="$2"
   [ "$(wanted_cookie_secure "$bind" "$port")" = "loopback" ] || return 0
   if [ "$bind" = "0.0.0.0" ]; then
-    hint "other machines cannot log in over plain HTTP; on this host use http://localhost:$port, from the LAN put a TLS reverse proxy in front and set an https FRONTEND_BASE_URL (see $HTTPS_DOCS_URL)"
+    hint "other machines cannot log in over plain HTTP; on this host use $(advertised_url "$bind" "$port"), from the LAN put a TLS reverse proxy in front and set an https FRONTEND_BASE_URL (see $HTTPS_DOCS_URL)"
   else
     hint "logging in over plain HTTP fails on $bind; put a TLS reverse proxy in front and set an https FRONTEND_BASE_URL (see $HTTPS_DOCS_URL)"
   fi
@@ -719,7 +722,7 @@ plain_http_lan_hint() {
 proxy_auto_login_warning() {
   local auto_login="$1" bind="$2" url
   { [ "$auto_login" = "true" ] && is_loopback "$bind"; } || return 0
-  url="$(effective_frontend_base_url "$3")"
+  url="$(effective_frontend_base_url "$2" "$3")"
   case "$url" in
     https://*) ;;
     *) return 0 ;;
@@ -2165,7 +2168,7 @@ warn_port_conflict() {
       ;;
   esac
   warn "port $port is already in use by $summary"
-  warn "Kerghan is published on $bind:$port only; other addresses (such as localhost) may reach that process instead"
+  warn "Kerghan is published on $bind:$port only; other addresses (such as localhost:$port) may reach that process instead"
   # shellcheck disable=SC2088 # the literal ~ is meant for display
   hint "use 'kerghan up -p <port>' or set port= in ~/.kerghan/config to pick another port"
   if [ -n "$airplay" ]; then
@@ -2259,7 +2262,7 @@ up_instance() {
   local extra
   while IFS= read -r extra; do
     args+=("$extra")
-  done < <(frontend_base_url_args "$port")
+  done < <(frontend_base_url_args "$bind" "$port")
   args+=(-e "KERGHAN_DEFAULT_USER_ALWAYS_AUTHENTICATED=$auto_login")
   args+=(-e "KERGHAN_DEFAULT_USER_ALLOWED_IPS=$DEFAULT_USER_ALLOWED_IPS")
   args+=(-e "KERGHAN_COOKIE_SECURE=$cookie_secure")
@@ -2574,6 +2577,8 @@ EOF
          Kerghan is reachable at $pub_url"
               ;;
           esac
+        else
+          diag_line "[ok]" "advertised URL is the published address"
         fi
         ;;
       foreign)
@@ -3943,6 +3948,7 @@ WIZARD_VALUE=""
 # The effective answers later questions depend on.
 WIZARD_PORT=""
 WIZARD_AUTO_LOGIN=""
+WIZARD_BIND=""
 # true when the wizard generated the password (the summary says so).
 WIZARD_GENERATED=false
 
@@ -4091,6 +4097,7 @@ wizard_questions() {
   wizard_config_question auto-login "Automatic login (true/false)"
   WIZARD_AUTO_LOGIN="$WIZARD_VALUE"
   wizard_config_question bind "Bind address"
+  WIZARD_BIND="$WIZARD_VALUE"
   # Always asked, like bind: the last config question.
   wizard_config_question restart-on-update "Restart after update (ask/always/never)"
   if wizard_asks_config file-logs "$advanced"; then
@@ -4137,7 +4144,7 @@ wizard_questions() {
     if [ "$ER_EXISTS" = "true" ] && env_value_set "$FRONTEND_BASE_URL_KEY"; then
       wizard_env_question "$FRONTEND_BASE_URL_KEY" "Public URL"
     else
-      wizard_ask "$FRONTEND_BASE_URL_KEY" "Public URL" "http://localhost:$WIZARD_PORT, derived from port"
+      wizard_ask "$FRONTEND_BASE_URL_KEY" "Public URL" "$(advertised_url "$WIZARD_BIND" "$WIZARD_PORT"), derived from bind and port"
       if [ -n "$WIZARD_ANSWER" ]; then
         batch_add set "$FRONTEND_BASE_URL_KEY" "$WIZARD_ANSWER"
       fi

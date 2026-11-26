@@ -122,7 +122,7 @@ See [docs/agents/standalone/client-completion.md](docs/agents/standalone/client-
 ### Run
 
 ```bash
-kerghan up              # starts Kerghan on http://localhost:3000
+kerghan up              # starts Kerghan on http://127.0.0.1:3000
 kerghan up -p 8080      # on another port
 kerghan up --offline    # with the offline image
 ```

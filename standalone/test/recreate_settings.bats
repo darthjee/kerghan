@@ -6,7 +6,7 @@ load helpers/setup
 
 # up_line <bind> <auto-login> - the expected `vault up` line on port 3000.
 up_line() {
-  echo "vault up --name kerghan --image $IMAGE --env-file $ENV_FILE -p $1:3000:80 -e FRONTEND_BASE_URL=http://localhost:3000 $(default_user_args "$2" "${3:-}") --runtime auto --stop-timeout 60"
+  echo "vault up --name kerghan --image $IMAGE --env-file $ENV_FILE -p $1:3000:80 -e FRONTEND_BASE_URL=http://$(advertised_host "$1"):3000 $(default_user_args "$2" "${3:-}") --runtime auto --stop-timeout 60"
 }
 
 # assert_recreated <bind> <auto-login> - vault down then vault up, volume kept.
@@ -30,7 +30,32 @@ KERGHAN_DEFAULT_USER_ALWAYS_AUTHENTICATED=true
 KERGHAN_COOKIE_SECURE=false"
   run "$KERGHAN" up
   [ "$status" -eq 0 ]
-  assert_output_contains "Kerghan is already running at http://localhost:3000"
+  assert_output_contains "Kerghan is already running at http://127.0.0.1:3000"
+  [ -z "$(vault_calls)" ]
+}
+
+@test "an instance with the old localhost FRONTEND_BASE_URL is not recreated on loopback" {
+  setup_running
+  export STUB_RUNNING_HOST_IP=127.0.0.1 \
+    STUB_RUNNING_ENV="FRONTEND_BASE_URL=http://localhost:3000
+KERGHAN_DEFAULT_USER_ALWAYS_AUTHENTICATED=true
+KERGHAN_COOKIE_SECURE=false"
+  run "$KERGHAN" up
+  [ "$status" -eq 0 ]
+  assert_output_contains "Kerghan is already running at http://127.0.0.1:3000"
+  [ -z "$(vault_calls)" ]
+}
+
+@test "an instance with the old localhost FRONTEND_BASE_URL is not recreated on every interface" {
+  setup_running
+  export STUB_RUNNING_HOST_IP=0.0.0.0 \
+    STUB_RUNNING_ENV="FRONTEND_BASE_URL=http://localhost:3000
+KERGHAN_DEFAULT_USER_ALWAYS_AUTHENTICATED=false
+KERGHAN_COOKIE_SECURE=loopback"
+  write_config "auto-login=false"
+  run "$KERGHAN" up
+  [ "$status" -eq 0 ]
+  assert_output_contains "Kerghan is already running at http://127.0.0.1:3000"
   [ -z "$(vault_calls)" ]
 }
 

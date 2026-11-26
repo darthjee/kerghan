@@ -15,7 +15,7 @@ HINT_DIAGNOSE="kerghan: hint: run 'kerghan diagnose' for details"
   run "$KERGHAN" up -p 5000
   [ "$status" -eq 0 ]
   assert_output_contains "kerghan: warning: port 5000 is already in use by ControlCenter (*:5000, [::]:5000)"
-  assert_output_contains "kerghan: warning: Kerghan is published on 127.0.0.1:5000 only; other addresses (such as localhost) may reach that process instead"
+  assert_output_contains "kerghan: warning: Kerghan is published on 127.0.0.1:5000 only; other addresses (such as localhost:5000) may reach that process instead"
   assert_output_contains "$HINT_P"
   assert_output_contains "$HINT_AIRPLAY"
   [ -n "$(vault_calls | grep ' up ')" ]
