@@ -27,7 +27,7 @@ Pinned images:
 | `darthjee/tent` (inner) | `1.0.3` (amd64), `1.0.3-arm64` (arm64) | separate tags, selected per architecture |
 
 Changing a pin is a normal change to the Dockerfile or the inner compose file. A Vault pin change
-must also update `VAULT_VERSION` in `standalone/install.sh`.
+must also update `VAULT_VERSION` in `standalone/install.sh`; `scripts/bump_vault.sh <version>` does both.
 
 The CI jobs that build and publish the images and the client assets (`release-kerghan`,
 `release-kerghan-standalone`, `release-kerghan-assets`) are documented in
