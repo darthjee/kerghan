@@ -187,7 +187,8 @@ log "checking that no env file or secret is baked into $IMAGE"
 vault_env=$(docker run --rm --entrypoint sh "$IMAGE" -c 'cat /vault/.env')
 unexpected=$(printf '%s\n' "$vault_env" | grep -vE '^(TENT_IMAGE|KERGHAN_VERSION|LOGS_IMAGE)=' || true)
 [ -z "$unexpected" ] || fail "/vault/.env holds unexpected entries: $unexpected"
-printf '%s\n' "$vault_env" | grep -q '^TENT_IMAGE=darthjee/tent:' || fail "/vault/.env has no TENT_IMAGE"
+printf '%s\n' "$vault_env" | grep -qE '^TENT_IMAGE=darthjee/tent:[0-9]+\.[0-9]+\.[0-9]+$' \
+  || fail "/vault/.env TENT_IMAGE must be darthjee/tent with a plain multi-arch X.Y.Z tag"
 printf '%s\n' "$vault_env" | grep -q "^KERGHAN_VERSION=" || fail "/vault/.env has no KERGHAN_VERSION"
 printf '%s\n' "$vault_env" | grep -q '^LOGS_IMAGE=docker:' || fail "/vault/.env has no LOGS_IMAGE"
 stray=$(docker run --rm --entrypoint sh "$IMAGE" -c \

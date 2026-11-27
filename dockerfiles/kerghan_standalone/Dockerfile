@@ -5,8 +5,8 @@
 #     --target standalone --build-arg KERGHAN_VERSION=<v> \
 #     -t darthjee/kerghan-standalone:<v> .
 #
-# BuildKit is required (TARGETARCH / BUILDPLATFORM and the per-Dockerfile
-# Dockerfile.dockerignore). No secret is baked into any stage.
+# BuildKit is required (TARGETARCH / BUILDPLATFORM, RUN --mount and the
+# per-Dockerfile Dockerfile.dockerignore). No secret is baked into any stage.
 #
 # Specs: see the "Standalone distribution" entry in docs/agents/specs.md.
 
@@ -30,9 +30,6 @@ RUN yarn build
 # Online image: inner images are pulled by Vault on first start.
 FROM darthjee/vault:0.4.0 AS standalone
 
-# No default: a default would override BuildKit's automatic TARGETARCH.
-# The legacy builder leaves it empty, which selects amd64 below.
-ARG TARGETARCH
 ARG KERGHAN_VERSION=latest
 
 COPY standalone/vault/ /vault/
@@ -43,13 +40,13 @@ COPY proxy/extension/loader.php /vault/tent/extension/loader.php
 COPY proxy/extension/lib/ /vault/tent/extension/lib/
 
 # /vault/.env is read by `docker compose` automatically. It holds no secrets.
-RUN set -e; \
-    case "${TARGETARCH}" in \
-      ""|amd64) tent_image=darthjee/tent:1.0.3 ;; \
-      arm64) tent_image=darthjee/tent:1.0.3-arm64 ;; \
-      *) echo "Unsupported TARGETARCH: ${TARGETARCH}" >&2; exit 1 ;; \
-    esac; \
-    printf 'TENT_IMAGE=%s\nKERGHAN_VERSION=%s\nLOGS_IMAGE=%s\n' "$tent_image" "$KERGHAN_VERSION" "docker:27.5.1-cli" > /vault/.env; \
+# Tent's version is the `tent=` line of the root `version` file (a single
+# multi-arch tag), read through a bind mount so the file never lands in a layer.
+RUN --mount=type=bind,source=version,target=/tmp/version \
+    set -e; \
+    tent_version=$(grep '^tent=' /tmp/version | sed -e 's/^tent=//'); \
+    [ -n "$tent_version" ] || { echo "version file has no tent= entry" >&2; exit 1; }; \
+    printf 'TENT_IMAGE=%s\nKERGHAN_VERSION=%s\nLOGS_IMAGE=%s\n' "darthjee/tent:$tent_version" "$KERGHAN_VERSION" "docker:27.5.1-cli" > /vault/.env; \
     cat /vault/.env
 
 #######################
@@ -58,9 +55,10 @@ RUN set -e; \
 # architecture's `docker save` tarballs of darthjee/kerghan:<v>, mysql:8.4.11
 # (mysql.tar), mysql:9.3.0 (mysql-legacy.tar, only for the #469 migration
 # release), docker:27.5.1-cli (docker-cli.tar, the logs collector) and the
-# matching Tent tag before building this target. They are produced by
-# bin/release_kerghan_standalone.sh; only the folder matching TARGETARCH is
-# copied, so a multi-platform build gives each architecture its own.
+# single multi-arch Tent tag (tent.tar) before building this target. They are
+# produced by bin/release_kerghan_standalone.sh; only the folder matching
+# TARGETARCH is copied, so a multi-platform build gives each architecture its
+# own.
 FROM standalone AS standalone-offline
 
 # ARGs do not carry over from the parent stage. No default: a default would

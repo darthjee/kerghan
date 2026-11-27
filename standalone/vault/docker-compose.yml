@@ -8,7 +8,7 @@
 # (stack and environment-variable contract).
 #
 # /vault/.env (written by the image build, no secrets) provides:
-#   TENT_IMAGE      - darthjee/tent tag matching the image's architecture
+#   TENT_IMAGE      - darthjee/tent multi-arch tag (from the root version file)
 #   KERGHAN_VERSION - darthjee/kerghan tag baked into this image
 #   LOGS_IMAGE      - docker CLI image for the logs collector service
 #
