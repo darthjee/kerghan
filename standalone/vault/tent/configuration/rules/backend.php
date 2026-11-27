@@ -14,6 +14,10 @@
  * backend's PUBLIC_MAX_AGE_SECONDS (backend/src/core/cache-class.ts);
  * change both together.
  *
+ * CanonicalHostHeaderMiddleware must stay in prependMiddlewares: it has to
+ * run before default_proxy renames the client's Host header, which Tent
+ * matches case-sensitively.
+ *
  * Full strategy: docs/agents/architecture/caching.md
  */
 
@@ -31,6 +35,11 @@ Configuration::buildRule([
     ],
     'matchers' => [
         ['uri' => '.json', 'type' => 'ends_with']
+    ],
+    'prependMiddlewares' => [
+        [
+            'class' => 'Tent\\Middlewares\\CanonicalHostHeaderMiddleware'
+        ]
     ],
     'middlewares' => [
         [
