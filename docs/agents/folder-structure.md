@@ -55,7 +55,7 @@
 |---|---|
 | `dev_configuration/` | Dev routing rules: `configure.php`, `locals.php`, `rules/{frontend,backend,redirects}.php` |
 | `prod_configuration/` | Prod routing rules — same shape, host-specific vars via `locals.php.sample` |
-| `extension/lib/` | Custom PHP middleware (`CacheControlMiddleware`, `SetClientIpMiddleware`, `TestHeaderMiddleware`) + `cache/DomainHash.php` — trimmed to backend-agnostic classes only, no upload/admin-staff code |
+| `extension/lib/` | Custom PHP middleware (`CacheControlMiddleware`, `CanonicalHostHeaderMiddleware`, `SetClientIpMiddleware`, `TestHeaderMiddleware`) + `cache/DomainHash.php` — trimmed to backend-agnostic classes only, no upload/admin-staff code |
 | `extension/tests/` | PHPUnit tests, mirrors `extension/lib/` |
 
 ## `standalone/` — Standalone Distribution

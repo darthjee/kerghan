@@ -73,6 +73,12 @@ Tent's `CacheStalenessMiddleware` (`maxAgeSeconds => 10`) treats entries older t
 as stale. A stale entry is **still served**, and a background refresh against the backend is
 scheduled (stale-while-revalidate). There is no hard expiry.
 
+**That is the configured intent, not what happens today.** On Tent 1.0.3 and 1.3.0 the cache read
+runs first, and a cache hit ends the request chain before `CacheStalenessMiddleware`, so an entry
+is served unrefreshed until it is invalidated or the cache is wiped. No route is `public` yet, so
+nothing is affected. Read [Tent behaviours](./security.md#tent-behaviours-the-security-model-relies-on)
+(item 4) before relying on, or fixing, the refresh.
+
 The backend's `PUBLIC_MAX_AGE_SECONDS` (`backend/src/core/cache-class.ts`) mirrors this value
 for the `public` `Cache-Control: max-age`. Change both together.
 
