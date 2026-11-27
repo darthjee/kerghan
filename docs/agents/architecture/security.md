@@ -64,10 +64,12 @@ Edge cases, decided in the implementation (`isCrossSiteRequestAllowed` in the sa
 The frontend and the API share one origin through Tent (`*.json` goes to the backend), so the
 app's own requests are always `same-origin`. Tent's `default_proxy` handler forwards incoming
 request headers (`getallheaders()` straight into its curl executor, verified in the
-`darthjee/tent:1.0.3` image's `ProxyRequestHandler`; recheck on a Tent upgrade), so `Origin` and
-`Sec-Fetch-Site` reach the backend intact. `Host` does **not**: `default_proxy`'s built-in
-middlewares move the client's `Host` to `X-Forwarded-Host` and set `Host` to the upstream host
-(see Tent's `docs/guides/tent/host-header.md`). As a result, `OriginGuard`'s fallback branch
+`darthjee/tent:1.3.0` image's `ProxyRequestHandler`; one of the
+[five Tent behaviours](#tent-behaviours-the-security-model-relies-on) to recheck on a Tent
+upgrade), so `Origin` and `Sec-Fetch-Site` reach the backend intact. `Host` does **not**:
+`default_proxy`'s built-in middlewares move the client's `Host` to `X-Forwarded-Host` and set
+`Host` to the upstream host (see Tent's `docs/guides/tent/host-header.md`; the header-name
+caveat is under item 2 of that list). As a result, `OriginGuard`'s fallback branch
 (no `Sec-Fetch-Site`, `Origin` host equal to `Host`) never matches behind Tent and fails closed —
 only the trusted-origin list admits such requests. **Any future proxy rule or middleware on
 `*.json` must keep forwarding `Origin`, `Sec-Fetch-Site` and `X-Forwarded-Host`.** If one strips
@@ -137,6 +139,34 @@ attack.
   alongside the cookie without a security review.
 - **Allowlist changes are trust changes**: `KERGHAN_ALLOWED_ORIGINS`/`FRONTEND_BASE_URL` define
   both CORS and CSRF trust (see `docs/agents/environment-variables.md`).
+
+## Tent behaviours the security model relies on
+
+Verified in `darthjee/tent:1.3.0`. **Recheck all five on a Tent upgrade** (code review plus a
+live check against the dev stack), then move the version in this file by hand:
+`scripts/bump_tent.sh` leaves it alone on purpose.
+
+1. **Header forwarding**: `default_proxy` forwards the incoming request headers, `Origin` and
+   `Sec-Fetch-Site` included. [`OriginGuard`](#csrf) (CSRF and login CSRF) depends on it.
+2. **`Host` rewrite**: `default_proxy` moves the client's `Host` to `X-Forwarded-Host` and sets
+   `Host` to the upstream host, which keeps `OriginGuard`'s `Origin`-equals-`Host` fallback
+   fail-closed. Tent matches that header name case-sensitively, so a hand-crafted request with a
+   lower-case `host` name keeps its own `Host` (as in 1.0.3). Browsers send `Host` and pages
+   can't set it, and a client able to craft it is already admitted by sending neither
+   `Sec-Fetch-Site` nor `Origin`, so this adds no CSRF exposure.
+3. **Single-entry `X-Forwarded-For`**: Kerghan's `SetClientIpMiddleware` replaces it with
+   `REMOTE_ADDR` and nothing later in Tent's chain appends to it (the image doesn't enable
+   `mod_remoteip`). Standalone automatic login through the IP allowlist, with
+   `KERGHAN_TRUSTED_PROXY_HOPS=1`, depends on it: a client-controlled entry would be an
+   authentication bypass. Guarded by
+   `proxy/extension/tests/proxy/ClientIpForwardingTest.php`.
+4. **Cache key and `skip_cache_header`**: every 2xx `*.json` response is shared-cached, keyed by
+   method, path and query string and never by caller, unless it carries `X-Skip-Cache`. That
+   header keeps `user-scoped` and `never` responses out of the shared cache
+   ([API Caching](./caching.md)).
+5. **`Set-Cookie` passthrough**: every `Set-Cookie` line reaches the client unchanged and is
+   stripped from what the cache stores (one of Tent's default excluded headers, which no Kerghan
+   rule overrides), so session cookies are never replayed to another caller.
 
 ## GitHub credentials stay in the backend
 
