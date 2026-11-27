@@ -85,6 +85,15 @@ D5=sha256:5555555555555555555555555555555555555555555555555555555555555555
   refute_logged_prefix "docker pull"
 }
 
+@test "require_platform_manifest: aborts on a single-platform tag (not an index)" {
+  for arch in amd64 arm64; do
+    run require_platform_manifest "$arch" single_platform:1.0
+    [ "$status" -eq 1 ]
+    [ "$output" = "single_platform:1.0 has no linux/$arch manifest; Tent must be published as a multi-arch tag." ]
+  done
+  refute_logged_prefix "docker pull"
+}
+
 @test "require_platform_manifest: a missing tag fails with the inspect error only" {
   run require_platform_manifest arm64 missing:1.0
   [ "$status" -eq 1 ]

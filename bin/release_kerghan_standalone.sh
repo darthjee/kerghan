@@ -58,27 +58,31 @@ function login() {
 # Prints the digest(s) of the linux/<arch> manifest(s) of <image>: the matching
 # entries of an index / manifest list (variant ignored, so arm64/v8 matches and
 # unknown/unknown attestations never do) or, for a single-platform manifest,
-# its own digest.
+# its own digest (nothing when the optional third argument is `index-only`).
 function platform_digest() {
   local arch=$1
   local image=$2
+  local mode=${3:-}
 
   docker buildx imagetools inspect "$image" --format '{{json .Manifest}}' \
-    | jq -r --arg a "$arch" '
+    | jq -r --arg a "$arch" --arg mode "$mode" '
         if .manifests
         then [.manifests[] | select(.platform.os == "linux" and .platform.architecture == $a) | .digest]
+        elif $mode == "index-only"
+        then []
         else [.digest]
         end | .[]'
 }
 
-# Fails unless <image> publishes a linux/<arch> manifest. A tag that cannot be
-# inspected at all fails with the inspect error instead of this message.
+# Fails unless <image> is a multi-arch tag with a linux/<arch> manifest: a
+# single-platform manifest names no platform, so it never counts. A tag that
+# cannot be inspected at all fails with the inspect error instead of this message.
 function require_platform_manifest() {
   local arch=$1
   local image=$2
   local digests
 
-  digests=$(platform_digest "$arch" "$image") || exit 1
+  digests=$(platform_digest "$arch" "$image" index-only) || exit 1
 
   if ! echo "$digests" | grep -qE '^sha256:[0-9a-f]{64}$'; then
     echo "$image has no linux/$arch manifest;" \
