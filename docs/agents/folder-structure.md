@@ -31,7 +31,7 @@
 | `src/app.module.ts` | Root module — see `docs/agents/architecture/backend.md` |
 | `src/core/` | Core layer: JWT Guard, `@Public()` decorator, CacheToken service, `LazyModuleLoader` wrapper, `tests/` |
 | `src/database/` | TypeORM `DataSource` config + `migrations/` (`<timestamp>-<module>-<action>.ts`) |
-| `src/health/` | `GET /health.json` controller |
+| `src/health/` | Public probes `GET /health.json` (identity and liveness) and `GET /ready.json` (readiness) — see `docs/agents/architecture/backend/request-pipeline.md` |
 | `src/auth/` | Auth module — see `docs/agents/modules/auth.md` |
 | `src/mail/` | Mail module — always-on, no routes/entities; filesystem email templates live under `mail/templates/` — see `docs/agents/modules/mail.md` |
 | `src/integrations/` | Integrations module — labelled, encrypted GitHub credentials and the exported `IntegrationsGithubService` — see `docs/agents/modules/integrations.md` |
