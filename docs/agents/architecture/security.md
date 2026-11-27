@@ -119,8 +119,12 @@ attack.
 ### Rules for future changes
 
 - **No state change over `GET`** (or `HEAD`/`OPTIONS`). Those methods skip `OriginGuard`. Today
-  the only `GET` routes are the public `/health.json` and `/ready.json` probes; `/ready.json`
-  exposes only per-check `up`/`down` states, never error details.
+  the only `GET` routes are the public `/health.json` and `/ready.json` probes.
+- **The probes expose only `app`, `status`, `version` and per-check `up`/`down` states**
+  ([Health probes](./backend/request-pipeline.md#health-probes)): never a host, an error message,
+  a stack trace or a credential. Publishing the release semver on an unauthenticated route is by
+  design: the repository is open source and the release is already public (README, image tags,
+  installer). Hardening Tent's `Server` / `X-Powered-By` headers is out of scope here.
 - **Don't relax the cookies**: `access_token` and `refresh_token` stay `httpOnly` + `Secure` +
   `SameSite=Strict`, except the one documented opt-out of `Secure` above
   (`KERGHAN_COOKIE_SECURE=false` or `loopback`, plain-HTTP standalone only; never set it on a

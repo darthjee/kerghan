@@ -25,6 +25,17 @@ describe('FakeWorkersService', () => {
     workers.register('test.job', RecordingJob, { service: 'injected' });
   });
 
+  it('reports itself running by default', () => {
+    expect(workers.isRunning()).toBe(true);
+  });
+
+  it('answers whatever running is set to, also after a reset', () => {
+    workers.running = false;
+
+    expect(workers.isRunning()).toBe(false);
+    expect(workers.reset().isRunning()).toBe(false);
+  });
+
   it('records registrations and every enqueue call, without running anything', () => {
     const id = workers.enqueue('test.job', { linkId: 4 });
 

@@ -28,6 +28,7 @@ export type JobClass = new (params?: JobParams) => Job;
 export class WorkersService implements OnModuleInit, OnApplicationBootstrap, OnApplicationShutdown {
   #engine?: Engine;
   #run?: Promise<void>;
+  #running = false;
 
   /**
    * @param {WorkersConfig} config - The pool, retry and drain values.
@@ -57,17 +58,24 @@ export class WorkersService implements OnModuleInit, OnApplicationBootstrap, OnA
 
   /**
    * Starts the engine without awaiting it. A crash is logged (error class
-   * only) and the engine is never restarted.
+   * only) and the engine is never restarted. The pool counts as running until
+   * the engine run settles, whether it crashes or exits cleanly.
    * @returns {void}
    */
   onApplicationBootstrap(): void {
     this.#engine = new Engine({ keepAlive: true, sleepMs: this.config.sleepMs });
-    this.#run = this.#engine.start().catch((error: unknown) => {
-      this.logger.error('workers engine crashed', {
-        context: 'WorkersService',
-        errorClass: error instanceof Error ? error.constructor.name : typeof error,
+    this.#run = this.#engine
+      .start()
+      .catch((error: unknown) => {
+        this.logger.error('workers engine crashed', {
+          context: 'WorkersService',
+          errorClass: error instanceof Error ? error.constructor.name : typeof error,
+        });
+      })
+      .finally(() => {
+        this.#running = false;
       });
-    });
+    this.#running = true;
   }
 
   /**
@@ -75,6 +83,7 @@ export class WorkersService implements OnModuleInit, OnApplicationBootstrap, OnA
    * @returns {Promise<void>} Resolves once drained or the timeout passes.
    */
   async onApplicationShutdown(): Promise<void> {
+    this.#running = false;
     this.#engine?.stop();
     await this.#run;
     await this.#drain();
@@ -100,6 +109,15 @@ export class WorkersService implements OnModuleInit, OnApplicationBootstrap, OnA
    */
   enqueue(name: string, params: Record<string, unknown> = {}): string {
     return JobRegistry.enqueue(name, params).id;
+  }
+
+  /**
+   * Tells whether the engine is running: started on bootstrap, its run not yet
+   * settled and shutdown not begun. Says nothing about queues or jobs.
+   * @returns {boolean} `true` while the engine is running.
+   */
+  isRunning(): boolean {
+    return this.#running;
   }
 
   /**

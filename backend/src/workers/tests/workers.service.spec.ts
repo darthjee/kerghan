@@ -131,6 +131,89 @@ describe('WorkersService', () => {
     });
   });
 
+  describe('isRunning', () => {
+    const settle = () => new Promise((resolve) => setImmediate(resolve));
+
+    it('is false before bootstrap, also once the registries are built', () => {
+      const { service } = build();
+
+      expect(service.isRunning()).toBe(false);
+      service.onModuleInit();
+      expect(service.isRunning()).toBe(false);
+    });
+
+    it('is true after bootstrap, while the engine runs', async () => {
+      const { service } = build();
+      service.onModuleInit();
+
+      service.onApplicationBootstrap();
+      await settle();
+
+      expect(service.isRunning()).toBe(true);
+      await service.onApplicationShutdown();
+    });
+
+    it('is false once the engine crashes, logging the crash once', async () => {
+      const { service, logger } = build();
+      jest.spyOn(Engine.prototype, 'start').mockRejectedValue(new TypeError('secret detail'));
+      service.onModuleInit();
+
+      service.onApplicationBootstrap();
+      await settle();
+
+      expect(service.isRunning()).toBe(false);
+      expect(logger.error).toHaveBeenCalledTimes(1);
+      expect(logger.error).toHaveBeenCalledWith('workers engine crashed', {
+        context: 'WorkersService',
+        errorClass: 'TypeError',
+      });
+    });
+
+    it('is false once the engine run resolves', async () => {
+      const { service, logger } = build();
+      jest.spyOn(Engine.prototype, 'start').mockResolvedValue(undefined);
+      service.onModuleInit();
+
+      service.onApplicationBootstrap();
+      await settle();
+
+      expect(service.isRunning()).toBe(false);
+      expect(logger.error).not.toHaveBeenCalled();
+    });
+
+    it('is false as soon as shutdown begins, before the engine run settles', async () => {
+      const { service } = build();
+      const run = done();
+      jest.spyOn(Engine.prototype, 'start').mockReturnValue(run.promise);
+      service.onModuleInit();
+      service.onApplicationBootstrap();
+      expect(service.isRunning()).toBe(true);
+
+      const shutdown = service.onApplicationShutdown();
+
+      expect(service.isRunning()).toBe(false);
+      run.resolve();
+      await shutdown;
+    });
+
+    it('is false during the drain of a busy worker', async () => {
+      const { service } = build({ drainTimeoutMs: 5000 });
+      service.onModuleInit();
+      service.onApplicationBootstrap();
+      const gate = done();
+      service.register('job', ThrowawayJob);
+      service.enqueue('job', { gate });
+      await new Promise((resolve) => setTimeout(resolve, 20));
+
+      const shutdown = service.onApplicationShutdown();
+
+      expect(WorkersRegistry.hasBusyWorker()).toBe(true);
+      expect(service.isRunning()).toBe(false);
+      gate.resolve();
+      await shutdown;
+    });
+  });
+
   it('runs a registered job end to end', async () => {
     const { service } = build({ sleepMs: 1 });
     service.onModuleInit();

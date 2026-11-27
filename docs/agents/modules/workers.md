@@ -32,11 +32,12 @@ repository sync launched by a request. This module only provides the pool
    All idempotent, so a second call does not throw.
 2. `onApplicationBootstrap` — builds the `Engine` (`keepAlive: true`, configured `sleepMs`) and
    starts it **without awaiting**. A rejecting engine is logged once as `workers engine crashed`
-   (`error`, `context: 'WorkersService'`, `errorClass` only) and is **never restarted**.
-3. `onApplicationShutdown` — `engine.stop()`, awaits the run promise, then polls
-   `WorkersRegistry.hasBusyWorker()` every 100 ms until no worker is busy or the fixed 10 s drain
-   timeout passes. On timeout it logs a `warn` (`workers drain timed out`, no job data) and
-   carries on.
+   (`error`, `context: 'WorkersService'`, `errorClass` only) and is **never restarted**. The pool
+   counts as running from this start until the run promise settles (crash or clean exit).
+3. `onApplicationShutdown` — marks the pool as not running first, then `engine.stop()`, awaits
+   the run promise, then polls `WorkersRegistry.hasBusyWorker()` every 100 ms until no worker is
+   busy or the fixed 10 s drain timeout passes. On timeout it logs a `warn`
+   (`workers drain timed out`, no job data) and carries on.
 
 `main.ts` calls `app.enableShutdownHooks()`; without it the drain never runs on SIGTERM.
 
@@ -46,6 +47,19 @@ repository sync launched by a request. This module only provides the pool
   (`JobFactory.build`). `attributes` are injected into every built job and may carry services.
 - `enqueue(name, params?)` — builds a job with the registered factory, enqueues it and returns
   its id.
+- `isRunning()` — `true` only while the engine is running: `false` before
+  `onApplicationBootstrap`, after the run promise settles (crash or clean exit) and from the start
+  of `onApplicationShutdown`. It says nothing about queues, jobs or failures.
+
+### Health dependency
+
+The health probes (`backend/src/health/`) consume this module: `HealthService` injects
+`WorkersService` and calls `isRunning()` for the `checks.workers` entry of `/ready.json` (see
+[Health probes](../architecture/backend/request-pipeline.md#health-probes)). It is acceptable
+under the [modular pattern](../architecture/modular-pattern.md) because it is a synchronous
+question answered through the exported service (direct DI), read-only, one boolean, with no job
+data. `health` never reads the `deku-swarm` registries, and nothing in this module depends on
+`health`.
 
 ## Configuration
 
@@ -78,7 +92,8 @@ without `_fail`, so a wait never consumes an attempt. See
 ## Edge cases
 
 - **Shutdown drain** — bounded (10 s); jobs still running after that are abandoned.
-- **Engine crash** — logged, never restarted; queued jobs stop being processed until a restart.
+- **Engine crash** — logged, never restarted; queued jobs stop being processed until a restart,
+  and `isRunning()` stays `false` (`/ready.json` reports `degraded`).
 - **Dead jobs** — a job that exhausts its attempts moves to `dead` and stays in memory.
 - **Unbounded growth** — `finished` and `dead` collections are never pruned; pruning is
   deferred.
@@ -109,7 +124,8 @@ without `_fail`, so a wait never consumes an attempt. See
 
 Unit specs under `backend/src/workers/tests/`, no database. `FakeWorkersService`
 (`tests/support/fake-workers.service.ts`) records `register` and `enqueue` and runs the captured
-jobs on demand (`runAll()`), for specs of the modules that use the pool; a few `(engine)` specs run
+jobs on demand (`runAll()`), for specs of the modules that use the pool (its `isRunning()`
+answers a settable `running`, `true` by default); a few `(engine)` specs run
 the real service (`backend/src/issues/tests/issues-reconcile.engine.spec.ts`). The three `deku-swarm` singletons
 are global, so every spec calls `resetDekuSwarm()`
 (`tests/support/reset-deku-swarm.ts`) in `afterEach`; the same file has a throwaway

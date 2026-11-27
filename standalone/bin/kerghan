@@ -2336,24 +2336,33 @@ diag_line() {
   printf '  %-6s %s\n' "$1" "$2"
 }
 
+# diag_version <whitespace-stripped body> - prints " <version>" when the body
+# carries a "version" of the form <n>.<n>.<n>, otherwise nothing: an
+# unvalidated value from the body is never printed.
+diag_version() {
+  local rest version semver='^[0-9]+\.[0-9]+\.[0-9]+$'
+  case "$1" in
+    *'"version":"'*'"'*) ;;
+    *) return 0 ;;
+  esac
+  rest="${1#*\"version\":\"}"
+  version="${rest%%\"*}"
+  [[ "$version" =~ $semver ]] || return 0
+  printf ' %s' "$version"
+}
+
 # diag_classify <url> - probes <url>/health.json and sets DIAG_ID (kerghan,
-# foreign or none) and DIAG_DESC (what answered, never a foreign body).
-# Kerghan is identified by a 200 with the exact body {"status":"ok"}.
+# kerghan_down, foreign or none) and DIAG_DESC (what answered, never a foreign
+# body). Kerghan is identified by "app":"kerghan" in the body, whatever the
+# status code (a 5xx is kerghan_down: the backend is down), or, for images
+# without that marker, by a 200 with the exact body {"status":"ok"}. Both are
+# matched with whitespace stripped.
 diag_classify() {
   local url="$1" body server=""
   probe_http "$url/health.json"
   body="${PROBE_BODY//[[:space:]]/}"
   [ -z "$PROBE_SERVER" ] || server=" (Server: $PROBE_SERVER)"
   case "$PROBE_STATUS" in
-    200)
-      if [ "$body" = '{"status":"ok"}' ]; then
-        DIAG_ID=kerghan
-        DIAG_DESC="Kerghan$server"
-        return 0
-      fi
-      DIAG_ID=foreign
-      DIAG_DESC="200 from another service$server"
-      ;;
     timeout)
       DIAG_ID=none
       DIAG_DESC="no answer (timeout)"
@@ -2367,6 +2376,32 @@ diag_classify() {
       DIAG_DESC="request failed"
       ;;
     *)
+      case "$body" in
+        *'"app":"kerghan"'*)
+          case "$PROBE_STATUS" in
+            2??)
+              DIAG_ID=kerghan
+              DIAG_DESC="Kerghan$(diag_version "$body")$server"
+              ;;
+            5??)
+              DIAG_ID=kerghan_down
+              DIAG_DESC="Kerghan proxy answered $PROBE_STATUS, backend down$server"
+              ;;
+            *)
+              DIAG_ID=kerghan
+              DIAG_DESC="Kerghan$(diag_version "$body") answered $PROBE_STATUS$server"
+              ;;
+          esac
+          return 0
+          ;;
+        '{"status":"ok"}')
+          if [ "$PROBE_STATUS" = "200" ]; then
+            DIAG_ID=kerghan
+            DIAG_DESC="Kerghan$server"
+            return 0
+          fi
+          ;;
+      esac
       DIAG_ID=foreign
       DIAG_DESC="$PROBE_STATUS from another service$server"
       ;;
@@ -2549,7 +2584,14 @@ EOF
         diag_line "[ok]" "$pub_url/health.json   $DIAG_DESC"
         probe_http "$pub_url/ready.json"
         case "$PROBE_STATUS" in
-          200) diag_line "[ok]" "$pub_url/ready.json   ready" ;;
+          200)
+            case "${PROBE_BODY//[[:space:]]/}" in
+              *'"status":"degraded"'*)
+                diag_line "[warn]" "$pub_url/ready.json   degraded (workers)"
+                ;;
+              *) diag_line "[ok]" "$pub_url/ready.json   ready" ;;
+            esac
+            ;;
           503)
             diag_line "[FAIL]" "$pub_url/ready.json   not ready (database)"
             diag_fail 4 "Kerghan answers but is not ready (database); $logs_hint"
@@ -2560,6 +2602,10 @@ EOF
           diag_classify "$adv_url"
           case "$DIAG_ID" in
             kerghan) diag_line "[ok]" "$adv_url/health.json   $DIAG_DESC" ;;
+            kerghan_down)
+              diag_line "[FAIL]" "$adv_url/health.json   $DIAG_DESC"
+              diag_fail 4 "Kerghan answers but the backend is down; $logs_hint"
+              ;;
             foreign)
               diag_line "[FAIL]" "$adv_url/health.json   $DIAG_DESC"
               if [ "$airplay" = "true" ]; then
@@ -2580,6 +2626,10 @@ EOF
         else
           diag_line "[ok]" "advertised URL is the published address"
         fi
+        ;;
+      kerghan_down)
+        diag_line "[FAIL]" "$pub_url/health.json   $DIAG_DESC"
+        diag_fail 4 "Kerghan answers but the backend is down; $logs_hint"
         ;;
       foreign)
         diag_line "[FAIL]" "$pub_url/health.json   $DIAG_DESC"

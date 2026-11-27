@@ -34,17 +34,38 @@ specs) pass. See [`security.md`](../security.md#csrf) for the decision table and
 
 `health/health.controller.ts` exposes two public, `never`-cached probes:
 
-| Route | Purpose | Success | Failure |
+| Route | Purpose | HTTP | Body |
 |---|---|---|---|
-| `GET /health.json` | liveness — the process is up; touches no dependency | `200 { "status": "ok" }` | — |
-| `GET /ready.json` | readiness — dependencies are reachable | `200 { "status": "ok", "checks": { "database": "up" } }` | `503 { "status": "error", "checks": { "database": "down" } }` |
+| `GET /health.json` | identity and liveness — the process is up; touches no dependency | `200` | `{ "app": "kerghan", "status": "ok", "version": "<semver>" }` |
+| `GET /ready.json` | readiness — every component is up | `200` | `{ "app": "kerghan", "status": "ok", "version": "<semver>", "checks": { "database": "up", "workers": "up" } }` |
+| `GET /ready.json` | readiness — a non-fatal component is down, the backend still serves | `200` | `{ "app": "kerghan", "status": "degraded", "version": "<semver>", "checks": { "database": "up", "workers": "down" } }` |
+| `GET /ready.json` | readiness — the database is down (`workers` is still reported as measured) | `503` | `{ "app": "kerghan", "status": "error", "version": "<semver>", "checks": { "database": "down", "workers": "up" } }` |
 
-The readiness logic lives in `health/health.service.ts` (`HealthService#checkReadiness`), which
-runs `SELECT 1` through the injected TypeORM `DataSource`. Only the database is checked — SMTP
-and the GitHub API are deliberately not. The body never carries error messages, hosts or stack
-traces; a failed check is logged through `LoggerService` instead. The `503` is set on the
-response (`@Res({ passthrough: true })`) rather than thrown, so `HttpExceptionFilter` does not
-reshape it into the standard error body.
+Both bodies are built by `health/health.service.ts` (`HealthService#liveness` and
+`HealthService#checkReadiness`):
+
+- `app` is always `"kerghan"`. It is the identity marker: a client checks `app`, not the status
+  code or the `Server` header.
+- `version` is the release semver, read once at boot from `backend/package.json`. When that file
+  cannot be read, or holds no non-empty `version`, the key is omitted, one warning is logged and
+  the probe answers normally.
+- `status` is derived from `checks`: `error` when `database` is not `up`, else `degraded` when
+  `workers` is not `up`, else `ok`. Only `error` answers `503`. `/health.json` is `200` whenever
+  the backend answers at all.
+- `checks.database` is `SELECT 1` through the injected TypeORM `DataSource`.
+- `checks.workers` is [`WorkersService#isRunning()`](../../modules/workers.md#workersservice-contract):
+  `up` only while the worker engine is running. A crashed or exited engine, and a shutdown
+  (including its drain), read `down`. Queue depth and job failures are not health.
+- SMTP and the GitHub API are deliberately not checked.
+- Keys are additive only: `app`, `status` and `version` keep their names and meanings, and a new
+  component is a new `checks` key.
+- `status: "down"` and the check state `"unknown"` are reserved for the Tent fallback for an
+  unreachable backend (#613). The backend never emits them.
+
+No body carries error messages, hosts, stack traces or credentials; a failed check is logged
+through `LoggerService` instead (the `workers` warning once per transition to `down`). The `503`
+is set on the response (`@Res({ passthrough: true })`) rather than thrown, so
+`HttpExceptionFilter` does not reshape it into the standard error body.
 
 ## JWT Guard
 
