@@ -39,8 +39,8 @@ through `docker-compose run` or the relevant image.
 | `kerghan_app` | `darthjee/dev_kerghan` | 3030 | Backend dev server |
 | `kerghan_tests` | `darthjee/dev_kerghan` | — | Backend test runner |
 | `kerghan_fe` | built from `dockerfiles/vite_kerghan/` | 3010 | Vite dev server / build |
-| `kerghan_proxy` | `darthjee/tent:0.10.1` | 3000 | Reverse proxy (single entry point) |
-| `proxy_lint` | `darthjee/tent-test:0.10.4` | — | PSR-12 PHPCS check for `proxy/` (ruleset: root `phpcs.xml`) |
+| `kerghan_proxy` | `darthjee/tent:1.3.0` | 3000 | Reverse proxy (single entry point) |
+| `proxy_lint` | `darthjee/tent-test:1.3.0` | — | PSR-12 PHPCS check for `proxy/` (ruleset: root `phpcs.xml`) |
 | `kerghan_mysql` | `mysql:8.4.11` | configurable | Database |
 | `kerghan_navi` | `darthjee/navi-hey:1.5.1` | 3100 | Cache warmer (local) |
 | `kerghan_phpmyadmin` | `phpmyadmin/phpmyadmin` | 3050 | DB admin UI |

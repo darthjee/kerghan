@@ -12,14 +12,14 @@
 | `docker_volumes/` | Bind-mount targets for local dev (gitignored contents) |
 | `docs/agents/` | Agent-facing documentation, hub + per-topic pages (this directory) |
 | `bin/` | Language-agnostic CI shell scripts (`image.sh`, `deploy_frontend.sh`, `release_kerghan.sh`, `release_kerghan_standalone.sh`, `release_kerghan_assets.sh`) |
-| `scripts/` | Release shell scripts (`bump_version.sh`, `bump_vault.sh`, `deploy.sh`, `render.sh`, `wake_navi.sh`, `warm_navi_cache.sh`) and their bats suite (`scripts/test/`, which also covers `bin/release_kerghan_standalone.sh`) |
+| `scripts/` | Release shell scripts (`bump_version.sh`, `bump_vault.sh`, `bump_tent.sh`, `deploy.sh`, `render.sh`, `wake_navi.sh`, `warm_navi_cache.sh`) and their bats suite (`scripts/test/`, which also covers `bin/release_kerghan_standalone.sh`) |
 | `.circleci/` | CI pipeline config (validate with `docker-compose run --rm circleci config validate`) |
 | `.claude/agents/` | Specialist AI agent definitions |
 | `.github/` | Commit/PR templates + `copilot-instructions.md` |
 | `navi/` | Navi cache-warmer config |
 | `Makefile` | Dev command interface |
 | `docker-compose.yml` | Full stack service definitions (includes a `circleci` service running the CircleCI CLI to validate `.circleci/config.yml`) |
-| `version` | Base-image version registry |
+| `version` | Base-image version registry, plus the Tent pin (`tent=`, see `docs/agents/architecture/infra/ci-setup.md`) |
 | `.env.dev.sample`, `.env`, `.env.prod` | Environment variable files |
 | `.codacy.yml`, `.gitguardian.yaml`, `.trivyignore` | Static analysis / secret-scanning / vulnerability-scan config |
 

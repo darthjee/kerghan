@@ -11,19 +11,19 @@ The CircleCI job table and per-job details. Part of the [infra architecture hub]
 | `backend_checks` | `darthjee/circleci_kerghan-base:0.1.2` | every push | `yarn_project` instance (`dir: backend`, `script: lint`): backend ESLint |
 | `jasmine` | `darthjee/circleci_node:0.2.1` | every push | `yarn_project` instance (`dir: frontend`, `script: coverage`, `upload_coverage: true`): frontend test suite + coverage; uploads a partial Codacy coverage report afterward (best-effort, non-blocking) |
 | `frontend-checks` | `darthjee/circleci_node:0.2.1` | every push | `yarn_project` instance (`dir: frontend`, `script: lint`): frontend ESLint |
-| `proxy_extension_tests` | `darthjee/tent-test:1.0.3` | every push | PHPUnit tests for `proxy/extension/` |
+| `proxy_extension_tests` | `darthjee/tent-test:1.3.0` | every push | PHPUnit tests for `proxy/extension/` |
 | `coverage-final` | `darthjee/circleci_kerghan-base:0.1.2` | every push | Finalizes the aggregated Codacy coverage report once `backend_tests`/`jasmine`'s partial uploads land (best-effort, non-blocking) |
 | `release-image` | machine (multi-arch: amd64 + arm64) | every push (no-op unless tag) | Publishes one of the 4 base images to Docker Hub via `bin/image.sh`; instantiated through a single workflow `matrix` (4 images × 2 archs = 8 jobs) — see below |
 | `release-kerghan` | machine (`ubuntu-2204:current`, multi-arch: amd64 + arm64) | tag only | Builds and pushes `darthjee/kerghan:<tag>` and `:latest` as one multi-arch manifest via `bin/release_kerghan.sh release` (buildx, `docker-container` builder) — see below |
 | `release-kerghan-standalone` | machine (`ubuntu-2204:current`, multi-arch: amd64 + arm64) | tag only | Requires `release-kerghan`. Publishes `darthjee/kerghan-standalone` online and offline via `bin/release_kerghan_standalone.sh release`; smoke-tests the offline image before moving `latest`/`latest-offline` — see below |
 | `release-kerghan-assets` | `cimg/base:stable` | tag only | Requires `release-kerghan-standalone`. Publishes the client assets (`kerghan`, `install.sh`, `config.example`, `SHA256SUMS`) to the GitHub release of the tag via `bin/release_kerghan_assets.sh release` — see below |
 | `standalone_tests` | `bats/bats:1.11.0` | every push | bats suite for the standalone client and installer (`bats standalone/test`) |
-| `scripts_tests` | `bats/bats:1.11.0` | every push | bats suite for the Render deploy scripts and `bin/release_kerghan_standalone.sh` (`save_image`) (`bats scripts/test`); locally `docker-compose run --rm scripts_tests` |
+| `scripts_tests` | `bats/bats:1.11.0` | every push | bats suite for the Render deploy scripts, `scripts/bump_tent.sh` and `bin/release_kerghan_standalone.sh` (`bats scripts/test`), then `scripts/bump_tent.sh --check` (see [Tent pin](ci-setup.md#tent-pin)); locally `docker-compose run --rm scripts_tests` |
 | `build-and-release` | machine (`ubuntu-2204:current`, for `curl --fail-with-body`) | tag only | Requires `release-kerghan`. Checks the thin Render Dockerfile is `FROM darthjee/kerghan:<tag>`, moves the Render service branch to the tag and triggers a deploy (`scripts/deploy.sh deploy`), blocks until it reports "live" — see "Render deploy" |
-| `upload_proxy_files` | `darthjee/tent:1.0.3` | tag only | Uploads Tent proxy runtime to the SSH deploy host's staging dir |
+| `upload_proxy_files` | `darthjee/tent:1.3.0` | tag only | Uploads Tent proxy runtime to the SSH deploy host's staging dir |
 | `upload_fe_files` | `darthjee/vite_kerghan-base:0.1.2` | tag only | Builds the Vite frontend, uploads the static output to the staging dir |
-| `upload_extension` | `darthjee/tent:1.0.3` | tag only | Uploads the proxy PHP extension (test files stripped) |
-| `copy_proxy_configuration` | `darthjee/tent:1.0.3` | tag only | Uploads prod proxy config + restores host-only state (`locals.php`, `.htaccess`) |
+| `upload_extension` | `darthjee/tent:1.3.0` | tag only | Uploads the proxy PHP extension (test files stripped) |
+| `copy_proxy_configuration` | `darthjee/tent:1.3.0` | tag only | Uploads prod proxy config + restores host-only state (`locals.php`, `.htaccess`) |
 | `release` | `darthjee/vite_kerghan-base:0.1.2` | tag only | Atomic swap: only runs once every upload/build job above has succeeded |
 
 ### `backend_db_tests` — the DB-backed tier
