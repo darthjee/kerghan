@@ -12,8 +12,10 @@ this page only covers how Kerghan configures it.
 `configure.php` requires rule files in order — order matters, later rules act as catch-alls:
 
 1. `rules/frontend.php` — dev: proxies to Vite (HMR); prod: serves static `dist/` output
-2. `rules/backend.php` — routes every `*.json`-suffixed URL to the NestJS backend, with cache
-   middlewares (`SetClientIpMiddleware`, `CacheCleanupMiddleware`, `CacheStalenessMiddleware`)
+2. `rules/backend.php` — routes every `*.json`-suffixed URL to the NestJS backend, with
+   `CanonicalHostHeaderMiddleware` in `prependMiddlewares` (it must run before Tent's own `Host`
+   rename) and `SetClientIpMiddleware`, `CacheCleanupMiddleware`, `CacheStalenessMiddleware` in
+   `middlewares`
 3. `rules/redirects.php` — catch-all: `GET /path → /#/path` (302) — **must stay last**
 
 There is no `rules/admin.php` — Kerghan has no admin UI (see `docs/agents/product.md`).
@@ -37,6 +39,9 @@ differ in where hosts/paths come from:
 
 - `CacheControlMiddleware` — sets an explicit `Cache-Control: max-age=<N>` header (used by the
   static-serving prod frontend rule).
+- `CanonicalHostHeaderMiddleware` — turns every casing of the client's `Host` header into
+  `Host`, so Tent's case-sensitive rename can't be bypassed (see
+  [Tent behaviours](./security.md#tent-behaviours-the-security-model-relies-on), item 2).
 - `SetClientIpMiddleware` — overwrites `X-Forwarded-For` with Tent's own view of the client IP,
   so the backend can trust it.
 - `TestHeaderMiddleware` — sample middleware demonstrating the extension pattern.
@@ -65,8 +70,10 @@ through its cache classes (`public`, `user-scoped`, `never`), declared with `@Ca
 
 The same rule also carries the freshness and invalidation middlewares:
 
-- `CacheStalenessMiddleware` (`maxAgeSeconds => 10`) serves entries older than 10s while
-  refreshing them in the background. The backend's `PUBLIC_MAX_AGE_SECONDS` mirrors this value.
+- `CacheStalenessMiddleware` (`maxAgeSeconds => 10`) is meant to serve entries older than 10s
+  while refreshing them in the background, but on current Tent a cache hit never reaches it (see
+  [Freshness](./caching.md#freshness)). The backend's `PUBLIC_MAX_AGE_SECONDS` mirrors this
+  value.
 - `CacheCleanupMiddleware` (`clear => ['collection','entity']`) clears the matching collection
   and entity cache entries on any POST/PATCH/PUT/DELETE.
 

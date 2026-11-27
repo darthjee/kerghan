@@ -71,12 +71,12 @@ Both targets come from `dockerfiles/kerghan_standalone/Dockerfile`, built with
 1. **Save the inner images.** For each architecture (amd64, then arm64) it clears
    `standalone/images/<arch>/`, then pulls each image by its `linux/<arch>` manifest digest and
    `docker save`s
-   `darthjee/kerghan:<tag>`, `mysql:8.4.11`, the Tent image (`darthjee/tent:1.0.3` for amd64,
-   `darthjee/tent:1.0.3-arm64` for arm64) and, for the #469 migration only, `mysql:9.3.0`, plus the log collector image `docker:27.5.1-cli` (it must match `LOGS_IMAGE` in
-   the Dockerfile's `.env` step), as
+   `darthjee/kerghan:<tag>`, `mysql:8.4.11`, `darthjee/tent` (see [Tent version](#tent-version))
+   and, for the #469 migration only, `mysql:9.3.0`, plus the log collector image
+   `docker:27.5.1-cli` (it must match `LOGS_IMAGE` in the Dockerfile's `.env` step), as
    `kerghan.tar`, `mysql.tar`, `tent.tar`, `mysql-legacy.tar` and `docker-cli.tar`. The digest comes from
    `docker buildx imagetools inspect` (the matching entry of the index, or the manifest's own digest
-   for a single-platform image such as Tent). The pulled `repo@digest` is re-tagged to `repo:tag`,
+   for a single-platform image). The pulled `repo@digest` is re-tagged to `repo:tag`,
    checked with `docker image inspect` (the job fails if the architecture does not match) and
    saved. Pulling by digest is needed because the containerd image store keeps multi-platform
    images under one tag: a pull by tag with `--platform` adds to the local image, and an inspect
@@ -97,6 +97,24 @@ Both targets come from `dockerfiles/kerghan_standalone/Dockerfile`, built with
 The versioned tags are pushed before the smoke test, because a multi-arch manifest must be
 pushed before it can be pulled. If the smoke test fails, `<tag>` and `<tag>-offline` stay
 published and `latest` / `latest-offline` are not moved.
+
+### Tent version
+
+The `tent=<X.Y.Z>` line of the root `version` file is the single source of truth for both
+`darthjee/tent` and `darthjee/tent-test`. The release script and the standalone Dockerfile read it
+directly, so neither holds a literal Tent version.
+
+Tent is published as one multi-arch tag for amd64 and arm64: the release saves that same tag once
+per architecture, each time from that platform's digest. An empty or missing `tent=` entry stops
+the release before any Docker command. Before each Tent save, `require_platform_manifest` fails
+the release, naming the image and the architecture, when the tag has no `linux/<arch>` manifest or
+is a single-platform tag. A tag that cannot be inspected at all fails with the inspect error
+instead.
+
+CircleCI executor images, `docker-compose.yml` and some docs cannot read a file, so they hold
+copies of the version, owned by [`scripts/bump_tent.sh`](ci-setup.md#tent-pin). The
+`upload_proxy_files` job copies the Tent runtime out of its own job image to the production host,
+so a bump also reaches the live proxy on the next release tag.
 
 ## `release-kerghan-assets` — client assets on the GitHub release
 

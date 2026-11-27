@@ -25,6 +25,7 @@ One line per project-wide mechanism; the linked doc owns the rule and is what yo
 - **GitHub credentials**: stored encrypted inside Integrations, used only by the backend, and no endpoint returns them beyond `secretHint` — [security.md](../../docs/agents/architecture/security.md#github-credentials-stay-in-the-backend), [integrations module](../../docs/agents/modules/integrations.md).
 - **Cache classes and `X-Skip-Cache`**: [caching.md](../../docs/agents/architecture/caching.md); the `@CachePolicy` audit belongs to the `cache` agent.
 - **Tent proxy rules**: [proxy.md](../../docs/agents/architecture/proxy.md).
+- **Tent behaviours the security model relies on** (forwarded headers, `Host` and its workaround middleware, client IP, shared cache, `Set-Cookie`): [security.md](../../docs/agents/architecture/security.md#tent-behaviours-the-security-model-relies-on).
 - **Data layer**: TypeORM, see [backend.md](../../docs/agents/architecture/backend.md).
 
 ## Where the rules live (discovery rule)

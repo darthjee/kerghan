@@ -7,9 +7,9 @@
  * rules, same middlewares, same CSP. Only locals.php differs (committed here,
  * no secrets). No Navi and no /admin in standalone.
  *
- * The custom middlewares used by the rules (SetClientIpMiddleware,
- * CacheControlMiddleware, SetResponseHeadersMiddleware) come from
- * proxy/extension/, copied into the image at build time (see
+ * The custom middlewares used by the rules (CanonicalHostHeaderMiddleware,
+ * SetClientIpMiddleware, CacheControlMiddleware, SetResponseHeadersMiddleware)
+ * come from proxy/extension/, copied into the image at build time (see
  * dockerfiles/kerghan_standalone/Dockerfile).
  */
 

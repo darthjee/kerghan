@@ -31,10 +31,10 @@ docker-compose run proxy_tests
 docker-compose run --rm proxy_lint
 
 # Lint a single PHP file (one-off)
-docker run --rm -v "$PWD":/repo darthjee/tent:0.10.1 sh -c 'php -l /repo/proxy/path/to/file.php'
+docker run --rm -v "$PWD":/repo darthjee/tent:1.3.0 sh -c 'php -l /repo/proxy/path/to/file.php'
 
 # Lint all PHP files under proxy/
-docker run --rm -v "$PWD":/repo darthjee/tent:0.10.1 sh -c '
+docker run --rm -v "$PWD":/repo darthjee/tent:1.3.0 sh -c '
   find /repo/proxy -name "*.php" -print0 | xargs -0 -n1 php -l
 '
 ```
@@ -104,7 +104,7 @@ reintroduce that coupling without a product decision backing it.
 Tests live in `proxy/extension/tests/`, mirroring that same structure, using PHPUnit
 (inheriting from `TestCase`).
 
-The `proxy_tests` docker-compose service (image `darthjee/tent-test:0.10.0`, which bundles
+The `proxy_tests` docker-compose service (image `darthjee/tent-test:1.3.0`, which bundles
 PHPUnit) mounts `./proxy/extension` and runs the suite via an explicit `--bootstrap`-qualified
 PHPUnit invocation: `vendor/bin/phpunit --bootstrap
 /var/www/html/extension/tests/bootstrap.php /var/www/html/extension/tests`.
@@ -116,7 +116,7 @@ local-only `proxy_lint` service). Run all proxy checks:
 
 ```bash
 # Lint all PHP files
-docker run --rm -v "$PWD":/repo darthjee/tent:0.10.1 sh -c '
+docker run --rm -v "$PWD":/repo darthjee/tent:1.3.0 sh -c '
   find /repo/proxy -name "*.php" -print0 | xargs -0 -n1 php -l
 '
 

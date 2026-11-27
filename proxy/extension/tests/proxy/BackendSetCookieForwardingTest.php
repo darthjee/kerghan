@@ -19,8 +19,9 @@ use Tent\Tests\Support\StubUpstreamServer;
  * The backend's login sets three cookies (access_token, refresh_token,
  * logged_in) and logoff clears all three, each as its own `Set-Cookie`
  * line. Tent before 1.0.0 emitted response headers with PHP's default
- * `header($line)` (replace = true), so only the last cookie survived; Tent
- * 1.0.3 sends them through `ResponseSender` with replace = false.
+ * `header($line)` (replace = true), so only the last cookie survived; later
+ * releases (still so in 1.3.0) send them through `ResponseSender` with
+ * replace = false.
  *
  * The request goes through the same path as Tent's `index.php`:
  * `RequestProcessor` picks the rule, the `default_proxy` handler forwards it
@@ -30,9 +31,10 @@ use Tent\Tests\Support\StubUpstreamServer;
  * emitter is swapped for a recorder, since PHP's `header()` has no visible
  * effect under the CLI.
  *
- * The rule below mirrors proxy/dev_configuration/rules/backend.php (and its
- * prod twin) with the upstream host pointed at the stub; the configuration
- * folders aren't mounted into proxy_tests, so keep the two in sync.
+ * The rule below mirrors proxy/dev_configuration/rules/backend.php, its prod
+ * twin and standalone/vault/tent/configuration/rules/backend.php, with the
+ * upstream host pointed at the stub. The configuration folders aren't mounted
+ * into proxy_tests, so none of those files is loaded here: keep them in sync.
  *
  * Run via docker-compose:
  *   docker-compose run proxy_tests
@@ -146,6 +148,11 @@ class BackendSetCookieForwardingTest extends TestCase
             ],
             'matchers' => [
                 ['uri' => '.json', 'type' => 'ends_with']
+            ],
+            'prependMiddlewares' => [
+                [
+                    'class' => 'Tent\\Middlewares\\CanonicalHostHeaderMiddleware'
+                ]
             ],
             'middlewares' => [
                 [

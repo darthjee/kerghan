@@ -28,5 +28,5 @@ equivalents — Kerghan doesn't warm the Navi cache from CI yet, see `docs/agent
   `release-kerghan-standalone`, `release-kerghan-assets`, production Dockerfile base selection
   and the shared base Dockerfile.
 - [infra/ci-setup.md](infra/ci-setup.md) — read for the backend/frontend CI setup pattern,
-  validating the CircleCI config locally, scripts, migrations on production boot, and the
-  missing Navi warm-up job.
+  validating the CircleCI config locally, scripts, the Tent pin (`bump_tent.sh`), migrations on
+  production boot, and the missing Navi warm-up job.

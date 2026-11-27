@@ -13,7 +13,7 @@ Part of [Standalone Distribution](../standalone.md). Image tags and versioning, 
 - All of them are multi-arch manifests (amd64 and arm64 under one tag), published to Docker Hub on
   every semver git tag.
 - `<v>` is the app's git semver tag (for example `0.5.0`), not the `version` file, which only
-  tracks the `*-base` images.
+  tracks the `*-base` images and the Tent pin.
 - `darthjee/kerghan-standalone:<v>` (both variants) always runs `darthjee/kerghan:<v>`.
 - The client pins an exact version; `latest` and `latest-offline` exist for convenience only.
 
@@ -24,10 +24,12 @@ Pinned images:
 | `darthjee/vault` (base) | `0.4.0` | multi-arch manifest |
 | `mysql` (inner) | `8.4.11` | multi-arch manifest |
 | `mysql-legacy` (inner, migration only) | `9.3.0` | multi-arch manifest |
-| `darthjee/tent` (inner) | `1.0.3` (amd64), `1.0.3-arm64` (arm64) | separate tags, selected per architecture |
+| `darthjee/tent` (inner) | the `tent=` line of the root `version` file | multi-arch manifest |
 
 Changing a pin is a normal change to the Dockerfile or the inner compose file. A Vault pin change
 must also update `VAULT_VERSION` in `standalone/install.sh`; `scripts/bump_vault.sh <version>` does both.
+Tent is the exception: change it only with `scripts/bump_tent.sh <version>`, then follow
+[Tent pin](../architecture/infra/ci-setup.md#tent-pin), which includes the security recheck.
 
 The CI jobs that build and publish the images and the client assets (`release-kerghan`,
 `release-kerghan-standalone`, `release-kerghan-assets`) are documented in

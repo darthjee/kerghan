@@ -10,6 +10,10 @@
 # The offline stage copies standalone/images/${TARGETARCH}/ into the image, so
 # the inner images (kerghan, mysql, mysql-legacy, tent and the docker-cli log
 # collector tarballs) are saved once per architecture before the build.
+#
+# The Tent version is the `tent=` line of the root `version` file (the script runs
+# from the repository root). It names a single multi-arch tag: the release fails
+# if that tag lacks the manifest of an architecture being saved.
 
 set -euo pipefail
 
@@ -18,7 +22,9 @@ PLATFORMS=linux/amd64,linux/arm64
 ARCHES="amd64 arm64"
 MYSQL_IMAGE=mysql:8.4.11
 MYSQL_LEGACY_IMAGE=mysql:9.3.0
-TENT_IMAGE=darthjee/tent:1.0.3
+# Empty when `version` has no `tent=` entry: rejected by require_tent_version.
+TENT_VERSION=$(grep '^tent=' version | sed -e 's/^tent=//' || true)
+TENT_IMAGE="darthjee/tent:$TENT_VERSION"
 # Log collector image: must match LOGS_IMAGE in the standalone Dockerfile's .env step.
 LOGS_IMAGE=docker:27.5.1-cli
 IMAGES_DIR=standalone/images
@@ -27,6 +33,14 @@ DOCKERFILE=dockerfiles/kerghan_standalone/Dockerfile
 function require_tag() {
   if [ -z "${CIRCLE_TAG:-}" ]; then
     echo "CIRCLE_TAG is empty: $IMAGE is only released on tag builds." >&2
+    exit 1
+  fi
+}
+
+function require_tent_version() {
+  if [ -z "$TENT_VERSION" ]; then
+    echo "The version file has no tent= entry (or it is empty):" \
+      "cannot select the Tent image." >&2
     exit 1
   fi
 }
@@ -41,30 +55,40 @@ function login() {
   echo "$DOCKER_HUB_PASSWORD" | docker login -u "$DOCKER_HUB_USERNAME" --password-stdin
 }
 
-function tent_image_for() {
-  local arch=$1
-
-  if [ "$arch" = "amd64" ]; then
-    echo "$TENT_IMAGE"
-  else
-    echo "$TENT_IMAGE-$arch"
-  fi
-}
-
 # Prints the digest(s) of the linux/<arch> manifest(s) of <image>: the matching
 # entries of an index / manifest list (variant ignored, so arm64/v8 matches and
 # unknown/unknown attestations never do) or, for a single-platform manifest,
-# its own digest.
+# its own digest (nothing when the optional third argument is `index-only`).
 function platform_digest() {
   local arch=$1
   local image=$2
+  local mode=${3:-}
 
   docker buildx imagetools inspect "$image" --format '{{json .Manifest}}' \
-    | jq -r --arg a "$arch" '
+    | jq -r --arg a "$arch" --arg mode "$mode" '
         if .manifests
         then [.manifests[] | select(.platform.os == "linux" and .platform.architecture == $a) | .digest]
+        elif $mode == "index-only"
+        then []
         else [.digest]
         end | .[]'
+}
+
+# Fails unless <image> is a multi-arch tag with a linux/<arch> manifest: a
+# single-platform manifest names no platform, so it never counts. A tag that
+# cannot be inspected at all fails with the inspect error instead of this message.
+function require_platform_manifest() {
+  local arch=$1
+  local image=$2
+  local digests
+
+  digests=$(platform_digest "$arch" "$image" index-only) || exit 1
+
+  if ! echo "$digests" | grep -qE '^sha256:[0-9a-f]{64}$'; then
+    echo "$image has no linux/$arch manifest;" \
+      "Tent must be published as a multi-arch tag." >&2
+    exit 1
+  fi
 }
 
 # Pulls the linux/<arch> manifest of <image> by digest, re-tags it as <image>,
@@ -121,7 +145,8 @@ function save_images() {
     # Exists only for the #469 migration (9.3.0 -> 8.4.11); remove it together
     # with the compose `mysql-legacy` service.
     save_image "$arch" "$MYSQL_LEGACY_IMAGE" mysql-legacy
-    save_image "$arch" "$(tent_image_for "$arch")" tent
+    require_platform_manifest "$arch" "$TENT_IMAGE"
+    save_image "$arch" "$TENT_IMAGE" tent
     save_image "$arch" "$LOGS_IMAGE" docker-cli
   done
 }
@@ -180,6 +205,7 @@ function inspect() {
 
 function release() {
   require_tag
+  require_tent_version
 
   local version=$CIRCLE_TAG
   local repo="$DOCKER_ID_USER/$IMAGE"

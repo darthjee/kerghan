@@ -263,7 +263,7 @@ jobs:
 
   proxy_extension_tests:
     docker:
-      - image: darthjee/tent-test:1.0.3
+      - image: darthjee/tent-test:1.3.0
     working_directory: /home/app/app
     steps:
       - checkout:
@@ -322,9 +322,10 @@ jobs:
           name: Tests
           command: KERGHAN_TEST_BASH32=1 bats standalone/test
 
-  # bats suite for scripts/ (Render deploy: deploy.sh/render.sh, and the standalone release
-  # script bin/release_kerghan_standalone.sh), same bats/bats image as
+  # bats suite for scripts/ (Render deploy: deploy.sh/render.sh, bump_tent.sh, and the
+  # standalone release script bin/release_kerghan_standalone.sh), same bats/bats image as
   # standalone_tests plus jq, which the deploy scripts need (mirrors dockerfiles/scripts_tests).
+  # Also fails when a copy of the Tent pin differs from the `version` file.
   scripts_tests:
     docker:
       - image: bats/bats:1.11.0
@@ -336,6 +337,9 @@ jobs:
       - run:
           name: Tests
           command: bats scripts/test
+      - run:
+          name: Tent pins in sync
+          command: scripts/bump_tent.sh --check
 
   # Multi-arch (amd64 + arm64) publish of Kerghan's 4 base images, mirroring Majora's
   # release-image pattern. Instantiated once via a workflow `matrix` (image x suffix). Runs on
@@ -438,7 +442,7 @@ jobs:
   # temp dir — staged, not yet swapped live (see the `release` job below).
   upload_proxy_files:
     docker:
-      - image: darthjee/tent:1.0.3
+      - image: darthjee/tent:1.3.0
     working_directory: /home/app/app
     steps:
       - checkout
@@ -454,7 +458,7 @@ jobs:
   # end) so the atomic swap doesn't wipe them.
   copy_proxy_configuration:
     docker:
-      - image: darthjee/tent:1.0.3
+      - image: darthjee/tent:1.3.0
     working_directory: /home/app/app
     steps:
       - checkout
@@ -474,7 +478,7 @@ jobs:
   # Uploads the Tent proxy extension, stripped of its test suite (not needed at runtime).
   upload_extension:
     docker:
-      - image: darthjee/tent:1.0.3
+      - image: darthjee/tent:1.3.0
     working_directory: /home/app/app
     steps:
       - checkout
