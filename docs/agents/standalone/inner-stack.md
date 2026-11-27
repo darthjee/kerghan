@@ -120,16 +120,21 @@ docker exec <vault> docker volume rm <project>_mysql-data
 
 ### `/vault/.env` and multi-arch Tent
 
-`darthjee/tent` publishes one tag per architecture (`1.0.3` for amd64, `1.0.3-arm64` for arm64),
-not a manifest. The Dockerfile uses `TARGETARCH` to write `/vault/.env`, which `docker compose`
-reads automatically. It holds no secrets:
+`darthjee/tent` is published as one multi-arch tag for `linux/amd64` and `linux/arm64`, so both
+architectures of the standalone image run the same tag. Its version is the `tent=<X.Y.Z>` line of
+the root `version` file, which the `standalone` stage reads through a BuildKit bind mount: no
+`--build-arg` is needed, and the file never lands in the image or a layer. The build fails with
+`version file has no tent= entry` when that line is missing or empty. See
+[Tent pin](../architecture/infra/ci-setup.md#tent-pin) to change the version.
+
+The build writes `/vault/.env`, which `docker compose` reads automatically. It holds exactly
+these keys and no secrets:
 
 ```
-TENT_IMAGE=darthjee/tent:1.0.3          # or darthjee/tent:1.0.3-arm64
+TENT_IMAGE=darthjee/tent:<tent version>  # the tent= line of the version file
 KERGHAN_VERSION=<v>                      # the darthjee/kerghan tag baked into this image
+LOGS_IMAGE=docker:27.5.1-cli             # the log collector image
 ```
-
-An unsupported `TARGETARCH` fails the build.
 
 ### Dockerfile targets
 
@@ -139,8 +144,9 @@ An unsupported `TARGETARCH` fails the build.
   `yarn build`. That base tag is amd64-only, so an arm64 build host runs it under emulation.
 - **`standalone`** (online): `FROM darthjee/vault:0.4.0`; copies `standalone/vault/` to `/vault`,
   the built frontend to `/vault/tent/static/` and the Tent extension to `/vault/tent/extension/`;
-  writes `/vault/.env` (`KERGHAN_VERSION` is a build arg, default `latest`). Vault pulls the inner
-  images on the first start.
+  writes `/vault/.env` (`KERGHAN_VERSION` is a build arg, default `latest`; the Tent tag comes
+  from the `version` file, see [`/vault/.env`](#vaultenv-and-multi-arch-tent)). Vault pulls the
+  inner images on the first start.
 - **`standalone-offline`**: `FROM standalone`; copies `standalone/images/<arch>/` (picked by
   `TARGETARCH`, `amd64` when unset) to `/vault/images/`, and sets
   `ENV COMPOSE_UP_ARGS="--pull never"`.
