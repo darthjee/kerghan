@@ -28,9 +28,11 @@ use Tent\Tests\Support\StubUpstreamServer;
  * a stub upstream (`php -S`, see support/upstream/echo_headers_router.php)
  * which echoes the headers it received.
  *
- * The rule below mirrors proxy/dev_configuration/rules/backend.php (and its
- * prod twin) with the upstream host pointed at the stub; the configuration
- * folders aren't mounted into proxy_tests, so keep the two in sync.
+ * The rule below mirrors proxy/dev_configuration/rules/backend.php, its prod
+ * twin and standalone/vault/tent/configuration/rules/backend.php (the one
+ * automatic login depends on), with the upstream host pointed at the stub. The
+ * configuration folders aren't mounted into proxy_tests, so none of those
+ * files is loaded here: keep them in sync.
  *
  * Run via docker-compose:
  *   docker-compose run proxy_tests
@@ -144,6 +146,11 @@ class ClientIpForwardingTest extends TestCase
             ],
             'matchers' => [
                 ['uri' => '.json', 'type' => 'ends_with']
+            ],
+            'prependMiddlewares' => [
+                [
+                    'class' => 'Tent\\Middlewares\\CanonicalHostHeaderMiddleware'
+                ]
             ],
             'middlewares' => [
                 [

@@ -31,9 +31,10 @@ use Tent\Tests\Support\StubUpstreamServer;
  * emitter is swapped for a recorder, since PHP's `header()` has no visible
  * effect under the CLI.
  *
- * The rule below mirrors proxy/dev_configuration/rules/backend.php (and its
- * prod twin) with the upstream host pointed at the stub; the configuration
- * folders aren't mounted into proxy_tests, so keep the two in sync.
+ * The rule below mirrors proxy/dev_configuration/rules/backend.php, its prod
+ * twin and standalone/vault/tent/configuration/rules/backend.php, with the
+ * upstream host pointed at the stub. The configuration folders aren't mounted
+ * into proxy_tests, so none of those files is loaded here: keep them in sync.
  *
  * Run via docker-compose:
  *   docker-compose run proxy_tests
@@ -147,6 +148,11 @@ class BackendSetCookieForwardingTest extends TestCase
             ],
             'matchers' => [
                 ['uri' => '.json', 'type' => 'ends_with']
+            ],
+            'prependMiddlewares' => [
+                [
+                    'class' => 'Tent\\Middlewares\\CanonicalHostHeaderMiddleware'
+                ]
             ],
             'middlewares' => [
                 [
