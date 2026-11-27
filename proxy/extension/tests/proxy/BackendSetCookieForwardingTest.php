@@ -19,8 +19,9 @@ use Tent\Tests\Support\StubUpstreamServer;
  * The backend's login sets three cookies (access_token, refresh_token,
  * logged_in) and logoff clears all three, each as its own `Set-Cookie`
  * line. Tent before 1.0.0 emitted response headers with PHP's default
- * `header($line)` (replace = true), so only the last cookie survived; Tent
- * 1.0.3 sends them through `ResponseSender` with replace = false.
+ * `header($line)` (replace = true), so only the last cookie survived; later
+ * releases (still so in 1.3.0) send them through `ResponseSender` with
+ * replace = false.
  *
  * The request goes through the same path as Tent's `index.php`:
  * `RequestProcessor` picks the rule, the `default_proxy` handler forwards it
