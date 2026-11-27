@@ -7,6 +7,11 @@
 # file or secret is baked into the image. Always removes its container and
 # data volume.
 #
+# /health.json must also identify Kerghan after the first boot: its body holds
+# "app":"kerghan" and a <n>.<n>.<n> "version", equal to the KERGHAN_VERSION
+# baked into /vault/.env when that tag is a release version (so an inner image
+# released before the marker fails).
+#
 # Env inputs (all optional):
 #   IMAGE            tag to test           (default darthjee/kerghan-standalone:dev)
 #   KERGHAN_VERSION  build arg             (default latest)
@@ -84,6 +89,28 @@ wait_for_200() {
     sleep 5
   done
   fail "$url did not answer 200 within ${SMOKE_TIMEOUT}s (last: ${code:-none})"
+}
+
+# Asserts /health.json carries the identity marker and the release version. The
+# body is Kerghan's own, so it is printed on a mismatch.
+check_identity() {
+  local url="$BASE_URL/health.json" body stripped version expected
+  log "checking the identity marker in $url"
+  body=$(curl -s --max-time 10 "$url" || true)
+  stripped=$(printf '%s' "$body" | tr -d '[:space:]')
+  case "$stripped" in
+    *'"app":"kerghan"'*) ;;
+    *) fail "$url has no \"app\":\"kerghan\" marker: $body" ;;
+  esac
+  version=$(printf '%s' "$stripped" \
+    | sed -n 's/.*"version":"\([0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*\)".*/\1/p')
+  [ -n "$version" ] || fail "$url has no semver \"version\": $body"
+  # vault_env is the image's /vault/.env: its KERGHAN_VERSION is the inner tag.
+  expected=$(printf '%s\n' "$vault_env" | sed -n 's/^KERGHAN_VERSION=//p')
+  if printf '%s\n' "$expected" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+    [ "$version" = "$expected" ] \
+      || fail "$url reports version $version, expected $expected: $body"
+  fi
 }
 
 inner_mysql() {
@@ -195,6 +222,7 @@ docker run -d --privileged --name "$CONTAINER" ${preload_args[@]+"${preload_args
 
 log "waiting for $BASE_URL/health.json (first boot pulls images and initializes MySQL)"
 wait_for_200 "$BASE_URL/health.json"
+check_identity
 
 if [ "$SMOKE_EXPECT_OFFLINE" = "true" ]; then
   check_offline
@@ -237,4 +265,4 @@ wait_for_log_line "$LOG_DIR/tent.log" "$log_path"
 wait_for_log_line "$LOG_DIR/tent.log" "$log_path2"
 
 SUCCESS=true
-log "OK: $IMAGE boots, serves /health.json and /, and keeps data across a restart"
+log "OK: $IMAGE boots, identifies as Kerghan on /health.json, serves /, and keeps data across a restart"
