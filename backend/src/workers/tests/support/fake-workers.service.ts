@@ -2,7 +2,7 @@ import type { Job, JobLogger } from 'deku-swarm';
 import type { JobClass, WorkersService } from '../../workers.service.js';
 
 /** The `WorkersService` methods other modules use. */
-export type WorkersSurface = Pick<WorkersService, 'register' | 'enqueue'>;
+export type WorkersSurface = Pick<WorkersService, 'register' | 'enqueue' | 'isRunning'>;
 
 /** A job registration as recorded by `register`. */
 export interface FakeRegistration {
@@ -29,12 +29,15 @@ export interface FakeJobLogger extends JobLogger {
  * reads), and nothing runs until a spec asks: `runNext()` / `runAll()` build each captured job
  * the way the real factory does (`new klass({ ...attributes, ...params })`) and perform it once.
  * There is no engine, no retry and no cooldown; a job that throws is kept in `errors`.
+ * `isRunning()` answers whatever `running` is set to (`true` by default).
  */
 export class FakeWorkersService implements WorkersSurface {
   readonly registrations: FakeRegistration[] = [];
   readonly enqueued: FakeEnqueue[] = [];
   readonly errors: unknown[] = [];
   readonly logger: FakeJobLogger = buildLogger();
+  /** What `isRunning()` answers; specs set it to simulate a dead pool. */
+  running = true;
   readonly #queue: FakeEnqueue[] = [];
   #counter = 0;
 
@@ -50,6 +53,10 @@ export class FakeWorkersService implements WorkersSurface {
     this.#queue.push(entry);
 
     return entry.id;
+  }
+
+  isRunning(): boolean {
+    return this.running;
   }
 
   /** The number of captured jobs still waiting to run. */
