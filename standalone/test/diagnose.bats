@@ -109,6 +109,101 @@ refute_logged_substring() {
   refute_output_contains "<html>"
 }
 
+@test "a 200 with app kerghan is Kerghan and shows the version" {
+  export STUB_PROBE_127_0_0_1_HEALTH='200|{"app":"kerghan","status":"ok","version":"0.11.0"}|Apache'
+  run "$KERGHAN" diagnose
+  [ "$status" -eq 0 ]
+  assert_output_contains "[ok]   http://127.0.0.1:3000/health.json   Kerghan 0.11.0 (Server: Apache)"
+  assert_output_contains "[ok]   http://127.0.0.1:3000/ready.json   ready"
+  assert_output_contains "Verdict: OK"
+}
+
+@test "app kerghan: key order and whitespace do not matter" {
+  export STUB_PROBE_127_0_0_1_HEALTH='200|{ "version": "10.20.30", "status": "ok", "app": "kerghan" }|Apache'
+  run "$KERGHAN" diagnose
+  [ "$status" -eq 0 ]
+  assert_output_contains "Kerghan 10.20.30 (Server: Apache)"
+  assert_output_contains "Verdict: OK"
+}
+
+@test "app kerghan without a version is Kerghan" {
+  export STUB_PROBE_127_0_0_1_HEALTH='200|{"app":"kerghan","status":"ok"}|Apache'
+  run "$KERGHAN" diagnose
+  [ "$status" -eq 0 ]
+  assert_output_contains "[ok]   http://127.0.0.1:3000/health.json   Kerghan (Server: Apache)"
+  assert_output_contains "Verdict: OK"
+}
+
+@test "the legacy body without app is Kerghan, whitespace ignored" {
+  export STUB_PROBE_127_0_0_1_HEALTH='200|{ "status": "ok" }|Apache'
+  run "$KERGHAN" diagnose
+  [ "$status" -eq 0 ]
+  assert_output_contains "[ok]   http://127.0.0.1:3000/health.json   Kerghan (Server: Apache)"
+  assert_output_contains "Verdict: OK"
+}
+
+@test "a 200 with a different app is another service, exit 5" {
+  export STUB_PROBE_127_0_0_1_HEALTH='200|{"app":"other","status":"ok"}|Apache'
+  run "$KERGHAN" diagnose
+  [ "$status" -eq 5 ]
+  assert_output_contains "200 from another service (Server: Apache)"
+  assert_output_contains "Verdict: 127.0.0.1:3000 is answered by another process (Apache)"
+  refute_output_contains '"app"'
+  refute_logged_substring "ready.json"
+}
+
+@test "a non-200 with the legacy body is another service" {
+  export STUB_PROBE_127_0_0_1_HEALTH='502|{"status":"ok"}|Apache'
+  run "$KERGHAN" diagnose
+  [ "$status" -eq 5 ]
+  assert_output_contains "502 from another service (Server: Apache)"
+}
+
+@test "safety: an invalid version is never printed" {
+  local version
+  for version in '$(evil)' '1.2.3-evil' '1.2' 'evil.1.2.3' ''; do
+    export STUB_PROBE_127_0_0_1_HEALTH="200|{\"app\":\"kerghan\",\"status\":\"ok\",\"version\":\"$version\"}|Apache"
+    run "$KERGHAN" diagnose
+    [ "$status" -eq 0 ]
+    assert_output_contains "[ok]   http://127.0.0.1:3000/health.json   Kerghan (Server: Apache)"
+    refute_output_contains "evil"
+  done
+}
+
+@test "a 502 with app kerghan: backend down, exit 4, /ready.json not probed" {
+  export STUB_PROBE_127_0_0_1_HEALTH='502|{"app":"kerghan","status":"down"}|Apache'
+  run "$KERGHAN" diagnose
+  [ "$status" -eq 4 ]
+  assert_output_contains "[FAIL] http://127.0.0.1:3000/health.json   Kerghan proxy answered 502, backend down (Server: Apache)"
+  assert_output_contains "Verdict: Kerghan answers but the backend is down; see 'kerghan logs' or ~/.kerghan/logs"
+  refute_output_contains "another service"
+  refute_logged_substring "ready.json"
+}
+
+@test "another code with app kerghan is still Kerghan, with the code shown" {
+  export STUB_PROBE_127_0_0_1_HEALTH='418|{"app":"kerghan","status":"ok","version":"0.11.0"}|Apache'
+  run "$KERGHAN" diagnose
+  [ "$status" -eq 0 ]
+  assert_output_contains "[ok]   http://127.0.0.1:3000/health.json   Kerghan 0.11.0 answered 418 (Server: Apache)"
+  grep -qF '/ready.json' "$STUB_LOG"
+}
+
+@test "/ready.json 200 ok with checks: ready" {
+  export STUB_PROBE_127_0_0_1_READY='200|{"app":"kerghan","status":"ok","version":"0.11.0","checks":{"database":"up","workers":"up"}}|Apache'
+  run "$KERGHAN" diagnose
+  [ "$status" -eq 0 ]
+  assert_output_contains "[ok]   http://127.0.0.1:3000/ready.json   ready"
+}
+
+@test "/ready.json 200 degraded: a warning, not a failure" {
+  export STUB_PROBE_127_0_0_1_READY='200|{"app":"kerghan","status":"degraded","version":"0.11.0","checks":{"database":"up","workers":"down"}}|Apache'
+  run "$KERGHAN" diagnose
+  [ "$status" -eq 0 ]
+  assert_output_contains "[warn] http://127.0.0.1:3000/ready.json   degraded (workers)"
+  refute_output_contains "ready.json   ready"
+  assert_output_contains "Verdict: OK"
+}
+
 @test "/ready.json 503: not ready (database), exit 4" {
   export STUB_PROBE_127_0_0_1_READY='503|{"status":"down"}|Apache'
   run "$KERGHAN" diagnose
