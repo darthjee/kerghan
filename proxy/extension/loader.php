@@ -13,4 +13,5 @@ require_once __DIR__ . '/lib/middlewares/TestHeaderMiddleware.php';
 require_once __DIR__ . '/lib/middlewares/CacheControlMiddleware.php';
 require_once __DIR__ . '/lib/middlewares/SetResponseHeadersMiddleware.php';
 require_once __DIR__ . '/lib/middlewares/SetClientIpMiddleware.php';
+require_once __DIR__ . '/lib/middlewares/CanonicalHostHeaderMiddleware.php';
 require_once __DIR__ . '/lib/cache/DomainHash.php';
