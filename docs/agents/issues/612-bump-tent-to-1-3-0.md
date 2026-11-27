@@ -101,7 +101,7 @@ set -euo pipefail
 4. The guard runs inside the per-architecture loop of `save_images()`, before `save_image` for Tent. It fails the release when the pinned Tent tag has no `linux/<arch>` manifest for the architecture being saved, so a regression to a single-architecture tag fails fast rather than at the architecture check inside `save_image` or, worse, at container start on a user machine.
 5. The root `version` file's `tent=X.Y.Z` line is the single source of truth for both `darthjee/tent` and `darthjee/tent-test`. Consumers that can read a file read it directly (release script, standalone Dockerfile, `.claude/scripts/check_proxy.sh`). Consumers that cannot (CircleCI executor `image:` values are static; compose could only interpolate from the gitignored `.env`; docs are plain text) hold synced copies.
 6. `scripts/bump_tent.sh <version>` writes `tent=<version>` to `version`, then rewrites every synced copy in an explicit list of files (see [Scope](#scope)), matching one pattern: `darthjee/tent(-test)?:X.Y.Z`. `scripts/bump_tent.sh --check` rewrites nothing and exits non-zero, listing each copy whose version differs from `version`. The script validates the version argument as `X.Y.Z` and fails on an empty argument, mirroring `scripts/bump_version.sh`.
-7. A new lightweight CircleCI job (`scripts_tests`, on `bats/bats:1.11.0`, every push) runs `bats scripts/test` and `scripts/bump_tent.sh --check`. Today no job runs `scripts/test/*.bats`, so without it the new `bump_tent.bats` and guard tests would never run in CI. The `--check` step means a hand edit to a copy that bypasses the script fails CI.
+7. The existing `scripts_tests` CircleCI job (`bats/bats:1.11.0`, every push, required by `build-and-release`), which already runs `bats scripts/test`, gains a `scripts/bump_tent.sh --check` step. A hand edit to a copy that bypasses the script therefore fails CI.
 8. `darthjee/tent` and `darthjee/tent-test` move in lockstep. They are two image families published from the Tent repository with the same version number; a bump of only one leaves the proxy running one Tent version and its tests another.
 9. `scripts/bump_version.sh` is not modified. Tent is a foreign pin (an external project's release cycle), unlike the Kerghan self-version it currently owns, so it gets its own script rather than a new responsibility inside the existing one.
 
@@ -145,16 +145,12 @@ set -euo pipefail
 
 One issue, one PR. Splitting tooling (single source of truth, `bump_tent.sh`, CI job) from the 1.3.0 bump was considered and rejected in favour of a single change; the PR description groups its review notes by the parts below so reviewers can take them in order:
 
-1. Tent version tooling — `version`, direct readers, `bump_tent.sh` / `--check`, `scripts_tests` CI job.
+1. Tent version tooling — `version`, direct readers, `bump_tent.sh` / `--check`, the `--check` step in the `scripts_tests` CI job.
 2. The bump to 1.3.0 — `scripts/bump_tent.sh 1.3.0` across all synced copies.
 3. Multi-arch simplification — Dockerfile `case` and `tent_image_for()` removed, release guard added.
 4. [Security recheck](#security-recheck) — verdicts and the row-3 proxy test.
 5. [Backward compatibility](#backward-compatibility) — production pre-merge checks.
 6. Prose documentation rewrites.
-
-### In scope (beyond the file lists above)
-
-- Running `scripts/test/*.bats` in CI, through the new `scripts_tests` job.
 
 ### Out of scope
 
@@ -265,7 +261,7 @@ The `/vault/.env` key set (`TENT_IMAGE`, `KERGHAN_VERSION`, `LOGS_IMAGE`, enforc
 | Pin `darthjee/tent:latest` | Rejected | Unreviewed Tent upgrades would reach production with no security recheck. |
 | Multi-arch guard in `bump_tent.sh` as well | Rejected | Tags are mutable, so only the release-time check is authoritative; a bump-time check would also make the script need Docker. |
 | Pin by digest (`darthjee/tent:1.3.0@sha256:<index>`) | Deferred to #615 | Would guarantee the rechecked bytes are what ships, but no other image in the repository is digest-pinned; it belongs in a separate issue covering every external image. |
-| Drift enforcement | `bump_tent.sh --check` in a new `scripts_tests` CircleCI job on every push | A source of truth with unchecked copies is a convention, not a guarantee. |
+| Drift enforcement | `bump_tent.sh --check` as a new step of the existing `scripts_tests` CircleCI job (every push) | A source of truth with unchecked copies is a convention, not a guarantee. |
 
 | Tent-test | Bumped in the same change and by the same script | Same repository, same release number, and the test images gate the proxy extension. |
 
@@ -297,7 +293,7 @@ The `/vault/.env` key set (`TENT_IMAGE`, `KERGHAN_VERSION`, `LOGS_IMAGE`, enforc
 
 - `docker-compose.yml` holds three Tent references with two different repository names. A naive `s|darthjee/tent:[0-9.]*|...|` substitution on `darthjee/tent-test:1.0.3` produces `darthjee/tent-test` only if the pattern is written to tolerate the `-test` suffix; anchor the pattern at the tag, not at the repository name.
 - `bin/release_kerghan_standalone.sh` keeps `TENT_VERSION` / `TENT_IMAGE` at file scope near `MYSQL_IMAGE`, `MYSQL_LEGACY_IMAGE` and `LOGS_IMAGE`, now derived from `version` rather than literal; the script already runs from the repository root, as `bin/release_kerghan.sh` does when it reads `version`.
-- The `scripts_tests` job needs only bash, grep, sed and bats (the existing `release_kerghan_standalone.bats` uses a stubbed `docker`, so no Docker is needed); `bats/bats:1.11.0` is already used by the standalone bats jobs.
+- The `scripts_tests` job (Alpine `bats/bats:1.11.0` plus `git openssh-client jq`) has BusyBox `sed`, so `bump_tent.sh` must not use BSD-only `sed -i ''` (as `scripts/bump_vault.sh` / `bump_version.sh` do): write to a temp file and `mv`, so the script runs on macOS and in its own bats suite. `scripts/bump_vault.sh` (its `V` regex and `replace` helper) is the closer model for the script's shape.
 - `platform_digest` already ignores the `variant` field, so `arm64/v8` matches and attestation entries with `unknown/unknown` never do. The guard inherits that behaviour for free.
 - Removing `tent_image_for()` orphans nothing else: it has exactly one caller, inside `save_images()`.
 - `proxy/extension/lib/` holds classes that extend Tent's `Tent\Middlewares` and `Tent\Cache` namespaces and are wired through `proxy/extension/loader.php`. Moving `tent-test` from `1.0.3` to `1.3.0` is a three-version jump against those interfaces; the proxy suite is the detector, and a failure is in scope for this PR.
@@ -312,7 +308,7 @@ The `/vault/.env` key set (`TENT_IMAGE`, `KERGHAN_VERSION`, `LOGS_IMAGE`, enforc
 - Manual security live check — the four requests in [Security recheck](#security-recheck), step 2.
 - `proxy_lint` — PHPCS over `proxy/extension/lib`, `proxy/extension/tests`, `proxy/dev_configuration` and `proxy/prod_configuration`, now against `darthjee/tent-test:1.3.0`, since the ruleset resolves Tent's own sources from that image.
 - `scripts/test/release_kerghan_standalone.bats` — extend with a case asserting that `require_platform_manifest` aborts when `platform_digest` returns nothing, using a `docker` stub. The guard is the only new failure path in the release script. Also: replace the `darthjee/tent:1.0.3-arm64` fixture with a neutral value (e.g. `darthjee/tent:9.9.9`), and assert that `TENT_IMAGE` is derived from `version`'s `tent=` line and that an empty value aborts before any pull.
-- `scripts_tests` CircleCI job — runs `bats scripts/test` (now wired into CI for the first time) and `scripts/bump_tent.sh --check` on every push.
+- `scripts_tests` CircleCI job — already runs `bats scripts/test` (so the new suites run with no wiring); gains a `scripts/bump_tent.sh --check` step.
 - `standalone/scripts/smoke_test.sh` — its `/vault/.env` assertion is tightened to `^TENT_IMAGE=darthjee/tent:[0-9]+\.[0-9]+\.[0-9]+$`. Running the full standalone smoke test is not required by this issue, but a local `docker build --target standalone` must confirm the bind-mounted `version` produces that line, and that removing `tent=` from `version` fails the build with the explicit message.
 - Manual end-to-end verification, per the scope agreed for this issue: `docker-compose run kerghan_proxy` brings the stack up through Tent 1.3.0, and a request to a `*.json` route reaches the backend. The standalone image's smoke test is not part of this issue.
 
