@@ -177,8 +177,11 @@ supported. Tarballs in `/vault/images/` are the only preload mechanism; pre-popu
 Tent serves the frontend and the API from one origin, so CORS stays disabled. Modern browsers send
 `Sec-Fetch-Site: same-origin`, which `OriginGuard` accepts with no configuration. Older browsers
 without that header fall back to comparing `Origin` with `Host`, and Tent rewrites `Host` to the
-backend host, so those writes would be rejected (production has the same limitation). The client's
-default `FRONTEND_BASE_URL` (the [advertised URL](client.md#advertised-url),
+backend host, so those writes would be rejected (production has the same limitation). The `*.json`
+rule lists `CanonicalHostHeaderMiddleware` under `prependMiddlewares`, so that rewrite also covers
+a lower-case or mixed-case `host` header and the client never chooses the backend's `Host` (see
+[Tent behaviours](../architecture/security.md#tent-behaviours-the-security-model-relies-on)).
+The client's default `FRONTEND_BASE_URL` (the [advertised URL](client.md#advertised-url),
 `http://127.0.0.1:<port>` with the default bind) makes `OriginGuard` trust that origin, the
 instance's own published one, and also gives the backend the base URL for password-reset links and
 the GitHub callback URLs. In browsers that send `Sec-Fetch-Site`, browsing on `localhost` still
