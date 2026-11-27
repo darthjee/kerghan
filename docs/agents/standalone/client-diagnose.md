@@ -42,14 +42,47 @@ Both read the running container, and use `curl -q --connect-timeout 2 --max-time
    `[ok] advertised URL is the published address`. The second probe and exit 6 remain for the case
    where the two ever differ.
 
-Kerghan is identified by `GET /health.json` answering `200` with the body `{"status":"ok"}`. The
-`Server` header is printed, never used to decide. `/ready.json` is probed only after that: `200`
-ready, `503` not ready (database, exit 4), anything else (such as `404` on an old image) is
-`readiness unknown`, not a failure. A server-side identity marker is tracked in #609.
+### Identification
+
+Kerghan is identified by the marker `"app":"kerghan"` in the body of `GET /health.json`, whatever
+the status code (#609). The body is matched with whitespace stripped, with no JSON parser (no `jq`
+dependency), so key order does not matter. Images released before the marker are still accepted: a
+`200` whose whole body is `{"status":"ok"}`. Everything else, including a different `app`, is
+another service. The `Server` header is printed, never used to decide.
+
+| `/health.json` answer | Report line | Effect |
+|---|---|---|
+| marker with `2xx` | `[ok] ... Kerghan <version> (Server: ...)` | `/ready.json` is probed |
+| marker with `5xx` | `[FAIL] ... Kerghan proxy answered <code>, backend down (Server: ...)` | exit 4, `/ready.json` is not probed |
+| marker with any other code | `[ok] ... Kerghan <version> answered <code> (Server: ...)` | `/ready.json` is probed |
+| legacy `200 {"status":"ok"}` | `[ok] ... Kerghan (Server: ...)` | `/ready.json` is probed |
+| anything else | `[FAIL] ... <code> from another service (Server: ...)` | exit 5 |
+
+`<version>` is the `version` field of the body, shown only when it has the form `<n>.<n>.<n>`;
+otherwise (absent, as it may be, or anything else) nothing is shown.
+
+The `5xx` case becomes reachable once #613 ships the Tent fallback for a backend that does not
+answer. Until then a down backend still shows up as an empty `200`, which is reported as another
+service (exit 5, unless a failed service already set exit 4).
+
+### Readiness
+
+`/ready.json` is probed only once the published address is identified as Kerghan:
+
+| `/ready.json` answer | Report line | Effect |
+|---|---|---|
+| `200` with `"status":"degraded"` | `[warn] ... degraded (workers)` | not a failure: the workers are down, the instance still serves |
+| any other `200` | `[ok] ... ready` | none |
+| `503` | `[FAIL] ... not ready (database)` | exit 4 |
+| anything else (such as `404` on an old image) | `[info] ... readiness unknown (<status>)` | not a failure |
+
+### Verdicts
 
 | Published | Advertised | Verdict | Exit |
 |---|---|---|---|
 | Kerghan | Kerghan, or same address | `OK` | 0 |
+| Kerghan, backend down | not probed | `Kerghan answers but the backend is down` + where the logs are | 4 |
+| Kerghan | Kerghan, backend down | `Kerghan answers but the backend is down` + where the logs are | 4 |
 | Kerghan | another service | `<host:port> is answered by another process (<who>)` + `Kerghan is reachable at <published URL>` (`AirPlay Receiver` plus its hint when it applies) | 6 |
 | Kerghan | timeout / refused | `<host:port> does not answer` + `Kerghan is reachable at <published URL>` | 6 |
 | another service / timeout | not probed | `<host:port> is answered by another process (...)` / `does not answer` | 5 |
@@ -65,7 +98,7 @@ last, followed by a `hint:` line when one applies.
 | 1 | Not running |
 | 2 | Usage error (any argument) |
 | 3 | Docker engine unreachable |
-| 4 | Unhealthy: an inner service is down or unhealthy, or `/ready.json` is `503` |
+| 4 | Unhealthy: an inner service is down or unhealthy, `/ready.json` is `503`, or the backend is down behind the proxy (a `5xx` `/health.json` with the Kerghan marker) |
 | 5 | Published address broken |
 | 6 | Advertised URL broken while the published address works (only when the two differ, which no `bind` produces since #598) |
 
@@ -78,6 +111,7 @@ a proxy) it is printed and never probed.
 
 - Read-only: it never calls `ensure_env_file` or anything else that writes under `~/.kerghan`.
 - No secrets: `kerghan.env` values and the container's `.Config.Env` are never printed.
-- Untrusted responses: only the status code and the `Server` header are printed, control
-  characters stripped and cut to 100 characters; a foreign body is never printed.
+- Untrusted responses: only the status code, the `Server` header (control characters stripped and
+  cut to 100 characters) and a Kerghan `version` that matches `<n>.<n>.<n>` are printed; a body is
+  never printed, foreign or not.
 - The log directory is shown as `~/...` when under `$HOME`.
